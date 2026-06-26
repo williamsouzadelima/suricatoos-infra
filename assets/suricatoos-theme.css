@@ -1,23 +1,128 @@
-/* Suricatoos brand override: remap Mantine "green" ramp -> teal/cyan (#0aa4a6 family) */
-:root,
-[data-mantine-color-scheme='light'],
-[data-mantine-color-scheme='dark'] {
-  --mantine-color-green-0: #e0fbfb !important;
-  --mantine-color-green-1: #c4f5f6 !important;
-  --mantine-color-green-2: #93ebec !important;
-  --mantine-color-green-3: #5fe0e2 !important;
-  --mantine-color-green-4: #34d5d7 !important;
-  --mantine-color-green-5: #16c2c4 !important;
-  --mantine-color-green-6: #0aa4a6 !important;
-  --mantine-color-green-7: #08898b !important;
-  --mantine-color-green-8: #066c6e !important;
-  --mantine-color-green-9: #044f51 !important;
-  --mantine-color-green-filled: #0aa4a6 !important;
-  --mantine-color-green-filled-hover: #08898b !important;
-  --mantine-color-green-light: rgba(10, 164, 166, 0.10) !important;
-  --mantine-color-green-light-hover: rgba(10, 164, 166, 0.13) !important;
-  --mantine-color-green-light-color: #16c2c4 !important;
-  --mantine-color-green-outline: #0aa4a6 !important;
-  --mantine-color-green-outline-hover: rgba(10, 164, 166, 0.05) !important;
-  --mantine-color-green-text: #0aa4a6 !important;
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+/* ============================================================
+   SURICATOOS — Tema Premium (claro + escuro) para GSA/Mantine v7
+   Carregado por ULTIMO (!important). Surfaces dos styled-components
+   usam var(--sur-surface) (editado no codigo: Display/LoginForm).
+   ============================================================ */
+
+/* ---- Tokens de superficie por esquema (usados pelos cards/login) ---- */
+[data-mantine-color-scheme='light'] {
+  --sur-surface: #ffffff;
+  --sur-canvas: #f4f6f8;
+  --sur-border: #e7ebef;
+  --sur-header: #eef2f5;
+  --sur-text: #16212b;
+  --sur-text-dim: #5c6b7a;
+  --sur-chart-text: #5c6b7a;
+  --sur-shadow: 0 1px 2px rgba(16,32,48,.06), 0 8px 24px rgba(16,32,48,.06);
 }
+[data-mantine-color-scheme='dark'] {
+  --sur-surface: #14212e;
+  --sur-canvas: #0a1019;
+  --sur-border: #233443;
+  --sur-header: #1b2b3a;
+  --sur-text: #e8f0f7;
+  --sur-text-dim: #8aa0b8;
+  --sur-chart-text: #aebfd0;
+  --sur-shadow: 0 2px 8px rgba(0,0,0,.45), 0 12px 30px rgba(0,0,0,.40);
+}
+
+/* ============================================================
+   1. PRIMARIO: rampa Mantine "green" -> CYAN Suricatoos (ambos)
+   ============================================================ */
+:root {
+  --mantine-color-green-0:#d8fbfb !important; --mantine-color-green-1:#aef3f4 !important;
+  --mantine-color-green-2:#7ce9eb !important; --mantine-color-green-3:#46dde0 !important;
+  --mantine-color-green-4:#1ccdd2 !important; --mantine-color-green-5:#08b6bd !important;
+  --mantine-color-green-6:#0a9aa3 !important; --mantine-color-green-7:#0a8089 !important;
+  --mantine-color-green-8:#0a666f !important; --mantine-color-green-9:#084e56 !important;
+  --mantine-color-green-filled:#0a9aa3 !important;
+  --mantine-color-green-filled-hover:#08b6bd !important;
+  --mantine-color-green-light:rgba(10,154,163,.14) !important;
+  --mantine-color-green-light-hover:rgba(10,154,163,.22) !important;
+  --mantine-color-green-light-color:#16c2c7 !important;
+  --mantine-color-green-outline:#0a9aa3 !important;
+  --mantine-color-green-text:#0aa0aa !important;
+  /* teal espelha o cyan */
+  --mantine-color-teal-5:#08b6bd !important; --mantine-color-teal-6:#0a9aa3 !important;
+  --mantine-color-teal-filled:#0a9aa3 !important; --mantine-color-teal-filled-hover:#08b6bd !important;
+  /* coral utilitario */
+  --mantine-color-red-5:#ff7678 !important; --mantine-color-red-6:#f2595b !important;
+
+  /* forma + tipografia (ambos) */
+  --mantine-radius-default:12px !important; --mantine-radius-xs:6px !important;
+  --mantine-radius-sm:8px !important; --mantine-radius-md:12px !important;
+  --mantine-radius-lg:16px !important; --mantine-radius-xl:22px !important;
+  --mantine-font-family:'Space Grotesk','Inter',system-ui,-apple-system,'Segoe UI',sans-serif !important;
+  --mantine-font-family-headings:'Space Grotesk',system-ui,sans-serif !important;
+  --mantine-font-family-monospace:'JetBrains Mono',ui-monospace,Menlo,monospace !important;
+  --mantine-heading-font-weight:600 !important;
+}
+
+/* ============================================================
+   2. ESQUEMA CLARO
+   ============================================================ */
+[data-mantine-color-scheme='light'] {
+  --mantine-color-body:#f4f6f8 !important;
+  --mantine-color-text:#16212b !important;
+  --mantine-color-dimmed:#5c6b7a !important;
+  --mantine-color-default:#ffffff !important;
+  --mantine-color-default-hover:#eef2f5 !important;
+  --mantine-color-default-border:#e7ebef !important;
+  --mantine-color-default-color:#16212b !important;
+  --mantine-primary-color-contrast:#ffffff !important;
+  --mantine-shadow-xs:0 1px 2px rgba(16,32,48,.06) !important;
+  --mantine-shadow-sm:0 2px 8px rgba(16,32,48,.07) !important;
+  --mantine-shadow-md:0 6px 20px rgba(16,32,48,.09) !important;
+}
+
+/* ============================================================
+   3. ESQUEMA ESCURO
+   ============================================================ */
+[data-mantine-color-scheme='dark'] {
+  --mantine-color-body:#0a1019 !important;
+  --mantine-color-text:#e8f0f7 !important;
+  --mantine-color-dimmed:#8aa0b8 !important;
+  --mantine-color-default:#14212e !important;
+  --mantine-color-default-hover:#1b2b3a !important;
+  --mantine-color-default-border:#233443 !important;
+  --mantine-color-default-color:#e8f0f7 !important;
+  --mantine-primary-color-contrast:#06121c !important;
+  --mantine-color-green-filled:#00d6d8 !important;
+  --mantine-color-green-filled-hover:#33eeee !important;
+  --mantine-color-green-light-color:#3cecec !important;
+  --mantine-shadow-xs:0 1px 2px rgba(0,0,0,.4) !important;
+  --mantine-shadow-sm:0 2px 8px rgba(0,0,0,.45) !important;
+  --mantine-shadow-md:0 8px 26px rgba(0,0,0,.5) !important;
+  /* escala dark do Mantine -> navy */
+  --mantine-color-dark-4:#3a5066 !important; --mantine-color-dark-5:#233443 !important;
+  --mantine-color-dark-6:#14212e !important; --mantine-color-dark-7:#0f1b29 !important;
+  --mantine-color-dark-8:#0a1019 !important; --mantine-color-dark-9:#070c13 !important;
+}
+
+/* ============================================================
+   4. CANVAS / TIPOGRAFIA GLOBAL
+   ============================================================ */
+html, body {
+  background-color: var(--sur-canvas) !important;
+  color: var(--sur-text) !important;
+  font-family:'Space Grotesk',system-ui,sans-serif !important;
+  -webkit-font-smoothing:antialiased;
+}
+[data-mantine-color-scheme='dark'] body {
+  background-image:
+    radial-gradient(900px 500px at 80% -10%, rgba(0,214,216,.06), transparent 60%),
+    radial-gradient(700px 460px at 0% 100%, rgba(0,243,161,.04), transparent 60%) !important;
+  background-attachment: fixed !important;
+}
+h1,h2,h3,h4,h5,h6 { font-family:'Space Grotesk',system-ui,sans-serif !important; letter-spacing:-.01em !important; }
+
+/* ============================================================
+   5. TEXTO DOS GRAFICOS por esquema (eixos/labels/legenda)
+   ============================================================ */
+svg text { fill: var(--sur-chart-text) !important; }
+[data-mantine-color-scheme='dark'] svg text { fill: var(--sur-chart-text) !important; }
+
+/* legenda/itens com fundo branco -> superficie */
+[class*="legend"], [class*="Legend"] { color: var(--sur-text) !important; }
