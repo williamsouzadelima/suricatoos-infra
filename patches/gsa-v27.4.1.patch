@@ -5349,10 +5349,10 @@ index eaff647..d6e39ef 100644
 \ No newline at end of file
 diff --git a/public/suricatoos-theme.css b/public/suricatoos-theme.css
 new file mode 100644
-index 0000000..0dcfc20
+index 0000000..9229974
 --- /dev/null
 +++ b/public/suricatoos-theme.css
-@@ -0,0 +1,180 @@
+@@ -0,0 +1,189 @@
 +@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
 +
 +/* ============================================================
@@ -5533,6 +5533,15 @@ index 0000000..0dcfc20
 +[class*="Button"][data-variant="filled"]:hover, button[type="submit"]:hover {
 +  filter: brightness(1.05);
 +}
++
++/* paleta BLUE (primario Mantine) -> indigo tambem */
++:root{
++ --mantine-color-blue-4:#8499fc!important;--mantine-color-blue-5:#6d8bff!important;--mantine-color-blue-6:#5b7cfa!important;--mantine-color-blue-7:#4c66e0!important;--mantine-color-blue-8:#3b4fc0!important;
++ --mantine-color-blue-filled:#5b7cfa!important;--mantine-color-blue-filled-hover:#6d8bff!important;
++ --mantine-color-blue-light:rgba(91,124,250,.14)!important;--mantine-color-blue-light-color:#8aa3ff!important;--mantine-color-blue-text:#7d97ff!important;--mantine-color-blue-outline:#5b7cfa!important;
++ --mantine-primary-color-filled:#5b7cfa!important;--mantine-primary-color-filled-hover:#6d8bff!important;--mantine-primary-color-light:rgba(91,124,250,.14)!important;
++}
++[data-mantine-color-scheme='dark']{--mantine-color-blue-filled:#7d97ff!important;--mantine-color-blue-filled-hover:#93a9ff!important;--mantine-color-blue-light-color:#a9b8ff!important;}
 diff --git a/src/web/App.tsx b/src/web/App.tsx
 index ebc06a0..af63477 100644
 --- a/src/web/App.tsx
@@ -5897,7 +5906,7 @@ index 39824b8..3834681 100644
        return _('NVD');
      default:
 diff --git a/src/web/utils/Theme.tsx b/src/web/utils/Theme.tsx
-index dd0b390..73dd27a 100644
+index dd0b390..6b7b520 100644
 --- a/src/web/utils/Theme.tsx
 +++ b/src/web/utils/Theme.tsx
 @@ -61,8 +61,8 @@ interface ThemeInterface {
@@ -5906,8 +5915,8 @@ index dd0b390..73dd27a 100644
    /* source styleguide */
 -  lightGreen: '#A1DDBA',
 -  green: '#11ab51',
-+  lightGreen: "#8cf0f1",
-+  green: "#0aa4a6",
++  lightGreen: "#a9b8ff",
++  green: "#5b7cfa",
  
    lightGray: '#e5e5e5', // used by: disabled inputs
    mediumDarkGray: '#c2c2c2',
@@ -5916,7 +5925,7 @@ index dd0b390..73dd27a 100644
  
    /* source ? */
 -  darkGreen: '#074320', // RGB: 7, 67, 32
-+  darkGreen: "#063b3d", // RGB: 7, 67, 32
++  darkGreen: "#2a3a7a", // RGB: 7, 67, 32
    darkGreenTransparent: 'rgba(7, 67, 32, 0.8)', // corresponds to darkGreen
  
    Layers: {

@@ -178,3 +178,12 @@ input:focus, textarea:focus,
 [class*="Button"][data-variant="filled"]:hover, button[type="submit"]:hover {
   filter: brightness(1.05);
 }
+
+/* paleta BLUE (primario Mantine) -> indigo tambem */
+:root{
+ --mantine-color-blue-4:#8499fc!important;--mantine-color-blue-5:#6d8bff!important;--mantine-color-blue-6:#5b7cfa!important;--mantine-color-blue-7:#4c66e0!important;--mantine-color-blue-8:#3b4fc0!important;
+ --mantine-color-blue-filled:#5b7cfa!important;--mantine-color-blue-filled-hover:#6d8bff!important;
+ --mantine-color-blue-light:rgba(91,124,250,.14)!important;--mantine-color-blue-light-color:#8aa3ff!important;--mantine-color-blue-text:#7d97ff!important;--mantine-color-blue-outline:#5b7cfa!important;
+ --mantine-primary-color-filled:#5b7cfa!important;--mantine-primary-color-filled-hover:#6d8bff!important;--mantine-primary-color-light:rgba(91,124,250,.14)!important;
+}
+[data-mantine-color-scheme='dark']{--mantine-color-blue-filled:#7d97ff!important;--mantine-color-blue-filled-hover:#93a9ff!important;--mantine-color-blue-light-color:#a9b8ff!important;}
