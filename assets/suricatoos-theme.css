@@ -26,6 +26,7 @@
   --sur-text-dim: #8aa0b8;
   --sur-chart-text: #aebfd0;
   --sur-shadow: 0 2px 8px rgba(0,0,0,.45), 0 12px 30px rgba(0,0,0,.40);
+  --sur-login-bg: radial-gradient(58% 105% at 58% 42%, #163150 0%, #0a121d 70%);
 }
 
 /* ============================================================
