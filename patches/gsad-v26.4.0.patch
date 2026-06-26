@@ -1,0 +1,48 @@
+diff --git a/src/gsad.c b/src/gsad.c
+index af389b5..470a439 100644
+--- a/src/gsad.c
++++ b/src/gsad.c
+@@ -361,7 +361,7 @@ my_gnutls_log_func (int level, const gchar *text)
+ int
+ gsad_init (const gchar *static_content_directory)
+ {
+-  g_debug ("Initializing the Greenbone Security Assistant Deamon...\n");
++  g_debug ("Initializing the Suricatoos Security Assistant Daemon...\n");
+ 
+   /* Init user ssessions. */
+   gsad_session_init ();
+@@ -820,7 +820,7 @@ main (int argc, char **argv)
+ 
+   if (gsad_args_is_print_version_enabled (gsad_args))
+     {
+-      printf ("Greenbone Security Assistant Deamon %s\n", GSAD_VERSION);
++      printf ("Suricatoos Security Assistant Daemon %s\n", GSAD_VERSION);
+       if (gsad_args_is_debug_tls_enabled (gsad_args))
+         {
+           printf ("gnutls %s\n", gnutls_check_version (NULL));
+diff --git a/src/gsad_args.c b/src/gsad_args.c
+index 48bd376..85d7740 100644
+--- a/src/gsad_args.c
++++ b/src/gsad_args.c
+@@ -171,7 +171,7 @@ gsad_args_parse (int argc, char **argv, gsad_args_t *args)
+     {NULL}};
+ 
+   option_context =
+-    g_option_context_new ("- Greenbone Security Assistant Daemon");
++    g_option_context_new ("- Suricatoos Security Assistant Daemon");
+ 
+   g_option_context_set_summary (option_context, COPYRIGHT);
+ 
+diff --git a/src/gsad_http.c b/src/gsad_http.c
+index dc8cf13..8a6ef5b 100644
+--- a/src/gsad_http.c
++++ b/src/gsad_http.c
+@@ -571,7 +571,7 @@ gsad_http_create_not_found_response (
+     "<head>"
+     "<meta http-equiv=\"Content-Type\" content=\"text/html; charset=UTF-8\" />"
+     "<link rel=\"icon\" href=\"/img/favicon.gif\" type=\"image/gif\"></link>"
+-    "<title>Greenbone Security Assistant</title>"
++    "<title>Suricatoos Security Assistant</title>"
+     "</head>"
+     "<body>"
+     "<h1>URL not found</h1>"

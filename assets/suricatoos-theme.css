@@ -1,0 +1,23 @@
+/* Suricatoos brand override: remap Mantine "green" ramp -> teal/cyan (#0aa4a6 family) */
+:root,
+[data-mantine-color-scheme='light'],
+[data-mantine-color-scheme='dark'] {
+  --mantine-color-green-0: #e0fbfb !important;
+  --mantine-color-green-1: #c4f5f6 !important;
+  --mantine-color-green-2: #93ebec !important;
+  --mantine-color-green-3: #5fe0e2 !important;
+  --mantine-color-green-4: #34d5d7 !important;
+  --mantine-color-green-5: #16c2c4 !important;
+  --mantine-color-green-6: #0aa4a6 !important;
+  --mantine-color-green-7: #08898b !important;
+  --mantine-color-green-8: #066c6e !important;
+  --mantine-color-green-9: #044f51 !important;
+  --mantine-color-green-filled: #0aa4a6 !important;
+  --mantine-color-green-filled-hover: #08898b !important;
+  --mantine-color-green-light: rgba(10, 164, 166, 0.10) !important;
+  --mantine-color-green-light-hover: rgba(10, 164, 166, 0.13) !important;
+  --mantine-color-green-light-color: #16c2c4 !important;
+  --mantine-color-green-outline: #0aa4a6 !important;
+  --mantine-color-green-outline-hover: rgba(10, 164, 166, 0.05) !important;
+  --mantine-color-green-text: #0aa4a6 !important;
+}

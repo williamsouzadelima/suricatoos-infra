@@ -1,0 +1,8 @@
+services:
+  gsa:
+    image: suricatoos/gsa:stable
+    environment:
+      GSA_VENDOR_TITLE: "Suricatoos"
+      GSA_VENDOR_VERSION: "Suricatoos 1.0"
+  gsad:
+    image: suricatoos/gsad:stable
