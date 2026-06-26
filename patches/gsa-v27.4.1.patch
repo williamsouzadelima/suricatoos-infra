@@ -5349,10 +5349,10 @@ index eaff647..d6e39ef 100644
 \ No newline at end of file
 diff --git a/public/suricatoos-theme.css b/public/suricatoos-theme.css
 new file mode 100644
-index 0000000..0b8ad15
+index 0000000..0dcfc20
 --- /dev/null
 +++ b/public/suricatoos-theme.css
-@@ -0,0 +1,129 @@
+@@ -0,0 +1,180 @@
 +@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
 +
 +/* ============================================================
@@ -5482,6 +5482,57 @@ index 0000000..0b8ad15
 +
 +/* legenda/itens com fundo branco -> superficie */
 +[class*="legend"], [class*="Legend"] { color: var(--sur-text) !important; }
++
++/* ===== ACCENT OVERRIDE: indigo ===== */
++:root{
++ --mantine-color-green-3:#a9b8ff!important;--mantine-color-green-4:#8499fc!important;--mantine-color-green-5:#6d8bff!important;
++ --mantine-color-green-6:#5b7cfa!important;--mantine-color-green-7:#4c66e0!important;--mantine-color-green-8:#3b4fc0!important;
++ --mantine-color-green-filled:#5b7cfa!important;--mantine-color-green-filled-hover:#6d8bff!important;
++ --mantine-color-green-light:rgba(91,124,250,.14)!important;--mantine-color-green-light-hover:rgba(91,124,250,.22)!important;
++ --mantine-color-green-light-color:#8aa3ff!important;--mantine-color-green-text:#7d97ff!important;--mantine-color-green-outline:#5b7cfa!important;
++ --mantine-color-teal-5:#6d8bff!important;--mantine-color-teal-6:#5b7cfa!important;--mantine-color-teal-filled:#5b7cfa!important;--mantine-color-teal-filled-hover:#6d8bff!important;--mantine-color-teal-light:rgba(91,124,250,.14)!important;--mantine-color-teal-text:#7d97ff!important;
++ --mantine-primary-color-contrast:#ffffff!important;
++}
++[data-mantine-color-scheme='dark']{
++ --mantine-color-green-filled:#7d97ff!important;--mantine-color-green-filled-hover:#93a9ff!important;
++ --mantine-color-green-light-color:#a9b8ff!important;--mantine-color-green-text:#b3c0ff!important;
++ --sur-login-bg:radial-gradient(58% 105% at 58% 42%, #2a3a7a 0%, #0a121d 70%)!important;
++}
++
++/* ============================================================
++   POLISH FINAL (toda a interface)
++   ============================================================ */
++/* Scrollbars tematizadas */
++* { scrollbar-width: thin; scrollbar-color: var(--sur-border) transparent; }
++::-webkit-scrollbar { width: 10px; height: 10px; }
++::-webkit-scrollbar-thumb { background: var(--sur-border) !important; border-radius: 10px !important; }
++::-webkit-scrollbar-thumb:hover { background: var(--sur-text-dim) !important; }
++::-webkit-scrollbar-track { background: transparent !important; }
++
++/* Transicoes suaves nos interativos */
++button, a, [role="button"], input, [class*="Button"], [class*="Tab"], [class*="nav"] {
++  transition: background-color .16s ease, border-color .16s ease, color .16s ease, box-shadow .16s ease !important;
++}
++
++/* Header dark -> navy (nao preto puro) */
++[data-mantine-color-scheme='dark'] header,
++[data-mantine-color-scheme='dark'] [class*="AppHeader"] {
++  background: #0c1622 !important;
++  border-bottom: 1px solid var(--sur-border) !important;
++}
++
++/* Inputs: foco com anel do acento */
++input:focus, textarea:focus,
++[class*="Input-input"]:focus, [class*="input"]:focus {
++  border-color: var(--mantine-color-green-filled) !important;
++  box-shadow: 0 0 0 3px var(--mantine-color-green-light) !important;
++  outline: none !important;
++}
++
++/* Botoes filled: leve elevacao no hover */
++[class*="Button"][data-variant="filled"]:hover, button[type="submit"]:hover {
++  filter: brightness(1.05);
++}
 diff --git a/src/web/App.tsx b/src/web/App.tsx
 index ebc06a0..af63477 100644
 --- a/src/web/App.tsx
