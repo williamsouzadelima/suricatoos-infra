@@ -1,11 +1,11 @@
 services:
   gsa:
-    image: suricatoos/gsa:stable
+    image: ghcr.io/williamsouzadelima/suricatoos-gsa:stable
     environment:
       GSA_VENDOR_TITLE: "Suricatoos"
       GSA_VENDOR_VERSION: "Suricatoos 1.0"
   gsad:
-    image: suricatoos/gsad:stable
+    image: ghcr.io/williamsouzadelima/suricatoos-gsad:stable
   nginx:
     volumes:
       - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
