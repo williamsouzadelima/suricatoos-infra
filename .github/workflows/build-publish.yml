@@ -1,0 +1,89 @@
+name: build-publish
+
+# Rebuilda gsa/gsad do fonte upstream (greenbone) + patches Suricatoos e publica no GHCR.
+# Dispara quando os patches mudam (o fonte fica fora do repo via .gitignore), ou manualmente.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'patches/**'
+      - '.github/workflows/build-publish.yml'
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  OWNER: williamsouzadelima
+
+jobs:
+  build-publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout (patches + workflow)
+        uses: actions/checkout@v4
+
+      - name: Derivar tags pinadas a partir dos nomes dos patches
+        id: refs
+        run: |
+          set -eu
+          GSA_PATCH=$(ls patches/gsa-*.patch | head -1)
+          GSAD_PATCH=$(ls patches/gsad-*.patch | head -1)
+          GSA_REF=$(basename "$GSA_PATCH" .patch | sed 's/^gsa-//')
+          GSAD_REF=$(basename "$GSAD_PATCH" .patch | sed 's/^gsad-//')
+          echo "gsa_ref=$GSA_REF"   >> "$GITHUB_OUTPUT"
+          echo "gsad_ref=$GSAD_REF" >> "$GITHUB_OUTPUT"
+          echo "Pinned -> gsa=$GSA_REF | gsad=$GSAD_REF"
+
+      - name: Login no GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_PAT }}
+
+      - name: Build & push suricatoos-gsad (greenbone/gsad + patch)
+        env:
+          GSAD_REF: ${{ steps.refs.outputs.gsad_ref }}
+        run: |
+          set -eux
+          git clone -q --branch "$GSAD_REF" --depth 1 https://github.com/greenbone/gsad.git gsad-src
+          git -C gsad-src apply "$GITHUB_WORKSPACE/patches/gsad-${GSAD_REF}.patch"
+          IMG="$REGISTRY/$OWNER/suricatoos-gsad"
+          docker build \
+            -f gsad-src/.docker/prod.Dockerfile \
+            -t "$IMG:stable" -t "$IMG:$GSAD_REF" -t "$IMG:${GITHUB_SHA::12}" \
+            gsad-src
+          docker push --all-tags "$IMG"
+
+      - name: Build & push suricatoos-gsa (greenbone/gsa + patch, FROM suricatoos-gsad)
+        env:
+          GSA_REF: ${{ steps.refs.outputs.gsa_ref }}
+        run: |
+          set -eux
+          git clone -q --branch "$GSA_REF" --depth 1 https://github.com/greenbone/gsa.git gsa-src
+          git -C gsa-src apply "$GITHUB_WORKSPACE/patches/gsa-${GSA_REF}.patch"
+          IMG="$REGISTRY/$OWNER/suricatoos-gsa"
+          BASE="$REGISTRY/$OWNER/suricatoos-gsad:stable"
+          docker build \
+            -f gsa-src/.docker/prod.Dockerfile \
+            --build-arg BASE_IMAGE="$BASE" \
+            -t "$IMG:stable" -t "$IMG:$GSA_REF" -t "$IMG:${GITHUB_SHA::12}" \
+            gsa-src
+          docker push --all-tags "$IMG"
+
+      - name: Resumo
+        if: always()
+        env:
+          GSA_REF: ${{ steps.refs.outputs.gsa_ref }}
+          GSAD_REF: ${{ steps.refs.outputs.gsad_ref }}
+        run: |
+          {
+            echo "### Suricatoos — imagens publicadas 🐾"
+            echo ""
+            echo "| Imagem | Tags |"
+            echo "|---|---|"
+            echo "| \`$REGISTRY/$OWNER/suricatoos-gsad\` | stable, ${GSAD_REF:-?}, ${GITHUB_SHA::12} |"
+            echo "| \`$REGISTRY/$OWNER/suricatoos-gsa\`  | stable, ${GSA_REF:-?}, ${GITHUB_SHA::12} |"
+          } >> "$GITHUB_STEP_SUMMARY"
