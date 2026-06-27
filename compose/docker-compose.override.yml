@@ -9,3 +9,4 @@ services:
   nginx:
     volumes:
       - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - /var/log/suricatoos-nginx:/var/log/nginx-sur
