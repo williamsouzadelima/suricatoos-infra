@@ -6,3 +6,6 @@ services:
       GSA_VENDOR_VERSION: "Suricatoos 1.0"
   gsad:
     image: suricatoos/gsad:stable
+  nginx:
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
