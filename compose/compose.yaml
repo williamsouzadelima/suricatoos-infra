@@ -160,7 +160,7 @@ services:
   nginx:
     image: registry.community.greenbone.net/community/nginx:latest
     ports:
-      - 127.0.0.1:443:443
+      - 0.0.0.0:443:443
       - 127.0.0.1:9392:9392
     volumes:
       - nginx_config_vol:/etc/nginx/conf.d:ro
