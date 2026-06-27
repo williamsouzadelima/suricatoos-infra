@@ -17,3 +17,19 @@ gvm-libs:stable (base de build do gsad)
 ## Feed (Greenbone, NAO forkado) — FEED_RELEASE=24.10
 vulnerability-tests, notus-data, scap-data, cert-bund-data, dfn-cert-data,
 data-objects, report-formats, gpg-data
+
+## Imagens publicadas (GHCR)
+
+| Imagem | Tags |
+|---|---|
+| `ghcr.io/williamsouzadelima/suricatoos-gsa`  | `stable`, `v27.4.1` |
+| `ghcr.io/williamsouzadelima/suricatoos-gsad` | `stable`, `v26.4.0` |
+
+Para usar as imagens do GHCR em vez de buildar local, no `compose/docker-compose.override.yml`:
+```yaml
+  gsa:
+    image: ghcr.io/williamsouzadelima/suricatoos-gsa:stable
+  gsad:
+    image: ghcr.io/williamsouzadelima/suricatoos-gsad:stable
+```
+(os packages precisam estar publicos, ou o puller autenticado no ghcr.io)
