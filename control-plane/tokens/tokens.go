@@ -43,6 +43,10 @@ const (
 	Deployment Type = "deployment"
 )
 
+// MaxDeploymentUses caps a deployment token's enrollment count, bounding both
+// blast radius and the per-token audit/clone cost.
+const MaxDeploymentUses = 100_000
+
 // Scope binds a token (and the enrolled agent) to a tenant/policy and, optionally,
 // to expected host attributes — the anti-confused-deputy / multi-tenant control.
 type Scope struct {
@@ -54,13 +58,20 @@ type Scope struct {
 }
 
 // permits reports whether the host attributes p are allowed by this token scope.
-// Tenant/policy são atribuídos pelo token (não validados); OS/arch são verificados.
+// Tenant/policy são atribuídos pelo token (não validados aqui). OS/arch são
+// verificados ESTRITAMENTE: quando o token fixa um valor, o apresentado precisa
+// ser não-vazio E igual (apresentar vazio NÃO satisfaz a restrição).
+//
+// AVISO: OS/arch são auto-declarados pelo enrollee (não atestados) — isto barra
+// erro honesto de configuração, não um adversário determinado. É defesa em
+// profundidade, não fronteira de segurança. A mensagem não revela o valor
+// esperado (anti-leak). Ver ADR-0004.
 func (s Scope) permits(p Scope) error {
-	if s.OS != "" && p.OS != "" && s.OS != p.OS {
-		return fmt.Errorf("%w: os %q != esperado %q", ErrScopeMismatch, p.OS, s.OS)
+	if s.OS != "" && p.OS != s.OS {
+		return fmt.Errorf("%w (os)", ErrScopeMismatch)
 	}
-	if s.Arch != "" && p.Arch != "" && s.Arch != p.Arch {
-		return fmt.Errorf("%w: arch %q != esperado %q", ErrScopeMismatch, p.Arch, s.Arch)
+	if s.Arch != "" && p.Arch != s.Arch {
+		return fmt.Errorf("%w (arch)", ErrScopeMismatch)
 	}
 	return nil
 }
@@ -150,13 +161,16 @@ func (m *Manager) Mint(req MintRequest) (Minted, error) {
 	default:
 		return Minted{}, fmt.Errorf("%w: tipo %q", ErrMalformed, req.Type)
 	}
+	if req.Scope.Tenant == "" {
+		return Minted{}, errors.New("Scope.Tenant é obrigatório (binding multi-tenant; sem ele o cert sai sem Organization)")
+	}
 	if req.TTL <= 0 {
 		return Minted{}, errors.New("TTL deve ser positivo")
 	}
 	maxUses := 1
 	if req.Type == Deployment {
-		if req.MaxUses < 1 {
-			return Minted{}, errors.New("deployment token requer MaxUses >= 1")
+		if req.MaxUses < 1 || req.MaxUses > MaxDeploymentUses {
+			return Minted{}, fmt.Errorf("MaxUses deve estar entre 1 e %d", MaxDeploymentUses)
 		}
 		maxUses = req.MaxUses
 	}
