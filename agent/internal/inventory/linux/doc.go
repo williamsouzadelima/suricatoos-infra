@@ -1,4 +1,4 @@
-// Package linux implements the Linux inventory Collector: it parses the dpkg
-// status database and the rpm database and reads /etc/os-release for the
-// distro/release. Passive and local-only. Implemented in Fase 1.
+// Package linux implements the Linux inventory Collector. It reads the dpkg
+// status database and /etc/os-release directly (no fragile shell-out) and is
+// passive/local-only. rpm support is added incrementally. See agent/README.md.
 package linux
