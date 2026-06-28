@@ -1,6 +1,7 @@
 package linux
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"runtime"
@@ -18,6 +19,7 @@ const (
 type Collector struct {
 	osReleasePath  string
 	dpkgStatusPath string
+	rpmList        func() ([]byte, error) // injetável p/ testes
 }
 
 // New returns a Collector reading the standard Linux system paths.
@@ -25,6 +27,7 @@ func New() *Collector {
 	return &Collector{
 		osReleasePath:  defaultOSReleasePath,
 		dpkgStatusPath: defaultDpkgStatusPath,
+		rpmList:        defaultRPMList,
 	}
 }
 
@@ -55,15 +58,18 @@ func (c *Collector) Collect() (*inventory.Inventory, error) {
 	return inv, nil
 }
 
-// collectPackages reads the native package database. dpkg (Debian/Ubuntu/Kali)
-// is supported now; rpm is added in a later increment.
+// collectPackages reads the native package database: dpkg (Debian/Ubuntu/Kali)
+// when present, otherwise rpm (RHEL/Fedora/SUSE) via a structured query.
 func (c *Collector) collectPackages() ([]inventory.Package, error) {
-	f, err := os.Open(c.dpkgStatusPath)
-	if err != nil {
-		return nil, fmt.Errorf("nenhuma base de pacotes suportada encontrada (dpkg): %w", err)
+	if f, err := os.Open(c.dpkgStatusPath); err == nil {
+		defer f.Close()
+		return parseDpkgStatus(f)
 	}
-	defer f.Close()
-	return parseDpkgStatus(f)
+	out, err := c.rpmList()
+	if err != nil {
+		return nil, fmt.Errorf("nenhuma base de pacotes suportada encontrada (dpkg/rpm): %w", err)
+	}
+	return parseRPMOutput(bytes.NewReader(out))
 }
 
 // fullName builds a normalized "name-version[.arch]" string. The exact Notus

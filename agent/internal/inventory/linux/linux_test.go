@@ -95,3 +95,53 @@ func TestCollectorWithFixtures(t *testing.T) {
 		t.Fatalf("cycle_hash = %q", inv.CycleHash)
 	}
 }
+
+func TestParseRPMOutput(t *testing.T) {
+	out := "bash\t5.1.8-1\tx86_64\n" +
+		"openssl\t3.0.7-2\tx86_64\n" +
+		"gpg-pubkey\tabcdef-12345678\t(none)\n" + // chave GPG, não é pacote
+		"filesystem\t3.16-2\tnoarch\n"
+	pkgs, err := parseRPMOutput(strings.NewReader(out))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pkgs) != 3 {
+		t.Fatalf("esperava 3 (gpg-pubkey excluído), got %d: %+v", len(pkgs), pkgs)
+	}
+	if pkgs[0].Name != "bash" || pkgs[0].Version != "5.1.8-1" || pkgs[0].Arch != "x86_64" || pkgs[0].Source != "rpm" {
+		t.Fatalf("primeiro pacote errado: %+v", pkgs[0])
+	}
+	if pkgs[0].FullName != "bash-5.1.8-1.x86_64" {
+		t.Fatalf("full_name = %q", pkgs[0].FullName)
+	}
+	for _, p := range pkgs {
+		if p.Name == "gpg-pubkey" {
+			t.Fatal("gpg-pubkey deve ser excluído")
+		}
+	}
+}
+
+func TestCollectorFallsBackToRPMWhenNoDpkg(t *testing.T) {
+	dir := t.TempDir()
+	osr := filepath.Join(dir, "os-release")
+	if err := os.WriteFile(osr, []byte("ID=fedora\nVERSION_ID=39\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	c := &Collector{
+		osReleasePath:  osr,
+		dpkgStatusPath: filepath.Join(dir, "inexistente"), // sem dpkg -> cai no rpm
+		rpmList: func() ([]byte, error) {
+			return []byte("bash\t5.2.15-1\tx86_64\nzlib\t1.2.13-3\tx86_64\n"), nil
+		},
+	}
+	inv, err := c.Collect()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if inv.OS.Distro != "fedora" || inv.OS.Release != "39" {
+		t.Fatalf("os = %+v", inv.OS)
+	}
+	if len(inv.Packages) != 2 || inv.Packages[0].Source != "rpm" {
+		t.Fatalf("packages = %+v", inv.Packages)
+	}
+}
