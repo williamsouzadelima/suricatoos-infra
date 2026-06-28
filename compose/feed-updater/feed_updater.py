@@ -29,8 +29,23 @@ DEFAULT_SCHEDULE = {
     'enabled': False, 'frequency': 'daily', 'weekday': 1, 'time': '02:00',
     'last_scheduled_run': None,
 }
+PROJECT = os.environ.get('COMPOSE_PROJECT_NAME', 'greenbone-community-edition')
 
 _sync_lock = threading.Lock()
+
+
+def _feed_image_ids():
+    """Image ID atual de cada container de feed (p/ saber o que mudou no sync)."""
+    ids = {}
+    for f in FEEDS:
+        try:
+            p = subprocess.run(
+                ['docker', 'inspect', '--format', '{{.Image}}', '%s-%s-1' % (PROJECT, f)],
+                capture_output=True, text=True, timeout=20)
+            ids[f] = (p.stdout.strip() or None) if p.returncode == 0 else None
+        except Exception:
+            ids[f] = None
+    return ids
 
 
 def _now_iso():
@@ -74,8 +89,12 @@ def run_sync(trigger='manual'):
     if not _sync_lock.acquire(blocking=False):
         return {'ok': False, 'error': 'Sincronizacao ja em andamento'}
     try:
-        set_status(state='running', started=_now_iso(), trigger=trigger, last_result=None, last_output='')
-        cmd = ['docker', 'compose', 'up', '-d', '--no-deps', '--pull', 'always'] + FEEDS
+        set_status(state='running', started=_now_iso(), trigger=trigger, last_result=None, last_output='', updated=[])
+        before = _feed_image_ids()
+        # --force-recreate: recria os containers de feed mesmo se a imagem nao mudou,
+        # pra re-rodar o init.sh (re-copia os dados) e fazer o gvmd RE-LER o feed.
+        # Sem isso, feeds ja atuais nao recriavam e "atualizar agora" nao mostrava nada.
+        cmd = ['docker', 'compose', 'up', '-d', '--no-deps', '--force-recreate', '--pull', 'always'] + FEEDS
         try:
             p = subprocess.run(cmd, cwd=COMPOSE_DIR, capture_output=True, text=True, timeout=2400)
             ok = p.returncode == 0
@@ -84,10 +103,13 @@ def run_sync(trigger='manual'):
             ok, out = False, 'timeout apos 40min'
         except Exception as e:
             ok, out = False, str(e)
+        after = _feed_image_ids()
+        # feeds cuja imagem mudou = feeds efetivamente atualizados
+        updated = [f for f in FEEDS if after.get(f) and before.get(f) != after.get(f)]
         set_status(state='idle', last_run=_now_iso(),
                    last_result='success' if ok else 'error',
-                   last_output=out[-3000:], trigger=trigger)
-        return {'ok': ok}
+                   last_output=out[-3000:], trigger=trigger, updated=updated)
+        return {'ok': ok, 'updated': updated}
     finally:
         _sync_lock.release()
 
