@@ -10341,199 +10341,202 @@ index 10e592f..325c214 100644
 \ No newline at end of file
 diff --git a/public/suricatoos-theme.css b/public/suricatoos-theme.css
 new file mode 100644
-index 0000000..9229974
+index 0000000..0da82d4
 --- /dev/null
 +++ b/public/suricatoos-theme.css
-@@ -0,0 +1,189 @@
-+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@@ -0,0 +1,192 @@
++@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 +
 +/* ============================================================
-+   SURICATOOS — Tema Premium (claro + escuro) para GSA/Mantine v7
-+   Carregado por ULTIMO (!important). Surfaces dos styled-components
-+   usam var(--sur-surface) (editado no codigo: Display/LoginForm).
++   SURICATOOS — Tema Premium v2 (claro + escuro) — GSA / Mantine v7
++   Carregado por ULTIMO. Foco: profundidade, cards, tabelas, nav,
++   tipografia corporativa (Inter body + Space Grotesk headings).
 +   ============================================================ */
 +
-+/* ---- Tokens de superficie por esquema (usados pelos cards/login) ---- */
++/* ---- Tokens de superficie ---- */
 +[data-mantine-color-scheme='light'] {
-+  --sur-surface: #ffffff;
-+  --sur-canvas: #f4f6f8;
-+  --sur-border: #e7ebef;
-+  --sur-header: #eef2f5;
-+  --sur-text: #16212b;
-+  --sur-text-dim: #5c6b7a;
-+  --sur-chart-text: #5c6b7a;
-+  --sur-shadow: 0 1px 2px rgba(16,32,48,.06), 0 8px 24px rgba(16,32,48,.06);
++  --sur-surface:#ffffff; --sur-surface-2:#f8fafc; --sur-canvas:#eceff5;
++  --sur-border:#e5e9f0; --sur-border-strong:#d3dae6; --sur-header:#f5f7fb;
++  --sur-text:#0f1825; --sur-text-dim:#64748b; --sur-chart-text:#64748b;
++  --sur-shadow:0 1px 2px rgba(15,28,50,.05), 0 6px 18px rgba(15,28,50,.05), 0 16px 44px rgba(15,28,50,.04);
++  --sur-shadow-sm:0 1px 2px rgba(15,28,50,.05), 0 3px 10px rgba(15,28,50,.05);
++  --sur-login-bg:radial-gradient(125% 125% at 12% 8%, #7d97ff 0%, #5b7cfa 38%, #3b4fc0 100%);
++  --sur-accent:#5b7cfa; --sur-accent-soft:rgba(91,124,250,.10); --sur-accent-line:rgba(91,124,250,.30);
 +}
 +[data-mantine-color-scheme='dark'] {
-+  --sur-surface: #14212e;
-+  --sur-canvas: #0a1019;
-+  --sur-border: #233443;
-+  --sur-header: #1b2b3a;
-+  --sur-text: #e8f0f7;
-+  --sur-text-dim: #8aa0b8;
-+  --sur-chart-text: #aebfd0;
-+  --sur-shadow: 0 2px 8px rgba(0,0,0,.45), 0 12px 30px rgba(0,0,0,.40);
-+  --sur-login-bg: radial-gradient(58% 105% at 58% 42%, #163150 0%, #0a121d 70%);
++  --sur-surface:#13202e; --sur-surface-2:#16273b; --sur-canvas:#080e17;
++  --sur-border:#22344a; --sur-border-strong:#2d435c; --sur-header:#172839;
++  --sur-text:#e6eef8; --sur-text-dim:#8499b3; --sur-chart-text:#9fb2cb;
++  --sur-shadow:0 2px 8px rgba(0,0,0,.5), 0 18px 44px rgba(0,0,0,.45);
++  --sur-shadow-sm:0 2px 10px rgba(0,0,0,.42);
++  --sur-login-bg:radial-gradient(125% 125% at 16% 6%, #32428a 0%, #1a2547 45%, #070d18 100%);
++  --sur-accent:#7d97ff; --sur-accent-soft:rgba(125,151,255,.14); --sur-accent-line:rgba(125,151,255,.34);
 +}
 +
 +/* ============================================================
-+   1. PRIMARIO: rampa Mantine "green" -> CYAN Suricatoos (ambos)
++   1. ACCENT: rampas Mantine green/teal/blue -> indigo #5b7cfa
 +   ============================================================ */
 +:root {
-+  --mantine-color-green-0:#d8fbfb !important; --mantine-color-green-1:#aef3f4 !important;
-+  --mantine-color-green-2:#7ce9eb !important; --mantine-color-green-3:#46dde0 !important;
-+  --mantine-color-green-4:#1ccdd2 !important; --mantine-color-green-5:#08b6bd !important;
-+  --mantine-color-green-6:#0a9aa3 !important; --mantine-color-green-7:#0a8089 !important;
-+  --mantine-color-green-8:#0a666f !important; --mantine-color-green-9:#084e56 !important;
-+  --mantine-color-green-filled:#0a9aa3 !important;
-+  --mantine-color-green-filled-hover:#08b6bd !important;
-+  --mantine-color-green-light:rgba(10,154,163,.14) !important;
-+  --mantine-color-green-light-hover:rgba(10,154,163,.22) !important;
-+  --mantine-color-green-light-color:#16c2c7 !important;
-+  --mantine-color-green-outline:#0a9aa3 !important;
-+  --mantine-color-green-text:#0aa0aa !important;
-+  /* teal espelha o cyan */
-+  --mantine-color-teal-5:#08b6bd !important; --mantine-color-teal-6:#0a9aa3 !important;
-+  --mantine-color-teal-filled:#0a9aa3 !important; --mantine-color-teal-filled-hover:#08b6bd !important;
-+  /* coral utilitario */
-+  --mantine-color-red-5:#ff7678 !important; --mantine-color-red-6:#f2595b !important;
++  --mantine-color-green-3:#a9b8ff!important; --mantine-color-green-4:#8499fc!important; --mantine-color-green-5:#6d8bff!important;
++  --mantine-color-green-6:#5b7cfa!important; --mantine-color-green-7:#4c66e0!important; --mantine-color-green-8:#3b4fc0!important;
++  --mantine-color-green-filled:#5b7cfa!important; --mantine-color-green-filled-hover:#6d8bff!important;
++  --mantine-color-green-light:rgba(91,124,250,.12)!important; --mantine-color-green-light-hover:rgba(91,124,250,.20)!important;
++  --mantine-color-green-light-color:#5b7cfa!important; --mantine-color-green-text:#4c66e0!important; --mantine-color-green-outline:#5b7cfa!important;
++  --mantine-color-teal-5:#6d8bff!important; --mantine-color-teal-6:#5b7cfa!important; --mantine-color-teal-filled:#5b7cfa!important; --mantine-color-teal-filled-hover:#6d8bff!important; --mantine-color-teal-light:rgba(91,124,250,.12)!important; --mantine-color-teal-text:#4c66e0!important;
++  --mantine-color-blue-4:#8499fc!important; --mantine-color-blue-5:#6d8bff!important; --mantine-color-blue-6:#5b7cfa!important; --mantine-color-blue-7:#4c66e0!important; --mantine-color-blue-8:#3b4fc0!important;
++  --mantine-color-blue-filled:#5b7cfa!important; --mantine-color-blue-filled-hover:#6d8bff!important; --mantine-color-blue-light:rgba(91,124,250,.12)!important; --mantine-color-blue-light-color:#5b7cfa!important; --mantine-color-blue-text:#4c66e0!important; --mantine-color-blue-outline:#5b7cfa!important;
++  --mantine-primary-color-filled:#5b7cfa!important; --mantine-primary-color-filled-hover:#6d8bff!important; --mantine-primary-color-light:rgba(91,124,250,.12)!important; --mantine-primary-color-contrast:#ffffff!important;
++  --mantine-color-red-5:#ff6b6e!important; --mantine-color-red-6:#f0484b!important;
 +
-+  /* forma + tipografia (ambos) */
-+  --mantine-radius-default:12px !important; --mantine-radius-xs:6px !important;
-+  --mantine-radius-sm:8px !important; --mantine-radius-md:12px !important;
-+  --mantine-radius-lg:16px !important; --mantine-radius-xl:22px !important;
-+  --mantine-font-family:'Space Grotesk','Inter',system-ui,-apple-system,'Segoe UI',sans-serif !important;
-+  --mantine-font-family-headings:'Space Grotesk',system-ui,sans-serif !important;
-+  --mantine-font-family-monospace:'JetBrains Mono',ui-monospace,Menlo,monospace !important;
-+  --mantine-heading-font-weight:600 !important;
++  /* forma + tipografia */
++  --mantine-radius-default:12px!important; --mantine-radius-xs:6px!important; --mantine-radius-sm:8px!important;
++  --mantine-radius-md:12px!important; --mantine-radius-lg:16px!important; --mantine-radius-xl:22px!important;
++  --mantine-font-family:'Inter',system-ui,-apple-system,'Segoe UI',sans-serif!important;
++  --mantine-font-family-headings:'Space Grotesk','Inter',system-ui,sans-serif!important;
++  --mantine-font-family-monospace:'JetBrains Mono',ui-monospace,Menlo,monospace!important;
++  --mantine-heading-font-weight:600!important;
 +}
 +
 +/* ============================================================
-+   2. ESQUEMA CLARO
++   2. ESQUEMA CLARO / ESCURO (vars do Mantine)
 +   ============================================================ */
 +[data-mantine-color-scheme='light'] {
-+  --mantine-color-body:#f4f6f8 !important;
-+  --mantine-color-text:#16212b !important;
-+  --mantine-color-dimmed:#5c6b7a !important;
-+  --mantine-color-default:#ffffff !important;
-+  --mantine-color-default-hover:#eef2f5 !important;
-+  --mantine-color-default-border:#e7ebef !important;
-+  --mantine-color-default-color:#16212b !important;
-+  --mantine-primary-color-contrast:#ffffff !important;
-+  --mantine-shadow-xs:0 1px 2px rgba(16,32,48,.06) !important;
-+  --mantine-shadow-sm:0 2px 8px rgba(16,32,48,.07) !important;
-+  --mantine-shadow-md:0 6px 20px rgba(16,32,48,.09) !important;
++  --mantine-color-body:var(--sur-canvas)!important; --mantine-color-text:var(--sur-text)!important;
++  --mantine-color-dimmed:var(--sur-text-dim)!important; --mantine-color-default:var(--sur-surface)!important;
++  --mantine-color-default-hover:var(--sur-header)!important; --mantine-color-default-border:var(--sur-border)!important;
++  --mantine-color-default-color:var(--sur-text)!important;
++  --mantine-shadow-xs:var(--sur-shadow-sm)!important; --mantine-shadow-sm:var(--sur-shadow-sm)!important; --mantine-shadow-md:var(--sur-shadow)!important;
 +}
-+
-+/* ============================================================
-+   3. ESQUEMA ESCURO
-+   ============================================================ */
 +[data-mantine-color-scheme='dark'] {
-+  --mantine-color-body:#0a1019 !important;
-+  --mantine-color-text:#e8f0f7 !important;
-+  --mantine-color-dimmed:#8aa0b8 !important;
-+  --mantine-color-default:#14212e !important;
-+  --mantine-color-default-hover:#1b2b3a !important;
-+  --mantine-color-default-border:#233443 !important;
-+  --mantine-color-default-color:#e8f0f7 !important;
-+  --mantine-primary-color-contrast:#06121c !important;
-+  --mantine-color-green-filled:#00d6d8 !important;
-+  --mantine-color-green-filled-hover:#33eeee !important;
-+  --mantine-color-green-light-color:#3cecec !important;
-+  --mantine-shadow-xs:0 1px 2px rgba(0,0,0,.4) !important;
-+  --mantine-shadow-sm:0 2px 8px rgba(0,0,0,.45) !important;
-+  --mantine-shadow-md:0 8px 26px rgba(0,0,0,.5) !important;
-+  /* escala dark do Mantine -> navy */
-+  --mantine-color-dark-4:#3a5066 !important; --mantine-color-dark-5:#233443 !important;
-+  --mantine-color-dark-6:#14212e !important; --mantine-color-dark-7:#0f1b29 !important;
-+  --mantine-color-dark-8:#0a1019 !important; --mantine-color-dark-9:#070c13 !important;
++  --mantine-color-body:var(--sur-canvas)!important; --mantine-color-text:var(--sur-text)!important;
++  --mantine-color-dimmed:var(--sur-text-dim)!important; --mantine-color-default:var(--sur-surface)!important;
++  --mantine-color-default-hover:var(--sur-header)!important; --mantine-color-default-border:var(--sur-border)!important;
++  --mantine-color-default-color:var(--sur-text)!important;
++  --mantine-color-green-filled:#7d97ff!important; --mantine-color-green-filled-hover:#93a9ff!important; --mantine-color-green-light-color:#9fb2ff!important; --mantine-color-green-text:#a9b8ff!important;
++  --mantine-color-blue-filled:#7d97ff!important; --mantine-color-blue-filled-hover:#93a9ff!important; --mantine-color-blue-light-color:#9fb2ff!important; --mantine-color-blue-text:#a9b8ff!important;
++  --mantine-primary-color-contrast:#06121c!important;
++  --mantine-shadow-xs:var(--sur-shadow-sm)!important; --mantine-shadow-sm:var(--sur-shadow-sm)!important; --mantine-shadow-md:var(--sur-shadow)!important;
++  --mantine-color-dark-4:#3a5066!important; --mantine-color-dark-5:#233443!important; --mantine-color-dark-6:#14212e!important; --mantine-color-dark-7:#0f1b29!important; --mantine-color-dark-8:#0a1019!important;
 +}
 +
 +/* ============================================================
-+   4. CANVAS / TIPOGRAFIA GLOBAL
++   3. CANVAS / TIPOGRAFIA
 +   ============================================================ */
 +html, body {
-+  background-color: var(--sur-canvas) !important;
-+  color: var(--sur-text) !important;
-+  font-family:'Space Grotesk',system-ui,sans-serif !important;
-+  -webkit-font-smoothing:antialiased;
++  background-color:var(--sur-canvas)!important; color:var(--sur-text)!important;
++  font-family:'Inter',system-ui,sans-serif!important; -webkit-font-smoothing:antialiased; letter-spacing:-.005em;
 +}
 +[data-mantine-color-scheme='dark'] body {
 +  background-image:
-+    radial-gradient(900px 500px at 80% -10%, rgba(0,214,216,.06), transparent 60%),
-+    radial-gradient(700px 460px at 0% 100%, rgba(0,243,161,.04), transparent 60%) !important;
-+  background-attachment: fixed !important;
++    radial-gradient(900px 520px at 82% -12%, rgba(91,124,250,.10), transparent 60%),
++    radial-gradient(720px 460px at -5% 102%, rgba(125,151,255,.06), transparent 60%)!important;
++  background-attachment:fixed!important;
 +}
-+h1,h2,h3,h4,h5,h6 { font-family:'Space Grotesk',system-ui,sans-serif !important; letter-spacing:-.01em !important; }
++h1,h2,h3,h4,h5,h6 { font-family:'Space Grotesk',system-ui,sans-serif!important; letter-spacing:-.02em!important; }
++
++/* texto dos graficos + legendas */
++svg text { fill:var(--sur-chart-text)!important; }
++[class*="legend"],[class*="Legend"] { color:var(--sur-text)!important; }
 +
 +/* ============================================================
-+   5. TEXTO DOS GRAFICOS por esquema (eixos/labels/legenda)
++   4. CARDS / SUPERFICIES — profundidade premium
 +   ============================================================ */
-+svg text { fill: var(--sur-chart-text) !important; }
-+[data-mantine-color-scheme='dark'] svg text { fill: var(--sur-chart-text) !important; }
-+
-+/* legenda/itens com fundo branco -> superficie */
-+[class*="legend"], [class*="Legend"] { color: var(--sur-text) !important; }
-+
-+/* ===== ACCENT OVERRIDE: indigo ===== */
-+:root{
-+ --mantine-color-green-3:#a9b8ff!important;--mantine-color-green-4:#8499fc!important;--mantine-color-green-5:#6d8bff!important;
-+ --mantine-color-green-6:#5b7cfa!important;--mantine-color-green-7:#4c66e0!important;--mantine-color-green-8:#3b4fc0!important;
-+ --mantine-color-green-filled:#5b7cfa!important;--mantine-color-green-filled-hover:#6d8bff!important;
-+ --mantine-color-green-light:rgba(91,124,250,.14)!important;--mantine-color-green-light-hover:rgba(91,124,250,.22)!important;
-+ --mantine-color-green-light-color:#8aa3ff!important;--mantine-color-green-text:#7d97ff!important;--mantine-color-green-outline:#5b7cfa!important;
-+ --mantine-color-teal-5:#6d8bff!important;--mantine-color-teal-6:#5b7cfa!important;--mantine-color-teal-filled:#5b7cfa!important;--mantine-color-teal-filled-hover:#6d8bff!important;--mantine-color-teal-light:rgba(91,124,250,.14)!important;--mantine-color-teal-text:#7d97ff!important;
-+ --mantine-primary-color-contrast:#ffffff!important;
++.mantine-Paper-root, .mantine-Card-root {
++  background:var(--sur-surface)!important;
++  border:1px solid var(--sur-border)!important;
++  border-radius:14px!important;
++  box-shadow:var(--sur-shadow)!important;
 +}
-+[data-mantine-color-scheme='dark']{
-+ --mantine-color-green-filled:#7d97ff!important;--mantine-color-green-filled-hover:#93a9ff!important;
-+ --mantine-color-green-light-color:#a9b8ff!important;--mantine-color-green-text:#b3c0ff!important;
-+ --sur-login-bg:radial-gradient(58% 105% at 58% 42%, #2a3a7a 0%, #0a121d 70%)!important;
++/* Cards do dashboard (styled-components que usam --sur-surface): borda+sombra+raio via atributo de cor de fundo */
++[style*="--sur-surface"], [class*="sc-"][style*="background"] {
++  border-radius:14px!important;
++}
++/* eleva cards ao passar o mouse (quando aplicavel) */
++.mantine-Card-root:hover, .mantine-Paper-root:hover { box-shadow:var(--sur-shadow), 0 0 0 1px var(--sur-border-strong)!important; }
++
++/* ============================================================
++   5. TABELAS — header corporativo + hover + respiro
++   ============================================================ */
++table thead th, table th {
++  text-transform:uppercase!important;
++  font-family:'Inter',sans-serif!important;
++  font-size:11px!important; font-weight:600!important; letter-spacing:.06em!important;
++  color:var(--sur-text-dim)!important;
++  background:var(--sur-header)!important;
++  padding:11px 14px!important;
++  border-bottom:1px solid var(--sur-border-strong)!important;
++  white-space:nowrap!important;
++}
++table tbody td {
++  padding:11px 14px!important;
++  border-bottom:1px solid var(--sur-border)!important;
++  font-size:13.5px!important;
++}
++table tbody tr { transition:background-color .14s ease!important; }
++table tbody tr:hover { background:var(--sur-accent-soft)!important; }
++table a { color:var(--sur-accent)!important; font-weight:500!important; }
++
++/* ============================================================
++   6. NAVEGACAO lateral — item ativo premium
++   ============================================================ */
++.mantine-NavLink-root {
++  border-radius:9px!important; margin:1px 8px!important; padding-top:8px!important; padding-bottom:8px!important;
++  font-weight:500!important; color:var(--sur-text)!important; position:relative!important;
++}
++.mantine-NavLink-root:hover { background:var(--sur-accent-soft)!important; }
++.mantine-NavLink-root[data-active='true'], .mantine-NavLink-root[aria-current='page'], .mantine-NavLink-root[data-active] {
++  background:var(--sur-accent-soft)!important; color:var(--sur-accent)!important; font-weight:600!important;
++}
++.mantine-NavLink-root[data-active='true']::before, .mantine-NavLink-root[data-active]::before {
++  content:''!important; position:absolute!important; left:0; top:18%; bottom:18%; width:3px;
++  border-radius:0 3px 3px 0; background:var(--sur-accent)!important;
 +}
 +
 +/* ============================================================
-+   POLISH FINAL (toda a interface)
++   7. BOTOES / ACTIONICONS
 +   ============================================================ */
-+/* Scrollbars tematizadas */
-+* { scrollbar-width: thin; scrollbar-color: var(--sur-border) transparent; }
-+::-webkit-scrollbar { width: 10px; height: 10px; }
-+::-webkit-scrollbar-thumb { background: var(--sur-border) !important; border-radius: 10px !important; }
-+::-webkit-scrollbar-thumb:hover { background: var(--sur-text-dim) !important; }
-+::-webkit-scrollbar-track { background: transparent !important; }
++.mantine-Button-root[data-variant='filled'] { box-shadow:0 1px 2px rgba(91,124,250,.25), 0 4px 12px rgba(91,124,250,.20)!important; font-weight:600!important; }
++.mantine-Button-root[data-variant='filled']:hover { box-shadow:0 2px 4px rgba(91,124,250,.30), 0 8px 20px rgba(91,124,250,.26)!important; transform:translateY(-1px); }
++.mantine-ActionIcon-root { border-radius:8px!important; }
++.mantine-ActionIcon-root:hover { background:var(--sur-accent-soft)!important; color:var(--sur-accent)!important; }
 +
-+/* Transicoes suaves nos interativos */
-+button, a, [role="button"], input, [class*="Button"], [class*="Tab"], [class*="nav"] {
-+  transition: background-color .16s ease, border-color .16s ease, color .16s ease, box-shadow .16s ease !important;
++/* ============================================================
++   8. HEADER (topbar)
++   ============================================================ */
++[class*="_header_"] {
++  background:linear-gradient(180deg, #0d1826 0%, #0a1420 100%)!important;
++  border-bottom:1px solid var(--sur-border)!important;
++  box-shadow:0 1px 0 rgba(255,255,255,.03), 0 6px 18px rgba(0,0,0,.18)!important;
 +}
 +
-+/* Header dark -> navy (nao preto puro) */
-+[data-mantine-color-scheme='dark'] header,
-+[data-mantine-color-scheme='dark'] [class*="AppHeader"] {
-+  background: #0c1622 !important;
-+  border-bottom: 1px solid var(--sur-border) !important;
++/* ============================================================
++   9. INPUTS — foco com anel do acento
++   ============================================================ */
++input:focus, textarea:focus, select:focus, [class*="Input-input"]:focus {
++  border-color:var(--sur-accent)!important; box-shadow:0 0 0 3px var(--sur-accent-soft)!important; outline:none!important;
 +}
++.mantine-Input-input, input, textarea { border-radius:9px!important; }
 +
-+/* Inputs: foco com anel do acento */
-+input:focus, textarea:focus,
-+[class*="Input-input"]:focus, [class*="input"]:focus {
-+  border-color: var(--mantine-color-green-filled) !important;
-+  box-shadow: 0 0 0 3px var(--mantine-color-green-light) !important;
-+  outline: none !important;
++/* ============================================================
++   10. LOGIN — fundo premium + card elevado
++   ============================================================ */
++[class*="_header_"] + *, body [class*="login"], [data-testid] form {
++  /* hooks genericos; o fundo real vem de --sur-login-bg no componente */
 +}
++/* badges / pills de status */
++[class*="Badge"], [class*="badge"] { font-weight:600!important; letter-spacing:.01em!important; border-radius:999px!important; }
 +
-+/* Botoes filled: leve elevacao no hover */
-+[class*="Button"][data-variant="filled"]:hover, button[type="submit"]:hover {
-+  filter: brightness(1.05);
++/* ============================================================
++   11. POLISH — scrollbars + transicoes
++   ============================================================ */
++* { scrollbar-width:thin; scrollbar-color:var(--sur-border-strong) transparent; }
++::-webkit-scrollbar { width:10px; height:10px; }
++::-webkit-scrollbar-thumb { background:var(--sur-border-strong)!important; border-radius:10px!important; border:2px solid transparent; background-clip:padding-box; }
++::-webkit-scrollbar-thumb:hover { background:var(--sur-text-dim)!important; }
++::-webkit-scrollbar-track { background:transparent!important; }
++button, a, [role="button"], input, [class*="Button"], [class*="Tab"], [class*="Nav"] {
++  transition:background-color .15s ease, border-color .15s ease, color .15s ease, box-shadow .15s ease, transform .12s ease!important;
 +}
-+
-+/* paleta BLUE (primario Mantine) -> indigo tambem */
-+:root{
-+ --mantine-color-blue-4:#8499fc!important;--mantine-color-blue-5:#6d8bff!important;--mantine-color-blue-6:#5b7cfa!important;--mantine-color-blue-7:#4c66e0!important;--mantine-color-blue-8:#3b4fc0!important;
-+ --mantine-color-blue-filled:#5b7cfa!important;--mantine-color-blue-filled-hover:#6d8bff!important;
-+ --mantine-color-blue-light:rgba(91,124,250,.14)!important;--mantine-color-blue-light-color:#8aa3ff!important;--mantine-color-blue-text:#7d97ff!important;--mantine-color-blue-outline:#5b7cfa!important;
-+ --mantine-primary-color-filled:#5b7cfa!important;--mantine-primary-color-filled-hover:#6d8bff!important;--mantine-primary-color-light:rgba(91,124,250,.14)!important;
-+}
-+[data-mantine-color-scheme='dark']{--mantine-color-blue-filled:#7d97ff!important;--mantine-color-blue-filled-hover:#93a9ff!important;--mantine-color-blue-light-color:#a9b8ff!important;}
 diff --git a/src/gmp/locale/languages.ts b/src/gmp/locale/languages.ts
 index 4d337bd..60048e5 100644
 --- a/src/gmp/locale/languages.ts
@@ -10593,7 +10596,7 @@ index 8244715..09b2987 100644
        onDataClick,
        onLegendItemClick,
 diff --git a/src/web/components/dashboard/display/Display.tsx b/src/web/components/dashboard/display/Display.tsx
-index 4895369..05ed148 100644
+index 4895369..9dc5c63 100644
 --- a/src/web/components/dashboard/display/Display.tsx
 +++ b/src/web/components/dashboard/display/Display.tsx
 @@ -24,6 +24,9 @@ export const DISPLAY_BORDER_WIDTH = 2;
@@ -10606,7 +10609,7 @@ index 4895369..05ed148 100644
    z-index: ${Theme.Layers.higher};
    height: ${DISPLAY_HEADER_HEIGHT}px;
    display: flex;
-@@ -38,9 +41,9 @@ const Header = styled.div`
+@@ -38,11 +41,11 @@ const Header = styled.div`
    display: flex;
    flex-grow: 1;
    flex-shrink: 1;
@@ -10617,8 +10620,11 @@ index 4895369..05ed148 100644
 +  border: 1px solid var(--sur-border, ${Theme.lightGray});
 +  color: var(--sur-text, ${Theme.black});
    text-overflow: ellipsis;
-   padding: 0px 5px;
+-  padding: 0px 5px;
++  padding: 2px 12px;
    user-select: none;
+   overflow: hidden;
+ `;
 @@ -63,17 +66,20 @@ const DisplayView = styled.div`
    flex-grow: 1;
    flex-shrink: 1;
@@ -10653,6 +10659,21 @@ index 4895369..05ed148 100644
    z-index: ${Theme.Layers.aboveAll};
  `;
  
+@@ -95,7 +101,13 @@ const DisplayTitle = styled.div`
+   word-break: keep-all;
+   text-overflow: ellipsis;
+   overflow: hidden;
+-  text-align: center;
++  text-align: left;
++  font-weight: 600;
++  font-family: 'Space Grotesk', system-ui, sans-serif;
++  color: var(--sur-text, #16212b);
++  font-size: 13px;
++  letter-spacing: -0.01em;
++  padding-left: 4px;
+ `;
+ 
+ const Display = (props: DisplayProps) => {
 diff --git a/src/web/components/dashboard/display/severity/SeverityClassDisplay.tsx b/src/web/components/dashboard/display/severity/SeverityClassDisplay.tsx
 index 9b845a2..e07973e 100644
 --- a/src/web/components/dashboard/display/severity/SeverityClassDisplay.tsx
