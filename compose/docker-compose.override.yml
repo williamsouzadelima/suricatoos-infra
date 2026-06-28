@@ -12,15 +12,45 @@ services:
       - /var/log/suricatoos-nginx:/var/log/nginx-sur
       - /etc/letsencrypt:/etc/letsencrypt:ro
 
+  # Suricatoos: proxy restrito do docker socket (so containers/images/networks/volumes,
+  # sem exec/swarm/secrets). O feed-updater fala com o docker SO atraves daqui.
+  docker-socket-proxy:
+    image: tecnativa/docker-socket-proxy:latest
+    restart: unless-stopped
+    environment:
+      CONTAINERS: 1
+      IMAGES: 1
+      NETWORKS: 1
+      VOLUMES: 1
+      INFO: 1
+      VERSION: 1
+      PING: 1
+      POST: 1
+      EXEC: 0
+      BUILD: 0
+      AUTH: 0
+      SECRETS: 0
+      SWARM: 0
+      SERVICES: 0
+      TASKS: 0
+      NODES: 0
+      SYSTEM: 0
+      DISTRIBUTION: 0
+      PLUGINS: 0
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+
   # Suricatoos: helper que atualiza/agenda os feeds (chamado pelo GSA via /feed-sync/)
   feed-updater:
     build: ./feed-updater
     restart: unless-stopped
+    depends_on:
+      - docker-socket-proxy
     environment:
       TZ: America/Sao_Paulo
       COMPOSE_DIR: /compose
+      DOCKER_HOST: tcp://docker-socket-proxy:2375
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
       - /root/suricatoos/compose:/compose:ro
       - feed_updater_state:/state
 
