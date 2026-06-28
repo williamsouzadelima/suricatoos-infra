@@ -1,6 +1,7 @@
 package tokens
 
 import (
+	"errors"
 	"path/filepath"
 	"testing"
 	"time"
@@ -123,5 +124,31 @@ func TestBoltStore_FullCycle(t *testing.T) {
 	// Token exhausted — second consume must fail.
 	if _, err := m.Consume(minted.Token, Enrollment{AgentID: "host-2"}); err != ErrExhausted {
 		t.Errorf("want ErrExhausted, got %v", err)
+	}
+}
+
+// TestBoltStore_AgentIDUniqueness_SurvivesReopen verifies that the agents bucket
+// persists across BoltStore reopen so duplicate agent_id is still rejected.
+func TestBoltStore_AgentIDUniqueness_SurvivesReopen(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "tokens.db")
+
+	// First run: enroll host-X.
+	s1, _ := NewBoltStore(path)
+	m1 := NewManager(s1, WithClock(func() time.Time { return time.Unix(1700000000, 0).UTC() }))
+	mt1, _ := m1.Mint(MintRequest{Type: SingleHost, Scope: Scope{Tenant: "acme"}, TTL: time.Hour})
+	if _, err := m1.Consume(mt1.Token, Enrollment{AgentID: "host-X"}); err != nil {
+		t.Fatalf("enroll 1: %v", err)
+	}
+	s1.Close()
+
+	// Second run (new process): same agent_id must be rejected.
+	s2, _ := NewBoltStore(path)
+	defer s2.Close()
+	m2 := NewManager(s2, WithClock(func() time.Time { return time.Unix(1700000000, 0).UTC() }))
+	mt2, _ := m2.Mint(MintRequest{Type: SingleHost, Scope: Scope{Tenant: "acme"}, TTL: time.Hour})
+	_, err := m2.Consume(mt2.Token, Enrollment{AgentID: "host-X"})
+	if !errors.Is(err, ErrAgentAlreadyExists) {
+		t.Fatalf("duplicate agent_id across reboots must be ErrAgentAlreadyExists, got %v", err)
 	}
 }

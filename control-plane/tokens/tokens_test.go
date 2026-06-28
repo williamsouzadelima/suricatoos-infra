@@ -2,6 +2,7 @@ package tokens
 
 import (
 	"errors"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -41,11 +42,12 @@ func TestDeploymentCap(t *testing.T) {
 	m := newTestManager(&now)
 	mt := mint(t, m, MintRequest{Type: Deployment, MaxUses: 3, TTL: time.Hour})
 	for i := 0; i < 3; i++ {
-		if _, err := m.Consume(mt.Token, Enrollment{AgentID: "a"}); err != nil {
+		id := fmt.Sprintf("host-%d", i)
+		if _, err := m.Consume(mt.Token, Enrollment{AgentID: id}); err != nil {
 			t.Fatalf("consume %d: %v", i, err)
 		}
 	}
-	if _, err := m.Consume(mt.Token, Enrollment{AgentID: "a"}); !errors.Is(err, ErrExhausted) {
+	if _, err := m.Consume(mt.Token, Enrollment{AgentID: "host-extra"}); !errors.Is(err, ErrExhausted) {
 		t.Fatalf("4º consume deve ser ErrExhausted, got %v", err)
 	}
 }
@@ -142,17 +144,52 @@ func TestConcurrentConsumeRespectsCap(t *testing.T) {
 	ok := 0
 	for i := 0; i < 50; i++ {
 		wg.Add(1)
-		go func() {
+		go func(idx int) {
 			defer wg.Done()
-			if _, err := m.Consume(mt.Token, Enrollment{AgentID: "a"}); err == nil {
+			agentID := fmt.Sprintf("host-%d", idx)
+			if _, err := m.Consume(mt.Token, Enrollment{AgentID: agentID}); err == nil {
 				mu.Lock()
 				ok++
 				mu.Unlock()
 			}
-		}()
+		}(i)
 	}
 	wg.Wait()
 	if ok != limit {
 		t.Fatalf("consumos bem-sucedidos = %d, want %d", ok, limit)
+	}
+}
+
+func TestAgentIDUniqueness(t *testing.T) {
+	now := time.Unix(1700000000, 0).UTC()
+	m := newTestManager(&now)
+
+	// Dois tokens diferentes — mesmo agent_id no segundo deve falhar.
+	t1 := mint(t, m, MintRequest{Type: SingleHost, TTL: time.Hour})
+	t2 := mint(t, m, MintRequest{Type: SingleHost, TTL: time.Hour})
+
+	if _, err := m.Consume(t1.Token, Enrollment{AgentID: "srv-01"}); err != nil {
+		t.Fatalf("primeiro enroll deve passar: %v", err)
+	}
+	if _, err := m.Consume(t2.Token, Enrollment{AgentID: "srv-01"}); !errors.Is(err, ErrAgentAlreadyExists) {
+		t.Fatalf("mesmo agent_id com outro token deve retornar ErrAgentAlreadyExists, got %v", err)
+	}
+}
+
+func TestAgentIDUniqueness_DeploymentToken(t *testing.T) {
+	now := time.Unix(1700000000, 0).UTC()
+	m := newTestManager(&now)
+	mt := mint(t, m, MintRequest{Type: Deployment, MaxUses: 5, TTL: time.Hour})
+
+	if _, err := m.Consume(mt.Token, Enrollment{AgentID: "host-A"}); err != nil {
+		t.Fatalf("primeiro enroll deve passar: %v", err)
+	}
+	// Mesmo token, mesmo agent_id — deve falhar (não é re-enroll legítimo).
+	if _, err := m.Consume(mt.Token, Enrollment{AgentID: "host-A"}); !errors.Is(err, ErrAgentAlreadyExists) {
+		t.Fatalf("duplicate agent_id via deployment token deve ser ErrAgentAlreadyExists, got %v", err)
+	}
+	// Agent diferente ainda deve funcionar.
+	if _, err := m.Consume(mt.Token, Enrollment{AgentID: "host-B"}); err != nil {
+		t.Fatalf("agent diferente deve passar: %v", err)
 	}
 }

@@ -127,12 +127,29 @@ func TestEnrollRejectsBadAgentID(t *testing.T) {
 	}
 }
 
+func TestEnrollDuplicateAgentIDReturns409(t *testing.T) {
+	now := time.Unix(1700000000, 0).UTC()
+	svc, tm := newService(t, &now)
+	t1 := mustMint(t, tm, tokens.MintRequest{Type: tokens.SingleHost, TTL: time.Hour})
+	t2 := mustMint(t, tm, tokens.MintRequest{Type: tokens.SingleHost, TTL: time.Hour})
+
+	if _, err := svc.Enroll(Request{Token: t1.Token, CSR: genCSR(t, "srv-dup"), AgentID: "srv-dup"}); err != nil {
+		t.Fatalf("primeiro enroll deve passar: %v", err)
+	}
+	if _, err := svc.Enroll(Request{Token: t2.Token, CSR: genCSR(t, "srv-dup"), AgentID: "srv-dup"}); !errors.Is(err, tokens.ErrAgentAlreadyExists) {
+		t.Fatalf("segundo enroll com mesmo agent_id deve retornar ErrAgentAlreadyExists, got %v", err)
+	}
+}
+
 // failingSigner sempre falha ao assinar — usado para provar que uma falha de
 // assinatura NÃO consome o token.
 type failingSigner struct{ authority *ca.CA }
 
 func (f failingSigner) SignClientCSR(*x509.CertificateRequest, ca.CertProfile, time.Duration, time.Time) ([]byte, error) {
 	return nil, errors.New("falha simulada de assinatura")
+}
+func (f failingSigner) SignClientCSRIssued(*x509.CertificateRequest, ca.CertProfile, time.Duration, time.Time) (ca.IssuedCert, error) {
+	return ca.IssuedCert{}, errors.New("falha simulada de assinatura")
 }
 func (f failingSigner) CertPEM() []byte { return f.authority.CertPEM() }
 

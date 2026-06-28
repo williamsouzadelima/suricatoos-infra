@@ -3,6 +3,7 @@
 // It exposes two sets of routes on a single HTTP(S) listener:
 //
 //   - POST /v1/enroll  — mTLS bootstrap enrollment (agent-facing)
+//   - GET  /v1/crl.der — signed Certificate Revocation List (DER format)
 //   - POST /api/v1/tokens, GET /api/v1/tokens, DELETE /api/v1/tokens/{id}
 //     — admin token management (admin-facing, bearer-auth)
 //
@@ -16,6 +17,9 @@
 //	CA_CERT_FILE          path to CA certificate PEM for persistent CA (recommended)
 //	CA_KEY_FILE           path to CA Ed25519 private key PEM (recommended)
 //	TOKEN_DB_PATH         path to BoltDB file for persistent token store (recommended)
+//	CRL_URL               public URL of the CRL endpoint (e.g. https://cp.example.com/v1/crl.der)
+//	                      when set, issued certs embed it as a CRL distribution point
+//	CRL_FILE              path to JSON file for persisting revoked serials (recommended with CRL_URL)
 //
 // When CA_CERT_FILE/CA_KEY_FILE are set the CA survives restarts (agents keep
 // their mTLS certificates). Without them a new ephemeral CA is generated on
@@ -48,6 +52,8 @@ func main() {
 	caCertFile := os.Getenv("CA_CERT_FILE")
 	caKeyFile := os.Getenv("CA_KEY_FILE")
 	tokenDBPath := os.Getenv("TOKEN_DB_PATH")
+	crlURL := os.Getenv("CRL_URL")
+	crlFile := os.Getenv("CRL_FILE")
 
 	// CA — persistent when CA_CERT_FILE + CA_KEY_FILE are set; ephemeral otherwise.
 	var authority *ca.CA
@@ -63,6 +69,21 @@ func main() {
 		log.Fatalf("CA init: %v", err)
 	}
 	log.Printf("CA fingerprint (pin): %s", authority.Fingerprint())
+
+	// CRL — optional; when set, issued certs carry the distribution point URL and
+	// revocations are persisted to disk so the CRL survives restarts.
+	if crlURL != "" {
+		authority.SetCRLURL(crlURL)
+		log.Printf("CRL: distribution point %s", crlURL)
+	} else {
+		log.Printf("CRL: disabled — set CRL_URL to enable revocation support")
+	}
+	if crlFile != "" {
+		if err := authority.LoadCRLFile(crlFile); err != nil {
+			log.Fatalf("CRL file: %v", err)
+		}
+		log.Printf("CRL: persisting revocations to %s", crlFile)
+	}
 
 	// Token store — BoltDB when TOKEN_DB_PATH is set; in-memory otherwise.
 	var store tokens.Store
@@ -84,7 +105,17 @@ func main() {
 	adminAPI := cpapi.New(tm, authority, serverURL, adminSecret)
 
 	mux := http.NewServeMux()
-	mux.Handle("/v1/", enrollSvc.Handler())
+	mux.Handle("/v1/enroll", enrollSvc.Handler())
+	mux.HandleFunc("GET /v1/crl.der", func(w http.ResponseWriter, r *http.Request) {
+		der, err := authority.IssueCRL(time.Now().UTC())
+		if err != nil {
+			http.Error(w, "CRL generation failed", http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/pkix-crl")
+		w.Header().Set("Cache-Control", "max-age=3600")
+		w.Write(der)
+	})
 	mux.Handle("/api/", adminAPI.Handler())
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("ok"))
