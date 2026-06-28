@@ -91,10 +91,11 @@ def run_sync(trigger='manual'):
     try:
         set_status(state='running', started=_now_iso(), trigger=trigger, last_result=None, last_output='', updated=[])
         before = _feed_image_ids()
-        # --force-recreate: recria os containers de feed mesmo se a imagem nao mudou,
-        # pra re-rodar o init.sh (re-copia os dados) e fazer o gvmd RE-LER o feed.
-        # Sem isso, feeds ja atuais nao recriavam e "atualizar agora" nao mostrava nada.
-        cmd = ['docker', 'compose', 'up', '-d', '--no-deps', '--force-recreate', '--pull', 'always'] + FEEDS
+        # `--pull always` (SEM --force-recreate): puxa a imagem mais nova de cada feed e
+        # recria SO os que tem dado novo. NAO usar --force-recreate: recriar os 8 feeds em
+        # paralelo causa race no `openvas --update-vt-info` (le NVT incompleto) -> scanner
+        # falha ao carregar VTs e fica sem NVTs. O feedback de "updated" abaixo mostra o que mudou.
+        cmd = ['docker', 'compose', 'up', '-d', '--no-deps', '--pull', 'always'] + FEEDS
         try:
             p = subprocess.run(cmd, cwd=COMPOSE_DIR, capture_output=True, text=True, timeout=2400)
             ok = p.returncode == 0
