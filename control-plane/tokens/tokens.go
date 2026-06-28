@@ -224,6 +224,11 @@ func (m *Manager) Consume(token string, enr Enrollment) (Record, error) {
 	return rec, nil
 }
 
+// List returns all Records from the store (no secrets — only metadata).
+func (m *Manager) List() ([]Record, error) {
+	return m.store.List()
+}
+
 // Revoke marks a token revoked; no further enrollments are allowed.
 func (m *Manager) Revoke(id, by string) error {
 	m.mu.Lock()

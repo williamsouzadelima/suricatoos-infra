@@ -1,0 +1,21 @@
+{
+  "version": "1.2",
+  "package_type": "deb",
+  "product_name": "Debian 12",
+  "advisories": [
+    {
+      "oid": "1.3.6.1.4.1.25623.1.1.1.1.2023.5418",
+      "fixed_packages": [
+        { "name": "chromium", "full_version": "114.0.5735.90-2~deb12u1", "specifier": ">=" },
+        { "name": "chromium-common", "full_version": "114.0.5735.90-2~deb12u1", "specifier": ">=" }
+      ]
+    },
+    {
+      "oid": "1.3.6.1.4.1.25623.1.1.1.2.2024.3001",
+      "fixed_packages": [
+        { "name": "openssh-client", "full_version": "1:8.4p1-2+deb12u3", "specifier": ">=" },
+        { "name": "openssh-server", "full_version": "1:8.4p1-2+deb12u3", "specifier": ">=" }
+      ]
+    }
+  ]
+}

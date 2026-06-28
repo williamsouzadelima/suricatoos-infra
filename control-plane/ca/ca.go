@@ -9,8 +9,10 @@ import (
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/sha256"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/hex"
 	"encoding/pem"
 	"errors"
 	"fmt"
@@ -66,6 +68,13 @@ func NewEphemeral(now time.Time) (*CA, error) {
 		key:     priv,
 		certPEM: pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}),
 	}, nil
+}
+
+// Fingerprint returns the SHA-256 fingerprint of the CA certificate in
+// "sha256:HEXHEX..." format — the value passed as --ca-pin to the agent.
+func (c *CA) Fingerprint() string {
+	h := sha256.Sum256(c.cert.Raw)
+	return "sha256:" + hex.EncodeToString(h[:])
 }
 
 // CertPEM returns a copy of the CA certificate PEM — the trust anchor shipped to
