@@ -1,16 +1,14 @@
-//go:build !linux && !darwin && !windows
+//go:build darwin
 
 // Package collect selects the inventory Collector for the host OS at build time.
 package collect
 
 import (
-	"errors"
-	"runtime"
-
 	"github.com/williamsouzadelima/suricatoos-infra/agent/internal/inventory"
+	"github.com/williamsouzadelima/suricatoos-infra/agent/internal/inventory/darwin"
 )
 
-// New returns the inventory Collector for this host.
+// New returns the inventory Collector for this macOS host.
 func New() (inventory.Collector, error) {
-	return nil, errors.New("coletor de inventário não disponível para " + runtime.GOOS)
+	return darwin.New(), nil
 }
