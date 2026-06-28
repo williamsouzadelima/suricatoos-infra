@@ -11111,16 +11111,16 @@ index b995df4..be67f0d 100644
              <TableRow>
 diff --git a/src/web/pages/extras/FeedUpdateSection.tsx b/src/web/pages/extras/FeedUpdateSection.tsx
 new file mode 100644
-index 0000000..fa4461e
+index 0000000..5b262d1
 --- /dev/null
 +++ b/src/web/pages/extras/FeedUpdateSection.tsx
-@@ -0,0 +1,227 @@
+@@ -0,0 +1,232 @@
 +/* SPDX-FileCopyrightText: 2026 Suricatoos
 + *
 + * SPDX-License-Identifier: AGPL-3.0-or-later
 + */
 +
-+import React, {useCallback, useEffect, useState} from 'react';
++import React, {useCallback, useEffect, useRef, useState} from 'react';
 +import {Button, Group, Loader, Select, Stack, Switch, Text} from '@mantine/core';
 +import useTranslation from 'web/hooks/useTranslation';
 +
@@ -11164,12 +11164,17 @@ index 0000000..fa4461e
 +  const [sch, setSch] = useState<Schedule>(DEFAULT_SCHEDULE);
 +  const [busy, setBusy] = useState(false);
 +  const [saved, setSaved] = useState(false);
++  // o agendamento eh carregado no form UMA vez; o polling depois so atualiza o
++  // status do sync, sem clobberar o que o usuario esta editando (senao o toggle
++  // "desabilita sozinho" quando o poll traz o estado antigo do servidor).
++  const schLoadedRef = useRef(false);
 +
 +  const refresh = useCallback(async () => {
 +    try {
 +      const s = await jget('/status');
 +      setStatus(s);
-+      if (s.schedule) {
++      if (!schLoadedRef.current && s.schedule) {
++        schLoadedRef.current = true;
 +        setSch({...DEFAULT_SCHEDULE, ...s.schedule});
 +      }
 +    } catch (e) {
