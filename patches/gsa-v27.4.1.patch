@@ -10341,10 +10341,10 @@ index 10e592f..325c214 100644
 \ No newline at end of file
 diff --git a/public/suricatoos-theme.css b/public/suricatoos-theme.css
 new file mode 100644
-index 0000000..0da82d4
+index 0000000..5e82346
 --- /dev/null
 +++ b/public/suricatoos-theme.css
-@@ -0,0 +1,192 @@
+@@ -0,0 +1,218 @@
 +@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 +
 +/* ============================================================
@@ -10537,6 +10537,32 @@ index 0000000..0da82d4
 +button, a, [role="button"], input, [class*="Button"], [class*="Tab"], [class*="Nav"] {
 +  transition:background-color .15s ease, border-color .15s ease, color .15s ease, box-shadow .15s ease, transform .12s ease!important;
 +}
++
++/* ============================================================
++   12. FIX dark: item de nav/aba ativos vinham VERDE -> indigo
++   (GSA usa CSS module _root-active_ proprio, e green-light do
++   Mantine no dark nao estava sobrescrito)
++   ============================================================ */
++[data-mantine-color-scheme='dark'] {
++  --mantine-color-green-light:rgba(125,151,255,.16)!important;
++  --mantine-color-green-light-hover:rgba(125,151,255,.24)!important;
++  --mantine-color-teal-light:rgba(125,151,255,.16)!important;
++  --mantine-color-blue-light:rgba(125,151,255,.16)!important;
++  --mantine-primary-color-light:rgba(125,151,255,.16)!important;
++}
++/* item de nav ativo (modulo CSS proprio do GSA) — ambos esquemas */
++[class*="_root-active_"], [class*="navigation-item"][data-active='true'] {
++  background:var(--sur-accent-soft)!important;
++  color:var(--sur-accent)!important;
++}
++[class*="_root-active_"] *, [class*="_root-active_"] svg { color:var(--sur-accent)!important; }
++/* abas ativas -> acento indigo, sem fundo verde */
++[role="tab"][aria-selected='true'], [class*="Tabs-tab"][data-active], [class*="Tab"][data-active='true'] {
++  background:transparent!important;
++  color:var(--sur-accent)!important;
++  border-color:var(--sur-accent)!important;
++}
++[role="tab"][aria-selected='true'] { border-bottom:2px solid var(--sur-accent)!important; }
 diff --git a/src/gmp/locale/languages.ts b/src/gmp/locale/languages.ts
 index 4d337bd..60048e5 100644
 --- a/src/gmp/locale/languages.ts
