@@ -1,0 +1,51 @@
+name: control-plane-publish
+
+# Builds the control-plane Go binary into a Docker image and publishes it to
+# GHCR whenever control-plane source or this workflow changes on main.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "control-plane/**"
+      - ".github/workflows/control-plane-publish.yml"
+  workflow_dispatch:
+
+env:
+  IMAGE: ghcr.io/williamsouzadelima/suricatoos-control-plane
+
+jobs:
+  build-publish:
+    name: build & publish (control-plane)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_PAT }}
+
+      - name: Build & push suricatoos-control-plane
+        run: |
+          docker build \
+            -f control-plane/Dockerfile \
+            -t ${{ env.IMAGE }}:stable \
+            -t ${{ env.IMAGE }}:${{ github.sha }} \
+            control-plane/
+          docker push --all-tags ${{ env.IMAGE }}
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### suricatoos-control-plane publicado 🐾"
+            echo ""
+            echo "| Imagem | Tags |"
+            echo "|---|---|"
+            echo "| \`${{ env.IMAGE }}\` | stable, ${GITHUB_SHA::12} |"
+          } >> "$GITHUB_STEP_SUMMARY"
