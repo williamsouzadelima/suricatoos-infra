@@ -8,13 +8,17 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
+	"github.com/williamsouzadelima/suricatoos-infra/agent/internal/agentd"
 	"github.com/williamsouzadelima/suricatoos-infra/agent/internal/collect"
 	"github.com/williamsouzadelima/suricatoos-infra/agent/internal/enroll"
 	"github.com/williamsouzadelima/suricatoos-infra/agent/internal/version"
@@ -33,9 +37,7 @@ func main() {
 	case "enroll":
 		runEnroll(os.Args[2:])
 	case "run":
-		// Fase 1+: loop de coleta + heartbeat + fila offline (store-and-forward).
-		fmt.Fprintln(os.Stderr, "run: não implementado (Fase 1)")
-		os.Exit(1)
+		runDaemon(os.Args[2:])
 	case "help", "-h", "--help":
 		usage(os.Stdout)
 	default:
@@ -97,6 +99,40 @@ func runEnroll(args []string) {
 	fmt.Printf("enrolled: identidade de %q gravada em %s\n", id, *stateDir)
 }
 
+// runDaemon executa o loop de coleta + reporte até receber SIGINT/SIGTERM.
+func runDaemon(args []string) {
+	fs := flag.NewFlagSet("run", flag.ExitOnError)
+	stateDir := fs.String("state", "./suricatoos-agent", "diretório da identidade (do enroll)")
+	ingest := fs.String("ingest", "", "URL do ingest (ex.: https://ingest.suricatoos/v1/inventory)")
+	queueDir := fs.String("queue", "./suricatoos-agent/queue", "diretório da fila offline")
+	interval := fs.Duration("interval", 15*time.Minute, "intervalo entre coletas")
+	maxQueue := fs.Int("max-queue", 1000, "máximo de itens na fila offline")
+	_ = fs.Parse(args)
+
+	if *ingest == "" {
+		fmt.Fprintln(os.Stderr, "run: --ingest é obrigatório")
+		os.Exit(2)
+	}
+	ag, err := agentd.New(agentd.Config{
+		StateDir:  *stateDir,
+		QueueDir:  *queueDir,
+		IngestURL: *ingest,
+		MaxQueue:  *maxQueue,
+		Interval:  *interval,
+	})
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "run:", err)
+		os.Exit(1)
+	}
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	fmt.Printf("suricatoos-agent rodando (ingest=%s, intervalo=%s) — Ctrl-C para parar\n", *ingest, *interval)
+	if err := ag.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
+		fmt.Fprintln(os.Stderr, "run:", err)
+		os.Exit(1)
+	}
+}
+
 func usage(w io.Writer) {
 	fmt.Fprint(w, `suricatoos-agent — agente de postura de vulnerabilidade (passivo/local)
 
@@ -105,8 +141,8 @@ uso:
 
 comandos:
   inventory  coleta e imprime o inventário local (JSON)
-  enroll     registra o agente no control plane (--server, --token [, --agent-id, --state])
-  run        executa o loop de coleta + reporte                                  [Fase 1]
+  enroll     registra o agente no control plane (--server, --token [, --agent-id, --state, --ca-pin])
+  run        loop de coleta + reporte outbound (--ingest [, --state, --queue, --interval, --max-queue])
   version    mostra a versão do agente
   help       mostra esta ajuda
 `)
