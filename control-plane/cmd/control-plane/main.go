@@ -105,7 +105,7 @@ func main() {
 	adminAPI := cpapi.New(tm, authority, serverURL, adminSecret)
 
 	mux := http.NewServeMux()
-	mux.Handle("/v1/enroll", enrollSvc.Handler())
+	mux.Handle("/v1/", http.StripPrefix("/v1", enrollSvc.Handler()))
 	mux.HandleFunc("GET /v1/crl.der", func(w http.ResponseWriter, r *http.Request) {
 		der, err := authority.IssueCRL(time.Now().UTC())
 		if err != nil {
