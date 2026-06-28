@@ -24,12 +24,13 @@ import (
 
 // Sentinel errors. Test with errors.Is.
 var (
-	ErrMalformed     = errors.New("token malformado")
-	ErrNotFound      = errors.New("token inválido ou inexistente")
-	ErrExpired       = errors.New("token expirado")
-	ErrRevoked       = errors.New("token revogado")
-	ErrExhausted     = errors.New("token esgotado (limite de enrollments atingido)")
-	ErrScopeMismatch = errors.New("escopo não autorizado para este token")
+	ErrMalformed          = errors.New("token malformado")
+	ErrNotFound           = errors.New("token inválido ou inexistente")
+	ErrExpired            = errors.New("token expirado")
+	ErrRevoked            = errors.New("token revogado")
+	ErrExhausted          = errors.New("token esgotado (limite de enrollments atingido)")
+	ErrScopeMismatch      = errors.New("escopo não autorizado para este token")
+	ErrAgentAlreadyExists = errors.New("agent_id já enrollado — re-enrollment requer revogação prévia")
 )
 
 // Type is the consumption model of a bootstrap token.
@@ -78,11 +79,12 @@ func (s Scope) permits(p Scope) error {
 
 // Enrollment is one audited consumption of a token.
 type Enrollment struct {
-	At      time.Time `json:"at"`
-	AgentID string    `json:"agent_id"`
-	OS      string    `json:"os,omitempty"`
-	Arch    string    `json:"arch,omitempty"`
-	Subject string    `json:"subject,omitempty"`
+	At         time.Time `json:"at"`
+	AgentID    string    `json:"agent_id"`
+	OS         string    `json:"os,omitempty"`
+	Arch       string    `json:"arch,omitempty"`
+	Subject    string    `json:"subject,omitempty"`
+	CertSerial string    `json:"cert_serial,omitempty"` // hex serial of the issued mTLS cert
 }
 
 // Record is the server-side source of truth for a minted token. The secret is
@@ -213,6 +215,17 @@ func (m *Manager) Consume(token string, enr Enrollment) (Record, error) {
 	if err != nil {
 		return Record{}, err
 	}
+	// Global agent_id uniqueness: first enrollment wins across all tokens.
+	// An already-enrolled agent must revoke before re-enrolling (e.g. cert renewal).
+	if enr.AgentID != "" {
+		exists, err := m.store.HasAgentID(enr.AgentID)
+		if err != nil {
+			return Record{}, fmt.Errorf("verificar unicidade de agent_id: %w", err)
+		}
+		if exists {
+			return Record{}, ErrAgentAlreadyExists
+		}
+	}
 	if enr.At.IsZero() {
 		enr.At = m.now()
 	}
@@ -220,6 +233,11 @@ func (m *Manager) Consume(token string, enr Enrollment) (Record, error) {
 	rec.Enrollments = append(rec.Enrollments, enr)
 	if err := m.store.Update(rec); err != nil {
 		return Record{}, err
+	}
+	if enr.AgentID != "" {
+		if err := m.store.RegisterAgentID(enr.AgentID, rec.ID); err != nil {
+			return Record{}, fmt.Errorf("registrar agent_id: %w", err)
+		}
 	}
 	return rec, nil
 }
@@ -231,16 +249,29 @@ func (m *Manager) List() ([]Record, error) {
 
 // Revoke marks a token revoked; no further enrollments are allowed.
 func (m *Manager) Revoke(id, by string) error {
+	_, err := m.RevokeRecord(id, by)
+	return err
+}
+
+// RevokeRecord marks a token revoked and returns the final Record (with the
+// full Enrollments audit trail), enabling callers to revoke associated certs.
+func (m *Manager) RevokeRecord(id, by string) (Record, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	rec, ok := m.store.Get(id)
 	if !ok {
-		return ErrNotFound
+		return Record{}, ErrNotFound
+	}
+	if rec.Revoked {
+		return Record{}, ErrRevoked
 	}
 	rec.Revoked = true
 	rec.RevokedBy = by
 	rec.RevokedAt = m.now()
-	return m.store.Update(rec)
+	if err := m.store.Update(rec); err != nil {
+		return Record{}, err
+	}
+	return rec, nil
 }
 
 func (m *Manager) check(token string, presented Scope) (Record, error) {

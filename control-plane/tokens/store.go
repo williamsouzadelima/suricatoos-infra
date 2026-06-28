@@ -10,16 +10,26 @@ type Store interface {
 	Get(id string) (Record, bool)
 	Update(Record) error
 	List() ([]Record, error)
+
+	// HasAgentID reports whether agentID has already been enrolled (by any token).
+	// Used to enforce global agent_id uniqueness: first enrollment wins.
+	HasAgentID(agentID string) (bool, error)
+	// RegisterAgentID marks agentID as enrolled by tokenID. Must be called under
+	// the Manager lock after Update so the two writes are logically atomic.
+	RegisterAgentID(agentID, tokenID string) error
 }
 
 // MemStore is an in-memory, concurrency-safe Store for dev and tests.
 type MemStore struct {
-	mu  sync.RWMutex
-	rec map[string]Record
+	mu     sync.RWMutex
+	rec    map[string]Record
+	agents map[string]string // agentID → tokenID
 }
 
 // NewMemStore returns an empty in-memory store.
-func NewMemStore() *MemStore { return &MemStore{rec: make(map[string]Record)} }
+func NewMemStore() *MemStore {
+	return &MemStore{rec: make(map[string]Record), agents: make(map[string]string)}
+}
 
 // Put inserts or replaces a record.
 func (s *MemStore) Put(r Record) error {
@@ -60,6 +70,22 @@ func (s *MemStore) List() ([]Record, error) {
 		out = append(out, cloneRecord(r))
 	}
 	return out, nil
+}
+
+// HasAgentID reports whether agentID has been registered.
+func (s *MemStore) HasAgentID(agentID string) (bool, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	_, ok := s.agents[agentID]
+	return ok, nil
+}
+
+// RegisterAgentID records agentID → tokenID.
+func (s *MemStore) RegisterAgentID(agentID, tokenID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.agents[agentID] = tokenID
+	return nil
 }
 
 // cloneRecord deep-copies the Enrollments slice so copies never share backing.

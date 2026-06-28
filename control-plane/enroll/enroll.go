@@ -40,6 +40,7 @@ type Response struct {
 // the interface keeps the Service testable (e.g. a failing signer).
 type Signer interface {
 	SignClientCSR(csr *x509.CertificateRequest, p ca.CertProfile, ttl time.Duration, now time.Time) ([]byte, error)
+	SignClientCSRIssued(csr *x509.CertificateRequest, p ca.CertProfile, ttl time.Duration, now time.Time) (ca.IssuedCert, error)
 	CertPEM() []byte
 }
 
@@ -112,8 +113,9 @@ func (s *Service) Enroll(req Request) (Response, error) {
 	}
 
 	// (3) Assina ANTES de consumir. Tenant/policy do token são ATRIBUÍDOS (o
-	// enrollee não os escolhe).
-	certPEM, err := s.signer.SignClientCSR(csr, ca.CertProfile{
+	// enrollee não os escolhe). O serial é gravado na trilha de auditoria para
+	// permitir revogação do certificado quando o token for revogado.
+	issued, err := s.signer.SignClientCSRIssued(csr, ca.CertProfile{
 		CommonName: req.AgentID,
 		Org:        rec.Scope.Tenant,
 		OrgUnit:    rec.Scope.Policy,
@@ -124,11 +126,15 @@ func (s *Service) Enroll(req Request) (Response, error) {
 
 	// (4) Commit: consome o token (re-checa cap/exp/revogação/escopo sob lock).
 	if _, err := s.tokens.Consume(req.Token, tokens.Enrollment{
-		AgentID: req.AgentID, OS: req.OS, Arch: req.Arch, Subject: req.AgentID,
+		AgentID:    req.AgentID,
+		OS:         req.OS,
+		Arch:       req.Arch,
+		Subject:    req.AgentID,
+		CertSerial: issued.SerialHex,
 	}); err != nil {
 		return Response{}, err
 	}
-	return Response{Certificate: string(certPEM), CACert: string(s.signer.CertPEM())}, nil
+	return Response{Certificate: string(issued.PEM), CACert: string(s.signer.CertPEM())}, nil
 }
 
 // Handler returns an http.Handler serving POST /enroll. Client-facing errors are
@@ -157,9 +163,11 @@ func (s *Service) Handler() http.Handler {
 	return mux
 }
 
-// statusFor maps token-policy rejections to 403 and everything else to 400.
+// statusFor maps enrollment errors to HTTP status codes.
 func statusFor(err error) int {
 	switch {
+	case errors.Is(err, tokens.ErrAgentAlreadyExists):
+		return http.StatusConflict
 	case errors.Is(err, tokens.ErrExpired),
 		errors.Is(err, tokens.ErrRevoked),
 		errors.Is(err, tokens.ErrExhausted),
@@ -175,6 +183,8 @@ func statusFor(err error) int {
 // detailed err stays server-side (for logs/metrics, wired in Fase 2).
 func clientMessage(err error) string {
 	switch {
+	case errors.Is(err, tokens.ErrAgentAlreadyExists):
+		return "agent_id já registrado"
 	case errors.Is(err, tokens.ErrScopeMismatch):
 		return "escopo não permitido para este token"
 	case errors.Is(err, tokens.ErrExpired),
