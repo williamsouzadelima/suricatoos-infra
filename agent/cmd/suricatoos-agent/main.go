@@ -6,10 +6,12 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 
+	"github.com/williamsouzadelima/suricatoos-infra/agent/internal/collect"
 	"github.com/williamsouzadelima/suricatoos-infra/agent/internal/version"
 )
 
@@ -21,6 +23,8 @@ func main() {
 	switch os.Args[1] {
 	case "version", "-v", "--version":
 		fmt.Println(version.String())
+	case "inventory":
+		runInventory()
 	case "enroll":
 		// Fase 1: gerar keypair + CSR e trocar o bootstrap token por cert mTLS.
 		fmt.Fprintln(os.Stderr, "enroll: não implementado (Fase 1)")
@@ -38,6 +42,26 @@ func main() {
 	}
 }
 
+// runInventory coleta o inventário local e o imprime como JSON (debug/validação).
+func runInventory() {
+	c, err := collect.New()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "inventory:", err)
+		os.Exit(1)
+	}
+	inv, err := c.Collect()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "inventory:", err)
+		os.Exit(1)
+	}
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(inv); err != nil {
+		fmt.Fprintln(os.Stderr, "inventory:", err)
+		os.Exit(1)
+	}
+}
+
 func usage(w io.Writer) {
 	fmt.Fprint(w, `suricatoos-agent — agente de postura de vulnerabilidade (passivo/local)
 
@@ -45,6 +69,7 @@ uso:
   suricatoos-agent <comando>
 
 comandos:
+  inventory  coleta e imprime o inventário local (JSON)
   enroll     registra o agente no control plane (bootstrap token -> cert mTLS)   [Fase 1]
   run        executa o loop de coleta + reporte                                  [Fase 1]
   version    mostra a versão do agente
