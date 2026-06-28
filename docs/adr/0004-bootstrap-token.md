@@ -48,4 +48,36 @@ inexistente retornam o **mesmo erro** (não vaza existência).
   único — control-plane/distribution, Fase 2).
 - *Replay/reuso* → uso-único/cap + TTL + revogação; **CSR (prova de posse de chave)** no enrollment.
 - *Confused-deputy / multi-tenant* → tenant/policy são **atribuídos pelo token** (o enrollee não os
-  escolhe); OS/arch esperados são **verificados** (`Scope.permits`).
+  escolhe), e **Tenant é obrigatório** no Mint. OS/arch esperados são **defesa em profundidade**
+  (auto-declarados pelo enrollee, não atestados — barram erro de config, não adversário); `Scope.permits`
+  rejeita valor vazio quando o token fixa um.
+
+## Hardening pós-review adversarial (2026-06-28)
+
+Uma review adversarial multi-agente (5 lentes: X.509/CA, cripto/PoP, mTLS, authz/token, leak/DoS)
+endureceu o fluxo. **Aplicado:**
+
+- **Ordem do enrollment:** `Validate` (read-only, barato) → CSR (PoP + CN) → `Sign` → `Consume`
+  (commit). Falha de assinatura **não queima** um token de uso único; o gate barato primeiro mitiga DoS
+  de parse de CSR pré-autenticação.
+- **Scope OS/arch:** apresentar vazio **não** satisfaz um token pinado (bypass corrigido); a mensagem de
+  erro não revela o valor esperado.
+- **Política de chave** na CA: só Ed25519 / ECDSA P-256·384·521 / RSA ≥ 2048.
+- **Tenant obrigatório** no Mint + **cap de MaxUses** (`MaxDeploymentUses`).
+- **agent_id** validado (charset/comprimento; sem caracteres especiais de DN).
+- **Agente:** `Enroll` exige **https** + recusa redirect cross-scheme (anti-downgrade); `verify()` confere
+  cadeia → CA pinada + leaf ≡ chave privada; **pin opcional de fingerprint** da CA (`--ca-pin`); chave
+  salva com **0600 forçado** (mesmo sobre arquivo pré-existente).
+- **Erros do handler** genéricos ao cliente (não vazam escopo nem strings do x509).
+
+**Diferido (precisa de registro/DB ou wiring de servidor — Fase 2/4):**
+
+- **Unicidade de `agent_id` por tenant** + binding do agent_id ao token (precisa de registro) — hoje há
+  colisão intra-tenant possível.
+- **Revogação de certs já emitidos** (CRL/OCSP/denylist) — `Revoke` só barra enrollments futuros;
+  mitigar com TTL de cert curto até lá.
+- **Atomicidade multi-réplica:** o `Store` precisará de um *consume condicional atômico*
+  (`UPDATE … WHERE used_count < max_uses`) quando virar DB com mais de uma réplica; hoje o cap depende
+  do mutex de processo.
+- **Rate-limit + timeouts** de `http.Server` no wiring do endpoint (nginx + `ReadHeaderTimeout`/`IdleTimeout`).
+- Entrega do **fingerprint da CA out-of-band** no bundle de enrollment (Fase 2 distribution).
