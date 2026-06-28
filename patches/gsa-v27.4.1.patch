@@ -10850,10 +10850,10 @@ index 9775497..9bb4a1d 100644
      </Footer>
    );
 diff --git a/src/web/components/structure/LanguageSwitch.tsx b/src/web/components/structure/LanguageSwitch.tsx
-index 7f74728..bb7342e 100644
+index 7f74728..b7c8165 100644
 --- a/src/web/components/structure/LanguageSwitch.tsx
 +++ b/src/web/components/structure/LanguageSwitch.tsx
-@@ -3,64 +3,91 @@
+@@ -3,64 +3,116 @@
   * SPDX-License-Identifier: AGPL-3.0-or-later
   */
  
@@ -10899,11 +10899,36 @@ index 7f74728..bb7342e 100644
  
 -const getNextLanguage = (language: LanguageCode): LanguageCode =>
 -  language === LANGUAGES.EN ? LANGUAGES.DE : LANGUAGES.EN;
-+const FlagEN: React.FC = () => (
++const FlagUS: React.FC = () => (
 +  <svg style={flagStyle} viewBox="0 0 28 20">
-+    <rect fill="#ffffff" height="20" width="28" />
-+    <rect fill="#ce1124" height="20" width="5" x="11.5" />
-+    <rect fill="#ce1124" height="5" width="28" y="7.5" />
++    <rect fill="#b22234" height="20" width="28" />
++    <rect fill="#fff" height="1.54" width="28" y="1.54" />
++    <rect fill="#fff" height="1.54" width="28" y="4.62" />
++    <rect fill="#fff" height="1.54" width="28" y="7.69" />
++    <rect fill="#fff" height="1.54" width="28" y="10.77" />
++    <rect fill="#fff" height="1.54" width="28" y="13.85" />
++    <rect fill="#fff" height="1.54" width="28" y="16.92" />
++    <rect fill="#3c3b6e" height="10.77" width="11.2" />
++    <g fill="#fff">
++      <circle cx="2" cy="2" r="0.5" />
++      <circle cx="4.3" cy="2" r="0.5" />
++      <circle cx="6.6" cy="2" r="0.5" />
++      <circle cx="8.9" cy="2" r="0.5" />
++      <circle cx="3.15" cy="3.7" r="0.5" />
++      <circle cx="5.45" cy="3.7" r="0.5" />
++      <circle cx="7.75" cy="3.7" r="0.5" />
++      <circle cx="2" cy="5.4" r="0.5" />
++      <circle cx="4.3" cy="5.4" r="0.5" />
++      <circle cx="6.6" cy="5.4" r="0.5" />
++      <circle cx="8.9" cy="5.4" r="0.5" />
++      <circle cx="3.15" cy="7.1" r="0.5" />
++      <circle cx="5.45" cy="7.1" r="0.5" />
++      <circle cx="7.75" cy="7.1" r="0.5" />
++      <circle cx="2" cy="8.8" r="0.5" />
++      <circle cx="4.3" cy="8.8" r="0.5" />
++      <circle cx="6.6" cy="8.8" r="0.5" />
++      <circle cx="8.9" cy="8.8" r="0.5" />
++    </g>
 +  </svg>
 +);
 +
@@ -10916,7 +10941,7 @@ index 7f74728..bb7342e 100644
 +const LANGS: LangDef[] = [
 +  {code: 'pt_BR', label: 'Português (Brasil)', Flag: FlagBR},
 +  {code: 'es', label: 'Español', Flag: FlagES},
-+  {code: 'en', label: 'English', Flag: FlagEN},
++  {code: 'en', label: 'English', Flag: FlagUS},
 +];
  
  const LanguageSwitch: React.FC = () => {
