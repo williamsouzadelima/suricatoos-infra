@@ -5349,10 +5349,10 @@ index eaff647..d6e39ef 100644
 \ No newline at end of file
 diff --git a/public/locales/gsa-es.json b/public/locales/gsa-es.json
 new file mode 100644
-index 0000000..7c66d38
+index 0000000..2bb3c08
 --- /dev/null
 +++ b/public/locales/gsa-es.json
-@@ -0,0 +1,2390 @@
+@@ -0,0 +1,2403 @@
 +{
 +  "\nThis could have the following reasons:\n1. The CPE might not be included in the official NVD CPE dictionary yet, and no additional information is available.\n2. You might have followed an incorrect link and the CPE does not exist.": "\nEsto podría deberse a las siguientes razones:\n1. Es posible que el CPE aún no esté incluido en el diccionario CPE oficial del NVD y no haya información adicional disponible.\n2. Es posible que haya seguido un enlace incorrecto y que el CPE no exista.",
 +  "\nThis could have the following reasons:\n1. The CVE might not be included in the SCAP database yet. For new CVEs it can take a month or more until they become available.\n2. You might have followed an incorrect link and the CVE does not exist.": "\nEsto podría deberse a las siguientes razones:\n1. Es posible que el CVE aún no esté incluido en la base de datos SCAP. Para los CVE nuevos puede pasar un mes o más hasta que estén disponibles.\n2. Es posible que haya seguido un enlace incorrecto y que el CVE no exista.",
@@ -7741,14 +7741,27 @@ index 0000000..7c66d38
 +  "Your Greenbone Enterprise License will expire in {{days}} days!": "¡Su licencia Greenbone Enterprise expirará en {{days}} días!",
 +  "Your last filter change may be too restrictive.": "Su último cambio de filtro puede ser demasiado restrictivo.",
 +  "Language": "Idioma",
-+  "Select language": "Seleccionar idioma"
++  "Select language": "Seleccionar idioma",
++  "Feed update": "Actualización de Feed",
++  "Update feeds now": "Actualizar feeds ahora",
++  "Updating feeds...": "Actualizando feeds...",
++  "Update now": "Actualizar ahora",
++  "Updating...": "Actualizando...",
++  "Last update: {{time}} ({{result}})": "Última actualización: {{time}} ({{result}})",
++  "Last update: never": "Última actualización: nunca",
++  "Enable automatic update": "Habilitar actualización automática",
++  "Frequency": "Frecuencia",
++  "Day of week": "Día de la semana",
++  "Save schedule": "Guardar programación",
++  "Saved": "Guardado",
++  "success": "éxito"
 +}
 \ No newline at end of file
 diff --git a/public/locales/gsa-pt_BR.json b/public/locales/gsa-pt_BR.json
-index 10e592f..325c214 100644
+index 10e592f..b810be9 100644
 --- a/public/locales/gsa-pt_BR.json
 +++ b/public/locales/gsa-pt_BR.json
-@@ -1,216 +1,2390 @@
+@@ -1,216 +1,2403 @@
  {
 -  "# of OVAL Definitions": "OVAL defini\u00e7\u00e3o",
 -  "# of Operating Systems": "Sistema Operacional",
@@ -10336,7 +10349,20 @@ index 10e592f..325c214 100644
 +  "Your Greenbone Enterprise License will expire in {{days}} days!": "Sua Licenca Greenbone Enterprise expirara em {{days}} dias!",
 +  "Your last filter change may be too restrictive.": "Sua última alteracao de filtro pode estar muito restritiva.",
 +  "Language": "Idioma",
-+  "Select language": "Selecionar idioma"
++  "Select language": "Selecionar idioma",
++  "Feed update": "Atualização de Feed",
++  "Update feeds now": "Atualizar feeds agora",
++  "Updating feeds...": "Atualizando feeds...",
++  "Update now": "Atualizar agora",
++  "Updating...": "Atualizando...",
++  "Last update: {{time}} ({{result}})": "Última atualização: {{time}} ({{result}})",
++  "Last update: never": "Última atualização: nunca",
++  "Enable automatic update": "Habilitar atualização automática",
++  "Frequency": "Frequência",
++  "Day of week": "Dia da semana",
++  "Save schedule": "Salvar agendamento",
++  "Saved": "Salvo",
++  "success": "sucesso"
 +}
 \ No newline at end of file
 diff --git a/public/suricatoos-theme.css b/public/suricatoos-theme.css
@@ -11063,6 +11089,259 @@ index 7f74728..b7c8165 100644
    );
  };
  
+diff --git a/src/web/pages/extras/FeedStatusPage.tsx b/src/web/pages/extras/FeedStatusPage.tsx
+index b995df4..be67f0d 100644
+--- a/src/web/pages/extras/FeedStatusPage.tsx
++++ b/src/web/pages/extras/FeedStatusPage.tsx
+@@ -42,6 +42,7 @@ import TableHead from 'web/components/table/TableHead';
+ import TableRow from 'web/components/table/TableRow';
+ import useGmp from 'web/hooks/useGmp';
+ import useTranslation from 'web/hooks/useTranslation';
++import FeedUpdateSection from 'web/pages/extras/FeedUpdateSection';
+ 
+ interface FeedStatusProps {
+   feeds: Feed[];
+@@ -124,6 +125,7 @@ const FeedStatus = ({feeds}: FeedStatusProps) => {
+           <ToolBarIcons />
+         </span>
+         <Section img={<FeedIcon size="large" />} title={_('Feed Status')} />
++        <FeedUpdateSection />
+         <Table>
+           <TableBody>
+             <TableRow>
+diff --git a/src/web/pages/extras/FeedUpdateSection.tsx b/src/web/pages/extras/FeedUpdateSection.tsx
+new file mode 100644
+index 0000000..fa4461e
+--- /dev/null
++++ b/src/web/pages/extras/FeedUpdateSection.tsx
+@@ -0,0 +1,227 @@
++/* SPDX-FileCopyrightText: 2026 Suricatoos
++ *
++ * SPDX-License-Identifier: AGPL-3.0-or-later
++ */
++
++import React, {useCallback, useEffect, useState} from 'react';
++import {Button, Group, Loader, Select, Stack, Switch, Text} from '@mantine/core';
++import useTranslation from 'web/hooks/useTranslation';
++
++const API = '/feed-sync';
++
++interface Schedule {
++  enabled: boolean;
++  frequency: 'daily' | 'weekly';
++  weekday: number;
++  time: string;
++}
++
++interface Status {
++  state?: string;
++  last_run?: string | null;
++  last_result?: string | null;
++  schedule?: Schedule;
++}
++
++const jget = (p: string): Promise<Status> =>
++  fetch(API + p, {credentials: 'same-origin'}).then(r => r.json());
++
++const jpost = (p: string, body?: unknown): Promise<Schedule> =>
++  fetch(API + p, {
++    method: 'POST',
++    credentials: 'same-origin',
++    headers: {'Content-Type': 'application/json'},
++    body: body !== undefined ? JSON.stringify(body) : undefined,
++  }).then(r => r.json());
++
++const DEFAULT_SCHEDULE: Schedule = {
++  enabled: false,
++  frequency: 'daily',
++  weekday: 1,
++  time: '02:00',
++};
++
++const FeedUpdateSection: React.FC = () => {
++  const [_] = useTranslation();
++  const [status, setStatus] = useState<Status | null>(null);
++  const [sch, setSch] = useState<Schedule>(DEFAULT_SCHEDULE);
++  const [busy, setBusy] = useState(false);
++  const [saved, setSaved] = useState(false);
++
++  const refresh = useCallback(async () => {
++    try {
++      const s = await jget('/status');
++      setStatus(s);
++      if (s.schedule) {
++        setSch({...DEFAULT_SCHEDULE, ...s.schedule});
++      }
++    } catch (e) {
++      // ignora; pagina segue util mesmo se o helper estiver fora
++    }
++  }, []);
++
++  useEffect(() => {
++    refresh();
++    const id = setInterval(refresh, 5000);
++    return () => clearInterval(id);
++  }, [refresh]);
++
++  const running = status?.state === 'running';
++
++  const syncNow = async () => {
++    setBusy(true);
++    try {
++      await jpost('/sync');
++      await refresh();
++    } finally {
++      setBusy(false);
++    }
++  };
++
++  const saveSchedule = async () => {
++    setBusy(true);
++    try {
++      const r = await jpost('/schedule', sch);
++      if (r && typeof r.enabled === 'boolean') {
++        setSch({...DEFAULT_SCHEDULE, ...r});
++      }
++      setSaved(true);
++      setTimeout(() => setSaved(false), 2500);
++    } finally {
++      setBusy(false);
++    }
++  };
++
++  const weekdays = [
++    {value: '1', label: _('Monday')},
++    {value: '2', label: _('Tuesday')},
++    {value: '3', label: _('Wednesday')},
++    {value: '4', label: _('Thursday')},
++    {value: '5', label: _('Friday')},
++    {value: '6', label: _('Saturday')},
++    {value: '7', label: _('Sunday')},
++  ];
++
++  const lastLine = running
++    ? _('Updating feeds...')
++    : status?.last_run
++      ? _('Last update: {{time}} ({{result}})', {
++          time: status.last_run,
++          result:
++            status.last_result === 'success'
++              ? _('success')
++              : status.last_result || '-',
++        })
++      : _('Last update: never');
++
++  return (
++    <div
++      style={{
++        margin: '4px 0 22px',
++        padding: 20,
++        border: '1px solid var(--sur-border, #e5e9f0)',
++        borderRadius: 14,
++        background: 'var(--sur-surface, #ffffff)',
++        boxShadow: 'var(--sur-shadow, 0 6px 18px rgba(15,28,50,.06))',
++        maxWidth: 620,
++      }}
++    >
++      <Text
++        fw={700}
++        mb="md"
++        size="lg"
++        style={{fontFamily: "'Space Grotesk', sans-serif"}}
++      >
++        {_('Feed update')}
++      </Text>
++
++      <Group align="center" justify="space-between" wrap="nowrap">
++        <div>
++          <Text fw={600}>{_('Update feeds now')}</Text>
++          <Text c="dimmed" size="sm">
++            {lastLine}
++          </Text>
++        </div>
++        <Button
++          disabled={busy || running}
++          leftSection={running ? <Loader size="xs" /> : undefined}
++          onClick={syncNow}
++        >
++          {running ? _('Updating...') : _('Update now')}
++        </Button>
++      </Group>
++
++      <div
++        style={{
++          marginTop: 18,
++          paddingTop: 16,
++          borderTop: '1px solid var(--sur-border, #e5e9f0)',
++        }}
++      >
++        <Switch
++          checked={sch.enabled}
++          label={_('Enable automatic update')}
++          onChange={e => setSch({...sch, enabled: e.currentTarget.checked})}
++        />
++        <Group align="flex-end" gap="md" mt="md" wrap="wrap">
++          <Select
++            allowDeselect={false}
++            data={[
++              {value: 'daily', label: _('Daily')},
++              {value: 'weekly', label: _('Weekly')},
++            ]}
++            disabled={!sch.enabled}
++            label={_('Frequency')}
++            value={sch.frequency}
++            w={150}
++            onChange={v =>
++              setSch({...sch, frequency: (v as 'daily' | 'weekly') || 'daily'})
++            }
++          />
++          {sch.frequency === 'weekly' && (
++            <Select
++              allowDeselect={false}
++              data={weekdays}
++              disabled={!sch.enabled}
++              label={_('Day of week')}
++              value={String(sch.weekday)}
++              w={160}
++              onChange={v => setSch({...sch, weekday: Number(v) || 1})}
++            />
++          )}
++          <div>
++            <Text fw={500} mb={4} size="sm">
++              {_('Time')}
++            </Text>
++            <input
++              disabled={!sch.enabled}
++              style={{
++                padding: '7px 10px',
++                borderRadius: 9,
++                border: '1px solid var(--sur-border, #e5e9f0)',
++                background: 'var(--sur-surface, #fff)',
++                color: 'var(--sur-text, #111a27)',
++                fontFamily: 'inherit',
++              }}
++              type="time"
++              value={sch.time}
++              onChange={e => setSch({...sch, time: e.currentTarget.value})}
++            />
++          </div>
++        </Group>
++        <Group align="center" gap="sm" mt="lg">
++          <Button disabled={busy} variant="filled" onClick={saveSchedule}>
++            {_('Save schedule')}
++          </Button>
++          {saved && (
++            <Text c="green" size="sm">
++              {_('Saved')}
++            </Text>
++          )}
++        </Group>
++      </div>
++    </div>
++  );
++};
++
++export default FeedUpdateSection;
 diff --git a/src/web/pages/login/LoginForm.tsx b/src/web/pages/login/LoginForm.tsx
 index 4c667ec..434d0dd 100644
 --- a/src/web/pages/login/LoginForm.tsx
