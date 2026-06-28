@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://suricatoos.dev/schema/inventory.schema.json",
+  "title": "Suricatoos Agent — Inventory",
+  "description": "Normalized, OS-independent inventory emitted per collection cycle. Source of truth mirrored by agent/internal/inventory (Go). schema_version is bumped with agent/internal/inventory.SchemaVersion.",
+  "type": "object",
+  "required": ["schema_version", "agent", "collected_at", "os", "packages"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "type": "string", "const": "1.0.0" },
+    "agent": {
+      "type": "object",
+      "required": ["agent_id", "agent_version", "hostname"],
+      "additionalProperties": false,
+      "properties": {
+        "agent_id": { "type": "string", "description": "machine-id derived, stable across reboot" },
+        "agent_version": { "type": "string" },
+        "hostname": { "type": "string" },
+        "scope": { "type": "string", "description": "tenant/policy bound to the mTLS cert" }
+      }
+    },
+    "collected_at": { "type": "string", "format": "date-time" },
+    "os": {
+      "type": "object",
+      "required": ["family", "release", "arch"],
+      "additionalProperties": false,
+      "properties": {
+        "family": { "enum": ["linux", "darwin", "windows"] },
+        "distro": { "type": "string" },
+        "release": { "type": "string" },
+        "arch": { "type": "string" },
+        "kernel": { "type": "string" }
+      }
+    },
+    "packages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "version", "source"],
+        "additionalProperties": false,
+        "properties": {
+          "name": { "type": "string" },
+          "version": { "type": "string" },
+          "arch": { "type": "string" },
+          "source": { "enum": ["dpkg", "rpm", "pkgutil", "app-bundle", "homebrew", "registry", "winget"] },
+          "full_name": { "type": "string", "description": "Notus-style name-version-release.arch (Linux)" }
+        }
+      }
+    },
+    "facts": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "listening_ports_local": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["port", "proto"],
+            "additionalProperties": false,
+            "properties": {
+              "port": { "type": "integer", "minimum": 0, "maximum": 65535 },
+              "proto": { "enum": ["tcp", "udp"] },
+              "process": { "type": "string" }
+            }
+          }
+        },
+        "services": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "cycle_hash": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+  }
+}

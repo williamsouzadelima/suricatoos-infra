@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://suricatoos.dev/schema/finding.schema.json",
+  "title": "Suricatoos Agent — Findings (post-correlation)",
+  "description": "Findings produced by the server-side correlation engine from an agent inventory. Every finding is traceable to a concrete collected artifact (package + advisory OID): no evidence, no finding.",
+  "type": "object",
+  "required": ["schema_version", "agent_id", "host", "collected_at", "findings"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "type": "string", "const": "1.0.0" },
+    "agent_id": { "type": "string" },
+    "host": { "type": "string" },
+    "collected_at": { "type": "string", "format": "date-time" },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["oid", "package_observed", "evidence"],
+        "additionalProperties": false,
+        "properties": {
+          "oid": { "type": "string", "pattern": "^[0-9.]+$", "description": "NVT OID the advisory matched" },
+          "cve": { "type": "array", "items": { "type": "string" } },
+          "severity": { "type": "number", "minimum": 0, "maximum": 10 },
+          "severity_origin": { "type": "string", "description": "e.g. feed-vt-metadata" },
+          "package_observed": { "type": "string", "description": "installed name-version-release.arch" },
+          "package_fixed": { "type": "string", "description": "fixed name-version-release.arch from the advisory" },
+          "specifier": { "type": "string", "description": "advisory comparison operator, e.g. >=" },
+          "product": { "type": "string", "description": "Notus product_name matched, e.g. Debian 12" },
+          "evidence": {
+            "type": "object",
+            "required": ["source"],
+            "additionalProperties": false,
+            "properties": {
+              "source": { "type": "string", "description": "collector source, e.g. dpkg" },
+              "matched_advisory": { "type": "string", "description": "advisory file, e.g. debian_12.notus" }
+            }
+          },
+          "detected_at": { "type": "string", "format": "date-time" }
+        }
+      }
+    }
+  }
+}
