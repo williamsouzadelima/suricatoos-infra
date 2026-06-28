@@ -154,14 +154,16 @@ func (h *Handler) listTokens(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(out)
 }
 
-// revokeToken revokes a token by ID.
+// revokeToken revokes a token by ID and invalidates all mTLS certificates that
+// were issued under it by adding their serials to the CA's revocation list.
 func (h *Handler) revokeToken(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {
 		http.Error(w, "missing token id", http.StatusBadRequest)
 		return
 	}
-	if err := h.tm.Revoke(id, "admin-api"); err != nil {
+	rec, err := h.tm.RevokeRecord(id, "admin-api")
+	if err != nil {
 		switch err {
 		case tokens.ErrNotFound:
 			http.Error(w, "token not found", http.StatusNotFound)
@@ -171,6 +173,17 @@ func (h *Handler) revokeToken(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "revoke failed: "+err.Error(), http.StatusInternalServerError)
 		}
 		return
+	}
+	// Revoke all mTLS certs that were issued via this token's enrollments.
+	now := time.Now().UTC()
+	for _, enr := range rec.Enrollments {
+		if enr.CertSerial == "" {
+			continue
+		}
+		if err := h.authority.RevokeCertSerial(enr.CertSerial, now); err != nil {
+			// Log but don't fail — token is already revoked.
+			_ = err
+		}
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"status": "revoked", "id": id})

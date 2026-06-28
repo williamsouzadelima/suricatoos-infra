@@ -145,6 +145,82 @@ func TestNewPersistent_InconsistentState(t *testing.T) {
 	}
 }
 
+func TestCRLDistributionPoint(t *testing.T) {
+	now := time.Unix(1700000000, 0).UTC()
+	c, _ := NewEphemeral(now)
+	c.SetCRLURL("https://cp.example.com/v1/crl.der")
+
+	issued, err := c.SignClientCSRIssued(testCSR(t, "agent-crl"), CertProfile{CommonName: "agent-crl", Org: "acme"}, time.Hour, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	block, _ := pem.Decode(issued.PEM)
+	cert, _ := x509.ParseCertificate(block.Bytes)
+	if len(cert.CRLDistributionPoints) != 1 || cert.CRLDistributionPoints[0] != "https://cp.example.com/v1/crl.der" {
+		t.Fatalf("CRLDistributionPoints = %v", cert.CRLDistributionPoints)
+	}
+	if issued.SerialHex == "" {
+		t.Fatal("SerialHex must be non-empty")
+	}
+}
+
+func TestIssueCRL_RevokeAndVerify(t *testing.T) {
+	now := time.Unix(1700000000, 0).UTC()
+	c, _ := NewEphemeral(now)
+
+	issued, err := c.SignClientCSRIssued(testCSR(t, "agent-rev"), CertProfile{CommonName: "agent-rev", Org: "acme"}, time.Hour, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := c.RevokeCertSerial(issued.SerialHex, now); err != nil {
+		t.Fatalf("RevokeCertSerial: %v", err)
+	}
+
+	crlDER, err := c.IssueCRL(now)
+	if err != nil {
+		t.Fatalf("IssueCRL: %v", err)
+	}
+	crl, err := x509.ParseRevocationList(crlDER)
+	if err != nil {
+		t.Fatalf("ParseRevocationList: %v", err)
+	}
+	if err := crl.CheckSignatureFrom(c.cert); err != nil {
+		t.Fatalf("CRL signature invalid: %v", err)
+	}
+	if len(crl.RevokedCertificateEntries) != 1 {
+		t.Fatalf("want 1 revoked entry, got %d", len(crl.RevokedCertificateEntries))
+	}
+	if crl.RevokedCertificateEntries[0].SerialNumber.Text(16) != issued.SerialHex {
+		t.Errorf("serial mismatch in CRL")
+	}
+}
+
+func TestCRLFile_PersistsAndLoads(t *testing.T) {
+	dir := t.TempDir()
+	crlPath := dir + "/revoked.json"
+	now := time.Unix(1700000000, 0).UTC()
+
+	c1, _ := NewEphemeral(now)
+	if err := c1.LoadCRLFile(crlPath); err != nil {
+		t.Fatal(err)
+	}
+	issued, _ := c1.SignClientCSRIssued(testCSR(t, "x"), CertProfile{CommonName: "x"}, time.Hour, now)
+	if err := c1.RevokeCertSerial(issued.SerialHex, now); err != nil {
+		t.Fatal(err)
+	}
+
+	// Reload CA state from same cert/key (simulating restart): revocations must survive.
+	c2, _ := NewEphemeral(now)
+	if err := c2.LoadCRLFile(crlPath); err != nil {
+		t.Fatal(err)
+	}
+	crlDER, _ := c2.IssueCRL(now)
+	crl, _ := x509.ParseRevocationList(crlDER)
+	if len(crl.RevokedCertificateEntries) != 1 {
+		t.Fatalf("revocations must survive CRL file reload, got %d entries", len(crl.RevokedCertificateEntries))
+	}
+}
+
 func TestSerialsAreUnique(t *testing.T) {
 	now := time.Unix(1700000000, 0).UTC()
 	c, _ := NewEphemeral(now)

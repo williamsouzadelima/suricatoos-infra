@@ -8,6 +8,7 @@ import (
 )
 
 var bucketName = []byte("tokens")
+var agentsBucket = []byte("agents")
 
 // BoltStore is a BoltDB-backed persistent Store. It survives control-plane
 // restarts and supports concurrent reads. Open it with NewBoltStore and close
@@ -24,7 +25,10 @@ func NewBoltStore(path string) (*BoltStore, error) {
 		return nil, fmt.Errorf("bolt.Open %s: %w", path, err)
 	}
 	if err := db.Update(func(tx *bolt.Tx) error {
-		_, err := tx.CreateBucketIfNotExists(bucketName)
+		if _, err := tx.CreateBucketIfNotExists(bucketName); err != nil {
+			return err
+		}
+		_, err := tx.CreateBucketIfNotExists(agentsBucket)
 		return err
 	}); err != nil {
 		db.Close()
@@ -94,4 +98,21 @@ func (s *BoltStore) List() ([]Record, error) {
 		})
 	})
 	return recs, err
+}
+
+// HasAgentID reports whether agentID exists in the agents bucket.
+func (s *BoltStore) HasAgentID(agentID string) (bool, error) {
+	var found bool
+	err := s.db.View(func(tx *bolt.Tx) error {
+		found = tx.Bucket(agentsBucket).Get([]byte(agentID)) != nil
+		return nil
+	})
+	return found, err
+}
+
+// RegisterAgentID writes agentID → tokenID to the agents bucket.
+func (s *BoltStore) RegisterAgentID(agentID, tokenID string) error {
+	return s.db.Update(func(tx *bolt.Tx) error {
+		return tx.Bucket(agentsBucket).Put([]byte(agentID), []byte(tokenID))
+	})
 }

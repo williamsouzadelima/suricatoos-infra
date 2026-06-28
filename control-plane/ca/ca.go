@@ -13,11 +13,13 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/hex"
+	"encoding/json"
 	"encoding/pem"
 	"errors"
 	"fmt"
 	"math/big"
 	"os"
+	"sync"
 	"time"
 )
 
@@ -34,6 +36,17 @@ type CA struct {
 	cert    *x509.Certificate
 	key     ed25519.PrivateKey
 	certPEM []byte
+
+	mu      sync.RWMutex
+	revoked []x509.RevocationListEntry // revoked cert entries
+	crlURL  string                     // embedded in issued certs; empty = omit
+	crlFile string                     // when set, revocations are persisted here
+}
+
+// crlEntry is the on-disk JSON representation of one revoked certificate.
+type crlEntry struct {
+	SerialHex string    `json:"serial"`
+	RevokedAt time.Time `json:"revoked_at"`
 }
 
 // NewEphemeral generates a fresh self-signed Ed25519 CA valid from now.
@@ -144,6 +157,92 @@ func saveCA(c *CA, certFile, keyFile string) error {
 	return nil
 }
 
+// SetCRLURL sets the URL embedded as a CRL distribution point in issued client
+// certificates. When non-empty, clients can fetch the CRL to check for
+// revocations without waiting for the certificate TTL to expire.
+func (c *CA) SetCRLURL(url string) {
+	c.mu.Lock()
+	c.crlURL = url
+	c.mu.Unlock()
+}
+
+// LoadCRLFile reads revoked serial entries from path (JSON array of crlEntry)
+// and remembers the path for future saves. Calling this is optional; without it
+// revocations are in-memory only and lost on restart.
+//
+// A missing file is treated as an empty list (first-run case).
+func (c *CA) LoadCRLFile(path string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.crlFile = path
+	data, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("ler crl file: %w", err)
+	}
+	var entries []crlEntry
+	if err := json.Unmarshal(data, &entries); err != nil {
+		return fmt.Errorf("decodificar crl file: %w", err)
+	}
+	for _, e := range entries {
+		serial := new(big.Int)
+		if _, ok := serial.SetString(e.SerialHex, 16); !ok {
+			return fmt.Errorf("serial inválido na crl: %q", e.SerialHex)
+		}
+		c.revoked = append(c.revoked, x509.RevocationListEntry{SerialNumber: serial, RevocationTime: e.RevokedAt})
+	}
+	return nil
+}
+
+// RevokeCertSerial adds a certificate serial (hex string) to the revocation list.
+// When LoadCRLFile was called, persists the updated list to disk.
+func (c *CA) RevokeCertSerial(serialHex string, revokedAt time.Time) error {
+	serial := new(big.Int)
+	if _, ok := serial.SetString(serialHex, 16); !ok {
+		return fmt.Errorf("serial inválido: %q", serialHex)
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.revoked = append(c.revoked, x509.RevocationListEntry{SerialNumber: serial, RevocationTime: revokedAt})
+	if c.crlFile != "" {
+		if err := c.saveCRLLocked(); err != nil {
+			return fmt.Errorf("persistir crl: %w", err)
+		}
+	}
+	return nil
+}
+
+// IssueCRL signs and returns a DER-encoded CRL valid for 24 hours from now.
+func (c *CA) IssueCRL(now time.Time) ([]byte, error) {
+	c.mu.RLock()
+	entries := make([]x509.RevocationListEntry, len(c.revoked))
+	copy(entries, c.revoked)
+	c.mu.RUnlock()
+
+	tmpl := &x509.RevocationList{
+		Number:                    big.NewInt(now.UnixMilli()),
+		ThisUpdate:                now,
+		NextUpdate:                now.Add(24 * time.Hour),
+		RevokedCertificateEntries: entries,
+	}
+	return x509.CreateRevocationList(rand.Reader, tmpl, c.cert, c.key)
+}
+
+// saveCRLLocked persists c.revoked to c.crlFile. Must be called with c.mu held.
+func (c *CA) saveCRLLocked() error {
+	entries := make([]crlEntry, len(c.revoked))
+	for i, r := range c.revoked {
+		entries[i] = crlEntry{SerialHex: r.SerialNumber.Text(16), RevokedAt: r.RevocationTime}
+	}
+	data, err := json.Marshal(entries)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(c.crlFile, data, 0o600)
+}
+
 // Fingerprint returns the SHA-256 fingerprint of the CA certificate in
 // "sha256:HEXHEX..." format — the value passed as --ca-pin to the agent.
 func (c *CA) Fingerprint() string {
@@ -159,28 +258,52 @@ func (c *CA) CertPEM() []byte {
 	return out
 }
 
+// IssuedCert bundles the PEM-encoded certificate with its serial number (hex),
+// allowing callers to record the serial for later revocation.
+type IssuedCert struct {
+	PEM       []byte // PEM-encoded certificate
+	SerialHex string // hex representation of the certificate serial number
+}
+
 // SignClientCSR verifies a CSR (proof-of-possession + key-strength policy) and
 // signs a client certificate bound to the profile, valid for ttl from now.
+//
+// When a CRL URL was set via SetCRLURL, the certificate includes a CRL
+// distribution point so clients can check revocation status.
 func (c *CA) SignClientCSR(csr *x509.CertificateRequest, p CertProfile, ttl time.Duration, now time.Time) ([]byte, error) {
-	if csr == nil {
-		return nil, errors.New("CSR nulo")
-	}
-	if err := csr.CheckSignature(); err != nil {
-		return nil, fmt.Errorf("assinatura do CSR inválida (proof-of-possession): %w", err)
-	}
-	if err := allowedKey(csr.PublicKey); err != nil {
-		return nil, err
-	}
-	if p.CommonName == "" {
-		return nil, errors.New("CommonName (agent id) obrigatório")
-	}
-	if ttl <= 0 {
-		return nil, errors.New("ttl do certificado deve ser positivo")
-	}
-	serial, err := randSerial()
+	issued, err := c.SignClientCSRIssued(csr, p, ttl, now)
 	if err != nil {
 		return nil, err
 	}
+	return issued.PEM, nil
+}
+
+// SignClientCSRIssued is like SignClientCSR but returns the full IssuedCert so
+// callers can record the serial for later revocation.
+func (c *CA) SignClientCSRIssued(csr *x509.CertificateRequest, p CertProfile, ttl time.Duration, now time.Time) (IssuedCert, error) {
+	if csr == nil {
+		return IssuedCert{}, errors.New("CSR nulo")
+	}
+	if err := csr.CheckSignature(); err != nil {
+		return IssuedCert{}, fmt.Errorf("assinatura do CSR inválida (proof-of-possession): %w", err)
+	}
+	if err := allowedKey(csr.PublicKey); err != nil {
+		return IssuedCert{}, err
+	}
+	if p.CommonName == "" {
+		return IssuedCert{}, errors.New("CommonName (agent id) obrigatório")
+	}
+	if ttl <= 0 {
+		return IssuedCert{}, errors.New("ttl do certificado deve ser positivo")
+	}
+	serial, err := randSerial()
+	if err != nil {
+		return IssuedCert{}, err
+	}
+	c.mu.RLock()
+	crlURL := c.crlURL
+	c.mu.RUnlock()
+
 	tmpl := &x509.Certificate{
 		SerialNumber:          serial,
 		Subject:               subject(p),
@@ -190,11 +313,17 @@ func (c *CA) SignClientCSR(csr *x509.CertificateRequest, p CertProfile, ttl time
 		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
 		BasicConstraintsValid: true,
 	}
+	if crlURL != "" {
+		tmpl.CRLDistributionPoints = []string{crlURL}
+	}
 	der, err := x509.CreateCertificate(rand.Reader, tmpl, c.cert, csr.PublicKey, c.key)
 	if err != nil {
-		return nil, err
+		return IssuedCert{}, err
 	}
-	return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}), nil
+	return IssuedCert{
+		PEM:       pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}),
+		SerialHex: serial.Text(16),
+	}, nil
 }
 
 // allowedKey enforces a public-key strength/algorithm policy so the CA never
