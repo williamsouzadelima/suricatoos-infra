@@ -54,5 +54,30 @@ services:
       - /root/suricatoos/compose:/compose:ro
       - feed_updater_state:/state
 
+  # Suricatoos: control-plane do agente de endpoint.
+  # Enroll: POST  https://scanner.suricatoos.com/agent/v1/enroll
+  # CRL:    GET   https://scanner.suricatoos.com/agent/v1/crl.der
+  # Admin:  POST/GET/DELETE https://scanner.suricatoos.com/agent/api/v1/tokens  (Bearer ADMIN_SECRET)
+  #
+  # Pré-requisito no host: criar /var/lib/suricatoos-cp/ e o env file:
+  #   mkdir -p /var/lib/suricatoos-cp
+  #   cat > /var/lib/suricatoos-cp/control-plane.env <<'EOF'
+  #   CONTROL_PLANE_URL=https://scanner.suricatoos.com/agent
+  #   ADMIN_SECRET=<segredo-forte-gerado-com-openssl-rand-hex-32>
+  #   CA_CERT_FILE=/data/ca.crt
+  #   CA_KEY_FILE=/data/ca.key
+  #   TOKEN_DB_PATH=/data/tokens.db
+  #   CRL_URL=https://scanner.suricatoos.com/agent/v1/crl.der
+  #   CRL_FILE=/data/crl.json
+  #   EOF
+  #   chmod 600 /var/lib/suricatoos-cp/control-plane.env
+  control-plane:
+    image: ghcr.io/williamsouzadelima/suricatoos-control-plane:stable
+    restart: unless-stopped
+    env_file:
+      - /var/lib/suricatoos-cp/control-plane.env
+    volumes:
+      - /var/lib/suricatoos-cp:/data
+
 volumes:
   feed_updater_state:
