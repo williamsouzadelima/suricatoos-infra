@@ -30,10 +30,12 @@ type Request struct {
 	Arch    string `json:"arch"`
 }
 
-// Response carries the issued client certificate and the CA to pin.
+// Response carries the issued client certificate, the CA to pin, and the ingest
+// endpoint the agent should report to (so the operator needn't supply it again).
 type Response struct {
-	Certificate string `json:"certificate"` // PEM
-	CACert      string `json:"ca_cert"`     // PEM
+	Certificate string `json:"certificate"`          // PEM
+	CACert      string `json:"ca_cert"`              // PEM
+	IngestURL   string `json:"ingest_url,omitempty"` // where the agent pushes inventory
 }
 
 // Signer issues a client certificate from a verified CSR. *ca.CA satisfies it;
@@ -46,10 +48,11 @@ type Signer interface {
 
 // Service ties the token manager and the CA into the enrollment flow.
 type Service struct {
-	tokens  *tokens.Manager
-	signer  Signer
-	now     func() time.Time
-	certTTL time.Duration
+	tokens    *tokens.Manager
+	signer    Signer
+	now       func() time.Time
+	certTTL   time.Duration
+	ingestURL string
 }
 
 // Option configures a Service.
@@ -60,6 +63,11 @@ func WithClock(f func() time.Time) Option { return func(s *Service) { s.now = f 
 
 // WithCertTTL sets the issued client-certificate lifetime.
 func WithCertTTL(d time.Duration) Option { return func(s *Service) { s.certTTL = d } }
+
+// WithIngestURL sets the ingest endpoint returned to agents on enrollment, so a
+// successfully enrolled agent learns where to push inventory without a separate
+// out-of-band flag.
+func WithIngestURL(u string) Option { return func(s *Service) { s.ingestURL = u } }
 
 // NewService builds an enrollment Service. Default cert TTL is 90 days.
 func NewService(tm *tokens.Manager, s Signer, opts ...Option) *Service {
@@ -134,7 +142,11 @@ func (s *Service) Enroll(req Request) (Response, error) {
 	}); err != nil {
 		return Response{}, err
 	}
-	return Response{Certificate: string(issued.PEM), CACert: string(s.signer.CertPEM())}, nil
+	return Response{
+		Certificate: string(issued.PEM),
+		CACert:      string(s.signer.CertPEM()),
+		IngestURL:   s.ingestURL,
+	}, nil
 }
 
 // Handler returns an http.Handler serving POST /enroll. Client-facing errors are

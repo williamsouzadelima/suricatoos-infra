@@ -72,7 +72,9 @@ services:
   #   TOKEN_DB_PATH=/data/tokens.db
   #   CRL_URL=https://scanner.suricatoos.com/agent/v1/crl.der
   #   CRL_FILE=/data/crl.json
+  #   INGEST_URL=https://scanner.suricatoos.com/ingest/v1/inventory
   #   EOF
+  # INGEST_URL é entregue aos agentes no enroll → eles reportam ao ingest sem --ingest.
   #   chmod 600 /var/lib/suricatoos-cp/control-plane.env
   control-plane:
     image: ghcr.io/williamsouzadelima/suricatoos-control-plane:stable
