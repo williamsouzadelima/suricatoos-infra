@@ -1,0 +1,12 @@
+{
+  "package_type": "deb",
+  "product_name": "Ubuntu 22.04 LTS",
+  "advisories": [
+    {
+      "oid": "1.3.6.1.4.1.25623.1.1.10.2024.1001",
+      "fixed_packages": [
+        { "name": "openssl", "full_version": "3.0.13-0ubuntu3.4", "specifier": ">=" }
+      ]
+    }
+  ]
+}

@@ -44,6 +44,13 @@ func NewPipelineSink(cfg PipelineConfig) (*PipelineSink, error) {
 	if err != nil {
 		return nil, fmt.Errorf("carregar advisories Notus de %s: %w", cfg.NotusDir, err)
 	}
+	// Surface advisories whose product_name we cannot map to a distro family:
+	// they will never match any host, so an operator must extend
+	// correlation.canonicalDistro rather than silently lose those findings.
+	if unclassified := corr.UnclassifiedProducts(); len(unclassified) > 0 {
+		log.Printf("pipeline: AVISO — %d produto(s) de advisory sem distro reconhecida (não casarão com nenhum host): %v",
+			len(unclassified), unclassified)
+	}
 
 	python := cfg.BridgePython
 	if python == "" {
