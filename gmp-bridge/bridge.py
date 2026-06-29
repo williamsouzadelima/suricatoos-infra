@@ -124,6 +124,9 @@ def fetch_nvt_meta(gmp: Gmp, oid: str) -> NVTMeta | None:
 def finding_report_to_xml(report: dict, nvt_meta: dict[str, NVTMeta | None] | None = None) -> str:
     """Convert a FindingReport dict to a GMP report XML string.
 
+    The report carries a report-level <host> block (+ <scan_start>/<scan_end>) so
+    gvmd registers the host on import (host_count, and a host asset with in_assets=1).
+
     Each finding becomes a <result> with:
     - <host> → host IP as text content (gvmd's result-host format).
     - <nvt oid=...> → links to the VT; gvmd enriches name after import.
@@ -142,8 +145,16 @@ def finding_report_to_xml(report: dict, nvt_meta: dict[str, NVTMeta | None] | No
         nvt_meta = {}
 
     root = ET.Element("report", id=str(uuid.uuid4()))
-    results_el = ET.SubElement(root, "results", max="-1", start="1")
     host_ip = report.get("host", "0.0.0.0")
+    # collected_at is RFC3339/ISO-8601 (e.g. "2026-06-29T00:00:00Z"), which gvmd's
+    # parse_iso_time_tz accepts. A bad/empty value parses to 0 but still registers
+    # the host, so this is safe either way.
+    scan_time = report.get("collected_at") or ""
+
+    # scan_start precedes <results> (mirrors gvmd's own report export order).
+    ET.SubElement(root, "scan_start").text = scan_time
+
+    results_el = ET.SubElement(root, "results", max="-1", start="1")
 
     for finding in report.get("findings", []):
         r = ET.SubElement(results_el, "result", id=str(uuid.uuid4()))
@@ -202,6 +213,18 @@ def finding_report_to_xml(report: dict, nvt_meta: dict[str, NVTMeta | None] | No
         qod = ET.SubElement(r, "qod")
         ET.SubElement(qod, "value").text = "70"
         ET.SubElement(qod, "type").text = "package"
+
+    # Report-level host block — registers the host so the imported report is
+    # host-attributed (report_hosts row → host_count) and, with in_assets=1,
+    # creates a host asset. Without it gvmd shows the report with 0 hosts. This
+    # is the modern <host> form gvmd itself exports (verified against gvmd 26.31.1:
+    # creates both the report_host and the asset). All findings in a FindingReport
+    # belong to the single agent host, so one block suffices.
+    report_host_el = ET.SubElement(root, "host")
+    ET.SubElement(report_host_el, "ip").text = host_ip
+    ET.SubElement(report_host_el, "start").text = scan_time
+    ET.SubElement(report_host_el, "end").text = scan_time
+    ET.SubElement(root, "scan_end").text = scan_time
 
     return ET.tostring(root, encoding="unicode")
 
