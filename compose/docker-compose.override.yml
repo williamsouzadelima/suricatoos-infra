@@ -11,6 +11,9 @@ services:
       - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
       - /var/log/suricatoos-nginx:/var/log/nginx-sur
       - /etc/letsencrypt:/etc/letsencrypt:ro
+      # Enrollment CA — nginx verifies agent client certs (mTLS) for /ingest/.
+      # Same CA the control-plane issues with (CA_CERT_FILE in control-plane.env).
+      - /var/lib/suricatoos-cp/ca.crt:/etc/nginx/enroll-ca.crt:ro
 
   # Suricatoos: proxy restrito do docker socket (so containers/images/networks/volumes,
   # sem exec/swarm/secrets). O feed-updater fala com o docker SO atraves daqui.
@@ -78,6 +81,34 @@ services:
       - /var/lib/suricatoos-cp/control-plane.env
     volumes:
       - /var/lib/suricatoos-cp:/data
+
+  # Suricatoos: data-plane do agente. Recebe inventários (push outbound dos
+  # agentes, via nginx /ingest/ com mTLS), correlaciona contra as advisories
+  # Notus do feed e importa os achados no gvmd (gmp-bridge) → visíveis na GSA.
+  # Sem porta publicada: o nginx termina o mTLS e proxia internamente.
+  #
+  # Pré-requisito no host: env file com a senha do gvmd:
+  #   mkdir -p /var/lib/suricatoos-cp
+  #   echo 'GVM_PASSWORD=<senha-admin-do-gvmd>' > /var/lib/suricatoos-cp/ingest.env
+  #   chmod 600 /var/lib/suricatoos-cp/ingest.env
+  # Confirme o nome real do volume de advisories Notus no host:
+  #   docker volume ls | grep notus      # esperado: <projeto>_notus_data_vol
+  ingest:
+    image: ghcr.io/williamsouzadelima/suricatoos-ingest:stable
+    restart: unless-stopped
+    env_file:
+      - /var/lib/suricatoos-cp/ingest.env
+    environment:
+      INGEST_ADDR: ":9090"
+      NOTUS_DIR: /notus
+      GMP_SOCKET: /run/gvmd/gvmd.sock
+      GMP_USERNAME: admin
+      GMP_TASK_NAME: suricatoos-agent
+    volumes:
+      # Volumes do compose base do greenbone (mesmo projeto): referenciados por
+      # short-name; já declarados no compose.yaml base, não redeclarar aqui.
+      - gvmd_socket_vol:/run/gvmd          # socket do gvmd (import_report)
+      - notus_data_vol:/notus:ro           # *.notus do feed (WalkDir recursivo)
 
 volumes:
   feed_updater_state:
