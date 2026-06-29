@@ -306,6 +306,76 @@ func TestSplitRPMFullName(t *testing.T) {
 	}
 }
 
+func TestSplitDebFullName(t *testing.T) {
+	cases := []struct {
+		input   string
+		name    string
+		version string
+		ok      bool
+	}{
+		{"openssl-3.0.11-1~deb12u2", "openssl", "3.0.11-1~deb12u2", true},
+		{"chromium-114.0.5735.90-2~deb12u1", "chromium", "114.0.5735.90-2~deb12u1", true},
+		{"openssh-client-1:8.4p1-2+deb12u3", "openssh-client", "1:8.4p1-2+deb12u3", true},
+		// Name contains a hyphen-then-digit segment — the required trailing
+		// revision keeps the split correct (must be "gcc-12", not "gcc").
+		{"gcc-12-12.2.0-14", "gcc-12", "12.2.0-14", true},
+		{"libstdc++6-12.2.0-14", "libstdc++6", "12.2.0-14", true},
+		// No debian revision (fallback pattern).
+		{"package-1.0", "package", "1.0", true},
+		{"zlib1g-1:1.2.13.dfsg-1", "zlib1g", "1:1.2.13.dfsg-1", true},
+		// Not a valid deb full_name (no version starting with a digit).
+		{"noversion", "", "", false},
+		{"just-a-name", "", "", false},
+	}
+	for _, tc := range cases {
+		name, ver, ok := splitDebFullName(tc.input)
+		if ok != tc.ok || name != tc.name || ver != tc.version {
+			t.Errorf("splitDebFullName(%q) = (%q, %q, %v), want (%q, %q, %v)",
+				tc.input, name, ver, ok, tc.name, tc.version, tc.ok)
+		}
+	}
+}
+
+// TestDeb_FullNameForm locks audit #6: a deb advisory written in the greenbone
+// full_name form (no separate name/full_version) must be indexed and matched.
+// Previously extractFixedPkg required name+full_version and dropped it silently,
+// so every Debian/Ubuntu host saw zero findings from such a file.
+func TestDeb_FullNameForm(t *testing.T) {
+	dir := t.TempDir()
+	const advisory = `{
+	  "package_type": "deb",
+	  "product_name": "Debian 12",
+	  "advisories": [
+	    { "oid": "1.3.6.1.4.1.25623.1.1.1.1.2023.5418",
+	      "fixed_packages": [ { "full_name": "chromium-114.0.5735.90-2~deb12u1", "specifier": ">=" } ] }
+	  ]
+	}`
+	if err := os.WriteFile(filepath.Join(dir, "debian_12_fullname.notus"), []byte(advisory), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	c, err := NewNotusCorrelator(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Vulnerable: chromium 113 < fixed 114.
+	inv := testInv(debPkg("chromium", "113.0.5672.126-1~deb12u1", "amd64"))
+	r, err := c.Correlate(inv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(r.Findings) != 1 {
+		t.Fatalf("deb full_name advisory dropped: want 1 finding, got %d: %+v", len(r.Findings), r.Findings)
+	}
+	if r.Findings[0].PackageFixed != "chromium-114.0.5735.90-2~deb12u1" {
+		t.Errorf("package_fixed = %q", r.Findings[0].PackageFixed)
+	}
+	// Fixed host: no finding.
+	r2, _ := c.Correlate(testInv(debPkg("chromium", "114.0.5735.90-2~deb12u1", "amd64")))
+	if len(r2.Findings) != 0 {
+		t.Fatalf("fixed host via full_name advisory: want 0, got %d", len(r2.Findings))
+	}
+}
+
 // TestCrossDistro_NoFalsePositive locks the audit's #2 finding: a Debian host
 // must NOT be flagged by an advisory from another deb distro (Ubuntu) just
 // because the package name matches and the version is lower. Without OS scoping

@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -124,6 +125,15 @@ func (c *NotusCorrelator) indexFile(f notusFile, fileName string) {
 func extractFixedPkg(pkgType string, fp notusFixed) (name, version, fullPkg string) {
 	switch pkgType {
 	case "deb":
+		// Greenbone's Notus loader reads full_name FIRST, then falls back to
+		// name + full_version. Mirror that precedence — a deb advisory written
+		// in the full_name-only form was previously dropped silently, blinding
+		// the engine to every Debian/Ubuntu finding in such a file.
+		if fp.FullName != "" {
+			if n, v, ok := splitDebFullName(fp.FullName); ok {
+				return n, v, fp.FullName
+			}
+		}
 		if fp.Name == "" || fp.FullVersion == "" {
 			return "", "", ""
 		}
@@ -249,6 +259,32 @@ var knownArches = map[string]bool{
 // The trailing ".ARCH" suffix is stripped first when the final dot-segment is a
 // known arch; an unknown arch is left in place (the name is still parsed
 // correctly, but the version may carry the arch — see knownArches).
+// debFullNameRe / debFullNameNoRevRe parse a Debian Notus full_name. A deb
+// full_name is NAME-[EPOCH:]UPSTREAM[-REVISION] with NO arch suffix. The name is
+// the greedy prefix before the version, which starts with an optional "epoch:"
+// then a digit. The revision (when present) carries no hyphen, and the required
+// trailing "-revision" in the first pattern disambiguates names that themselves
+// contain a hyphen-then-digit segment (e.g. "gcc-12"). Mirrors greenbone
+// notus-scanner's deb parser.
+var (
+	debFullNameRe      = regexp.MustCompile(`^([a-z0-9][a-z0-9.+-]+)-(?:\d*:)?\d[\w.+~-]*-[\w.+~]*$`)
+	debFullNameNoRevRe = regexp.MustCompile(`^([a-z0-9][a-z0-9.+-]+)-(?:\d*:)?\d[\w.+~]*$`)
+)
+
+// splitDebFullName splits a deb Notus full_name into (name, version), where
+// version is the "[epoch:]upstream[-revision]" string compared by go-deb-version.
+// Examples: "openssl-3.0.11-1~deb12u2" → ("openssl","3.0.11-1~deb12u2");
+// "gcc-12-12.2.0-14" → ("gcc-12","12.2.0-14"); "package-1.0" → ("package","1.0").
+func splitDebFullName(fullName string) (name, version string, ok bool) {
+	if m := debFullNameRe.FindStringSubmatch(fullName); m != nil {
+		return m[1], fullName[len(m[1])+1:], true
+	}
+	if m := debFullNameNoRevRe.FindStringSubmatch(fullName); m != nil {
+		return m[1], fullName[len(m[1])+1:], true
+	}
+	return "", "", false
+}
+
 func splitRPMFullName(fullName string) (name, version string, ok bool) {
 	s := fullName
 	if idx := strings.LastIndex(s, "."); idx >= 0 && knownArches[s[idx+1:]] {
