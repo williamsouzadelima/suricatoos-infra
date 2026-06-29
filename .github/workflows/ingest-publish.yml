@@ -1,0 +1,55 @@
+name: ingest-publish
+
+# Builds the ingest pipeline image (Go ingest binary + python3/python-gvm +
+# gmp-bridge) and publishes it to GHCR on changes to the pipeline sources on main.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "ingest/**"
+      - "correlation/**"
+      - "gmp-bridge/**"
+      - ".github/workflows/ingest-publish.yml"
+  workflow_dispatch:
+
+env:
+  IMAGE: ghcr.io/williamsouzadelima/suricatoos-ingest
+
+jobs:
+  build-publish:
+    name: build & publish (ingest)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_PAT }}
+
+      # Build context is the repo root: the ingest module replaces ../correlation
+      # and the runtime copies gmp-bridge/bridge.py.
+      - name: Build & push suricatoos-ingest
+        run: |
+          docker build \
+            -f ingest/Dockerfile \
+            -t ${{ env.IMAGE }}:stable \
+            -t ${{ env.IMAGE }}:${{ github.sha }} \
+            .
+          docker push --all-tags ${{ env.IMAGE }}
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### suricatoos-ingest publicado 🐾"
+            echo ""
+            echo "| Imagem | Tags |"
+            echo "|---|---|"
+            echo "| \`${{ env.IMAGE }}\` | stable, ${GITHUB_SHA::12} |"
+          } >> "$GITHUB_STEP_SUMMARY"
