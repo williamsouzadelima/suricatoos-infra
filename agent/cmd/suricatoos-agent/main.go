@@ -125,16 +125,33 @@ func buildAgent(args []string) (*agentd.Agent, error) {
 	if err := fs.Parse(args); err != nil {
 		return nil, err
 	}
-	if *ingest == "" {
-		return nil, errors.New("--ingest é obrigatório")
+	ingestURL := resolveIngestURL(*ingest, *stateDir)
+	if ingestURL == "" {
+		return nil, errors.New("--ingest é obrigatório (ou enrole o agente para herdá-lo do control-plane)")
 	}
 	return agentd.New(agentd.Config{
 		StateDir:  *stateDir,
 		QueueDir:  *queueDir,
-		IngestURL: *ingest,
+		IngestURL: ingestURL,
 		MaxQueue:  *maxQueue,
 		Interval:  *interval,
 	})
+}
+
+// resolveIngestURL returns the explicit --ingest flag, or falls back to the
+// ingest URL the control-plane handed back at enrollment (persisted in stateDir).
+// Returns "" when neither is available.
+func resolveIngestURL(flagVal, stateDir string) string {
+	if flagVal != "" {
+		return flagVal
+	}
+	if stateDir == "" {
+		return ""
+	}
+	if id, err := enroll.Load(stateDir); err == nil {
+		return id.IngestURL
+	}
+	return ""
 }
 
 // runDaemon executa o loop de coleta + reporte até receber SIGINT/SIGTERM.
@@ -163,12 +180,13 @@ func runInstall(args []string) {
 	maxQueue := fs.Int("max-queue", 1000, "máximo de itens na fila offline")
 	_ = fs.Parse(args)
 
-	if *ingest == "" {
-		fmt.Fprintln(os.Stderr, "install: --ingest é obrigatório")
+	ingestURL := resolveIngestURL(*ingest, *stateDir)
+	if ingestURL == "" {
+		fmt.Fprintln(os.Stderr, "install: --ingest é obrigatório (ou enrole o agente primeiro, com --state, para herdá-lo)")
 		os.Exit(2)
 	}
 	cfg := service.Config{
-		IngestURL: *ingest,
+		IngestURL: ingestURL,
 		StateDir:  *stateDir,
 		QueueDir:  *queueDir,
 		Interval:  *interval,
@@ -209,8 +227,8 @@ uso:
 comandos:
   inventory       coleta e imprime o inventário local (JSON)
   enroll          registra o agente no control plane (--server, --token [, --agent-id, --state, --ca-pin])
-  run             loop de coleta + reporte outbound (--ingest [, --state, --queue, --interval, --max-queue])
-  install         instala o agente como serviço nativo (--ingest [, --state, --interval, --max-queue])
+  run             loop de coleta + reporte outbound ([--ingest herdado do enroll] [, --state, --queue, --interval, --max-queue])
+  install         instala o agente como serviço nativo ([--ingest herdado do enroll] [, --state, --interval, --max-queue])
   uninstall       remove o serviço nativo
   service-status  mostra o estado do serviço nativo
   version         mostra a versão do agente

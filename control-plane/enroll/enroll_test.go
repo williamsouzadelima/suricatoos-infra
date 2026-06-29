@@ -74,6 +74,25 @@ func TestEnrollHappyPathBindsScopeAndConsumes(t *testing.T) {
 	}
 }
 
+func TestEnrollReturnsIngestURL(t *testing.T) {
+	now := time.Unix(1700000000, 0).UTC()
+	authority, err := ca.NewEphemeral(now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tm := tokens.NewManager(tokens.NewMemStore(), tokens.WithClock(func() time.Time { return now }))
+	const ingest = "https://scanner.suricatoos.com/ingest/v1/inventory"
+	svc := NewService(tm, authority, WithClock(func() time.Time { return now }), WithIngestURL(ingest))
+	mint := mustMint(t, tm, tokens.MintRequest{Type: tokens.SingleHost, Scope: tokens.Scope{Tenant: "acme", OS: "linux"}, TTL: time.Hour})
+	resp, err := svc.Enroll(Request{Token: mint.Token, CSR: genCSR(t, "agent-x"), AgentID: "agent-x", OS: "linux", Arch: "amd64"})
+	if err != nil {
+		t.Fatalf("enroll: %v", err)
+	}
+	if resp.IngestURL != ingest {
+		t.Errorf("ingest_url = %q, want %q", resp.IngestURL, ingest)
+	}
+}
+
 func TestEnrollForbidsExpiredToken(t *testing.T) {
 	now := time.Unix(1700000000, 0).UTC()
 	svc, tm := newService(t, &now)

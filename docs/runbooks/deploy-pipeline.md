@@ -108,13 +108,32 @@ docker compose logs --tail=10 ingest   # "findings=N" + "gmp-bridge ok"
 Confira na GSA (ou via GMP) que apareceu um report da task `suricatoos-agent-<host>`
 com o host atribuído.
 
-## 6. Lado do agente
+## 6. Lado do agente — URL do ingest via enrollment (automático)
 
-Os agentes precisam saber o endpoint do ingest:
-`https://scanner.suricatoos.com/ingest/v1/inventory`. Verifique se o bundle de
-enrollment / config do agente carrega essa URL (flag `--ingest` / config). **Se
-ainda não carrega, esse é o gancho que falta para o fluxo automático** — incluir
-a URL do ingest no bundle gerado pelo control-plane.
+O agente **aprende a URL do ingest no enrollment**: o control-plane a devolve na
+resposta de `/enroll` e o agente a persiste (`ingest.url` no state dir). Logo
+`suricatoos-agent run` / `install` **não precisam de `--ingest`** — ele é herdado
+(passe `--ingest` só para sobrescrever).
+
+Para isso, o control-plane precisa do env `INGEST_URL`:
+
+```sh
+# acrescente ao env file do control-plane e recrie o serviço:
+echo 'INGEST_URL=https://scanner.suricatoos.com/ingest/v1/inventory' \
+  >> /var/lib/suricatoos-cp/control-plane.env
+docker compose up -d --no-deps --force-recreate control-plane
+docker compose logs --tail=5 control-plane   # "ingest URL (handed to agents on enroll): ..."
+```
+
+Tokens cunhados depois disso geram bundles com `ingest_url:` e os agentes que
+enrolarem com eles já reportam ao ingest sem config extra. Fluxo no host do agente:
+
+```sh
+suricatoos-agent enroll --server <...> --token <...> --ca-pin <...>
+suricatoos-agent run            # usa a URL herdada do enroll
+# ou instalar como serviço:
+suricatoos-agent install --state <mesmo state do enroll>
+```
 
 ## 7. Rollback
 
