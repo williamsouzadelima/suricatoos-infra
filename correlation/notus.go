@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 )
@@ -37,8 +38,9 @@ type advisoryMatch struct {
 	fixedFullPkg string // human-readable fixed package (for Finding.PackageFixed)
 	specifier    string
 	productName  string
-	fileName     string // advisory file name (for Evidence.MatchedAdvisory)
-	pkgType      string // "deb" | "rpm"
+	fileName     string       // advisory file name (for Evidence.MatchedAdvisory)
+	pkgType      string       // "deb" | "rpm"
+	scope        productScope // (distro, release) the advisory applies to
 }
 
 // NotusCorrelator loads Notus advisory files from a directory and correlates
@@ -46,12 +48,20 @@ type advisoryMatch struct {
 type NotusCorrelator struct {
 	// index maps package name → list of match candidates across all loaded files.
 	index map[string][]advisoryMatch
+	// unclassified records product_name strings whose distro could not be
+	// recognized at load time. Advisories with an unrecognized product never
+	// match any host (their scope.distro is ""), so surfacing this set lets an
+	// operator extend canonicalDistro instead of silently missing findings.
+	unclassified map[string]bool
 }
 
 // NewNotusCorrelator loads all *.notus files from dir and builds an in-memory
 // index keyed by package name for O(1) per-package lookups during correlation.
 func NewNotusCorrelator(dir string) (*NotusCorrelator, error) {
-	c := &NotusCorrelator{index: make(map[string][]advisoryMatch)}
+	c := &NotusCorrelator{
+		index:        make(map[string][]advisoryMatch),
+		unclassified: make(map[string]bool),
+	}
 	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() || !strings.HasSuffix(path, ".notus") {
 			return err
@@ -70,8 +80,25 @@ func NewNotusCorrelator(dir string) (*NotusCorrelator, error) {
 	return c, err
 }
 
+// UnclassifiedProducts returns the sorted set of advisory product_name strings
+// whose distro family canonicalDistro could not recognize. A non-empty result
+// means those advisories will never match any host — the caller should log it
+// and extend canonicalDistro so the corresponding findings are not missed.
+func (c *NotusCorrelator) UnclassifiedProducts() []string {
+	out := make([]string, 0, len(c.unclassified))
+	for p := range c.unclassified {
+		out = append(out, p)
+	}
+	sort.Strings(out)
+	return out
+}
+
 // indexFile adds all advisory entries from f into the correlator's index.
 func (c *NotusCorrelator) indexFile(f notusFile, fileName string) {
+	scope := advisoryScope(f.ProductName)
+	if !scope.known() {
+		c.unclassified[f.ProductName] = true
+	}
 	for _, entry := range f.Advisories {
 		for _, fp := range entry.FixedPackages {
 			pkgName, fixedVer, fixedFullPkg := extractFixedPkg(f.PackageType, fp)
@@ -86,6 +113,7 @@ func (c *NotusCorrelator) indexFile(f notusFile, fileName string) {
 				productName:  f.ProductName,
 				fileName:     fileName,
 				pkgType:      f.PackageType,
+				scope:        scope,
 			})
 		}
 	}
@@ -128,10 +156,17 @@ func (c *NotusCorrelator) Correlate(inv Inventory) (*FindingReport, error) {
 	// the same advisory OID appears in multiple .notus files for the same package.
 	seen := make(map[string]bool)
 
+	// Scope advisories to the host's distro+release so a host is never matched
+	// against another product's advisories (cross-distro false positive).
+	host := hostScope(inv.OS)
+
 	for _, pkg := range inv.Packages {
 		candidates := c.index[pkg.Name]
 		for _, m := range candidates {
 			if !sourcePkgTypeMatch(pkg.Source, m.pkgType) {
+				continue
+			}
+			if !m.scope.appliesTo(host) {
 				continue
 			}
 			vuln, err := isVulnerable(m.pkgType, pkg.Version, m.fixedVersion, m.specifier)
@@ -175,29 +210,57 @@ func sourcePkgTypeMatch(source, pkgType string) bool {
 }
 
 // knownArches is the set of package architecture suffixes used in Notus full_name
-// for rpm-type advisories.
+// for rpm-type advisories. It must be reasonably complete: an arch missing here
+// is left glued to the release component and inflates the version string, which
+// flags an already-patched host as vulnerable (false positive). The list mirrors
+// the rpm/yum canonical arch set (rpmrc plus common cross arches).
 var knownArches = map[string]bool{
-	"x86_64": true, "amd64": true, "aarch64": true, "arm64": true,
-	"i386": true, "i586": true, "i686": true, "armhf": true,
-	"armv7hl": true, "ppc64le": true, "ppc64": true, "s390x": true,
-	"noarch": true, "all": true, "src": true,
+	// x86
+	"x86_64": true, "amd64": true, "i386": true, "i486": true, "i586": true, "i686": true,
+	"athlon": true, "geode": true, "pentium3": true, "pentium4": true,
+	// arm
+	"aarch64": true, "arm64": true, "armhf": true,
+	"armv5tel": true, "armv5tejl": true, "armv6l": true, "armv6hl": true,
+	"armv7l": true, "armv7hl": true, "armv7hnl": true,
+	// power
+	"ppc": true, "ppc64": true, "ppc64le": true, "ppc64p7": true,
+	// ibm Z
+	"s390": true, "s390x": true,
+	// sparc
+	"sparc": true, "sparcv8": true, "sparcv9": true, "sparc64": true,
+	// mips
+	"mips": true, "mipsel": true, "mips64": true, "mips64el": true,
+	// newer / niche
+	"riscv64": true, "loongarch64": true, "alpha": true, "ia64": true, "sh4": true,
+	// pseudo-arches
+	"noarch": true, "all": true, "src": true, "nosrc": true,
 }
 
 // splitRPMFullName splits an RPM Notus full_name (e.g. "bash-5.1.8-6.el9.x86_64")
-// into (name="bash", version="5.1.8-6.el9", ok=true).
+// into (name="bash", version="5.1.8-6.el9", ok=true), where version is the
+// VERSION-RELEASE string (matching the agent's %{VERSION}-%{RELEASE} format).
 //
-// Strategy: strip the trailing arch suffix (last ".segment" when the segment is
-// a known arch), then find the first hyphen followed by a digit — everything
-// before is the name, everything after is the version-release string.
+// An rpm full_name is NAME-VERSION-RELEASE[.ARCH]. The rpm format forbids '-'
+// inside the VERSION and RELEASE fields, so the parse is unambiguous from the
+// RIGHT: RELEASE is after the last '-', VERSION after the second-to-last '-',
+// and NAME is everything before — even when NAME itself contains hyphens or
+// digits (e.g. "java-1.8.0-openjdk", "libpng16-16", "rust-hyper-rustls+default-devel").
+//
+// The trailing ".ARCH" suffix is stripped first when the final dot-segment is a
+// known arch; an unknown arch is left in place (the name is still parsed
+// correctly, but the version may carry the arch — see knownArches).
 func splitRPMFullName(fullName string) (name, version string, ok bool) {
 	s := fullName
 	if idx := strings.LastIndex(s, "."); idx >= 0 && knownArches[s[idx+1:]] {
 		s = s[:idx]
 	}
-	for i := 0; i < len(s); i++ {
-		if s[i] == '-' && i+1 < len(s) && s[i+1] >= '0' && s[i+1] <= '9' {
-			return s[:i], s[i+1:], true
-		}
+	lastDash := strings.LastIndex(s, "-")
+	if lastDash <= 0 {
+		return "", "", false
 	}
-	return "", "", false
+	secondDash := strings.LastIndex(s[:lastDash], "-")
+	if secondDash <= 0 {
+		return "", "", false
+	}
+	return s[:secondDash], s[secondDash+1:], true
 }
