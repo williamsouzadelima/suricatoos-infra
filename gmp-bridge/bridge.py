@@ -68,18 +68,35 @@ class NVTMeta:
         self.cves = cves
 
 
-def fetch_nvt_meta(gmp: Gmp, oid: str) -> NVTMeta:
+def fetch_nvt_meta(gmp: Gmp, oid: str) -> NVTMeta | None:
     """Look up CVE list and CVSS base score for an OID from the gvmd VT feed.
 
-    Returns NVTMeta(cvss_base=0.0, cves=[]) if the OID is unknown or the VT
-    feed has no data — callers must not fabricate severity in that case.
+    Returns None when there is NO feed evidence for the OID — i.e. the GMP
+    request errored (non-2xx status: auth expired, OID rejected, ...) or the OID
+    is not present in the feed. None is distinct from a found-but-unscored VT,
+    which legitimately returns NVTMeta(cvss_base=0.0, cves=[...]): an OID can
+    exist in the feed with a real CVE list yet a 0.0 base score.
+
+    Callers MUST treat None as "no evidence" and never substitute a
+    caller-supplied severity in its place (that would fabricate severity).
     """
     req = Nvts.get_nvt(oid)
     resp = gmp.send_command(str(req))
     root = ET.fromstring(resp)
+
+    status = root.get("status", "")
+    if not status.startswith("2"):
+        # Feed lookup failed — signal "no evidence" loudly instead of silently
+        # collapsing to severity 0 (which the old code did, masking feed outages).
+        print(
+            f"WARN: get_nvt {oid} failed: {status} {root.get('status_text', '')}",
+            file=sys.stderr,
+        )
+        return None
+
     nvt = root.find(".//nvt")
     if nvt is None:
-        return NVTMeta(cvss_base=0.0, cves=[])
+        return None  # OID not in feed → no evidence
 
     cvss_text = nvt.findtext("cvss_base") or "0.0"
     try:
@@ -104,19 +121,22 @@ def fetch_nvt_meta(gmp: Gmp, oid: str) -> NVTMeta:
 # Report XML builder
 # --------------------------------------------------------------------------- #
 
-def finding_report_to_xml(report: dict, nvt_meta: dict[str, NVTMeta] | None = None) -> str:
+def finding_report_to_xml(report: dict, nvt_meta: dict[str, NVTMeta | None] | None = None) -> str:
     """Convert a FindingReport dict to a GMP report XML string.
 
     Each finding becomes a <result> with:
+    - <host> → host IP as text content (gvmd's result-host format).
     - <nvt oid=...> → links to the VT; gvmd enriches name after import.
-    - <severity> → from nvt_meta lookup (cvss_base), or finding.severity,
-      or 0.0 (Log) if unknown. Never fabricated.
-    - <refs><ref type="cve">…> → from nvt_meta, or finding.cve.
+    - <severity> → the VT-feed cvss_base for the OID (nvt_meta), else 0.0 (Log).
+      Never the caller-supplied value — feed evidence only.
+    - <refs><ref type="cve">…> → the VT-feed CVEs for the OID (nvt_meta), else none.
     - <description> → evidence trail (package, advisory, agent).
     - <qod><type>package</type> → QoD 70 (same as Notus scanner results).
 
-    nvt_meta: optional dict {oid → NVTMeta} pre-fetched from gvmd. When absent
-    (e.g. dry-run without a live connection), uses finding.severity / finding.cve.
+    nvt_meta: dict {oid → NVTMeta} pre-fetched from the gvmd VT feed; an OID maps
+    to None when there is no feed evidence (absent / lookup failed). When the map
+    is empty (e.g. --dry-run without a live connection) every result is emitted
+    unenriched at severity 0.0/Log — severity requires the feed.
     """
     if nvt_meta is None:
         nvt_meta = {}
@@ -143,20 +163,28 @@ def finding_report_to_xml(report: dict, nvt_meta: dict[str, NVTMeta] | None = No
         )
         ET.SubElement(r, "description").text = desc
 
+        # GMP result host: the IP is the TEXT content of <host> (optionally with
+        # <hostname>/<asset> children). gvmd ignores a <host><ip> child, which
+        # left every imported result with a blank host.
         host_el = ET.SubElement(r, "host")
-        ET.SubElement(host_el, "ip").text = host_ip
+        host_el.text = host_ip
         ET.SubElement(r, "port").text = "general/tcp"
 
         oid = finding.get("oid", "")
         meta = nvt_meta.get(oid)
 
-        # Severity: prefer VT-feed lookup; fall back to finding value; then 0.0.
-        if meta is not None and meta.cvss_base > 0:
+        # Severity and CVEs come from FEED EVIDENCE ONLY (non-fabrication). When
+        # the OID has feed metadata we use its score — even 0.0, since an
+        # unscored VT is genuinely "Log" — and its CVEs. Without feed evidence
+        # (meta is None: OID absent or lookup failed) we emit 0.0/Log and no CVE
+        # refs; we never substitute the caller-supplied finding.severity/finding.cve,
+        # which would present unverified, client-controlled values as feed-attested.
+        if meta is not None:
             severity = meta.cvss_base
             cves = meta.cves
         else:
-            severity = float(finding.get("severity") or 0.0)
-            cves = finding.get("cve") or []
+            severity = 0.0
+            cves = []
 
         nvt_el = ET.SubElement(r, "nvt", oid=oid)
         ET.SubElement(nvt_el, "type").text = "nvt"
@@ -220,14 +248,14 @@ def run_import(
 
         # Enrich findings with CVE/severity from the VT feed.
         unique_oids = {f.get("oid", "") for f in report_dict.get("findings", []) if f.get("oid")}
-        nvt_meta: dict[str, NVTMeta] = {}
+        nvt_meta: dict[str, NVTMeta | None] = {}
         for oid in unique_oids:
-            nvt_meta[oid] = fetch_nvt_meta(gmp, oid)
-            meta = nvt_meta[oid]
-            print(
-                f"VT {oid}: cvss={meta.cvss_base} cves={len(meta.cves)}",
-                file=sys.stderr,
-            )
+            meta = fetch_nvt_meta(gmp, oid)
+            nvt_meta[oid] = meta
+            if meta is None:
+                print(f"VT {oid}: no feed evidence (severity 0/Log)", file=sys.stderr)
+            else:
+                print(f"VT {oid}: cvss={meta.cvss_base} cves={len(meta.cves)}", file=sys.stderr)
 
         report_xml = finding_report_to_xml(report_dict, nvt_meta=nvt_meta)
 
