@@ -100,13 +100,14 @@ func TestParseRPMOutput(t *testing.T) {
 	out := "bash\t5.1.8-1\tx86_64\n" +
 		"openssl\t3.0.7-2\tx86_64\n" +
 		"gpg-pubkey\tabcdef-12345678\t(none)\n" + // chave GPG, não é pacote
+		"grub2\t1:2.06-70.el9_3\tx86_64\n" + // epoch presente (rpmQueryFormat condicional)
 		"filesystem\t3.16-2\tnoarch\n"
 	pkgs, err := parseRPMOutput(strings.NewReader(out))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(pkgs) != 3 {
-		t.Fatalf("esperava 3 (gpg-pubkey excluído), got %d: %+v", len(pkgs), pkgs)
+	if len(pkgs) != 4 {
+		t.Fatalf("esperava 4 (gpg-pubkey excluído), got %d: %+v", len(pkgs), pkgs)
 	}
 	if pkgs[0].Name != "bash" || pkgs[0].Version != "5.1.8-1" || pkgs[0].Arch != "x86_64" || pkgs[0].Source != "rpm" {
 		t.Fatalf("primeiro pacote errado: %+v", pkgs[0])
@@ -114,10 +115,22 @@ func TestParseRPMOutput(t *testing.T) {
 	if pkgs[0].FullName != "bash-5.1.8-1.x86_64" {
 		t.Fatalf("full_name = %q", pkgs[0].FullName)
 	}
-	for _, p := range pkgs {
-		if p.Name == "gpg-pubkey" {
+	// Epoch must be preserved verbatim in the version field so server-side
+	// correlation can compare it against the epoch-bearing Notus advisory.
+	grub2Found := false
+	for i := range pkgs {
+		if pkgs[i].Name == "grub2" {
+			grub2Found = true
+			if pkgs[i].Version != "1:2.06-70.el9_3" {
+				t.Fatalf("epoch perdido: grub2.Version = %q, want %q", pkgs[i].Version, "1:2.06-70.el9_3")
+			}
+		}
+		if pkgs[i].Name == "gpg-pubkey" {
 			t.Fatal("gpg-pubkey deve ser excluído")
 		}
+	}
+	if !grub2Found {
+		t.Fatal("grub2 ausente")
 	}
 }
 

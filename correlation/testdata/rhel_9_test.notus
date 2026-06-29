@@ -1,0 +1,12 @@
+{
+  "package_type": "rpm",
+  "product_name": "Red Hat Enterprise Linux 9",
+  "advisories": [
+    {
+      "oid": "1.3.6.1.4.1.25623.1.1.2.2024.7001",
+      "fixed_packages": [
+        { "full_name": "grub2-1:2.06-70.el9_3.x86_64", "specifier": ">=" }
+      ]
+    }
+  ]
+}
