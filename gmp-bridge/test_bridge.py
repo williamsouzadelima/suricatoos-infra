@@ -146,6 +146,27 @@ class TestFindingReportToXML(unittest.TestCase):
         self.assertIn("debian_12.notus", desc.text)
         self.assertIn("dpkg", desc.text)
 
+    def test_report_level_host_block(self):
+        # A report-level <host><ip>…</ip><start/><end/></host> registers the host
+        # so the imported report is host-attributed (host_count) and an asset is
+        # created; <scan_start>/<scan_end> frame the scan. Verified against gvmd.
+        root, _ = self._parse()
+        host = root.find("host")
+        self.assertIsNotNone(host, "report must carry a report-level <host> block")
+        self.assertEqual(host.findtext("ip"), "10.0.0.42")
+        self.assertEqual(host.findtext("start"), "2026-06-28T00:00:00Z")
+        self.assertEqual(host.findtext("end"), "2026-06-28T00:00:00Z")
+        self.assertEqual(root.findtext("scan_start"), "2026-06-28T00:00:00Z")
+        self.assertEqual(root.findtext("scan_end"), "2026-06-28T00:00:00Z")
+
+    def test_report_host_ip_matches_result_host(self):
+        # The report-level <host><ip> must byte-match each result's <host> text,
+        # else gvmd will not associate the results with the host.
+        root, _ = self._parse()
+        report_ip = root.find("host/ip").text
+        for result in root.findall("results/result"):
+            self.assertEqual((result.find("host").text or "").strip(), report_ip)
+
     def test_empty_findings(self):
         empty = {**SAMPLE_REPORT, "findings": []}
         xml = finding_report_to_xml(empty)
