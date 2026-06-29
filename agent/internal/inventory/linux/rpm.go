@@ -11,9 +11,18 @@ import (
 	"github.com/williamsouzadelima/suricatoos-infra/agent/internal/inventory"
 )
 
-// rpmQueryFormat emits one tab-separated "name<TAB>version-release<TAB>arch" line
-// per package — a stable, STRUCTURED format (not fragile free-form parsing).
-const rpmQueryFormat = "%{NAME}\t%{VERSION}-%{RELEASE}\t%{ARCH}\n"
+// rpmQueryFormat emits one tab-separated "name<TAB>[epoch:]version-release<TAB>arch"
+// line per package — a stable, STRUCTURED format (not fragile free-form parsing).
+//
+// The EPOCH is prefixed as "E:" only when present, via rpm's conditional query
+// idiom %|EPOCH?{...}:{...}|. This is required for correct correlation: Notus
+// rpm advisories encode the epoch in their fixed version (e.g. "1:2.06-70.el9_3"
+// for grub2), and comparing an epoch-less installed version against an
+// epoch-bearing fixed version makes rpmvercmp read the installed epoch as 0 < 1,
+// flagging an already-patched host as vulnerable (a false positive). Emitting the
+// real epoch keeps the comparison symmetric. Packages without an epoch produce no
+// prefix, matching advisories that omit the (zero) epoch.
+const rpmQueryFormat = "%{NAME}\t%|EPOCH?{%{EPOCH}:}:{}|%{VERSION}-%{RELEASE}\t%{ARCH}\n"
 
 // defaultRPMList runs `rpm -qa` with a fixed query format. rpm reads its own
 // database (BDB/NDB/SQLite) authoritatively, so results are robust without

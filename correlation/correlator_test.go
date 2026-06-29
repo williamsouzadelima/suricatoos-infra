@@ -426,6 +426,56 @@ func TestExtractProductRelease(t *testing.T) {
 	}
 }
 
+// rhel94 is a RHEL host whose VERSION_ID carries a minor (9.4); it must match the
+// per-major "Red Hat Enterprise Linux 9" advisory via the release-prefix rule.
+var rhel94 = OSInfo{Family: "linux", Distro: "rhel", Release: "9.4"}
+
+// TestRPM_Epoch_NotVulnerable locks audit #3: a host AT the epoch-bearing fixed
+// version (collected WITH its epoch, per the rpm collector) must NOT be flagged.
+// Previously the collector dropped the epoch, so "2.06-70.el9_3" compared against
+// "1:2.06-70.el9_3" read epoch 0 < 1 and produced a false positive.
+func TestRPM_Epoch_NotVulnerable(t *testing.T) {
+	c := newCorrelator(t)
+	inv := testInvOS(rhel94, rpmPkg("grub2", "1:2.06-70.el9_3", "x86_64")) // exactly the fixed NEVRA
+	r, err := c.Correlate(inv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(r.Findings) != 0 {
+		t.Fatalf("epoch false positive: patched host flagged; want 0 findings, got %d: %+v", len(r.Findings), r.Findings)
+	}
+}
+
+// TestRPM_Epoch_NewerNotVulnerable: a host NEWER than the fix (same epoch) is clean.
+func TestRPM_Epoch_NewerNotVulnerable(t *testing.T) {
+	c := newCorrelator(t)
+	inv := testInvOS(rhel94, rpmPkg("grub2", "1:2.06-80.el9_4", "x86_64"))
+	r, err := c.Correlate(inv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(r.Findings) != 0 {
+		t.Fatalf("newer host flagged; want 0 findings, got %d", len(r.Findings))
+	}
+}
+
+// TestRPM_Epoch_Vulnerable: a host genuinely behind the fix (same epoch, lower
+// release) is still correctly flagged.
+func TestRPM_Epoch_Vulnerable(t *testing.T) {
+	c := newCorrelator(t)
+	inv := testInvOS(rhel94, rpmPkg("grub2", "1:2.06-50.el9_1", "x86_64"))
+	r, err := c.Correlate(inv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(r.Findings) != 1 {
+		t.Fatalf("vulnerable host not flagged; want 1 finding, got %d", len(r.Findings))
+	}
+	if got := r.Findings[0].Product; got != "Red Hat Enterprise Linux 9" {
+		t.Errorf("product = %q, want RHEL 9", got)
+	}
+}
+
 // TestUnclassifiedProducts: all shipped fixtures use recognized products, so the
 // set is empty; an advisory with an unknown product is surfaced (not silently
 // dropped) so an operator can extend canonicalDistro.
