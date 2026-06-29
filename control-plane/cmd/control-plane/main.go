@@ -20,6 +20,8 @@
 //	CRL_URL               public URL of the CRL endpoint (e.g. https://cp.example.com/v1/crl.der)
 //	                      when set, issued certs embed it as a CRL distribution point
 //	CRL_FILE              path to JSON file for persisting revoked serials (recommended with CRL_URL)
+//	INGEST_URL            public inventory endpoint handed to agents on enrollment
+//	                      (e.g. https://scanner.suricatoos.com/ingest/v1/inventory)
 //
 // When CA_CERT_FILE/CA_KEY_FILE are set the CA survives restarts (agents keep
 // their mTLS certificates). Without them a new ephemeral CA is generated on
@@ -54,6 +56,7 @@ func main() {
 	tokenDBPath := os.Getenv("TOKEN_DB_PATH")
 	crlURL := os.Getenv("CRL_URL")
 	crlFile := os.Getenv("CRL_FILE")
+	ingestURL := os.Getenv("INGEST_URL")
 
 	// CA — persistent when CA_CERT_FILE + CA_KEY_FILE are set; ephemeral otherwise.
 	var authority *ca.CA
@@ -101,8 +104,14 @@ func main() {
 	}
 	tm := tokens.NewManager(store)
 
-	enrollSvc := enroll.NewService(tm, authority)
-	adminAPI := cpapi.New(tm, authority, serverURL, adminSecret)
+	if ingestURL != "" {
+		log.Printf("ingest URL (handed to agents on enroll): %s", ingestURL)
+	} else {
+		log.Printf("ingest URL: unset — set INGEST_URL so agents learn where to report")
+	}
+
+	enrollSvc := enroll.NewService(tm, authority, enroll.WithIngestURL(ingestURL))
+	adminAPI := cpapi.New(tm, authority, serverURL, ingestURL, adminSecret)
 
 	mux := http.NewServeMux()
 	mux.Handle("/v1/", http.StripPrefix("/v1", enrollSvc.Handler()))

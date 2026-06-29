@@ -23,15 +23,18 @@ type Handler struct {
 	tm          *tokens.Manager
 	authority   *ca.CA
 	serverURL   string
+	ingestURL   string
 	adminSecret string
 }
 
 // New returns an admin Handler. serverURL is the public URL of the control-plane
 // enrollment endpoint (e.g. "https://control.suricatoos.example.com"); it is
-// embedded in every bundle so agents know where to enroll. adminSecret is the
-// shared secret expected in "Authorization: Bearer <secret>" admin requests.
-func New(tm *tokens.Manager, authority *ca.CA, serverURL, adminSecret string) *Handler {
-	return &Handler{tm: tm, authority: authority, serverURL: serverURL, adminSecret: adminSecret}
+// embedded in every bundle so agents know where to enroll. ingestURL is the
+// public inventory endpoint, embedded in the bundle for operator visibility (the
+// agent also learns it from the enrollment response). adminSecret is the shared
+// secret expected in "Authorization: Bearer <secret>" admin requests.
+func New(tm *tokens.Manager, authority *ca.CA, serverURL, ingestURL, adminSecret string) *Handler {
+	return &Handler{tm: tm, authority: authority, serverURL: serverURL, ingestURL: ingestURL, adminSecret: adminSecret}
 }
 
 // Handler returns an http.Handler serving all /api/v1/ routes.
@@ -106,7 +109,7 @@ func (h *Handler) createToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	bundle := buildBundle(minted, h.authority.Fingerprint(), h.serverURL)
+	bundle := buildBundle(minted, h.authority.Fingerprint(), h.serverURL, h.ingestURL)
 	fname := fmt.Sprintf("enroll-%s.yaml", minted.ID)
 	w.Header().Set("Content-Type", "application/yaml")
 	w.Header().Set("Content-Disposition", "attachment; filename=\""+fname+"\"")
@@ -191,7 +194,7 @@ func (h *Handler) revokeToken(w http.ResponseWriter, r *http.Request) {
 
 // buildBundle returns the YAML content for an enrollment bundle.
 // The token secret is included once and never stored again after this point.
-func buildBundle(m tokens.Minted, caPin, serverURL string) string {
+func buildBundle(m tokens.Minted, caPin, serverURL, ingestURL string) string {
 	return fmt.Sprintf(`# Suricatoos Agent — enrollment bundle
 # token_id:  %s
 # type:      %s
@@ -204,12 +207,15 @@ func buildBundle(m tokens.Minted, caPin, serverURL string) string {
 #     --server "%s" \
 #     --token "%s" \
 #     --ca-pin "%s"
+#   # then: suricatoos-agent run   (the ingest URL is learned from enrollment;
+#   #                                pass --ingest only to override)
 #
 # The token secret above is shown ONCE. Store this file securely.
 # Delete it after the agent enrolls (or after expiry).
 server: "%s"
 token: "%s"
 ca_pin: "%s"
+ingest_url: "%s"
 `,
 		m.ID,
 		string(m.Record.Type),
@@ -222,5 +228,6 @@ ca_pin: "%s"
 		serverURL,
 		m.Token,
 		caPin,
+		ingestURL,
 	)
 }

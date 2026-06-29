@@ -28,6 +28,9 @@ type Identity struct {
 	PrivateKey ed25519.PrivateKey
 	CertPEM    []byte
 	CACertPEM  []byte
+	// IngestURL is where the agent reports inventory, learned from the
+	// enrollment response so `run`/`install` need no separate --ingest flag.
+	IngestURL string
 }
 
 // GenerateCSR creates a fresh Ed25519 keypair and a CSR for agentID. It returns
@@ -57,6 +60,7 @@ type request struct {
 type response struct {
 	Certificate string `json:"certificate"`
 	CACert      string `json:"ca_cert"`
+	IngestURL   string `json:"ingest_url"`
 }
 
 // Enroll runs the full flow: generate key+CSR, POST to baseURL/enroll with the
@@ -111,7 +115,12 @@ func Enroll(ctx context.Context, hc *http.Client, baseURL, token, agentID, caFin
 	if err := json.Unmarshal(data, &er); err != nil {
 		return nil, fmt.Errorf("resposta de enrollment inválida: %w", err)
 	}
-	id := &Identity{PrivateKey: key, CertPEM: []byte(er.Certificate), CACertPEM: []byte(er.CACert)}
+	id := &Identity{
+		PrivateKey: key,
+		CertPEM:    []byte(er.Certificate),
+		CACertPEM:  []byte(er.CACert),
+		IngestURL:  er.IngestURL,
+	}
 	if err := id.verify(caFingerprint); err != nil {
 		return nil, fmt.Errorf("identidade recebida inválida: %w", err)
 	}
@@ -204,7 +213,16 @@ func Save(dir string, id *Identity) error {
 	if err := os.WriteFile(filepath.Join(dir, "agent.crt"), id.CertPEM, 0o644); err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(dir, "ca.crt"), id.CACertPEM, 0o644)
+	if err := os.WriteFile(filepath.Join(dir, "ca.crt"), id.CACertPEM, 0o644); err != nil {
+		return err
+	}
+	// ingest.url is optional: only written when the control-plane supplied one.
+	if id.IngestURL != "" {
+		if err := os.WriteFile(filepath.Join(dir, "ingest.url"), []byte(id.IngestURL), 0o644); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // Load reads an identity previously written by Save.
@@ -233,5 +251,10 @@ func Load(dir string) (*Identity, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Identity{PrivateKey: edKey, CertPEM: certPEM, CACertPEM: caPEM}, nil
+	id := &Identity{PrivateKey: edKey, CertPEM: certPEM, CACertPEM: caPEM}
+	// ingest.url is optional (absent for pre-existing enrollments).
+	if b, err := os.ReadFile(filepath.Join(dir, "ingest.url")); err == nil {
+		id.IngestURL = strings.TrimSpace(string(b))
+	}
+	return id, nil
 }

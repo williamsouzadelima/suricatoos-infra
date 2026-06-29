@@ -107,9 +107,13 @@ func signedEnrollServer(t *testing.T, signer *testCA, caPEM []byte) *httptest.Se
 		_ = json.NewEncoder(w).Encode(response{
 			Certificate: string(signer.signClient(t, csr)),
 			CACert:      string(caPEM),
+			IngestURL:   testIngestURL,
 		})
 	}))
 }
+
+// testIngestURL is the ingest endpoint the mock enroll server hands back.
+const testIngestURL = "https://scanner.suricatoos.com/ingest/v1/inventory"
 
 func TestGenerateCSRValid(t *testing.T) {
 	csrPEM, key, err := GenerateCSR("agent-x")
@@ -152,6 +156,9 @@ func TestEnrollAndMTLSEndToEnd(t *testing.T) {
 	}
 	if id.PrivateKey == nil || len(id.CertPEM) == 0 || len(id.CACertPEM) == 0 {
 		t.Fatal("identidade incompleta")
+	}
+	if id.IngestURL != testIngestURL {
+		t.Errorf("ingest_url não propagado do enroll: got %q, want %q", id.IngestURL, testIngestURL)
 	}
 
 	cfg, err := id.TLSClientConfig()
@@ -249,5 +256,48 @@ func TestSaveLoadRoundTripAndKeyPerm(t *testing.T) {
 	}
 	if _, err := loaded.TLSClientConfig(); err != nil {
 		t.Fatalf("identidade carregada inutilizável: %v", err)
+	}
+}
+
+func TestSaveLoadIngestURL(t *testing.T) {
+	authority := newTestCA(t)
+	csrPEM, key, err := GenerateCSR("agent-iu")
+	if err != nil {
+		t.Fatal(err)
+	}
+	block, _ := pem.Decode(csrPEM)
+	csr, _ := x509.ParseCertificateRequest(block.Bytes)
+	base := &Identity{PrivateKey: key, CertPEM: authority.signClient(t, csr), CACertPEM: authority.pem}
+
+	// With an ingest URL → persisted to ingest.url and reloaded.
+	withURL := *base
+	withURL.IngestURL = "https://scanner.suricatoos.com/ingest/v1/inventory"
+	dir := t.TempDir()
+	if err := Save(dir, &withURL); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.IngestURL != withURL.IngestURL {
+		t.Errorf("ingest url = %q, want %q", loaded.IngestURL, withURL.IngestURL)
+	}
+
+	// Without an ingest URL → no file written; Load leaves it empty (backward
+	// compatible with identities enrolled before this field existed).
+	dir2 := t.TempDir()
+	if err := Save(dir2, base); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(dir2, "ingest.url")); !os.IsNotExist(err) {
+		t.Errorf("ingest.url não deve existir quando IngestURL vazio (err=%v)", err)
+	}
+	loaded2, err := Load(dir2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded2.IngestURL != "" {
+		t.Errorf("ingest url = %q, want vazio", loaded2.IngestURL)
 	}
 }

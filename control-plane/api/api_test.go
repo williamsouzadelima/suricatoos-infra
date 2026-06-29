@@ -24,7 +24,7 @@ func newTestHandler(t *testing.T) *Handler {
 	}
 	store := tokens.NewMemStore()
 	tm := tokens.NewManager(store)
-	return New(tm, authority, "https://test.example.com", testSecret)
+	return New(tm, authority, "https://test.example.com", "https://test.example.com/ingest/v1/inventory", testSecret)
 }
 
 func authHeader() string { return "Bearer " + testSecret }
@@ -239,10 +239,11 @@ func TestBuildBundle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	bundle := buildBundle(minted, authority.Fingerprint(), "https://cp.example.com")
+	bundle := buildBundle(minted, authority.Fingerprint(), "https://cp.example.com", "https://cp.example.com/ingest/v1/inventory")
 	for _, want := range []string{
 		"st_", "sha256:", "https://cp.example.com", "demo",
 		"suricatoos-agent enroll", "--server", "--token", "--ca-pin",
+		"ingest_url:", "https://cp.example.com/ingest/v1/inventory",
 	} {
 		if !strings.Contains(bundle, want) {
 			t.Errorf("bundle missing %q", want)
