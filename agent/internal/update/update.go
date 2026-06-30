@@ -32,7 +32,7 @@ const canonicalPrefix = "suricatoos-agent-update-v1"
 
 // freshness bounds reject replayed/stale manifests and absurd clock skew.
 const (
-	maxManifestAge   = 48 * time.Hour
+	maxManifestAge     = 48 * time.Hour
 	maxClockSkewFuture = 5 * time.Minute
 )
 
@@ -152,7 +152,6 @@ func isNewer(a, b string) bool {
 	return false
 }
 
-// parseVer extracts up to 3 numeric components from "x.y.z[-suffix]".
 // normalizeVersion canonicalizes a version for comparison/storage: strips a
 // leading "v", drops any pre-release/build "-suffix", and trims surrounding space.
 // Used so a "v1.2.3" manifest and a "1.2.3" compiled binary compare equal in the
