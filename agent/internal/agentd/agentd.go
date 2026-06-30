@@ -67,6 +67,12 @@ type Agent struct {
 	currentVersion string
 	stateDir       string
 	doUpdate       func(context.Context) bool // nil quando desligado; retorna true se aplicou (parar o loop)
+
+	// agentID é a identidade lógica enrolada (CN do certificado). Sobrescreve o
+	// agent_id do inventário (que o coletor preenche com o hostname do SO) para
+	// que --agent-id no enroll seja o nome reportado/correlacionado, independente
+	// do hostname da máquina. Vazio = mantém o hostname.
+	agentID string
 }
 
 // New builds an Agent from cfg: loads the enrolled identity, builds an mTLS
@@ -106,6 +112,7 @@ func New(cfg Config) (*Agent, error) {
 		rnd:            rand.Float64,
 		currentVersion: cfg.CurrentVersion,
 		stateDir:       cfg.StateDir,
+		agentID:        id.AgentID(),
 	}
 	if u := buildUpdater(cfg, id); u != nil {
 		a.updateInterval = cfg.UpdateInterval
@@ -169,6 +176,9 @@ func buildUpdater(cfg Config, id *enroll.Identity) func(context.Context) bool {
 // error is non-fatal (the backlog is still flushed).
 func (a *Agent) tick(ctx context.Context) (int, error) {
 	if inv, err := a.collector.Collect(); err == nil {
+		if a.agentID != "" {
+			inv.Agent.AgentID = a.agentID // identidade lógica enrolada > hostname do SO
+		}
 		if b, err := json.Marshal(inv); err == nil {
 			_ = a.queue.Enqueue(b)
 		}
