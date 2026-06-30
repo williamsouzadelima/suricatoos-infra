@@ -250,6 +250,14 @@ func (c *CA) Fingerprint() string {
 	return "sha256:" + hex.EncodeToString(h[:])
 }
 
+// Sign returns an Ed25519 signature over msg using the CA private key. It lets the
+// control-plane authenticate out-of-band artifacts (e.g. signed update manifests)
+// that agents verify with the CA public key they pinned at enrollment — no extra
+// key to distribute.
+func (c *CA) Sign(msg []byte) []byte {
+	return ed25519.Sign(c.key, msg)
+}
+
 // CertPEM returns a copy of the CA certificate PEM — the trust anchor shipped to
 // agents to pin.
 func (c *CA) CertPEM() []byte {

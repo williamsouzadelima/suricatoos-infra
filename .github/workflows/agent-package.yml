@@ -60,6 +60,12 @@ jobs:
         run: |
           ( cd dist && sha256sum *.deb *.rpm > SHA256SUMS )
           cat dist/SHA256SUMS
+      # Binários crus version-stamped (o que o auto-update troca) + manifesto
+      # assinável que o control-plane serve via UPDATE_MANIFEST_FILE.
+      - name: build raw binaries + update manifest
+        run: |
+          bash packaging/binaries/build-binaries.sh "${{ steps.ver.outputs.version }}"
+          cat dist/bin/update-manifest.json
       - uses: actions/upload-artifact@v4
         with:
           name: suricatoos-agent-linux-packages
@@ -67,6 +73,9 @@ jobs:
             dist/*.deb
             dist/*.rpm
             dist/SHA256SUMS
+            dist/bin/suricatoos-agent-*
+            dist/bin/SHA256SUMS-bin
+            dist/bin/update-manifest.json
           if-no-files-found: error
 
       # Distribuição: nos tags agent-v*, publica um GitHub Release com os pacotes
@@ -81,6 +90,7 @@ jobs:
             --title "Suricatoos Agent ${{ steps.ver.outputs.version }}" \
             --notes "Pacotes do Suricatoos Agent (Linux .deb/.rpm amd64+arm64; macOS .pkg universal). Verifique a assinatura GPG (Linux) com a chave pública (packaging/keys/) — ver packaging/{linux,macos}/README.install.md." \
             dist/*.deb dist/*.rpm dist/SHA256SUMS \
+            dist/bin/suricatoos-agent-* dist/bin/SHA256SUMS-bin dist/bin/update-manifest.json \
             packaging/keys/suricatoos-agent-pkg-pub.asc
 
   package-macos:

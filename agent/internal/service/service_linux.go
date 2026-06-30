@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 )
 
@@ -16,6 +17,8 @@ Description=Suricatoos Vulnerability Agent
 Documentation=https://github.com/williamsouzadelima/suricatoos-infra
 After=network-online.target
 Wants=network-online.target
+StartLimitIntervalSec=600
+StartLimitBurst=5
 
 [Service]
 Type=simple
@@ -30,6 +33,17 @@ RestartSec=30
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=suricatoos-agent
+
+# Hardening (paridade com o pacote). O diretório do binário é RW para o
+# auto-update assinado poder trocar o próprio binário; o resto fica read-only.
+NoNewPrivileges=yes
+ProtectSystem=strict
+ReadWritePaths=%s %s
+ProtectHome=yes
+PrivateTmp=yes
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
 
 [Install]
 WantedBy=multi-user.target
@@ -50,6 +64,8 @@ func Install(cfg Config) error {
 		cfg.QueueDir,
 		cfg.Interval,
 		cfg.MaxQueue,
+		cfg.StateDir,                 // ReadWritePaths: state dir
+		filepath.Dir(cfg.BinaryPath), // ReadWritePaths: binary dir (p/ auto-update)
 	)
 	if err := os.WriteFile(unitPath, []byte(unit), 0o644); err != nil {
 		return fmt.Errorf("write unit file: %w", err)

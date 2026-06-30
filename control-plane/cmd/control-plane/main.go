@@ -22,6 +22,9 @@
 //	CRL_FILE              path to JSON file for persisting revoked serials (recommended with CRL_URL)
 //	INGEST_URL            public inventory endpoint handed to agents on enrollment
 //	                      (e.g. https://scanner.suricatoos.com/ingest/v1/inventory)
+//	UPDATE_MANIFEST_FILE  path to the JSON auto-update manifest (version + per
+//	                      os/arch url+sha256). When set, /v1/update/check serves a
+//	                      CA-signed answer; unset → endpoint returns 204 (disabled)
 //
 // When CA_CERT_FILE/CA_KEY_FILE are set the CA survives restarts (agents keep
 // their mTLS certificates). Without them a new ephemeral CA is generated on
@@ -43,6 +46,7 @@ import (
 	"github.com/williamsouzadelima/suricatoos-infra/control-plane/ca"
 	"github.com/williamsouzadelima/suricatoos-infra/control-plane/enroll"
 	"github.com/williamsouzadelima/suricatoos-infra/control-plane/tokens"
+	cpupdate "github.com/williamsouzadelima/suricatoos-infra/control-plane/update"
 )
 
 func main() {
@@ -57,6 +61,7 @@ func main() {
 	crlURL := os.Getenv("CRL_URL")
 	crlFile := os.Getenv("CRL_FILE")
 	ingestURL := os.Getenv("INGEST_URL")
+	updateManifestFile := os.Getenv("UPDATE_MANIFEST_FILE")
 
 	// CA — persistent when CA_CERT_FILE + CA_KEY_FILE are set; ephemeral otherwise.
 	var authority *ca.CA
@@ -113,6 +118,21 @@ func main() {
 	enrollSvc := enroll.NewService(tm, authority, enroll.WithIngestURL(ingestURL))
 	adminAPI := cpapi.New(tm, authority, serverURL, ingestURL, adminSecret)
 
+	// Auto-update channel — optional. When UPDATE_MANIFEST_FILE points at a valid
+	// manifest, agents poll /v1/update/check and get a CA-signed answer; without
+	// it the endpoint returns 204 (disabled).
+	var updateCfg *cpupdate.ManifestConfig
+	if updateManifestFile != "" {
+		updateCfg, err = cpupdate.LoadConfig(updateManifestFile)
+		if err != nil {
+			log.Fatalf("update manifest: %v", err)
+		}
+		log.Printf("auto-update: manifest %s (version %s, %d artifacts)", updateManifestFile, updateCfg.Version, len(updateCfg.Artifacts))
+	} else {
+		log.Printf("auto-update: disabled — set UPDATE_MANIFEST_FILE to enable")
+	}
+	updateSvc := cpupdate.NewService(updateCfg, authority)
+
 	mux := http.NewServeMux()
 	mux.Handle("/v1/", http.StripPrefix("/v1", enrollSvc.Handler()))
 	mux.HandleFunc("GET /v1/crl.der", func(w http.ResponseWriter, r *http.Request) {
@@ -125,6 +145,7 @@ func main() {
 		w.Header().Set("Cache-Control", "max-age=3600")
 		w.Write(der)
 	})
+	mux.HandleFunc("GET /v1/update/check", updateSvc.Handler())
 	mux.Handle("/api/", adminAPI.Handler())
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("ok"))
