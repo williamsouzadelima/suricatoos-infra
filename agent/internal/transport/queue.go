@@ -2,6 +2,7 @@ package transport
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -76,9 +77,11 @@ func (q *Queue) evictLocked() error {
 	return nil
 }
 
-// Flush delivers queued items in order, stopping at the first send failure (the
-// item is kept for the next attempt). Returns how many were delivered. The lock
-// is not held during Send, so collection can enqueue concurrently.
+// Flush delivers queued items in order. A transient send failure stops the cycle
+// (the item is kept and retried next time); a permanent one (ErrPermanent, e.g. a
+// 4xx) drops the item and continues so it can't block the backlog. Returns how
+// many were delivered. The lock is not held during Send, so collection can enqueue
+// concurrently.
 func (q *Queue) Flush(ctx context.Context, s Sender) (int, error) {
 	q.mu.Lock()
 	items, err := q.list()
@@ -97,7 +100,16 @@ func (q *Queue) Flush(ctx context.Context, s Sender) (int, error) {
 			continue // item já removido / ilegível — pula
 		}
 		if err := s.Send(ctx, payload); err != nil {
-			return sent, err
+			if errors.Is(err, ErrPermanent) {
+				// Unsendable item (4xx) — drop it and keep going so one bad
+				// payload can't block the whole backlog forever.
+				q.mu.Lock()
+				_ = os.Remove(path)
+				q.dropped.Add(1)
+				q.mu.Unlock()
+				continue
+			}
+			return sent, err // transient — stop and retry from here next cycle
 		}
 		q.mu.Lock()
 		_ = os.Remove(path)

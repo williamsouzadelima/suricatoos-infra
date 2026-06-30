@@ -165,6 +165,14 @@ func TestEnrollAndMTLSEndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// In production the ingest server presents a public (Let's Encrypt) cert, so
+	// TLSClientConfig leaves RootCAs nil to use the system trust store. The test
+	// server is self-signed by the test CA, so trust it explicitly here.
+	serverPool := x509.NewCertPool()
+	if !serverPool.AppendCertsFromPEM(authority.pem) {
+		t.Fatal("falha no pool de CA do servidor")
+	}
+	cfg.RootCAs = serverPool
 
 	clientPool := x509.NewCertPool()
 	if !clientPool.AppendCertsFromPEM(authority.pem) {
