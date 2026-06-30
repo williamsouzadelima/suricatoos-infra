@@ -218,6 +218,26 @@ func TestEnrollFingerprintPinMismatch(t *testing.T) {
 	}
 }
 
+func TestNormalizeFingerprint(t *testing.T) {
+	const hexFP = "efe73e7165a52279de68e990ed7af48670db1b21e1d43be3ba54047c61c57faa"
+	colon := "EF:E7:3E:71:65:A5:22:79:DE:68:E9:90:ED:7A:F4:86:70:DB:1B:21:E1:D4:3B:E3:BA:54:04:7C:61:C5:7F:AA"
+	// All forms the control-plane/bundle and openssl emit must reduce to the same
+	// bare hex. The "sha256:" cases are the regression: the bundle ca_pin uses it
+	// and previously never matched (the literal "sha256" stayed glued on).
+	for _, in := range []string{
+		hexFP,
+		"sha256:" + hexFP,
+		"SHA256:" + hexFP,
+		"  sha256:" + hexFP + "  ",
+		colon,
+		"sha256:" + colon,
+	} {
+		if got := normalizeFingerprint(in); !strings.EqualFold(got, hexFP) {
+			t.Errorf("normalizeFingerprint(%q) = %q, want (eqfold) %q", in, got, hexFP)
+		}
+	}
+}
+
 func TestSaveLoadRoundTripAndKeyPerm(t *testing.T) {
 	authority := newTestCA(t)
 	csrPEM, key, err := GenerateCSR("agent-sl")

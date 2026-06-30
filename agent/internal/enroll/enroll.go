@@ -136,7 +136,7 @@ func (id *Identity) verify(caFingerprint string) error {
 	}
 	if caFingerprint != "" {
 		sum := sha256.Sum256(caBlock.Bytes)
-		want := strings.ReplaceAll(strings.ReplaceAll(caFingerprint, ":", ""), " ", "")
+		want := normalizeFingerprint(caFingerprint)
 		if !strings.EqualFold(hex.EncodeToString(sum[:]), want) {
 			return errors.New("fingerprint da CA não confere com o pin esperado")
 		}
@@ -164,6 +164,26 @@ func (id *Identity) verify(caFingerprint string) error {
 		return errors.New("cert não corresponde à chave privada do agente")
 	}
 	return nil
+}
+
+// normalizeFingerprint reduces a CA fingerprint pin to bare hex for comparison,
+// accepting the forms the control-plane and openssl emit:
+//
+//	"sha256:efe7…"          enrollment bundle ca_pin (control-plane Fingerprint)
+//	"efe7…"                 bare hex
+//	"EF:E7:…" / "ef e7 …"   colon/space separated hex
+//
+// The leading "sha256:" algorithm label MUST be stripped first: without it the
+// generic ":" removal left the literal "sha256" glued to the hex, so a bundle
+// pin never matched the computed digest and --ca-pin always failed.
+func normalizeFingerprint(fp string) string {
+	fp = strings.TrimSpace(fp)
+	if i := strings.IndexByte(fp, ':'); i >= 0 && strings.EqualFold(fp[:i], "sha256") {
+		fp = fp[i+1:]
+	}
+	fp = strings.ReplaceAll(fp, ":", "")
+	fp = strings.ReplaceAll(fp, " ", "")
+	return fp
 }
 
 // TLSClientConfig builds an mTLS client config: it presents the agent's client
