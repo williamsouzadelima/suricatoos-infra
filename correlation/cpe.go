@@ -105,7 +105,10 @@ func GenerateCPEs(inv Inventory) []string {
 			continue
 		}
 		ver := upstreamVersion(p.Version)
-		if ver == "" {
+		// Skip anything that isn't a clean version token: a value still carrying
+		// ':' '*' whitespace or other characters (e.g. a crafted package version)
+		// could inject extra CPE fields/wildcards into the CVE scanner's input.
+		if !isSafeCPEToken(ver) {
 			continue
 		}
 		part := "a"
@@ -162,6 +165,24 @@ func isAllDigits(s string) bool {
 	}
 	for _, r := range s {
 		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+// isSafeCPEToken reports whether s is a non-empty version token safe to embed in
+// a CPE URI: only ASCII letters, digits, '.' and '_'. Anything else (':', '*',
+// whitespace, control chars) is rejected so a crafted version cannot inject
+// extra CPE fields or wildcards.
+func isSafeCPEToken(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, r := range s {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '.', r == '_':
+		default:
 			return false
 		}
 	}

@@ -10,8 +10,13 @@ from bridge import (
     fetch_nvt_meta,
     finding_report_to_xml,
     provision_cve_task,
+    safe_host_id,
     severity_to_threat,
 )
+
+# finding_report_to_xml now keys the host identity on the UNIQUE agent_id, not
+# the (collision-prone) OS hostname. SAMPLE_REPORT.agent_id is the expected host.
+AGENT = "test-agent-abc"
 
 # OIDs of the two SAMPLE_REPORT findings, for building nvt_meta in tests.
 OID_0 = "1.3.6.1.4.1.25623.1.1.1.1.2023.5418"
@@ -86,12 +91,12 @@ class TestFindingReportToXML(unittest.TestCase):
         self.assertEqual(nvt.get("oid"), "1.3.6.1.4.1.25623.1.1.1.1.2023.5418")
 
     def test_finding_host_is_text(self):
-        # GMP result host: IP is the TEXT of <host>, not a <host><ip> child.
+        # GMP result host: identity is the TEXT of <host> (= agent_id), not a child.
         root, _ = self._parse()
         result = root.findall("results/result")[0]
         host = result.find("host")
         self.assertIsNotNone(host)
-        self.assertEqual((host.text or "").strip(), "10.0.0.42")
+        self.assertEqual((host.text or "").strip(), AGENT)
         self.assertIsNone(host.find("ip"), "must not use a <host><ip> child")
 
     def test_no_feed_meta_is_log_no_severity_fabrication(self):
@@ -160,7 +165,7 @@ class TestFindingReportToXML(unittest.TestCase):
         root, _ = self._parse()
         host = root.find("host")
         self.assertIsNotNone(host, "report must carry a report-level <host> block")
-        self.assertEqual(host.findtext("ip"), "10.0.0.42")
+        self.assertEqual(host.findtext("ip"), AGENT)
         self.assertEqual(host.findtext("start"), "2026-06-28T00:00:00Z")
         self.assertEqual(host.findtext("end"), "2026-06-28T00:00:00Z")
         self.assertEqual(root.findtext("scan_start"), "2026-06-28T00:00:00Z")
@@ -183,7 +188,7 @@ class TestFindingReportToXML(unittest.TestCase):
         results = root.findall("results/result")
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0].find("threat").text, "Log")
-        self.assertEqual((results[0].find("host").text or "").strip(), "10.0.0.42")
+        self.assertEqual((results[0].find("host").text or "").strip(), AGENT)
 
     def test_cpe_host_details(self):
         # CPEs become <host><detail><name>App</name><value>cpe:...</value> blocks
@@ -206,6 +211,29 @@ class TestFindingReportToXML(unittest.TestCase):
         root, _ = self._parse()
         ids = [r.get("id") for r in root.findall("results/result")]
         self.assertEqual(len(ids), len(set(ids)), "result ids must be unique")
+
+
+class TestHostIdentity(unittest.TestCase):
+    def test_safe_host_id_neutralizes_target_injection(self):
+        # commas/slashes/spaces (multi-host, CIDR, range, XML-breaking) are removed
+        self.assertEqual(safe_host_id("ok-host_1.example"), "ok-host_1.example")
+        self.assertEqual(safe_host_id("a,10.0.0.0/24"), "a_10.0.0.0_24")
+        self.assertEqual(safe_host_id("host with spaces"), "host_with_spaces")
+        self.assertEqual(safe_host_id("evil<x>"), "evil_x")  # XML-breaking chars removed
+        self.assertEqual(safe_host_id("\x00\x01"), "")  # only control chars → empty
+        self.assertEqual(safe_host_id(""), "")
+
+    def test_xml_uses_agent_id_not_hostname(self):
+        # Identity must be the unique agent_id, not the (collision-prone) hostname.
+        rep = {**SAMPLE_REPORT, "agent_id": "uniq-agent-7", "host": "localhost"}
+        root = ET.fromstring(finding_report_to_xml(rep))
+        self.assertEqual(root.find("host/ip").text, "uniq-agent-7")
+
+    def test_xml_falls_back_to_host_when_no_agent_id(self):
+        rep = {k: v for k, v in SAMPLE_REPORT.items() if k != "agent_id"}
+        rep["host"] = "fallback-host"
+        root = ET.fromstring(finding_report_to_xml(rep))
+        self.assertEqual(root.find("host/ip").text, "fallback-host")
 
 
 class TestSeverityToThreat(unittest.TestCase):

@@ -41,6 +41,23 @@ func TestLookupCPEProduct(t *testing.T) {
 	}
 }
 
+func TestGenerateCPEs_SkipsUnsafeVersion(t *testing.T) {
+	// A crafted version that survives normalization but carries CPE-meaningful
+	// characters (':' '*' space) must be dropped, not injected into a CPE.
+	inv := Inventory{
+		Packages: []Package{
+			{Name: "openssl", Version: "3.0.2:*:extra"}, // ':' -> not all-digits epoch, stays -> unsafe
+			{Name: "nginx", Version: "1.18.0 OR 1=1"},   // space stripped -> "1.18.0" safe
+			{Name: "bash", Version: "5.1*"},             // '*' -> unsafe
+		},
+	}
+	got := GenerateCPEs(inv)
+	want := []string{"cpe:/a:nginx:nginx:1.18.0"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("GenerateCPEs() = %v, want %v (unsafe versions dropped)", got, want)
+	}
+}
+
 func TestGenerateCPEs(t *testing.T) {
 	inv := Inventory{
 		Packages: []Package{

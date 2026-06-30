@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/williamsouzadelima/suricatoos-infra/correlation"
@@ -25,6 +26,14 @@ type PipelineSink struct {
 	gmpUsername  string
 	gmpPassword  string
 	taskName     string
+
+	// Idempotency/concurrency guard. cycle_hash makes a re-delivered inventory a
+	// no-op (the agent retries on a lost ack, and re-imports would otherwise
+	// duplicate findings); inflight collapses concurrent deliveries of the same
+	// cycle. Both are keyed by agent_id and protected by mu.
+	mu        sync.Mutex
+	lastCycle map[string]string // agent_id -> last successfully-processed cycle_hash
+	inflight  map[string]bool   // agent_id\x00cycle_hash currently being processed
 }
 
 // PipelineConfig configures a PipelineSink.
@@ -77,22 +86,69 @@ func NewPipelineSink(cfg PipelineConfig) (*PipelineSink, error) {
 		gmpUsername:  username,
 		gmpPassword:  cfg.GmpPassword,
 		taskName:     taskName,
+		lastCycle:    make(map[string]string),
+		inflight:     make(map[string]bool),
 	}, nil
+}
+
+// beginCycle returns true if (agentID, cycleHash) should be processed now. It
+// returns false — and processes nothing — when the same cycle was already
+// completed (a retried/unchanged report) or is currently in flight (a concurrent
+// duplicate). A non-empty cycleHash is required to dedupe; empty always proceeds.
+func (s *PipelineSink) beginCycle(agentID, cycleHash string) bool {
+	if cycleHash == "" {
+		return true
+	}
+	key := agentID + "\x00" + cycleHash
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.lastCycle[agentID] == cycleHash || s.inflight[key] {
+		return false
+	}
+	s.inflight[key] = true
+	return true
+}
+
+// endCycle clears the in-flight mark and, on success, records the cycle as the
+// agent's last-processed so future identical deliveries are skipped.
+func (s *PipelineSink) endCycle(agentID, cycleHash string, ok bool) {
+	if cycleHash == "" {
+		return
+	}
+	key := agentID + "\x00" + cycleHash
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.inflight, key)
+	if ok {
+		s.lastCycle[agentID] = cycleHash
+	}
 }
 
 // Put correlates the inventory and, if findings are produced, imports them to
 // gvmd. Errors are logged but never returned — the agent always gets 202.
 func (s *PipelineSink) Put(inv Inventory) error {
+	// Skip re-delivered or concurrently-duplicated cycles: the agent retries when
+	// an ack is lost, and re-running the bridge would duplicate the gvmd report.
+	// Unchanged inventories (same cycle_hash) are also skipped, avoiding a bridge
+	// subprocess + GMP round-trips on every 15-minute check-in.
+	if !s.beginCycle(inv.Agent.AgentID, inv.CycleHash) {
+		log.Printf("pipeline: agent=%s cycle inalterado/duplicado — skip", inv.Agent.AgentID)
+		return nil
+	}
+	ok := false
+	defer func() { s.endCycle(inv.Agent.AgentID, inv.CycleHash, ok) }()
+
 	corrInv := toCorrelationInventory(inv)
 
 	report, err := s.correlator.Correlate(corrInv)
 	if err != nil {
 		log.Printf("pipeline: correlate agent=%s: %v", inv.Agent.AgentID, err)
-		return nil
+		return nil // ok stays false → a retry of this cycle will reprocess
 	}
 	log.Printf("pipeline: agent=%s host=%s findings=%d", inv.Agent.AgentID, inv.Agent.Hostname, len(report.Findings))
 
 	if s.bridgeScript == "" {
+		ok = true
 		return nil
 	}
 
@@ -101,8 +157,12 @@ func (s *PipelineSink) Put(inv Inventory) error {
 	// provisioned. CPEs come from the full package inventory (not just findings).
 	cpes := correlation.GenerateCPEs(corrInv)
 	if err := s.importToBridge(report, cpes); err != nil {
+		// Leave ok=false so the agent's retry reprocesses (the import did not
+		// complete); the bridge swallows non-fatal provisioning errors itself.
 		log.Printf("pipeline: gmp-bridge agent=%s: %v", inv.Agent.AgentID, err)
+		return nil
 	}
+	ok = true
 	return nil
 }
 

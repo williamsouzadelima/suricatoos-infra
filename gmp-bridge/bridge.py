@@ -29,6 +29,7 @@ Environment:
 import argparse
 import json
 import os
+import re
 import sys
 import uuid
 from xml.etree import ElementTree as ET
@@ -44,6 +45,20 @@ from gvm.protocols.gmp.requests.v226 import Authentication, Nvts, Reports, Tasks
 CVE_SCANNER_ID = "6acd0832-df90-11e4-b9d5-28d24461215b"  # built-in "CVE" scanner
 EMPTY_CONFIG_ID = "085569ce-73ed-11df-83c3-002264764cea"  # built-in "empty" scan config
 ALL_IANA_TCP_PORT_LIST = "33d0cd82-57c6-11e1-8ed1-406186ea4fc5"  # required by create_target; unused by CVE scanner
+
+# OID for the synthetic "inventory collected" marker. Deliberately OUTSIDE
+# Greenbone's NVT arc (1.3.6.1.4.1.25623…) so it can never collide with — or be
+# relabelled by — a real feed NVT. 55683 is an unassigned private-enterprise arc
+# used here only as a local, non-feed marker id.
+INVENTORY_MARKER_OID = "1.3.6.1.4.1.55683.1.0.1"
+
+
+def safe_host_id(value: str) -> str:
+    """Reduce an agent-supplied identity to a safe gvmd host token: only
+    [A-Za-z0-9._-]. This blocks injection of multi-host/CIDR/range target specs
+    (commas, slashes, dashes-as-ranges are neutralised) and XML-breaking control
+    characters. Returns "" if nothing usable remains."""
+    return re.sub(r"[^A-Za-z0-9._-]", "_", value or "").strip("_")
 
 
 # --------------------------------------------------------------------------- #
@@ -159,7 +174,11 @@ def finding_report_to_xml(
         cpes = []
 
     root = ET.Element("report", id=str(uuid.uuid4()))
-    host_ip = report.get("host", "0.0.0.0")
+    # Identity is the UNIQUE agent_id (the enrolled cert CN), NOT the OS hostname:
+    # hostnames collide across a fleet (cloned VMs, "localhost", containers) and
+    # would merge distinct machines into one gvmd host asset. Sanitized so it is
+    # safe as an asset/target host token and as XML text.
+    host_ip = safe_host_id(report.get("agent_id") or report.get("host", "")) or "unknown-agent"
     # collected_at is RFC3339/ISO-8601 (e.g. "2026-06-29T00:00:00Z"), which gvmd's
     # parse_iso_time_tz accepts. A bad/empty value parses to 0 but still registers
     # the host, so this is safe either way.
@@ -236,7 +255,7 @@ def finding_report_to_xml(
         r = ET.SubElement(results_el, "result", id=str(uuid.uuid4()))
         ET.SubElement(r, "host").text = host_ip
         ET.SubElement(r, "port").text = "general/tcp"
-        nvt_el = ET.SubElement(r, "nvt", oid="1.3.6.1.4.1.25623.1.0.90022")
+        nvt_el = ET.SubElement(r, "nvt", oid=INVENTORY_MARKER_OID)
         ET.SubElement(nvt_el, "type").text = "nvt"
         ET.SubElement(nvt_el, "name").text = "Suricatoos Agent inventory"
         ET.SubElement(nvt_el, "family").text = "General"
@@ -354,12 +373,12 @@ def run_import(
         # Auto-provision a native, playable CVE-scanner task for this host so the
         # agent appears in the GSA and can be (re)scanned with the play button.
         if provision_cve:
-            host = report_dict.get("host", "")
-            if host:
+            agent_host = safe_host_id(report_dict.get("agent_id") or report_dict.get("host", ""))
+            if agent_host:
                 # Non-fatal: the Notus import + CPE host-details already landed;
                 # a provisioning hiccup must not fail the whole bridge run.
                 try:
-                    tgt, cve_task = provision_cve_task(gmp, host)
+                    tgt, cve_task = provision_cve_task(gmp, agent_host)
                     print(f"CVE task ready: {cve_task} target={tgt} ({len(cpes)} CPEs)", file=sys.stderr)
                 except (SystemExit, Exception) as e:  # noqa: B014 - _assert_ok raises SystemExit
                     print(f"WARN: CVE task provisioning failed (import OK): {e}", file=sys.stderr)
@@ -432,7 +451,13 @@ def provision_cve_task(gmp: Gmp, host: str) -> tuple[str, str]:
             config_id=EMPTY_CONFIG_ID,
             target_id=target_id,
             scanner_id=CVE_SCANNER_ID,
-            comment="Play to assess this agent's catalogued software against the CVE feed",
+            comment=(
+                "Play to assess this agent's catalogued software (CPEs) against the "
+                "CVE feed. Note: CVE-scanner matching is upstream-version based and "
+                "is NOT distro-backport aware, so expect some false positives on "
+                "Debian/Ubuntu/RHEL — the precise per-distro findings are in the "
+                "Notus task 'suricatoos-agent-<id>'."
+            ),
         )
         _assert_ok(resp, "create_task(cve)")
         task_id = _extract_id(resp)
