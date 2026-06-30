@@ -24,7 +24,8 @@ brief §6.A e §7.
     quando `SIGN_KEY_FILE` está definido; o CI assina via segredo `PKG_SIGNING_KEY`.
     Validado: `.rpm` verifica com `rpm -K` ("digests signatures OK"); `.deb` com
     assinatura `_gpgorigin`. Verificação no `README.install.md`.
-  - **Pendente (distribuição):** servir os pacotes via repo apt/yum com Release/repo
-    assinada (verificação automática no `apt`/`dnf`).
+  - **Distribuição: GitHub Release** no tag `agent-v*` (pacotes + SHA256SUMS + chave
+    pública). Opcional/futuro: repo apt/yum com Release/repo assinada (verificação
+    automática no `apt`/`dnf` sem baixar o .deb/.rpm avulso).
 - **macOS (.pkg) e Windows (MSI): pendentes** — exigem credenciais de assinatura
   (Apple Developer ID + notarytool; Authenticode/signtool) que ficam com o operador.
