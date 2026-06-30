@@ -122,6 +122,7 @@ func buildAgent(args []string) (*agentd.Agent, error) {
 	queueDir := fs.String("queue", "./suricatoos-agent/queue", "diretório da fila offline")
 	interval := fs.Duration("interval", 15*time.Minute, "intervalo entre coletas")
 	maxQueue := fs.Int("max-queue", 1000, "máximo de itens na fila offline")
+	updateInterval := fs.Duration("update-interval", 6*time.Hour, "intervalo de checagem de auto-update assinado (0 desliga)")
 	if err := fs.Parse(args); err != nil {
 		return nil, err
 	}
@@ -129,12 +130,17 @@ func buildAgent(args []string) (*agentd.Agent, error) {
 	if ingestURL == "" {
 		return nil, errors.New("--ingest é obrigatório (ou enrole o agente para herdá-lo do control-plane)")
 	}
+	binPath, _ := os.Executable()
 	return agentd.New(agentd.Config{
-		StateDir:  *stateDir,
-		QueueDir:  *queueDir,
-		IngestURL: ingestURL,
-		MaxQueue:  *maxQueue,
-		Interval:  *interval,
+		StateDir:       *stateDir,
+		QueueDir:       *queueDir,
+		IngestURL:      ingestURL,
+		MaxQueue:       *maxQueue,
+		Interval:       *interval,
+		UpdateInterval: *updateInterval,
+		CurrentVersion: version.Version,
+		BinaryPath:     binPath,
+		Restart:        service.Restart,
 	})
 }
 
@@ -157,6 +163,10 @@ func resolveIngestURL(flagVal, stateDir string) string {
 // runDaemon executa o loop de coleta + reporte até receber SIGINT/SIGTERM.
 func runDaemon(args []string) {
 	ag, err := buildAgent(args)
+	if errors.Is(err, agentd.ErrRolledBack) {
+		fmt.Println("update: rollback para a versão anterior — reiniciando o serviço")
+		return
+	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "run:", err)
 		os.Exit(1)

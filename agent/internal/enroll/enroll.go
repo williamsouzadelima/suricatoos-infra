@@ -31,6 +31,29 @@ type Identity struct {
 	// IngestURL is where the agent reports inventory, learned from the
 	// enrollment response so `run`/`install` need no separate --ingest flag.
 	IngestURL string
+	// ServerURL is the control-plane base URL (the --server passed at enroll,
+	// ending in /v1). Persisted so the daemon can poll for signed update
+	// manifests without a separate flag. Empty for pre-update enrollments.
+	ServerURL string
+}
+
+// CAPublicKey returns the enrollment CA's Ed25519 public key, parsed from the
+// pinned CA certificate. It is the trust anchor used to verify CA-signed
+// artifacts (e.g. update manifests) the agent receives over untrusted channels.
+func (id *Identity) CAPublicKey() (ed25519.PublicKey, error) {
+	block, _ := pem.Decode(id.CACertPEM)
+	if block == nil || block.Type != "CERTIFICATE" {
+		return nil, errors.New("CA PEM inválido")
+	}
+	caCert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		return nil, err
+	}
+	pub, ok := caCert.PublicKey.(ed25519.PublicKey)
+	if !ok {
+		return nil, errors.New("CA não usa chave Ed25519")
+	}
+	return pub, nil
 }
 
 // GenerateCSR creates a fresh Ed25519 keypair and a CSR for agentID. It returns
@@ -120,6 +143,7 @@ func Enroll(ctx context.Context, hc *http.Client, baseURL, token, agentID, caFin
 		CertPEM:    []byte(er.Certificate),
 		CACertPEM:  []byte(er.CACert),
 		IngestURL:  er.IngestURL,
+		ServerURL:  strings.TrimSuffix(baseURL, "/"),
 	}
 	if err := id.verify(caFingerprint); err != nil {
 		return nil, fmt.Errorf("identidade recebida inválida: %w", err)
@@ -242,6 +266,13 @@ func Save(dir string, id *Identity) error {
 			return err
 		}
 	}
+	// server.url is the control-plane base URL, used by the daemon to poll for
+	// signed update manifests. Optional (absent for pre-update enrollments).
+	if id.ServerURL != "" {
+		if err := os.WriteFile(filepath.Join(dir, "server.url"), []byte(id.ServerURL), 0o644); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -275,6 +306,10 @@ func Load(dir string) (*Identity, error) {
 	// ingest.url is optional (absent for pre-existing enrollments).
 	if b, err := os.ReadFile(filepath.Join(dir, "ingest.url")); err == nil {
 		id.IngestURL = strings.TrimSpace(string(b))
+	}
+	// server.url is optional (absent for pre-update enrollments).
+	if b, err := os.ReadFile(filepath.Join(dir, "server.url")); err == nil {
+		id.ServerURL = strings.TrimSpace(string(b))
 	}
 	return id, nil
 }

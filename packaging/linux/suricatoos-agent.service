@@ -3,6 +3,11 @@ Description=Suricatoos Vulnerability Agent
 Documentation=https://github.com/williamsouzadelima/suricatoos-infra
 After=network-online.target
 Wants=network-online.target
+# Backstop: se até o rollback do auto-update falhar, o systemd marca o unit como
+# failed (em vez de crash-loop infinito) após 5 starts em 10min. O rollback do
+# agente dispara antes (maxBootAttempts=3 ≈ 90s), então isto é só rede de segurança.
+StartLimitIntervalSec=600
+StartLimitBurst=5
 
 [Service]
 Type=simple
@@ -17,10 +22,12 @@ StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=suricatoos-agent
 
-# Hardening (a coleta só LÊ a base de pacotes do sistema; nada de escrita fora do state).
+# Hardening (a coleta só LÊ a base de pacotes do sistema; nada de escrita fora do
+# state). /usr/bin é RW para o auto-update assinado poder trocar o próprio binário
+# (download+swap acontecem no diretório do binário); todo o resto segue read-only.
 NoNewPrivileges=yes
 ProtectSystem=strict
-ReadWritePaths=/var/lib/suricatoos-agent
+ReadWritePaths=/var/lib/suricatoos-agent /usr/bin
 ProtectHome=yes
 PrivateTmp=yes
 ProtectKernelTunables=yes

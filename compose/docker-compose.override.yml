@@ -78,6 +78,9 @@ services:
   #   CRL_URL=https://scanner.suricatoos.com/agent/v1/crl.der
   #   CRL_FILE=/data/crl.json
   #   INGEST_URL=https://scanner.suricatoos.com/ingest/v1/inventory
+  #   # Auto-update (opcional): publique os binários crus no Release agent-v*, baixe
+  #   # o update-manifest.json do Release para /var/lib/suricatoos-cp/ e aponte:
+  #   UPDATE_MANIFEST_FILE=/data/update-manifest.json
   #   EOF
   # INGEST_URL é entregue aos agentes no enroll → eles reportam ao ingest sem --ingest.
   #   chmod 600 /var/lib/suricatoos-cp/control-plane.env
