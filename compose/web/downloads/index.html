@@ -1,0 +1,326 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Downloads — Suricatoos Agent</title>
+<meta name="description" content="Baixe e instale o Suricatoos Agent (Linux, macOS, Windows). Passo a passo de instalação, verificação de assinatura e enrollment.">
+<style>
+  :root{
+    --bg:#0b0f17; --bg2:#0e1320; --surface:#131a2a; --surface2:#172033;
+    --border:#243049; --border2:#2d3a57;
+    --text:#e7edf6; --muted:#93a0b6; --faint:#64718c;
+    --brand:#f5a524; --brand-d:#c9821a; --ok:#34d399; --info:#5eb0ff;
+    --radius:14px; --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+    --sans:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:radial-gradient(1200px 600px at 70% -10%,#16203a 0,transparent 60%),var(--bg);
+    color:var(--text);font-family:var(--sans);line-height:1.55;-webkit-font-smoothing:antialiased}
+  a{color:var(--info);text-decoration:none} a:hover{text-decoration:underline}
+  .wrap{max-width:980px;margin:0 auto;padding:0 20px}
+  header.top{position:sticky;top:0;z-index:20;backdrop-filter:blur(10px);
+    background:rgba(11,15,23,.82);border-bottom:1px solid var(--border)}
+  header.top .wrap{display:flex;align-items:center;gap:14px;height:62px}
+  .logo{display:flex;align-items:center;gap:11px;font-weight:700;letter-spacing:.2px;color:var(--text)}
+  .logo:hover{text-decoration:none}
+  .logo .mark{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;
+    background:linear-gradient(150deg,var(--brand),var(--brand-d));color:#1a1206;font-weight:900;font-size:17px}
+  .logo small{display:block;font-weight:500;color:var(--muted);font-size:11px;letter-spacing:.4px;margin-top:-2px}
+  .top .spacer{flex:1}
+  .top nav a{color:var(--muted);font-size:14px;margin-left:18px}
+  .top nav a:hover{color:var(--text);text-decoration:none}
+  .hero{padding:54px 0 26px}
+  .badge{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;color:var(--brand);
+    border:1px solid var(--border2);background:var(--surface);padding:5px 11px;border-radius:999px}
+  .hero h1{font-size:38px;line-height:1.1;margin:18px 0 10px;letter-spacing:-.5px}
+  .hero p.lead{font-size:17px;color:var(--muted);max-width:680px;margin:0}
+  .note{margin:26px 0;border:1px solid var(--border);border-left:3px solid var(--brand);
+    background:var(--surface);border-radius:12px;padding:16px 18px;color:#cdd6e4;font-size:14.5px}
+  .note b{color:var(--text)}
+  .note.info{border-left-color:var(--info)}
+  .note.warn{border-left-color:#f0883e}
+  code{font-family:var(--mono);font-size:.92em;background:#0a0e18;border:1px solid var(--border);
+    border-radius:6px;padding:1.5px 6px;color:#e9d9b8}
+  h2{font-size:24px;margin:46px 0 6px;letter-spacing:-.3px}
+  h2 .num{color:var(--brand);font-variant-numeric:tabular-nums}
+  .sub{color:var(--muted);margin:0 0 18px;font-size:14.5px}
+  /* OS tabs */
+  .tabs{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 22px}
+  .tab{cursor:pointer;border:1px solid var(--border2);background:var(--surface);color:var(--muted);
+    padding:10px 18px;border-radius:10px;font-size:14.5px;font-weight:600;display:flex;align-items:center;gap:9px}
+  .tab:hover{color:var(--text)}
+  .tab[aria-selected="true"]{color:#1a1206;background:linear-gradient(150deg,var(--brand),var(--brand-d));border-color:transparent}
+  .tab svg{width:18px;height:18px}
+  .panel{display:none;animation:fade .25s ease}
+  .panel.active{display:block}
+  @keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+  /* download cards */
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin:6px 0 8px}
+  .card{border:1px solid var(--border);background:linear-gradient(180deg,var(--surface2),var(--surface));
+    border-radius:12px;padding:15px 16px;display:flex;flex-direction:column;gap:4px}
+  .card .k{font-size:13px;color:var(--faint)}
+  .card .t{font-weight:700;font-size:15px}
+  .card .dl{margin-top:10px}
+  .btn{display:inline-flex;align-items:center;gap:8px;background:var(--brand);color:#1a1206;font-weight:700;
+    border:0;border-radius:9px;padding:9px 14px;font-size:14px;cursor:pointer;text-decoration:none}
+  .btn:hover{background:#ffb733;text-decoration:none}
+  .btn.ghost{background:transparent;color:var(--text);border:1px solid var(--border2)}
+  .btn.ghost:hover{background:var(--surface2)}
+  .btn svg{width:15px;height:15px}
+  /* steps */
+  ol.steps{list-style:none;counter-reset:s;padding:0;margin:14px 0 0}
+  ol.steps>li{counter-increment:s;position:relative;padding:2px 0 22px 46px;border-left:1px solid var(--border);margin-left:15px}
+  ol.steps>li:last-child{border-left-color:transparent}
+  ol.steps>li::before{content:counter(s);position:absolute;left:-15px;top:0;width:30px;height:30px;border-radius:50%;
+    background:var(--surface2);border:1px solid var(--border2);color:var(--brand);display:grid;place-items:center;
+    font-weight:700;font-size:14px;font-variant-numeric:tabular-nums}
+  ol.steps>li h3{margin:3px 0 8px;font-size:16px;font-weight:650}
+  ol.steps>li p{margin:0 0 8px;color:var(--muted);font-size:14px}
+  /* code blocks */
+  .code{position:relative;margin:8px 0}
+  .code pre{margin:0;background:#080b13;border:1px solid var(--border);border-radius:10px;
+    padding:14px 15px;overflow:auto;font-family:var(--mono);font-size:13px;line-height:1.6;color:#dfe7f2}
+  .code .cp{position:absolute;top:8px;right:8px;background:var(--surface2);border:1px solid var(--border2);
+    color:var(--muted);border-radius:7px;padding:4px 9px;font-size:12px;cursor:pointer}
+  .code .cp:hover{color:var(--text)}
+  .pre-tag{color:#7f8ca3} .tok{color:var(--brand)}
+  details{border:1px solid var(--border);background:var(--surface);border-radius:12px;padding:4px 18px;margin:14px 0}
+  details summary{cursor:pointer;padding:13px 0;font-weight:650;color:var(--text)}
+  details[open] summary{border-bottom:1px solid var(--border);margin-bottom:12px}
+  .kv{font-family:var(--mono);font-size:12.5px;color:#cbd5e6;word-break:break-all}
+  footer{margin:60px 0 40px;padding-top:22px;border-top:1px solid var(--border);color:var(--faint);font-size:13px}
+  footer a{color:var(--muted)}
+  .pillrow{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+  .pill{font-size:12px;color:var(--muted);border:1px solid var(--border);background:var(--surface);
+    padding:4px 10px;border-radius:999px}
+  hr.sep{border:0;border-top:1px solid var(--border);margin:30px 0}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <a class="logo" href="/"><span class="mark">S</span><span>Suricatoos<small>Vulnerability Platform</small></span></a>
+    <span class="spacer"></span>
+    <nav>
+      <a href="/">Scanner</a>
+      <a href="#verify">Verificar</a>
+      <a href="#admin">Para admins</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <section class="hero">
+    <span class="badge">● Suricatoos Agent · v0.1.0</span>
+    <h1>Downloads do Agente</h1>
+    <p class="lead">Agente de endpoint <b>passivo e local</b>: inventaria pacotes e SO da máquina e
+      reporta <b>outbound (mTLS)</b> ao pipeline Suricatoos. A correlação roda no servidor e os achados
+      aparecem no scanner. Não faz varredura de rede, não coleta arquivos, credenciais nem telemetria.</p>
+    <div class="pillrow">
+      <span class="pill">Linux .deb / .rpm</span>
+      <span class="pill">macOS .pkg universal</span>
+      <span class="pill">Windows .msi x64</span>
+      <span class="pill">Pacotes Linux assinados (GPG)</span>
+    </div>
+  </section>
+
+  <div class="note info">
+    <b>Antes de começar</b> — para o agente se conectar você precisa de um <b>token de enrollment</b> e do
+    <b>CA-pin</b>, gerados pelo administrador no control-plane (veja <a href="#admin">Para administradores</a>).
+    O servidor de enrollment é <code>https://scanner.suricatoos.com/agent/v1</code>.
+  </div>
+
+  <h2><span class="num">1.</span> Escolha o sistema operacional</h2>
+  <p class="sub">Selecione a plataforma do endpoint para ver o passo a passo específico.</p>
+
+  <div class="tabs" role="tablist" aria-label="Sistema operacional">
+    <button class="tab" role="tab" aria-selected="true" data-os="linux">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a4 4 0 0 0-4 4c0 1.5.4 2.3.4 3.4 0 1.3-1.8 2.6-2.6 4.6-.8 2-.3 4 .6 5 .6.7 1.6 1 2.6 1 .6 1 1.7 1 3 1s2.4 0 3-1c1 0 2-.3 2.6-1 .9-1 1.4-3 .6-5-.8-2-2.6-3.3-2.6-4.6 0-1.1.4-1.9.4-3.4a4 4 0 0 0-4-4z"/></svg>
+      Linux</button>
+    <button class="tab" role="tab" aria-selected="false" data-os="macos">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 3c-1 .1-2.2.7-2.9 1.5-.6.7-1.2 1.8-1 2.9 1.1.1 2.2-.6 2.9-1.4.6-.8 1.1-1.8 1-3zM19 17c-.5 1.2-.8 1.7-1.5 2.8-1 1.5-2.3 3.3-4 3.3-1.5 0-1.9-1-3.9-1s-2.5 1-3.9 1c-1.7 0-3-1.6-4-3.1C-.2 16.6-.5 11 2 8.2 3 7 4.6 6.3 6 6.3c1.6 0 2.6 1 3.9 1 1.2 0 2-1 3.9-1 1.2 0 2.6.4 3.6 1.4-3.2 1.8-2.7 6.4 1.6 9.3z"/></svg>
+      macOS</button>
+    <button class="tab" role="tab" aria-selected="false" data-os="windows">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 5.5 10.5 4.5v7H3zM11.5 4.3 21 3v8.5h-9.5zM3 12.5h7.5v7L3 18.5zM11.5 12.5H21V21l-9.5-1.3z"/></svg>
+      Windows</button>
+  </div>
+
+  <!-- ===================== LINUX ===================== -->
+  <section class="panel active" data-panel="linux" role="tabpanel">
+    <div class="cards">
+      <div class="card"><span class="k">Debian / Ubuntu · x86_64</span><span class="t">.deb (amd64)</span>
+        <span class="dl"><a class="btn" href="https://github.com/williamsouzadelima/suricatoos-infra/releases/download/agent-v0.1.0/suricatoos-agent_0.1.0_amd64.deb">Baixar .deb</a></span></div>
+      <div class="card"><span class="k">Debian / Ubuntu · ARM64</span><span class="t">.deb (arm64)</span>
+        <span class="dl"><a class="btn" href="https://github.com/williamsouzadelima/suricatoos-infra/releases/download/agent-v0.1.0/suricatoos-agent_0.1.0_arm64.deb">Baixar .deb</a></span></div>
+      <div class="card"><span class="k">RHEL / Fedora / SUSE · x86_64</span><span class="t">.rpm (x86_64)</span>
+        <span class="dl"><a class="btn" href="https://github.com/williamsouzadelima/suricatoos-infra/releases/download/agent-v0.1.0/suricatoos-agent-0.1.0-1.x86_64.rpm">Baixar .rpm</a></span></div>
+      <div class="card"><span class="k">RHEL / Fedora / SUSE · aarch64</span><span class="t">.rpm (aarch64)</span>
+        <span class="dl"><a class="btn" href="https://github.com/williamsouzadelima/suricatoos-infra/releases/download/agent-v0.1.0/suricatoos-agent-0.1.0-1.aarch64.rpm">Baixar .rpm</a></span></div>
+    </div>
+
+    <ol class="steps">
+      <li><h3>Verifique a assinatura (recomendado)</h3>
+        <p>Os pacotes são assinados pela chave <b>Suricatoos Agent Packages</b>. Importe a chave pública e cheque o RPM:</p>
+        <div class="code"><pre>curl -LO https://github.com/williamsouzadelima/suricatoos-infra/releases/download/agent-v0.1.0/suricatoos-agent-pkg-pub.asc
+sudo rpm --import suricatoos-agent-pkg-pub.asc
+rpm -K suricatoos-agent-*.rpm        <span class="pre-tag"># -> "digests signatures OK"</span></pre></div>
+        <p>Confira também os checksums (<a href="https://github.com/williamsouzadelima/suricatoos-infra/releases/download/agent-v0.1.0/SHA256SUMS">SHA256SUMS</a>): <code>sha256sum -c SHA256SUMS</code></p>
+      </li>
+      <li><h3>Instale o pacote</h3>
+        <div class="code"><pre><span class="pre-tag"># Debian / Ubuntu</span>
+sudo apt install ./suricatoos-agent_0.1.0_amd64.deb
+<span class="pre-tag"># RHEL / Fedora / SUSE</span>
+sudo dnf install ./suricatoos-agent-0.1.0-1.x86_64.rpm</pre></div>
+        <p>Instala <code>/usr/bin/suricatoos-agent</code>, a unit systemd (ainda <b>não habilitada</b>) e cria <code>/var/lib/suricatoos-agent</code>.</p>
+      </li>
+      <li><h3>Enrolle o agente</h3>
+        <p>Use o <span class="tok">token</span> e o <span class="tok">CA-pin</span> fornecidos pelo administrador:</p>
+        <div class="code"><pre>sudo suricatoos-agent enroll --state /var/lib/suricatoos-agent \
+  --server https://scanner.suricatoos.com/agent/v1 \
+  --token "<span class="tok">&lt;TOKEN&gt;</span>" --ca-pin "<span class="tok">&lt;CA-PIN&gt;</span>"</pre></div>
+        <p>A URL de ingest é <b>herdada do enrollment</b> — não precisa de <code>--ingest</code>.</p>
+      </li>
+      <li><h3>Habilite e inicie o serviço</h3>
+        <div class="code"><pre>sudo systemctl enable --now suricatoos-agent
+systemctl status suricatoos-agent
+journalctl -u suricatoos-agent -f</pre></div>
+      </li>
+    </ol>
+    <details><summary>Remover</summary>
+      <div class="code"><pre>sudo apt remove suricatoos-agent     <span class="pre-tag"># ou: dnf remove suricatoos-agent</span>
+<span class="pre-tag"># o state (/var/lib/suricatoos-agent, com os certs) é preservado; apague com:</span>
+sudo rm -rf /var/lib/suricatoos-agent</pre></div>
+    </details>
+  </section>
+
+  <!-- ===================== macOS ===================== -->
+  <section class="panel" data-panel="macos" role="tabpanel">
+    <div class="cards">
+      <div class="card"><span class="k">macOS · Intel + Apple Silicon</span><span class="t">.pkg (universal)</span>
+        <span class="dl"><a class="btn" href="https://github.com/williamsouzadelima/suricatoos-infra/releases/download/agent-v0.1.0/suricatoos-agent-0.1.0.pkg">Baixar .pkg</a></span></div>
+    </div>
+    <div class="note warn">O <code>.pkg</code> atual é <b>não assinado</b>. O Gatekeeper avisa fora de um MDM —
+      em produção, assine com Developer ID + notarize. Instale via terminal para evitar o bloqueio.</div>
+    <ol class="steps">
+      <li><h3>Confira o checksum</h3>
+        <div class="code"><pre>curl -LO https://github.com/williamsouzadelima/suricatoos-infra/releases/download/agent-v0.1.0/SHA256SUMS
+shasum -a 256 -c SHA256SUMS</pre></div></li>
+      <li><h3>Instale o pacote</h3>
+        <div class="code"><pre>sudo installer -pkg suricatoos-agent-0.1.0.pkg -target /</pre></div>
+        <p>Instala <code>/usr/local/bin/suricatoos-agent</code>, o LaunchDaemon (ainda <b>não carregado</b>) e cria <code>/var/lib/suricatoos-agent</code>.</p></li>
+      <li><h3>Enrolle o agente</h3>
+        <div class="code"><pre>sudo suricatoos-agent enroll --state /var/lib/suricatoos-agent \
+  --server https://scanner.suricatoos.com/agent/v1 \
+  --token "<span class="tok">&lt;TOKEN&gt;</span>" --ca-pin "<span class="tok">&lt;CA-PIN&gt;</span>"</pre></div></li>
+      <li><h3>Carregue o serviço (launchd)</h3>
+        <div class="code"><pre>sudo launchctl bootstrap system /Library/LaunchDaemons/com.suricatoos.agent.plist
+sudo launchctl print system/com.suricatoos.agent | grep state
+<span class="pre-tag"># logs: /var/log/suricatoos-agent.log</span></pre></div></li>
+    </ol>
+    <details><summary>Remover</summary>
+      <div class="code"><pre>sudo launchctl bootout system/com.suricatoos.agent
+sudo rm -f /Library/LaunchDaemons/com.suricatoos.agent.plist /usr/local/bin/suricatoos-agent
+sudo pkgutil --forget com.suricatoos.agent
+<span class="pre-tag"># state (certs) preservado; apague com: sudo rm -rf /var/lib/suricatoos-agent</span></pre></div>
+    </details>
+  </section>
+
+  <!-- ===================== Windows ===================== -->
+  <section class="panel" data-panel="windows" role="tabpanel">
+    <div class="cards">
+      <div class="card"><span class="k">Windows · x64</span><span class="t">.msi (x64)</span>
+        <span class="dl"><a class="btn" href="https://github.com/williamsouzadelima/suricatoos-infra/releases/download/agent-v0.1.0/suricatoos-agent-0.1.0.msi">Baixar .msi</a></span></div>
+    </div>
+    <div class="note warn">O MSI atual é <b>não assinado</b> — o SmartScreen/antivírus pode avisar.
+      Em produção, assine com Authenticode (signtool).</div>
+    <ol class="steps">
+      <li><h3>Instale o MSI</h3>
+        <div class="code"><pre>msiexec /i suricatoos-agent-0.1.0.msi /qn</pre></div>
+        <p>Instala <code>suricatoos-agent.exe</code> em <code>C:\Program Files\Suricatoos Agent\</code>.</p></li>
+      <li><h3>Enrolle o agente (PowerShell, como Administrador)</h3>
+        <div class="code"><pre>cd "C:\Program Files\Suricatoos Agent"
+.\suricatoos-agent.exe enroll --state "C:\ProgramData\Suricatoos\agent" `
+  --server https://scanner.suricatoos.com/agent/v1 `
+  --token "<span class="tok">&lt;TOKEN&gt;</span>" --ca-pin "<span class="tok">&lt;CA-PIN&gt;</span>"</pre></div></li>
+      <li><h3>Registre e inicie o serviço (SCM)</h3>
+        <div class="code"><pre>.\suricatoos-agent.exe install      <span class="pre-tag"># serviço "SuricatoosAgent", start automático</span>
+sc query SuricatoosAgent</pre></div>
+        <p>State (certs) em <code>C:\ProgramData\Suricatoos\agent</code>.</p></li>
+    </ol>
+    <details><summary>Remover</summary>
+      <div class="code"><pre>.\suricatoos-agent.exe uninstall   <span class="pre-tag"># remove o serviço SCM</span>
+msiexec /x suricatoos-agent-0.1.0.msi /qn
+<span class="pre-tag"># state preservado; apague com: rmdir /s "C:\ProgramData\Suricatoos\agent"</span></pre></div>
+    </details>
+  </section>
+
+  <hr class="sep">
+
+  <h2 id="verify"><span class="num">2.</span> Integridade e assinatura</h2>
+  <p class="sub">Sempre verifique o que você baixou antes de instalar.</p>
+  <div class="cards">
+    <div class="card"><span class="k">Checksums SHA-256</span><span class="t">SHA256SUMS</span>
+      <span class="dl"><a class="btn ghost" href="https://github.com/williamsouzadelima/suricatoos-infra/releases/download/agent-v0.1.0/SHA256SUMS">Baixar</a></span></div>
+    <div class="card"><span class="k">Chave pública GPG (pacotes Linux)</span><span class="t">suricatoos-agent-pkg-pub.asc</span>
+      <span class="dl"><a class="btn ghost" href="https://github.com/williamsouzadelima/suricatoos-infra/releases/download/agent-v0.1.0/suricatoos-agent-pkg-pub.asc">Baixar chave</a></span></div>
+  </div>
+  <div class="note">Fingerprint da chave de assinatura — <b>Suricatoos Agent Packages</b>:<br>
+    <span class="kv">DF0B 2F8E E9D8 0DBD 962F&nbsp;&nbsp;5486 8DBB 15A3 B50F 113D</span></div>
+
+  <h2 id="admin"><span class="num">3.</span> Para administradores — gerar um token</h2>
+  <p class="sub">O token e o CA-pin saem do control-plane. O comando abaixo gera um <b>bundle de enrollment</b>
+    (YAML) já com <code>server</code>, <code>token</code> e <code>ca_pin</code> prontos para entregar ao operador.</p>
+  <div class="code"><pre>curl -sS -X POST https://scanner.suricatoos.com/agent/api/v1/tokens \
+  -H "Authorization: Bearer <span class="tok">&lt;ADMIN_SECRET&gt;</span>" \
+  -H "Content-Type: application/json" \
+  -d '{"type":"single_host","tenant":"default","ttl_hours":24}' \
+  -OJ        <span class="pre-tag"># salva enroll-&lt;id&gt;.yaml</span></pre></div>
+  <p class="sub" style="margin-top:12px">Tipos: <code>single_host</code> (1 uso) ou <code>deployment</code> (vários hosts, use <code>"max_uses"</code>).
+    Liste com <code>GET /agent/api/v1/tokens</code> e revogue com <code>DELETE /agent/api/v1/tokens/{id}</code>
+    (revogar também invalida os certificados mTLS emitidos por aquele token). O <code>&lt;ADMIN_SECRET&gt;</code> é
+    secreto — nunca o coloque em scripts versionados ou nesta página.</p>
+
+  <footer>
+    Suricatoos Agent · release <a href="https://github.com/williamsouzadelima/suricatoos-infra/releases/tag/agent-v0.1.0">agent-v0.1.0</a> ·
+    <a href="https://github.com/williamsouzadelima/suricatoos-infra/releases">todas as versões</a> ·
+    <a href="https://github.com/williamsouzadelima/suricatoos-infra">código-fonte</a><br>
+    O agente coleta apenas nome/versão/arch de pacotes, distro/kernel e portas locais em escuta. Reporte outbound via mTLS.
+  </footer>
+</main>
+
+<script>
+  // Tabs de SO (com deep-link via hash: #linux/#macos/#windows e persistência)
+  (function(){
+    var tabs = Array.prototype.slice.call(document.querySelectorAll('.tab'));
+    var panels = Array.prototype.slice.call(document.querySelectorAll('.panel'));
+    function select(os){
+      tabs.forEach(function(t){ t.setAttribute('aria-selected', t.dataset.os===os); });
+      panels.forEach(function(p){ p.classList.toggle('active', p.dataset.panel===os); });
+    }
+    tabs.forEach(function(t){
+      t.addEventListener('click', function(){ select(t.dataset.os); history.replaceState(null,'','#'+t.dataset.os); });
+    });
+    // auto-detecta o SO do visitante na 1ª carga
+    var os = (location.hash||'').replace('#','');
+    if(['linux','macos','windows'].indexOf(os)<0){
+      var p = navigator.platform.toLowerCase()+' '+navigator.userAgent.toLowerCase();
+      os = p.indexOf('win')>=0 ? 'windows' : (p.indexOf('mac')>=0 ? 'macos' : 'linux');
+    }
+    select(os);
+  })();
+  // Botão copiar nos blocos de código
+  document.querySelectorAll('.code').forEach(function(box){
+    var pre = box.querySelector('pre'); if(!pre) return;
+    var b = document.createElement('button'); b.className='cp'; b.type='button'; b.textContent='copiar';
+    b.addEventListener('click', function(){
+      navigator.clipboard.writeText(pre.innerText).then(function(){
+        b.textContent='copiado ✓'; setTimeout(function(){ b.textContent='copiar'; },1400);
+      });
+    });
+    box.appendChild(b);
+  });
+</script>
+</body>
+</html>
