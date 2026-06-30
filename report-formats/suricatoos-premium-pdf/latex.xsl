@@ -333,13 +333,15 @@ TODOS: Solve Whitespace/Indentation problem of this file.
     </xsl:choose>
   </xsl:template>
 
-  <!-- Create a verbatim indented row. -->
+  <!-- Create a verbatim indented row. NOTE: a \rowcolor here is "Misplaced
+       \noalign" in this table context — TeX ignores it but recovers ~1344 times
+       on large reports, which makes pdflatex slow enough that gvmd times out the
+       generator (0-byte download). The row was effectively white anyway, so we
+       emit the cell directly (no \rowcolor) — visually identical, error-free, fast. -->
   <xsl:template name="wrap-row-indented">
     <xsl:param name="line"/>
     <xsl:param name="color">white</xsl:param>
-    <xsl:text>\rowcolor{</xsl:text>
-    <xsl:value-of select="$color"/>
-    <xsl:text>}{$\hookrightarrow$\verb=</xsl:text>
+    <xsl:text>{$\hookrightarrow$\verb=</xsl:text>
     <xsl:value-of select="str:replace($line, '=', '=\verb-=-\verb=')"/>
     <!-- Inline latex-newline for speed. -->
     <xsl:text>=}\\
@@ -348,9 +350,11 @@ TODOS: Solve Whitespace/Indentation problem of this file.
 
   <!-- Create a verbatim row. -->
   <!-- This is called very often, and is relatively slow. -->
+  <!-- \rowcolor dropped: it was "Misplaced \noalign" here (ignored by TeX) and
+       the per-line recovery on large reports timed gvmd out → 0-byte PDF. -->
   <xsl:template name="wrap-row">
     <xsl:param name="line"/>
-    <xsl:text>\rowcolor{white}{\verb=</xsl:text>
+    <xsl:text>{\verb=</xsl:text>
     <xsl:value-of select="str:replace($line, '=', '=\verb-=-\verb=')"/>
     <!-- Inline latex-newline for speed. -->
     <xsl:text>=}\\
@@ -359,12 +363,11 @@ TODOS: Solve Whitespace/Indentation problem of this file.
 
   <!-- Create a verbatim row. -->
   <!-- This is called very often, and is relatively slow. -->
+  <!-- \rowcolor dropped (see wrap-row): it errored+slowed pdflatex into a gvmd timeout. -->
   <xsl:template name="wrap-row-color">
     <xsl:param name="line"/>
     <xsl:param name="color">white</xsl:param>
-    <xsl:text>\rowcolor{</xsl:text>
-    <xsl:value-of select="$color"/>
-    <xsl:text>}{\verb=</xsl:text>
+    <xsl:text>{\verb=</xsl:text>
     <xsl:value-of select="str:replace($line, '=', '=\verb-=-\verb=')"/>
     <!-- Inline latex-newline for speed. -->
     <xsl:text>=}\\

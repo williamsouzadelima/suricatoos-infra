@@ -34,14 +34,20 @@ TMP=`mktemp -d` || exit 1
 # that pdflatex (which runs with -output-directory ${TMP}) can find them.
 cp ./suricatoos-*.pdf "${TMP}/" 2>/dev/null
 
-xsltproc ./latex.xsl $1 > ${TMP}/report.tex 2>/tmp/err.out
+# NB: xsltproc stderr goes to the PER-RUN temp dir, NOT a shared /tmp/err.out.
+# The stock template hardcodes /tmp/err.out, which gvmd (running as the non-root
+# gvmd user) cannot create/overwrite if another user owns it — that makes the
+# whole generator fail with exit 1 and the report downloads as 0 bytes.
+xsltproc ./latex.xsl $1 > ${TMP}/report.tex 2>${TMP}/err.out
 
 pdflatex -interaction batchmode -output-directory ${TMP} ${TMP}/report.tex > /dev/null 2>&1
 
 # Run a second time to resolve references, the table of contents and the
 # "page X of Y" page numbering assembled during the first run.
-pdflatex -interaction batchmode -output-directory ${TMP} ${TMP}/report.tex > /dev/null 2>&1 &
-
-wait
+# NB: this MUST run in the FOREGROUND. The stock template backgrounds it with
+# "&" + wait, but under gvmd's non-interactive system() shell that wait does not
+# reliably block, so the following cat races the second pdflatex still truncating
+# report.pdf and the report downloads as 0 bytes. Sequential foreground is robust.
+pdflatex -interaction batchmode -output-directory ${TMP} ${TMP}/report.tex > /dev/null 2>&1
 
 cat ${TMP}/report.pdf && rm -rf ${TMP}
