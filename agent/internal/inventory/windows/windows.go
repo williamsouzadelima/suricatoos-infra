@@ -18,6 +18,7 @@ import (
 	"os"
 
 	"github.com/williamsouzadelima/suricatoos-infra/agent/internal/inventory"
+	"github.com/williamsouzadelima/suricatoos-infra/agent/internal/version"
 )
 
 // Collector is the Windows inventory Collector. Use New to create.
@@ -55,6 +56,8 @@ func (c *Collector) Collect() (*inventory.Inventory, error) {
 	if h, err := os.Hostname(); err == nil {
 		inv.Agent.Hostname = h
 	}
+	inv.Agent.AgentID = inv.Agent.Hostname
+	inv.Agent.AgentVersion = version.Version
 	if release, arch, err := c.osInfo(); err == nil {
 		inv.OS.Release = release
 		if arch != "" {
