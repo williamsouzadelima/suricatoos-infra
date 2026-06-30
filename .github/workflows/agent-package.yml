@@ -78,6 +78,37 @@ jobs:
           gh release create "${GITHUB_REF#refs/tags/}" \
             --repo "${{ github.repository }}" \
             --title "Suricatoos Agent ${{ steps.ver.outputs.version }}" \
-            --notes "Pacotes Linux (.deb/.rpm, amd64+arm64) do Suricatoos Agent. Verifique a assinatura com a chave pública (packaging/keys/) — ver packaging/linux/README.install.md." \
+            --notes "Pacotes do Suricatoos Agent (Linux .deb/.rpm amd64+arm64; macOS .pkg universal). Verifique a assinatura GPG (Linux) com a chave pública (packaging/keys/) — ver packaging/{linux,macos}/README.install.md." \
             dist/*.deb dist/*.rpm dist/SHA256SUMS \
             packaging/keys/suricatoos-agent-pkg-pub.asc
+
+  package-macos:
+    name: build .pkg (macOS universal)
+    runs-on: macos-latest
+    needs: package   # o Release é criado no job 'package'; só então anexamos o .pkg
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+          cache-dependency-path: agent/go.mod
+      - name: derive version
+        id: ver
+        run: |
+          v="${{ github.event.inputs.version }}"
+          case "${GITHUB_REF}" in refs/tags/agent-v*) v="${GITHUB_REF#refs/tags/agent-v}";; esac
+          echo "version=${v:-0.1.0}" >> "$GITHUB_OUTPUT"
+      # UNSIGNED — assinatura/notarização (Developer ID + notarytool) precisa de
+      # credenciais Apple do operador; ver packaging/macos/README.install.md.
+      - name: build .pkg
+        run: bash packaging/macos/build.sh "${{ steps.ver.outputs.version }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: suricatoos-agent-macos-pkg
+          path: dist/*.pkg
+          if-no-files-found: error
+      - name: anexa o .pkg ao Release (tags agent-v*)
+        if: startsWith(github.ref, 'refs/tags/agent-v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${GITHUB_REF#refs/tags/}" dist/*.pkg --repo "${{ github.repository }}" --clobber
