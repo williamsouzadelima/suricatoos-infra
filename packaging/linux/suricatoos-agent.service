@@ -1,0 +1,31 @@
+[Unit]
+Description=Suricatoos Vulnerability Agent
+Documentation=https://github.com/williamsouzadelima/suricatoos-infra
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# A URL do ingest é HERDADA do enrollment (gravada no state dir). Enrole ANTES
+# de habilitar o serviço:
+#   suricatoos-agent enroll --state /var/lib/suricatoos-agent \
+#     --server https://scanner.suricatoos.com/agent/v1 --token <TOKEN> --ca-pin <PIN>
+ExecStart=/usr/bin/suricatoos-agent run --state /var/lib/suricatoos-agent --queue /var/lib/suricatoos-agent/queue
+Restart=always
+RestartSec=30
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=suricatoos-agent
+
+# Hardening (a coleta só LÊ a base de pacotes do sistema; nada de escrita fora do state).
+NoNewPrivileges=yes
+ProtectSystem=strict
+ReadWritePaths=/var/lib/suricatoos-agent
+ProtectHome=yes
+PrivateTmp=yes
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+
+[Install]
+WantedBy=multi-user.target

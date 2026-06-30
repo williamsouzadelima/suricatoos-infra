@@ -1,0 +1,40 @@
+# nfpm config — gera .deb e .rpm do Suricatoos Agent (Linux).
+# Build: packaging/linux/build.sh (define PKG_ARCH + PKG_VERSION). Ver README.
+name: suricatoos-agent
+arch: ${PKG_ARCH}
+platform: linux
+version: ${PKG_VERSION}
+section: admin
+priority: optional
+maintainer: William Lima <william@w3cybersec.com>
+homepage: https://github.com/williamsouzadelima/suricatoos-infra
+license: proprietary
+description: |
+  Suricatoos Vulnerability Agent — coletor passivo/local de postura de
+  vulnerabilidade. Inventaria pacotes/SO localmente e reporta outbound (mTLS)
+  ao pipeline Suricatoos; a correlação roda server-side. Sem scanning de rede.
+
+contents:
+  - src: ./dist/suricatoos-agent-${PKG_ARCH}
+    dst: /usr/bin/suricatoos-agent
+    file_info:
+      mode: 0755
+  - src: ./packaging/linux/suricatoos-agent.service
+    dst: /lib/systemd/system/suricatoos-agent.service
+    file_info:
+      mode: 0644
+  - src: ./packaging/linux/README.install.md
+    dst: /usr/share/doc/suricatoos-agent/README.md
+    file_info:
+      mode: 0644
+
+scripts:
+  postinstall: ./packaging/linux/scripts/postinstall.sh
+  preremove: ./packaging/linux/scripts/preremove.sh
+  postremove: ./packaging/linux/scripts/postremove.sh
+
+# state dir (certs do enrollment) é tratado como config: preservado no upgrade/remove.
+deb:
+  signature: {}
+rpm:
+  signature: {}
