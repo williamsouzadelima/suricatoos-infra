@@ -20,7 +20,7 @@ brief §6.A e §7.
   - Instalação/uso: `packaging/linux/README.install.md` (enroll → `systemctl enable --now`).
   - Validado: instala em Debian 12 limpo; unit systemd + state dir corretos; `suricatoos-agent inventory` coleta.
   - **Assinatura GPG: IMPLEMENTADA.** Chave dedicada *Suricatoos Agent Packages*
-    (fp `12CB5520…C0A8A055`); pública em `packaging/keys/`. `build.sh` assina
+    (fp `DF0B2F8E…B50F113D`); pública em `packaging/keys/`. `build.sh` assina
     quando `SIGN_KEY_FILE` está definido; o CI assina via segredo `PKG_SIGNING_KEY`.
     Validado: `.rpm` verifica com `rpm -K` ("digests signatures OK"); `.deb` com
     assinatura `_gpgorigin`. Verificação no `README.install.md`.
