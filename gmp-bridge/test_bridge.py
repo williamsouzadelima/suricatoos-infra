@@ -12,6 +12,7 @@ from bridge import (
     provision_cve_task,
     safe_host_id,
     severity_to_threat,
+    valid_scan_time,
 )
 
 # finding_report_to_xml now keys the host identity on the UNIQUE agent_id, not
@@ -223,6 +224,20 @@ class TestFindingReportToXML(unittest.TestCase):
         root, _ = self._parse()
         ids = [r.get("id") for r in root.findall("results/result")]
         self.assertEqual(len(ids), len(set(ids)), "result ids must be unique")
+
+
+class TestValidScanTime(unittest.TestCase):
+    def test_valid_passthrough(self):
+        self.assertEqual(valid_scan_time("2026-06-28T00:00:00Z"), "2026-06-28T00:00:00Z")
+        self.assertEqual(valid_scan_time("2026-06-30T12:00:00.123456789Z"), "2026-06-30T12:00:00.123456789Z")
+
+    def test_zero_and_empty_fall_back_to_now(self):
+        # Go's zero time and empty/None must NOT reach gvmd (garbage epoch breaks
+        # the CVE scan); they fall back to a real "now" timestamp.
+        for bad in ("0001-01-01T00:00:00Z", "", None, "garbage"):
+            out = valid_scan_time(bad)
+            self.assertTrue(out.startswith("20") and out.endswith("Z"), f"{bad!r} -> {out!r}")
+            self.assertFalse(out.startswith("0001"))
 
 
 class TestHostIdentity(unittest.TestCase):

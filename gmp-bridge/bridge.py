@@ -32,6 +32,7 @@ import os
 import re
 import sys
 import uuid
+from datetime import datetime, timezone
 from xml.etree import ElementTree as ET
 
 from gvm.connections import UnixSocketConnection, TLSConnection
@@ -51,6 +52,17 @@ ALL_IANA_TCP_PORT_LIST = "33d0cd82-57c6-11e1-8ed1-406186ea4fc5"  # required by c
 # relabelled by — a real feed NVT. 55683 is an unassigned private-enterprise arc
 # used here only as a local, non-feed marker id.
 INVENTORY_MARKER_OID = "1.3.6.1.4.1.55683.1.0.1"
+
+
+def valid_scan_time(ts) -> str:
+    """Return a gvmd-parseable RFC3339 UTC timestamp for the report's scan/host
+    times. An empty value or Go's zero time ("0001-01-01T00:00:00Z") makes gvmd
+    store a garbage/negative epoch, which breaks the CVE scanner's host-detail
+    matching (it then finds 0 even with valid CPEs). Fall back to "now" for any
+    empty/zero/implausible timestamp."""
+    if isinstance(ts, str) and len(ts) >= 10 and ts[:2] == "20" and not ts.startswith("0001"):
+        return ts
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def safe_host_id(value: str) -> str:
@@ -182,7 +194,7 @@ def finding_report_to_xml(
     # collected_at is RFC3339/ISO-8601 (e.g. "2026-06-29T00:00:00Z"), which gvmd's
     # parse_iso_time_tz accepts. A bad/empty value parses to 0 but still registers
     # the host, so this is safe either way.
-    scan_time = report.get("collected_at") or ""
+    scan_time = valid_scan_time(report.get("collected_at"))
 
     # scan_start precedes <results> (mirrors gvmd's own report export order).
     ET.SubElement(root, "scan_start").text = scan_time
@@ -390,11 +402,12 @@ def run_import(
                 except (SystemExit, Exception) as e:  # noqa: B014 - _assert_ok raises SystemExit
                     print(f"WARN: CVE task provisioning failed (import OK): {e}", file=sys.stderr)
 
+    n_findings = len(report_dict.get("findings") or [])  # findings may be JSON null
     if provision_cve:
         print(f"ok: CPE inventory imported ({len(cpes)} CPEs) — task={task_id} report={report_id} "
-              f"({len(report_dict.get('findings', []))} Notus findings kept in pipeline, not gvmd)")
+              f"({n_findings} Notus findings kept in pipeline, not gvmd)")
     else:
-        print(f"ok: {len(report_dict.get('findings', []))} finding(s) imported — task={task_id} report={report_id}")
+        print(f"ok: {n_findings} finding(s) imported — task={task_id} report={report_id}")
 
 
 def _assert_ok(xml_str: str, cmd: str) -> None:

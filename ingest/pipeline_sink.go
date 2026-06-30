@@ -224,6 +224,7 @@ func (s *PipelineSink) importToBridge(report *correlation.FindingReport, cpes []
 func toCorrelationInventory(inv Inventory) correlation.Inventory {
 	ci := correlation.Inventory{
 		SchemaVersion: inv.SchemaVersion,
+		CollectedAt:   inv.CollectedAt, // propagate so the gvmd report gets a real timestamp
 		Agent: correlation.AgentInfo{
 			AgentID:  inv.Agent.AgentID,
 			Hostname: inv.Agent.Hostname,
