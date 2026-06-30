@@ -21,7 +21,7 @@ A instalação coloca o binário em `/usr/bin/suricatoos-agent`, a unit systemd 
 
 Os pacotes são assinados pela chave **Suricatoos Agent Packages**
 (`packaging/keys/suricatoos-agent-pkg-pub.asc`, fingerprint
-`12CB 5520 BBCF 8388 D2D2 3BF1 7EA8 AFD3 C0A8 A055`).
+`DF0B 2F8E E9D8 0DBD 962F 5486 8DBB 15A3 B50F 113D`).
 
 **RPM** (RHEL/Fedora/SUSE):
 
