@@ -11,3 +11,14 @@ brief §6.A e §7.
   token de enrollment entra como propriedade do MSI.
 
 **Fase 4.**
+
+## Estado
+
+- **Linux (.deb/.rpm): IMPLEMENTADO** → `packaging/linux/` (nfpm + systemd + scripts).
+  - Build: `packaging/linux/build.sh [VERSÃO]` → `dist/*.deb` e `dist/*.rpm` (amd64 + arm64).
+  - CI: `.github/workflows/agent-package.yml` (manual ou tag `agent-v*`; sobe os pacotes como artifacts).
+  - Instalação/uso: `packaging/linux/README.install.md` (enroll → `systemctl enable --now`).
+  - Validado: instala em Debian 12 limpo; unit systemd + state dir corretos; `suricatoos-agent inventory` coleta.
+  - **Pendente: assinatura** (`dpkg-sig` / `rpm --addsign`) — precisa de chave GPG.
+- **macOS (.pkg) e Windows (MSI): pendentes** — exigem credenciais de assinatura
+  (Apple Developer ID + notarytool; Authenticode/signtool) que ficam com o operador.
