@@ -32,4 +32,7 @@ brief §6.A e §7.
   - Validado: payload + perms corretos, binário universal roda; instala via `installer -pkg`.
   - **UNSIGNED** — assinatura + notarização (`productsign` Developer ID + `notarytool` + `stapler`)
     precisam de credenciais Apple do operador. Sem isso, o Gatekeeper bloqueia fora de MDM.
-- **Windows (MSI): pendente** — WiX + Authenticode (`signtool`); cert de assinatura do operador.
+- **Windows (MSI): SCAFFOLD pronto** → `packaging/windows/` (wixl/msitools + .wxs).
+  - Build: `packaging/windows/build.sh [VERSÃO]` → `.msi` x64; CI builda via `wixl` no Linux (sem runner Windows).
+  - Validado: `msiinfo` confirma o `.exe` na File table, ProductName/Manufacturer/Version corretos.
+  - **UNSIGNED** — Authenticode (`signtool`/`osslsigncode`) precisa do cert do operador.
