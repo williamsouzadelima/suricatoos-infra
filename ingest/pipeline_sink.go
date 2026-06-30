@@ -92,18 +92,24 @@ func (s *PipelineSink) Put(inv Inventory) error {
 	}
 	log.Printf("pipeline: agent=%s host=%s findings=%d", inv.Agent.AgentID, inv.Agent.Hostname, len(report.Findings))
 
-	if len(report.Findings) == 0 || s.bridgeScript == "" {
+	if s.bridgeScript == "" {
 		return nil
 	}
 
-	if err := s.importToBridge(report); err != nil {
+	// Always import — even with zero Notus findings — so the agent is registered
+	// in gvmd (host asset + CPE host-details) and its native CVE-scanner task is
+	// provisioned. CPEs come from the full package inventory (not just findings).
+	cpes := correlation.GenerateCPEs(corrInv)
+	if err := s.importToBridge(report, cpes); err != nil {
 		log.Printf("pipeline: gmp-bridge agent=%s: %v", inv.Agent.AgentID, err)
 	}
 	return nil
 }
 
-// importToBridge writes the FindingReport to a temp file and calls bridge.py.
-func (s *PipelineSink) importToBridge(report *correlation.FindingReport) error {
+// importToBridge writes the FindingReport (and the CPE list) to temp files and
+// calls bridge.py, which imports the Notus findings + CPE host-details and
+// find-or-creates the agent's native CVE-scanner Target+Task.
+func (s *PipelineSink) importToBridge(report *correlation.FindingReport, cpes []string) error {
 	tmp, err := os.CreateTemp("", "suricatoos-report-*.json")
 	if err != nil {
 		return fmt.Errorf("criar arquivo temporário: %w", err)
@@ -116,11 +122,27 @@ func (s *PipelineSink) importToBridge(report *correlation.FindingReport) error {
 	}
 	tmp.Close()
 
+	cpeFile, err := os.CreateTemp("", "suricatoos-cpes-*.json")
+	if err != nil {
+		return fmt.Errorf("criar arquivo de cpes: %w", err)
+	}
+	defer os.Remove(cpeFile.Name())
+	if cpes == nil {
+		cpes = []string{} // marshal as [] not null
+	}
+	if err := json.NewEncoder(cpeFile).Encode(cpes); err != nil {
+		cpeFile.Close()
+		return fmt.Errorf("serializar cpes: %w", err)
+	}
+	cpeFile.Close()
+
 	args := []string{
 		s.bridgeScript,
 		"--socket", s.gmpSocket,
 		"--username", s.gmpUsername,
 		"--task-name", fmt.Sprintf("%s-%s", s.taskName, report.AgentID),
+		"--cpe-file", cpeFile.Name(),
+		"--provision-cve",
 		tmp.Name(),
 	}
 
