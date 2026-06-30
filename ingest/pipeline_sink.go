@@ -152,24 +152,21 @@ func (s *PipelineSink) Put(inv Inventory) error {
 		return nil
 	}
 
-	// Always import — even with zero Notus findings — so the agent is registered
-	// in gvmd (host asset + CPE host-details) and its native CVE-scanner task is
-	// provisioned. CPEs come from the full package inventory (not just findings).
-	cpes := correlation.GenerateCPEs(corrInv)
-	if err := s.importToBridge(report, cpes); err != nil {
-		// Leave ok=false so the agent's retry reprocesses (the import did not
-		// complete); the bridge swallows non-fatal provisioning errors itself.
+	// Import the precise Notus findings into the agent's per-agent container task
+	// (find-or-create, idempotent). gvmd's CVE scanner can't drive a passive agent
+	// on-demand, so Notus — distro-aware, accurate — is the per-agent signal; the
+	// "scan now" refresh is handled by the agent command channel, not gvmd play.
+	if err := s.importToBridge(report); err != nil {
 		log.Printf("pipeline: gmp-bridge agent=%s: %v", inv.Agent.AgentID, err)
-		return nil
+		return nil // ok stays false → a retry of this cycle reprocesses
 	}
 	ok = true
 	return nil
 }
 
-// importToBridge writes the FindingReport (and the CPE list) to temp files and
-// calls bridge.py, which imports the Notus findings + CPE host-details and
-// find-or-creates the agent's native CVE-scanner Target+Task.
-func (s *PipelineSink) importToBridge(report *correlation.FindingReport, cpes []string) error {
+// importToBridge writes the FindingReport to a temp file and calls bridge.py,
+// which imports the Notus findings into the agent's per-agent container task.
+func (s *PipelineSink) importToBridge(report *correlation.FindingReport) error {
 	tmp, err := os.CreateTemp("", "suricatoos-report-*.json")
 	if err != nil {
 		return fmt.Errorf("criar arquivo temporário: %w", err)
@@ -182,27 +179,11 @@ func (s *PipelineSink) importToBridge(report *correlation.FindingReport, cpes []
 	}
 	tmp.Close()
 
-	cpeFile, err := os.CreateTemp("", "suricatoos-cpes-*.json")
-	if err != nil {
-		return fmt.Errorf("criar arquivo de cpes: %w", err)
-	}
-	defer os.Remove(cpeFile.Name())
-	if cpes == nil {
-		cpes = []string{} // marshal as [] not null
-	}
-	if err := json.NewEncoder(cpeFile).Encode(cpes); err != nil {
-		cpeFile.Close()
-		return fmt.Errorf("serializar cpes: %w", err)
-	}
-	cpeFile.Close()
-
 	args := []string{
 		s.bridgeScript,
 		"--socket", s.gmpSocket,
 		"--username", s.gmpUsername,
 		"--task-name", fmt.Sprintf("%s-%s", s.taskName, report.AgentID),
-		"--cpe-file", cpeFile.Name(),
-		"--provision-cve",
 		tmp.Name(),
 	}
 
