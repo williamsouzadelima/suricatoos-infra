@@ -6,6 +6,16 @@ services:
       GSA_VENDOR_VERSION: "Suricatoos 1.0"
   gsad:
     image: ghcr.io/williamsouzadelima/suricatoos-gsad:stable
+
+  # Suricatoos: report-formats feed fork. Adds the "Suricatoos Premium PDF"
+  # report format to the Greenbone feed so gvmd installs it as predefined +
+  # trusted (aparece automaticamente no dropdown "Download report" da GSA, sem
+  # GPG, sem mexer no frontend). Puramente aditivo — os formatos stock seguem.
+  # Imagem buildada por .github/workflows/report-formats-publish.yml a partir de
+  # report-formats/Dockerfile. Só a imagem é sobrescrita; o resto vem do compose.yaml.
+  report-formats:
+    image: ghcr.io/williamsouzadelima/suricatoos-report-formats:stable
+
   nginx:
     volumes:
       - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro

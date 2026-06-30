@@ -1,0 +1,128 @@
+<report extension="pdf" content_type="application/pdf" id="11111111-2222-3333-4444-555555555555">
+  <task id="aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee">
+    <name>Quarterly External Assessment &amp; Perimeter Review</name>
+    <comment>Authorized engagement for ACME Corp.</comment>
+  </task>
+  <timezone>Coordinated Universal Time</timezone>
+  <timezone_abbrev>UTC</timezone_abbrev>
+  <scan_start>2026-06-28T09:00:00Z</scan_start>
+  <scan_end>2026-06-28T11:42:13Z</scan_end>
+  <result_count>5<filtered>5</filtered></result_count>
+  <filters id="ffffffff-0000-0000-0000-000000000000">
+    <phrase></phrase>
+    <apply_overrides>0</apply_overrides>
+    <keywords>
+      <keyword><column>levels</column><value>chmlg</value></keyword>
+      <keyword><column>min_qod</column><value>70</value></keyword>
+      <keyword><column>apply_overrides</column><value>0</value></keyword>
+      <keyword><column>overrides</column><value>1</value></keyword>
+      <keyword><column>notes</column><value>1</value></keyword>
+      <keyword><column>autofp</column><value>0</value></keyword>
+      <keyword><column>result_hosts_only</column><value>1</value></keyword>
+    </keywords>
+  </filters>
+  <ports start="1" max="-1">
+    <port>443/tcp<host>192.0.2.10</host></port>
+    <port>22/tcp<host>192.0.2.10</host></port>
+    <port>general/tcp<host>192.0.2.20</host></port>
+  </ports>
+  <host>
+    <ip>192.0.2.10</ip>
+    <start>2026-06-28T09:01:10Z</start>
+    <end>2026-06-28T10:05:55Z</end>
+    <detail><name>hostname</name><value>web01.acme.example.com</value></detail>
+    <detail><name>best_os_txt</name><value>Linux Ubuntu 22.04</value></detail>
+  </host>
+  <host>
+    <ip>192.0.2.20</ip>
+    <start>2026-06-28T10:06:00Z</start>
+    <end>2026-06-28T11:42:00Z</end>
+    <detail><name>hostname</name><value>db01.acme.example.com</value></detail>
+  </host>
+  <results start="1">
+    <result id="r1">
+      <host>192.0.2.10<asset asset_id="a1"/></host>
+      <port>443/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.111111">
+        <name>OpenSSL Heap Buffer Overflow Remote Code Execution Vulnerability</name>
+        <cvss_base>9.8</cvss_base>
+        <tags>summary=The remote host is running a version of OpenSSL that is affected by a heap buffer overflow.|insight=An attacker can craft a malicious TLS handshake that overflows an internal buffer, leading to memory corruption.|impact=Successful exploitation allows remote, unauthenticated code execution in the context of the affected service.|affected=OpenSSL versions prior to 3.0.14 and 1.1.1x.|vuldetect=Checks the version of OpenSSL reported by the TLS service.</tags>
+        <refs>
+          <ref type="cve" id="CVE-2026-1234"/>
+          <ref type="url" id="https://www.openssl.org/news/secadv/20260601.txt"/>
+        </refs>
+        <solution type="VendorFix">Update OpenSSL to version 3.0.14 or later and restart all dependent services.</solution>
+      </nvt>
+      <threat>Critical</threat>
+      <severity>9.8</severity>
+      <qod><value>98</value><type>remote_active</type></qod>
+      <description>Installed version: OpenSSL 3.0.2
+Fixed version:     OpenSSL 3.0.14
+Detection method:  TLS banner inspection on port 443/tcp.</description>
+    </result>
+    <result id="r2">
+      <host>192.0.2.10<asset asset_id="a1"/></host>
+      <port>443/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.222222">
+        <name>TLS/SSL Server Supports Deprecated TLSv1.0 / TLSv1.1 Protocols</name>
+        <cvss_base>7.5</cvss_base>
+        <tags>summary=The remote service accepts connections using deprecated TLS protocol versions.|impact=Weak protocol versions are subject to downgrade and cryptographic attacks such as BEAST and POODLE.|affected=Services negotiating TLSv1.0 or TLSv1.1.|vuldetect=Attempts TLS handshakes using each protocol version.|solution_type=Mitigation</tags>
+        <refs>
+          <ref type="cve" id="CVE-2026-2222"/>
+        </refs>
+        <solution type="Mitigation">Disable TLSv1.0 and TLSv1.1 and require TLSv1.2 or TLSv1.3.</solution>
+      </nvt>
+      <threat>High</threat>
+      <severity>7.5</severity>
+      <qod><value>98</value></qod>
+      <description>The service on 443/tcp negotiated TLSv1.0 during the assessment.</description>
+    </result>
+    <result id="r3">
+      <host>192.0.2.10<asset asset_id="a1"/></host>
+      <port>22/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.333333">
+        <name>OpenSSH Weak Key Exchange Algorithms Supported</name>
+        <cvss_base>5.3</cvss_base>
+        <tags>summary=The remote SSH server is configured to allow weak key exchange algorithms.|impact=Weak key exchange may permit cryptographic attacks against the confidentiality of the session.|affected=OpenSSH servers offering diffie-hellman-group1-sha1.|vuldetect=Reviews the algorithms advertised during the SSH handshake.|solution_type=Mitigation</tags>
+        <refs>
+          <ref type="url" id="https://www.openssh.com/legacy.html"/>
+        </refs>
+        <solution type="Mitigation">Restrict KexAlgorithms in sshd_config to strong, modern algorithms.</solution>
+      </nvt>
+      <threat>Medium</threat>
+      <severity>5.3</severity>
+      <qod><value>80</value></qod>
+      <description>The SSH server on 22/tcp offers: diffie-hellman-group1-sha1.</description>
+    </result>
+    <result id="r4">
+      <host>192.0.2.20<asset asset_id="a2"/></host>
+      <port>general/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.444444">
+        <name>TCP Timestamps Information Disclosure</name>
+        <cvss_base>2.6</cvss_base>
+        <tags>summary=The remote host implements TCP timestamps and therefore allows uptime computation.|impact=A remote attacker may compute the host uptime.|affected=Hosts with RFC1323 TCP timestamps enabled.|vuldetect=Sends a TCP SYN with the timestamp option set.|solution_type=Mitigation</tags>
+        <refs>
+          <ref type="cve" id="CVE-2005-0688"/>
+        </refs>
+        <solution type="Mitigation">Disable TCP timestamps where operationally acceptable.</solution>
+      </nvt>
+      <threat>Low</threat>
+      <severity>2.6</severity>
+      <qod><value>80</value></qod>
+      <description>The host responded with TCP timestamps enabled.</description>
+    </result>
+    <result id="r5">
+      <host>192.0.2.20<asset asset_id="a2"/></host>
+      <port>general/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.555555">
+        <name>Traceroute / Hop Count</name>
+        <cvss_base></cvss_base>
+        <tags>summary=Informational traceroute results for the target host.|vuldetect=Performs a traceroute to the target.</tags>
+      </nvt>
+      <threat>Log</threat>
+      <severity>0.0</severity>
+      <qod><value>80</value></qod>
+      <description>traceroute: 10.0.0.1, 192.0.2.20</description>
+    </result>
+  </results>
+</report>

@@ -1,0 +1,15 @@
+<!-- Copyright (C) 2026 Suricatoos -->
+<report_format id="c6482c1b-57bb-406b-a501-c97eed86ad05">
+  <name>Suricatoos Premium PDF</name>
+  <summary>Premium branded Portable Document Format report. Version 20260630.</summary>
+  <description>A premium, corporate vulnerability assessment report in Portable Document Format (PDF), with a branded Suricatoos cover page, executive risk summary and full per-host findings. Version 20260630.</description>
+  <extension>pdf</extension>
+  <content_type>application/pdf</content_type>
+  <report_type>all</report_type>
+  <file name="generate"/>
+  <file name="latex.xsl"/>
+  <file name="report_format.xml"/>
+  <file name="suricatoos-wordmark-white.pdf"/>
+  <file name="suricatoos-mark-navy.pdf"/>
+  <file name="suricatoos-mark-white.pdf"/>
+</report_format>
