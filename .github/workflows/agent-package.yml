@@ -1,9 +1,10 @@
 name: agent-package
 
-# Builds the Linux .deb/.rpm packages of the Suricatoos Agent (amd64 + arm64).
-# Manual (workflow_dispatch), PR (validação), ou tag agent-v* (publica Release).
-# Assina com GPG quando o segredo PKG_SIGNING_KEY existe (senão, unsigned).
-# .pkg macOS / MSI Windows: pendentes (creds Apple/Windows — ver packaging/README.md).
+# Builds os pacotes do Suricatoos Agent: Linux .deb/.rpm (amd64+arm64), macOS .pkg
+# (universal), Windows .msi (x64, via wixl). Manual (workflow_dispatch), PR
+# (validação), ou tag agent-v* (publica GitHub Release com tudo).
+# Linux assina com GPG quando PKG_SIGNING_KEY existe. .pkg/.msi: UNSIGNED
+# (notarização Apple / Authenticode Windows precisam das creds do operador).
 on:
   workflow_dispatch:
     inputs:
@@ -112,3 +113,35 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release upload "${GITHUB_REF#refs/tags/}" dist/*.pkg --repo "${{ github.repository }}" --clobber
+
+  package-windows:
+    name: build .msi (Windows x64)
+    runs-on: ubuntu-latest   # wixl (msitools) builda MSI no Linux; sem runner Windows
+    needs: package
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+          cache-dependency-path: agent/go.mod
+      - name: install msitools (wixl)
+        run: sudo apt-get update && sudo apt-get install -y wixl msitools
+      - name: derive version
+        id: ver
+        run: |
+          v="${{ github.event.inputs.version }}"
+          case "${GITHUB_REF}" in refs/tags/agent-v*) v="${GITHUB_REF#refs/tags/agent-v}";; esac
+          echo "version=${v:-0.1.0}" >> "$GITHUB_OUTPUT"
+      # UNSIGNED — Authenticode (signtool/osslsigncode) precisa do cert do operador.
+      - name: build .msi
+        run: bash packaging/windows/build.sh "${{ steps.ver.outputs.version }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: suricatoos-agent-windows-msi
+          path: dist/*.msi
+          if-no-files-found: error
+      - name: anexa o .msi ao Release (tags agent-v*)
+        if: startsWith(github.ref, 'refs/tags/agent-v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${GITHUB_REF#refs/tags/}" dist/*.msi --repo "${{ github.repository }}" --clobber

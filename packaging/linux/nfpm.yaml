@@ -6,7 +6,8 @@ platform: linux
 version: ${PKG_VERSION}
 section: admin
 priority: optional
-maintainer: William Lima <william@w3cybersec.com>
+maintainer: William Lima <williamsouzadelima@gmail.com>
+vendor: Suricatoos
 homepage: https://github.com/williamsouzadelima/suricatoos-infra
 license: proprietary
 description: |

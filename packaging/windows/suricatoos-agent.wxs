@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- MSI do Suricatoos Agent (Windows x64). Buildado com wixl (msitools).
+     ${VERSION} é renderizado pelo build.sh. GUIDs estáveis (não mude entre versões:
+     UpgradeCode identifica o produto p/ upgrades; Component p/ o .exe). -->
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <Product Name="Suricatoos Agent" Id="*"
+           UpgradeCode="D55C4A2B-034D-4DF7-ACBB-6FF1A287380B"
+           Language="1033" Codepage="1252" Version="${VERSION}"
+           Manufacturer="Suricatoos">
+
+    <Package Id="*" Keywords="Installer"
+             Description="Suricatoos Vulnerability Agent"
+             Comments="Coletor passivo/local de postura de vulnerabilidade."
+             Manufacturer="Suricatoos" InstallerVersion="200"
+             Languages="1033" Compressed="yes" SummaryCodepage="1252"
+             InstallScope="perMachine"/>
+
+    <Media Id="1" Cabinet="agent.cab" EmbedCab="yes"/>
+
+    <Directory Id="TARGETDIR" Name="SourceDir">
+      <Directory Id="ProgramFiles64Folder">
+        <Directory Id="INSTALLDIR" Name="Suricatoos Agent">
+          <Component Id="MainExecutable" Guid="DA082A5E-01B4-4151-81FA-C335C1E3D80B" Win64="yes">
+            <File Id="agentExe" Name="suricatoos-agent.exe"
+                  Source="dist/suricatoos-agent.exe" KeyPath="yes"/>
+          </Component>
+        </Directory>
+      </Directory>
+    </Directory>
+
+    <Feature Id="Complete" Title="Suricatoos Agent" Level="1">
+      <ComponentRef Id="MainExecutable"/>
+    </Feature>
+  </Product>
+</Wix>
