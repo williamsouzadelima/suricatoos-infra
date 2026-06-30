@@ -84,8 +84,14 @@ services:
   control-plane:
     image: ghcr.io/williamsouzadelima/suricatoos-control-plane:stable
     restart: unless-stopped
+    # required:false → o feed-updater roda `docker compose up <feeds>` de DENTRO do
+    # seu container (só monta /compose, NÃO /var/lib/suricatoos-cp); o compose parseia
+    # TODOS os serviços, então um env_file obrigatório aqui fazia o sync dos feeds falhar
+    # ("env file ... not found"). Opcional aqui não enfraquece nada: o control-plane
+    # valida o env no startup (mustEnv CONTROL_PLANE_URL/ADMIN_SECRET → fatal se faltar).
     env_file:
-      - /var/lib/suricatoos-cp/control-plane.env
+      - path: /var/lib/suricatoos-cp/control-plane.env
+        required: false
     volumes:
       - /var/lib/suricatoos-cp:/data
 
@@ -103,8 +109,12 @@ services:
   ingest:
     image: ghcr.io/williamsouzadelima/suricatoos-ingest:stable
     restart: unless-stopped
+    # required:false — idem control-plane: deixa o `docker compose up <feeds>` do
+    # feed-updater parsear sem exigir este env_file (host-only). O ingest usa
+    # GVM_PASSWORD daqui; se faltar, a auth do gmp-bridge falha de forma visível.
     env_file:
-      - /var/lib/suricatoos-cp/ingest.env
+      - path: /var/lib/suricatoos-cp/ingest.env
+        required: false
     environment:
       INGEST_ADDR: ":9090"
       NOTUS_DIR: /notus
