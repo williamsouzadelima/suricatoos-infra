@@ -207,6 +207,18 @@ class TestFindingReportToXML(unittest.TestCase):
         root = ET.fromstring(xml)
         self.assertEqual(root.findall("host/detail"), [])
 
+    def test_cve_only_report_is_findings_free(self):
+        # CVE-only mode imports a findings-FREE CPE inventory (Notus NVT results
+        # would make gvmd skip the CVE scan for the host). With findings cleared,
+        # only the inventory marker remains and the CPE details are present.
+        root = ET.fromstring(finding_report_to_xml({**SAMPLE_REPORT, "findings": []},
+                                                    cpes=["cpe:/a:gnu:glibc:2.39"]))
+        results = root.findall("results/result")
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0].find("nvt").get("oid"), "1.3.6.1.4.1.55683.1.0.1")
+        apps = [d.findtext("value") for d in root.findall("host/detail") if d.findtext("name") == "App"]
+        self.assertEqual(apps, ["cpe:/a:gnu:glibc:2.39"])
+
     def test_unique_result_ids(self):
         root, _ = self._parse()
         ids = [r.get("id") for r in root.findall("results/result")]

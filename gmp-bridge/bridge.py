@@ -336,30 +336,37 @@ def run_import(
         auth_req = Authentication.authenticate(username=username, password=password)
         _assert_ok(gmp.send_command(str(auth_req)), "authenticate")
 
-        # Enrich findings with CVE/severity from the VT feed.
-        unique_oids = {f.get("oid", "") for f in report_dict.get("findings", []) if f.get("oid")}
-        nvt_meta: dict[str, NVTMeta | None] = {}
-        for oid in unique_oids:
-            meta = fetch_nvt_meta(gmp, oid)
-            nvt_meta[oid] = meta
-            if meta is None:
-                print(f"VT {oid}: no feed evidence (severity 0/Log)", file=sys.stderr)
-            else:
-                print(f"VT {oid}: cvss={meta.cvss_base} cves={len(meta.cves)}", file=sys.stderr)
+        if provision_cve:
+            # CVE-only mode (the agent pipeline). gvmd SKIPS CVE-scanning a host
+            # that already carries NVT results, so importing the Notus findings to
+            # this host would zero out its CVE scan. Import a findings-FREE CPE
+            # inventory instead (the synthetic marker result + App/CPE host-details
+            # the CVE scanner consumes); the precise Notus findings stay in the
+            # pipeline, not in gvmd. Verified: findings-free host -> CVE results.
+            report_xml = finding_report_to_xml({**report_dict, "findings": []}, cpes=cpes)
+            comment = f"Suricatoos Agent CPE inventory for host {report_dict.get('host', '')}"
+        else:
+            # Legacy mode: enrich findings from the VT feed and import them.
+            unique_oids = {f.get("oid", "") for f in report_dict.get("findings", []) if f.get("oid")}
+            nvt_meta: dict[str, NVTMeta | None] = {}
+            for oid in unique_oids:
+                meta = fetch_nvt_meta(gmp, oid)
+                nvt_meta[oid] = meta
+                if meta is None:
+                    print(f"VT {oid}: no feed evidence (severity 0/Log)", file=sys.stderr)
+                else:
+                    print(f"VT {oid}: cvss={meta.cvss_base} cves={len(meta.cves)}", file=sys.stderr)
+            report_xml = finding_report_to_xml(report_dict, nvt_meta=nvt_meta, cpes=cpes)
+            comment = f"Suricatoos Agent findings for host {report_dict.get('host', '')}"
 
-        report_xml = finding_report_to_xml(report_dict, nvt_meta=nvt_meta, cpes=cpes)
-
-        # Reuse the per-agent Notus container task if it already exists (the name
-        # is per-agent), so repeated reports accumulate in ONE task instead of
+        # Reuse the per-agent container task if it already exists (the name is
+        # per-agent), so repeated reports accumulate in ONE task instead of
         # spawning a new container task every cycle.
         task_id = _find_task_id(gmp, task_name)
         if task_id:
             print(f"Container task (reused): {task_id} ({task_name})", file=sys.stderr)
         else:
-            task_resp = gmp.send_command(str(Tasks.create_container_task(
-                name=task_name,
-                comment=f"Suricatoos Agent findings for host {report_dict.get('host', '')}",
-            )))
+            task_resp = gmp.send_command(str(Tasks.create_container_task(name=task_name, comment=comment)))
             _assert_ok(task_resp, "create_container_task")
             task_id = _extract_id(task_resp)
             print(f"Container task (created): {task_id} ({task_name})", file=sys.stderr)
@@ -375,16 +382,19 @@ def run_import(
         if provision_cve:
             agent_host = safe_host_id(report_dict.get("agent_id") or report_dict.get("host", ""))
             if agent_host:
-                # Non-fatal: the Notus import + CPE host-details already landed;
-                # a provisioning hiccup must not fail the whole bridge run.
+                # Non-fatal: the CPE inventory already landed; a provisioning
+                # hiccup must not fail the whole bridge run.
                 try:
                     tgt, cve_task = provision_cve_task(gmp, agent_host)
                     print(f"CVE task ready: {cve_task} target={tgt} ({len(cpes)} CPEs)", file=sys.stderr)
                 except (SystemExit, Exception) as e:  # noqa: B014 - _assert_ok raises SystemExit
                     print(f"WARN: CVE task provisioning failed (import OK): {e}", file=sys.stderr)
 
-    findings_count = len(report_dict.get("findings", []))
-    print(f"ok: {findings_count} finding(s) imported — task={task_id} report={report_id}")
+    if provision_cve:
+        print(f"ok: CPE inventory imported ({len(cpes)} CPEs) — task={task_id} report={report_id} "
+              f"({len(report_dict.get('findings', []))} Notus findings kept in pipeline, not gvmd)")
+    else:
+        print(f"ok: {len(report_dict.get('findings', []))} finding(s) imported — task={task_id} report={report_id}")
 
 
 def _assert_ok(xml_str: str, cmd: str) -> None:
