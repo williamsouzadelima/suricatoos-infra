@@ -24,6 +24,20 @@ for arch in amd64 arm64; do
   sed -e "s|\${PKG_ARCH}|$arch|g" -e "s|\${PKG_VERSION}|$VERSION|g" \
     packaging/linux/nfpm.yaml > "$cfg"
 
+  # Assinatura GPG opcional: se SIGN_KEY_FILE apontar p/ uma chave privada,
+  # injeta as seções deb/rpm signature (nfpm assina durante o package).
+  if [ -n "${SIGN_KEY_FILE:-}" ]; then
+    cat >> "$cfg" <<YAML
+deb:
+  signature:
+    key_file: ${SIGN_KEY_FILE}
+rpm:
+  signature:
+    key_file: ${SIGN_KEY_FILE}
+YAML
+    echo ">> assinatura GPG habilitada"
+  fi
+
   for pkg in deb rpm; do
     echo ">> nfpm $pkg ($arch)"
     nfpm package -f "$cfg" -p "$pkg" -t dist/
