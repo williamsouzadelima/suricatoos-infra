@@ -1,9 +1,9 @@
 name: agent-package
 
 # Builds the Linux .deb/.rpm packages of the Suricatoos Agent (amd64 + arm64).
-# Manual (workflow_dispatch) or on an agent-v* tag. Artifacts are uploaded; the
-# packages are UNSIGNED here (deb-sig/rpm --addsign + .pkg notarize / MSI
-# Authenticode need signing creds — see packaging/README.md).
+# Manual (workflow_dispatch), PR (validação), ou tag agent-v* (publica Release).
+# Assina com GPG quando o segredo PKG_SIGNING_KEY existe (senão, unsigned).
+# .pkg macOS / MSI Windows: pendentes (creds Apple/Windows — ver packaging/README.md).
 on:
   workflow_dispatch:
     inputs:
@@ -16,7 +16,7 @@ on:
     paths: ["agent/**", "packaging/**", ".github/workflows/agent-package.yml"]
 
 permissions:
-  contents: read
+  contents: write   # criar GitHub Release nos tags agent-v*
 
 jobs:
   package:
@@ -55,10 +55,29 @@ jobs:
           fi
           bash packaging/linux/build.sh "${{ steps.ver.outputs.version }}"
           rm -f /tmp/pkg-signing.asc
+      - name: checksums
+        run: |
+          ( cd dist && sha256sum *.deb *.rpm > SHA256SUMS )
+          cat dist/SHA256SUMS
       - uses: actions/upload-artifact@v4
         with:
           name: suricatoos-agent-linux-packages
           path: |
             dist/*.deb
             dist/*.rpm
+            dist/SHA256SUMS
           if-no-files-found: error
+
+      # Distribuição: nos tags agent-v*, publica um GitHub Release com os pacotes
+      # (assinados se PKG_SIGNING_KEY estiver setado), os checksums e a chave pública.
+      - name: GitHub Release
+        if: startsWith(github.ref, 'refs/tags/agent-v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF#refs/tags/}" \
+            --repo "${{ github.repository }}" \
+            --title "Suricatoos Agent ${{ steps.ver.outputs.version }}" \
+            --notes "Pacotes Linux (.deb/.rpm, amd64+arm64) do Suricatoos Agent. Verifique a assinatura com a chave pública (packaging/keys/) — ver packaging/linux/README.install.md." \
+            dist/*.deb dist/*.rpm dist/SHA256SUMS \
+            packaging/keys/suricatoos-agent-pkg-pub.asc
