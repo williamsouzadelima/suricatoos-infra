@@ -445,6 +445,8 @@ func TestScope_AppliesTo(t *testing.T) {
 		{"ubuntu exact", productScope{"ubuntu", "22.04"}, productScope{"ubuntu", "22.04"}, true},
 		{"ubuntu 2 vs 22.04 (no numeric prefix bleed)", productScope{"ubuntu", "2"}, productScope{"ubuntu", "22.04"}, false},
 		{"opensuse leap exact", productScope{"opensuse-leap", "15.6"}, productScope{"opensuse-leap", "15.6"}, true},
+		{"openeuler exact", productScope{"openeuler", "22.03"}, productScope{"openeuler", "22.03"}, true},
+		{"openeuler vs euleros (distintos)", productScope{"openeuler", "22.03"}, productScope{"euleros", "22.03"}, false},
 		{"unknown advisory distro", productScope{"", "12"}, productScope{"debian", "12"}, false},
 		{"unknown host distro", productScope{"debian", "12"}, productScope{"", "12"}, false},
 	}
@@ -470,6 +472,10 @@ func TestCanonicalDistro(t *testing.T) {
 		"Ubuntu 22.04 LTS":                    "ubuntu",
 		"SUSE Linux Enterprise Server 15 SP5": "sles",
 		"Amazon Linux 2023":                   "amazon",
+		"openEuler 22.03 LTS SP1":             "openeuler",
+		"openeuler":                           "openeuler",
+		"SUSE Manager Server 4.3":             "", // add-on product line, intentionally unscoped
+		"SUSE Enterprise Storage 7.1":         "", // idem
 		"TempleOS 5.0":                        "", // unknown
 		"":                                    "",
 	}
