@@ -222,9 +222,13 @@ func (s *PipelineSink) importToBridge(report *correlation.FindingReport, cpes []
 // toCorrelationInventory converts an ingest Inventory to the type the
 // correlation engine expects. Packages are re-decoded from their raw JSON form.
 func toCorrelationInventory(inv Inventory) correlation.Inventory {
+	// Parse collected_at leniently: a malformed value must not reject the
+	// inventory (the agent's report is still useful), and a zero result is floored
+	// to a valid timestamp downstream in the bridge (valid_scan_time).
+	collectedAt, _ := time.Parse(time.RFC3339, inv.CollectedAt)
 	ci := correlation.Inventory{
 		SchemaVersion: inv.SchemaVersion,
-		CollectedAt:   inv.CollectedAt, // propagate so the gvmd report gets a real timestamp
+		CollectedAt:   collectedAt, // propagate so the gvmd report gets a real timestamp
 		Agent: correlation.AgentInfo{
 			AgentID:  inv.Agent.AgentID,
 			Hostname: inv.Agent.Hostname,

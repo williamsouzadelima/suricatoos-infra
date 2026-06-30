@@ -13,6 +13,7 @@ func TestUpstreamVersion(t *testing.T) {
 		"2.38-3ubuntu1":       "2.38",   // glibc
 		"1.1.1f-1ubuntu2.22":  "1.1.1f", // openssl letter suffix
 		"2.4.52+dfsg1-1":      "2.4.52", // debian +dfsg
+		"1:1.2.13.dfsg-1":     "1.2.13", // zlib dotted .dfsg repack marker
 		"5.15.0-117.127":      "5.15.0", // kernel
 		"9.16.1~beta-1":       "9.16.1", // tilde pre-release
 		"":                    "",

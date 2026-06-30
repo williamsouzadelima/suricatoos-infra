@@ -231,12 +231,15 @@ class TestValidScanTime(unittest.TestCase):
         self.assertEqual(valid_scan_time("2026-06-28T00:00:00Z"), "2026-06-28T00:00:00Z")
         self.assertEqual(valid_scan_time("2026-06-30T12:00:00.123456789Z"), "2026-06-30T12:00:00.123456789Z")
 
-    def test_zero_and_empty_fall_back_to_now(self):
-        # Go's zero time and empty/None must NOT reach gvmd (garbage epoch breaks
-        # the CVE scan); they fall back to a real "now" timestamp.
-        for bad in ("0001-01-01T00:00:00Z", "", None, "garbage"):
+    def test_zero_empty_and_malformed_fall_back_to_now(self):
+        # Go's zero time, empty/None, malformed and implausible (far-future,
+        # non-2000s) values must NOT reach gvmd (garbage epoch breaks the CVE
+        # scan); they fall back to a real "now" timestamp.
+        for bad in ("0001-01-01T00:00:00Z", "", None, "garbage",
+                    "20bad-01-01T00:00:00Z", "9999-01-01T00:00:00Z",
+                    "2026-13-01T00:00:00Z", "1999-01-01T00:00:00Z"):
             out = valid_scan_time(bad)
-            self.assertTrue(out.startswith("20") and out.endswith("Z"), f"{bad!r} -> {out!r}")
+            self.assertRegex(out, r"^20\d\d-\d\d-\d\dT.*Z$", f"{bad!r} -> {out!r}")
             self.assertFalse(out.startswith("0001"))
 
 

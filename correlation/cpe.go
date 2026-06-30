@@ -141,8 +141,10 @@ func lookupCPEProduct(name string) string {
 
 // upstreamVersion extracts the upstream version from a dpkg/rpm version string:
 // it strips a leading "epoch:", the Debian revision / RPM release (everything
-// from the first '-'), and Debian "~"/"+" suffixes. e.g. "1:3.0.2-0ubuntu1.10"
-// -> "3.0.2"; "8.9p1-3" -> "8.9p1"; "3.0.7-18.el9" -> "3.0.7".
+// from the first '-'), Debian "~"/"+" suffixes, and dotted Debian repack markers
+// (".dfsg"/".orig", which NVD does not carry). e.g. "1:3.0.2-0ubuntu1.10" ->
+// "3.0.2"; "8.9p1-3" -> "8.9p1"; "3.0.7-18.el9" -> "3.0.7";
+// "1:1.2.13.dfsg-1" -> "1.2.13".
 func upstreamVersion(v string) string {
 	v = strings.TrimSpace(v)
 	// epoch: leading digits followed by ':'
@@ -153,6 +155,14 @@ func upstreamVersion(v string) string {
 	}
 	for _, sep := range []byte{'-', '~', '+', ' '} {
 		if i := strings.IndexByte(v, sep); i >= 0 {
+			v = v[:i]
+		}
+	}
+	// Dotted Debian repackaging markers (".dfsg", ".orig") aren't part of the
+	// upstream version NVD tracks, and leaving them yields a CPE the CVE scanner
+	// can't match (e.g. zlib "1.2.13.dfsg" vs NVD "1.2.13").
+	for _, marker := range []string{".dfsg", ".orig", ".real"} {
+		if i := strings.Index(v, marker); i > 0 {
 			v = v[:i]
 		}
 	}
