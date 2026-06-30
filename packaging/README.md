@@ -27,5 +27,9 @@ brief §6.A e §7.
   - **Distribuição: GitHub Release** no tag `agent-v*` (pacotes + SHA256SUMS + chave
     pública). Opcional/futuro: repo apt/yum com Release/repo assinada (verificação
     automática no `apt`/`dnf` sem baixar o .deb/.rpm avulso).
-- **macOS (.pkg) e Windows (MSI): pendentes** — exigem credenciais de assinatura
-  (Apple Developer ID + notarytool; Authenticode/signtool) que ficam com o operador.
+- **macOS (.pkg): SCAFFOLD pronto** → `packaging/macos/` (pkgbuild + LaunchDaemon).
+  - Build: `packaging/macos/build.sh [VERSÃO]` → `.pkg` **universal** (amd64+arm64); CI no `macos-latest`.
+  - Validado: payload + perms corretos, binário universal roda; instala via `installer -pkg`.
+  - **UNSIGNED** — assinatura + notarização (`productsign` Developer ID + `notarytool` + `stapler`)
+    precisam de credenciais Apple do operador. Sem isso, o Gatekeeper bloqueia fora de MDM.
+- **Windows (MSI): pendente** — WiX + Authenticode (`signtool`); cert de assinatura do operador.

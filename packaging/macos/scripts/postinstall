@@ -1,0 +1,23 @@
+#!/bin/sh
+# Suricatoos Agent — pós-instalação (.pkg macOS). O LaunchDaemon NÃO é carregado
+# (precisa enrolar antes).
+set -e
+
+mkdir -p /var/lib/suricatoos-agent/queue
+chmod 700 /var/lib/suricatoos-agent
+
+cat <<'EOF'
+
+Suricatoos Agent instalado. Próximos passos:
+
+  sudo suricatoos-agent enroll --state /var/lib/suricatoos-agent \
+    --server https://scanner.suricatoos.com/agent/v1 \
+    --token <TOKEN-DO-BUNDLE> --ca-pin <CA-PIN>
+
+  sudo launchctl bootstrap system /Library/LaunchDaemons/com.suricatoos.agent.plist
+  sudo launchctl print system/com.suricatoos.agent | grep state
+
+A URL do ingest é herdada do enrollment.
+EOF
+
+exit 0
