@@ -44,6 +44,7 @@ import (
 
 	cpapi "github.com/williamsouzadelima/suricatoos-infra/control-plane/api"
 	"github.com/williamsouzadelima/suricatoos-infra/control-plane/ca"
+	cpcommands "github.com/williamsouzadelima/suricatoos-infra/control-plane/commands"
 	"github.com/williamsouzadelima/suricatoos-infra/control-plane/enroll"
 	cpprovision "github.com/williamsouzadelima/suricatoos-infra/control-plane/provision"
 	"github.com/williamsouzadelima/suricatoos-infra/control-plane/tokens"
@@ -138,6 +139,10 @@ func main() {
 	// command per OS. Guarded by nginx (GSA session), never bearer — see provision pkg.
 	provisionSvc := cpprovision.New(tm, authority.Fingerprint(), serverURL)
 
+	// Command channel: operators enqueue "scan_now" for an agent (admin Bearer);
+	// the agent polls + acks over its mTLS channel and re-collects immediately.
+	cmdSvc := cpcommands.NewService(cpcommands.NewQueue())
+
 	mux := http.NewServeMux()
 	mux.Handle("/v1/", http.StripPrefix("/v1", enrollSvc.Handler()))
 	mux.HandleFunc("GET /v1/crl.der", func(w http.ResponseWriter, r *http.Request) {
@@ -152,6 +157,11 @@ func main() {
 	})
 	mux.HandleFunc("GET /v1/update/check", updateSvc.Handler())
 	mux.HandleFunc("GET /provision/install", provisionSvc.Handler())
+	// Agent command channel (mTLS-gated by nginx; identity from the client cert CN).
+	mux.HandleFunc("GET /v1/commands", cmdSvc.PollHandler())
+	mux.HandleFunc("POST /v1/commands/ack", cmdSvc.AckHandler())
+	// Operator/CLI trigger (admin Bearer) to enqueue an on-demand scan.
+	mux.HandleFunc("POST /api/v1/agents/{id}/commands", cmdSvc.EnqueueHandler(adminSecret))
 	mux.Handle("/api/", adminAPI.Handler())
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("ok"))
