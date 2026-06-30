@@ -10911,6 +10911,33 @@ index d68da89..2bbd0cb 100644
  
    return (
      <StyledImage
+diff --git a/src/web/components/menu/Menu.tsx b/src/web/components/menu/Menu.tsx
+index 13fca0c..f748b38 100644
+--- a/src/web/components/menu/Menu.tsx
++++ b/src/web/components/menu/Menu.tsx
+@@ -7,6 +7,7 @@ import {AppNavigation} from '@greenbone/ui-lib';
+ import {
+   BarChart3,
+   CircleHelp,
++  Download,
+   FileCheck,
+   Server,
+   ShieldCheck,
+@@ -647,6 +648,14 @@ const Menu = () => {
+         to: '/asset-management',
+         isExternal: true,
+       },
++      // Suricatoos: link para a página estática de download/instalação dos
++      // agentes de endpoint (servida pelo nginx em /downloads, fora da SPA).
++      {
++        icon: Download,
++        label: _('Downloads'),
++        to: '/downloads',
++        isExternal: true,
++      },
+     ].filter(Boolean),
+   ];
+   return (
 diff --git a/src/web/components/structure/Footer.tsx b/src/web/components/structure/Footer.tsx
 index 9775497..9bb4a1d 100644
 --- a/src/web/components/structure/Footer.tsx
