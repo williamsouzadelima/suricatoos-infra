@@ -54,13 +54,18 @@ ALL_IANA_TCP_PORT_LIST = "33d0cd82-57c6-11e1-8ed1-406186ea4fc5"  # required by c
 INVENTORY_MARKER_OID = "1.3.6.1.4.1.55683.1.0.1"
 
 
+# A plausible RFC3339 date prefix: year 20xx, valid month, valid day, then 'T'.
+# Anything else (empty, Go zero "0001-…", malformed "20bad", far-future "9999-…")
+# is floored to "now" — a garbage timestamp makes gvmd store a negative epoch that
+# breaks the CVE scanner's host-detail matching. The time/fraction/offset after
+# 'T' is passed through unchanged (gvmd accepts RFC3339Nano).
+_RFC3339_DATE = re.compile(r"^20\d\d-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])T")
+
+
 def valid_scan_time(ts) -> str:
     """Return a gvmd-parseable RFC3339 UTC timestamp for the report's scan/host
-    times. An empty value or Go's zero time ("0001-01-01T00:00:00Z") makes gvmd
-    store a garbage/negative epoch, which breaks the CVE scanner's host-detail
-    matching (it then finds 0 even with valid CPEs). Fall back to "now" for any
-    empty/zero/implausible timestamp."""
-    if isinstance(ts, str) and len(ts) >= 10 and ts[:2] == "20" and not ts.startswith("0001"):
+    times, flooring any empty/zero/implausible value to the current UTC time."""
+    if isinstance(ts, str) and _RFC3339_DATE.match(ts):
         return ts
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
@@ -391,16 +396,21 @@ def run_import(
 
         # Auto-provision a native, playable CVE-scanner task for this host so the
         # agent appears in the GSA and can be (re)scanned with the play button.
+        provision_failed = False
         if provision_cve:
             agent_host = safe_host_id(report_dict.get("agent_id") or report_dict.get("host", ""))
             if agent_host:
-                # Non-fatal: the CPE inventory already landed; a provisioning
-                # hiccup must not fail the whole bridge run.
+                # The CPE inventory already landed (import succeeded). Provisioning
+                # is find-or-create (idempotent), so a failure is safe to retry; we
+                # signal it (non-zero exit below) so the ingest leaves the cycle
+                # uncached and the next check-in re-provisions — otherwise a stable
+                # host whose first provisioning failed would never get its task.
                 try:
                     tgt, cve_task = provision_cve_task(gmp, agent_host)
                     print(f"CVE task ready: {cve_task} target={tgt} ({len(cpes)} CPEs)", file=sys.stderr)
                 except (SystemExit, Exception) as e:  # noqa: B014 - _assert_ok raises SystemExit
-                    print(f"WARN: CVE task provisioning failed (import OK): {e}", file=sys.stderr)
+                    print(f"WARN: CVE task provisioning failed (import OK, will retry): {e}", file=sys.stderr)
+                    provision_failed = True
 
     n_findings = len(report_dict.get("findings") or [])  # findings may be JSON null
     if provision_cve:
@@ -408,6 +418,12 @@ def run_import(
               f"({n_findings} Notus findings kept in pipeline, not gvmd)")
     else:
         print(f"ok: {n_findings} finding(s) imported — task={task_id} report={report_id}")
+
+    # Signal a provisioning failure to the caller (non-zero exit) so the ingest
+    # does not cache this cycle as fully done and re-provisions on the next
+    # check-in. The CPE import is already committed; the retry is idempotent.
+    if provision_cve and provision_failed:
+        sys.exit("CVE task provisioning failed — leaving cycle uncached for retry")
 
 
 def _assert_ok(xml_str: str, cmd: str) -> None:
