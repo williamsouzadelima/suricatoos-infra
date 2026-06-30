@@ -45,6 +45,7 @@ import (
 	cpapi "github.com/williamsouzadelima/suricatoos-infra/control-plane/api"
 	"github.com/williamsouzadelima/suricatoos-infra/control-plane/ca"
 	"github.com/williamsouzadelima/suricatoos-infra/control-plane/enroll"
+	cpprovision "github.com/williamsouzadelima/suricatoos-infra/control-plane/provision"
 	"github.com/williamsouzadelima/suricatoos-infra/control-plane/tokens"
 	cpupdate "github.com/williamsouzadelima/suricatoos-infra/control-plane/update"
 )
@@ -133,6 +134,10 @@ func main() {
 	}
 	updateSvc := cpupdate.NewService(updateCfg, authority)
 
+	// Frictionless install: mints a short-lived token and returns a ready install
+	// command per OS. Guarded by nginx (GSA session), never bearer — see provision pkg.
+	provisionSvc := cpprovision.New(tm, authority.Fingerprint(), serverURL)
+
 	mux := http.NewServeMux()
 	mux.Handle("/v1/", http.StripPrefix("/v1", enrollSvc.Handler()))
 	mux.HandleFunc("GET /v1/crl.der", func(w http.ResponseWriter, r *http.Request) {
@@ -146,6 +151,7 @@ func main() {
 		w.Write(der)
 	})
 	mux.HandleFunc("GET /v1/update/check", updateSvc.Handler())
+	mux.HandleFunc("GET /provision/install", provisionSvc.Handler())
 	mux.Handle("/api/", adminAPI.Handler())
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("ok"))
