@@ -210,8 +210,13 @@ func normalizeFingerprint(fp string) string {
 	return fp
 }
 
-// TLSClientConfig builds an mTLS client config: it presents the agent's client
-// certificate and pins the enrollment CA as the only trust anchor (TLS 1.3).
+// TLSClientConfig builds an mTLS client config presenting the agent's client
+// certificate. The SERVER is verified against the system trust store (the ingest
+// is fronted by a public TLS cert, e.g. Let's Encrypt) — NOT against the
+// enrollment CA. The enrollment CA is the trust anchor the SERVER uses to verify
+// the agent's CLIENT cert (mTLS); using it as the client's RootCAs made the agent
+// reject the public server cert ("unable to get local issuer certificate") and no
+// inventory ever reached the ingest.
 func (id *Identity) TLSClientConfig() (*tls.Config, error) {
 	block, _ := pem.Decode(id.CertPEM)
 	if block == nil || block.Type != "CERTIFICATE" {
@@ -221,17 +226,13 @@ func (id *Identity) TLSClientConfig() (*tls.Config, error) {
 	if err != nil {
 		return nil, err
 	}
-	pool := x509.NewCertPool()
-	if !pool.AppendCertsFromPEM(id.CACertPEM) {
-		return nil, errors.New("CA pinada inválida")
-	}
 	return &tls.Config{
 		Certificates: []tls.Certificate{{
 			Certificate: [][]byte{block.Bytes},
 			PrivateKey:  id.PrivateKey,
 			Leaf:        leaf,
 		}},
-		RootCAs:    pool,
+		// RootCAs nil → system trust store verifies the (public) server cert.
 		MinVersion: tls.VersionTLS13,
 	}, nil
 }

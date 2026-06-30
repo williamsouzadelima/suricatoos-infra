@@ -93,7 +93,9 @@ PIN_ARG=""; [ -n "$CA_PIN" ] && PIN_ARG="--ca-pin $CA_PIN"
 # --- serviço ---
 if [ "$NO_SERVICE" = "0" ]; then
   echo ">> registrando serviço nativo"
-  "${DEST}/suricatoos-agent" install
+  # --state aponta p/ a identidade recém-enrolada; o install herda dela a URL de
+  # ingest (server.url persistido), evitando exigir --ingest manualmente.
+  "${DEST}/suricatoos-agent" install --state "$STATE"
   echo ">> pronto — agente instalado, enrolado e rodando."
 else
   echo ">> pronto — agente instalado e enrolado (serviço não registrado: --no-service)."
