@@ -103,6 +103,8 @@ func canonicalDistro(s string) string {
 		return "mageia"
 	case "euleros":
 		return "euleros"
+	case "openeuler":
+		return "openeuler"
 	case "slackware":
 		return "slackware"
 	}
@@ -136,9 +138,19 @@ func canonicalDistro(s string) string {
 		return "mageia"
 	case strings.HasPrefix(t, "euleros"):
 		return "euleros"
+	case strings.HasPrefix(t, "openeuler"):
+		return "openeuler"
 	case strings.HasPrefix(t, "slackware"):
 		return "slackware"
 	}
+	// SUSE add-on PRODUCT LINES (e.g. "SUSE Manager …", "SUSE CaaS Platform …",
+	// "SUSE Cloud …", "SUSE Enterprise Storage …", "SUSE OpenStack …", "SUSE
+	// Package Hub …", "SUSE Real Time Module …") are intentionally NOT mapped:
+	// they are not base OS distros, so a host's os-release reports the underlying
+	// SLES, not the product. There is no os-release identity to scope them by, and
+	// mapping them to "sles" would mismatch on release. They are safely excluded
+	// (surfaced via NotusCorrelator.UnclassifiedProducts) rather than risk a
+	// cross-product false positive.
 	return ""
 }
 
