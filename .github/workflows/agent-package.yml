@@ -42,7 +42,19 @@ jobs:
           case "${GITHUB_REF}" in refs/tags/agent-v*) v="${GITHUB_REF#refs/tags/agent-v}";; esac
           echo "version=${v:-0.1.0}" >> "$GITHUB_OUTPUT"
       - name: build packages
-        run: bash packaging/linux/build.sh "${{ steps.ver.outputs.version }}"
+        env:
+          PKG_SIGNING_KEY: ${{ secrets.PKG_SIGNING_KEY }}
+        run: |
+          if [ -n "$PKG_SIGNING_KEY" ]; then
+            umask 077
+            printf '%s' "$PKG_SIGNING_KEY" > /tmp/pkg-signing.asc
+            export SIGN_KEY_FILE=/tmp/pkg-signing.asc
+            echo "::notice::pacotes serão ASSINADOS (chave Suricatoos Agent Packages)"
+          else
+            echo "::warning::PKG_SIGNING_KEY ausente — pacotes UNSIGNED (defina o segredo p/ assinar; PRs de fork não têm acesso a segredos)"
+          fi
+          bash packaging/linux/build.sh "${{ steps.ver.outputs.version }}"
+          rm -f /tmp/pkg-signing.asc
       - uses: actions/upload-artifact@v4
         with:
           name: suricatoos-agent-linux-packages
