@@ -109,3 +109,36 @@ func TestPipelineSink_Put_NoFindings(t *testing.T) {
 		t.Errorf("Put: %v", err)
 	}
 }
+
+func TestPipelineSink_CycleDedup(t *testing.T) {
+	s := &PipelineSink{lastCycle: map[string]string{}, inflight: map[string]bool{}}
+
+	if !s.beginCycle("a", "h1") {
+		t.Fatal("first delivery of a cycle must proceed")
+	}
+	if s.beginCycle("a", "h1") {
+		t.Fatal("concurrent in-flight duplicate must be skipped")
+	}
+	s.endCycle("a", "h1", true)
+	if s.beginCycle("a", "h1") {
+		t.Fatal("already-completed cycle must be skipped (retry/unchanged)")
+	}
+	if !s.beginCycle("a", "h2") {
+		t.Fatal("a new cycle for the same agent must proceed")
+	}
+	s.endCycle("a", "h2", true)
+
+	// empty cycle_hash disables dedup (always proceeds)
+	if !s.beginCycle("a", "") || !s.beginCycle("a", "") {
+		t.Fatal("empty cycle_hash must always proceed")
+	}
+
+	// a failed cycle is not recorded → it stays retryable
+	if !s.beginCycle("b", "h3") {
+		t.Fatal("first delivery must proceed")
+	}
+	s.endCycle("b", "h3", false)
+	if !s.beginCycle("b", "h3") {
+		t.Fatal("a failed cycle must remain retryable")
+	}
+}
