@@ -1,0 +1,68 @@
+name: report-formats-publish
+
+# Builda a imagem de feed report-formats da Suricatoos (fork da upstream greenbone
+# report-formats + o report format "Suricatoos Premium PDF") e publica no GHCR.
+# Dispara quando o bundle/feed XML/Dockerfile mudam, ou manualmente.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'report-formats/**'
+      - '.github/workflows/report-formats-publish.yml'
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  OWNER: williamsouzadelima
+  IMAGE: suricatoos-report-formats
+
+jobs:
+  build-publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Regenerar o feed XML a partir do bundle (mantem em sincronia)
+        run: |
+          set -eux
+          python3 report-formats/build-feed-xml.py
+          # Falha se o XML versionado divergir do bundle (forca regeneracao no commit).
+          git diff --exit-code report-formats/pdf-suricatoos-*.xml
+
+      - name: Login no GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_PAT }}
+
+      - name: Build & push suricatoos-report-formats
+        run: |
+          set -eux
+          IMG="$REGISTRY/$OWNER/$IMAGE"
+          docker build \
+            -t "$IMG:stable" -t "$IMG:${GITHUB_SHA::12}" \
+            report-formats
+          docker push --all-tags "$IMG"
+
+      - name: Resumo
+        if: always()
+        run: |
+          {
+            echo "### Suricatoos — report-formats publicado 🐾"
+            echo ""
+            echo "| Imagem | Tags |"
+            echo "|---|---|"
+            echo "| \`$REGISTRY/$OWNER/$IMAGE\` | stable, ${GITHUB_SHA::12} |"
+            echo ""
+            echo "Report format: **Suricatoos Premium PDF** (\`c6482c1b-57bb-406b-a501-c97eed86ad05\`)"
+          } >> "$GITHUB_STEP_SUMMARY"
