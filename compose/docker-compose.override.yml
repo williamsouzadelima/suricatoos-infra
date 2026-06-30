@@ -17,6 +17,8 @@ services:
       # Página de Downloads do agente (estática) — servida em /downloads/ pela
       # location no default.conf. Hot-swappable: editar o HTML e recarregar o nginx.
       - ./web/downloads:/usr/share/suricatoos/downloads:ro
+      # Scripts de instalação one-shot servidos em /install.sh e /install.ps1.
+      - ../packaging/install:/usr/share/suricatoos/install:ro
 
   # Suricatoos: proxy restrito do docker socket (so containers/images/networks/volumes,
   # sem exec/swarm/secrets). O feed-updater fala com o docker SO atraves daqui.
