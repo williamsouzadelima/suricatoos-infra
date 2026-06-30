@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/williamsouzadelima/suricatoos-infra/agent/internal/inventory"
+	"github.com/williamsouzadelima/suricatoos-infra/agent/internal/version"
 )
 
 const (
@@ -42,6 +43,10 @@ func (c *Collector) Collect() (*inventory.Inventory, error) {
 	if h, err := os.Hostname(); err == nil {
 		inv.Agent.Hostname = h
 	}
+	// agent_id + agent_version são obrigatórios no ingest. O id default = hostname
+	// (= o CN enrolado quando --agent-id não é passado); a versão vem do build.
+	inv.Agent.AgentID = inv.Agent.Hostname
+	inv.Agent.AgentVersion = version.Version
 	if f, err := os.Open(c.osReleasePath); err == nil {
 		distro, release, perr := parseOSRelease(f)
 		f.Close()
