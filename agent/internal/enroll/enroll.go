@@ -37,6 +37,21 @@ type Identity struct {
 	ServerURL string
 }
 
+// AgentID returns the agent's logical identity — the CommonName of its enrolled
+// certificate (the value the control-plane signed, from --agent-id or the
+// hostname at enroll time). Empty if the cert can't be parsed.
+func (id *Identity) AgentID() string {
+	block, _ := pem.Decode(id.CertPEM)
+	if block == nil || block.Type != "CERTIFICATE" {
+		return ""
+	}
+	cert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		return ""
+	}
+	return cert.Subject.CommonName
+}
+
 // CAPublicKey returns the enrollment CA's Ed25519 public key, parsed from the
 // pinned CA certificate. It is the trust anchor used to verify CA-signed
 // artifacts (e.g. update manifests) the agent receives over untrusted channels.

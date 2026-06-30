@@ -287,6 +287,24 @@ func TestSaveLoadRoundTripAndKeyPerm(t *testing.T) {
 	}
 }
 
+func TestAgentIDFromCertCN(t *testing.T) {
+	authority := newTestCA(t)
+	csrPEM, key, err := GenerateCSR("ubuntu-2404-89")
+	if err != nil {
+		t.Fatal(err)
+	}
+	block, _ := pem.Decode(csrPEM)
+	csr, _ := x509.ParseCertificateRequest(block.Bytes)
+	id := &Identity{PrivateKey: key, CertPEM: authority.signClient(t, csr), CACertPEM: authority.pem}
+	if got := id.AgentID(); got != "ubuntu-2404-89" {
+		t.Fatalf("AgentID() = %q, want %q", got, "ubuntu-2404-89")
+	}
+	// cert ausente/ilegível → string vazia (sem panic)
+	if got := (&Identity{}).AgentID(); got != "" {
+		t.Fatalf("AgentID() sem cert = %q, want vazio", got)
+	}
+}
+
 func TestSaveLoadIngestURL(t *testing.T) {
 	authority := newTestCA(t)
 	csrPEM, key, err := GenerateCSR("agent-iu")
