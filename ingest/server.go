@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"sync"
+	"time"
 )
 
 // SchemaVersion is the inventory contract version this stub accepts (kept in
@@ -28,6 +29,11 @@ type Inventory struct {
 	} `json:"os"`
 	Packages  []json.RawMessage `json:"packages"`
 	CycleHash string            `json:"cycle_hash"`
+	// CollectedAt is the agent's collection time (RFC3339). It MUST be propagated
+	// to the imported gvmd report: an empty/zero value serializes as Go's zero
+	// time, which gvmd parses to a garbage epoch that breaks the CVE scanner's
+	// host-detail matching (the scanner finds 0 even with valid CPEs).
+	CollectedAt time.Time `json:"collected_at"`
 }
 
 // Sink receives validated inventories.
