@@ -19,6 +19,12 @@ brief §6.A e §7.
   - CI: `.github/workflows/agent-package.yml` (manual ou tag `agent-v*`; sobe os pacotes como artifacts).
   - Instalação/uso: `packaging/linux/README.install.md` (enroll → `systemctl enable --now`).
   - Validado: instala em Debian 12 limpo; unit systemd + state dir corretos; `suricatoos-agent inventory` coleta.
-  - **Pendente: assinatura** (`dpkg-sig` / `rpm --addsign`) — precisa de chave GPG.
+  - **Assinatura GPG: IMPLEMENTADA.** Chave dedicada *Suricatoos Agent Packages*
+    (fp `12CB5520…C0A8A055`); pública em `packaging/keys/`. `build.sh` assina
+    quando `SIGN_KEY_FILE` está definido; o CI assina via segredo `PKG_SIGNING_KEY`.
+    Validado: `.rpm` verifica com `rpm -K` ("digests signatures OK"); `.deb` com
+    assinatura `_gpgorigin`. Verificação no `README.install.md`.
+  - **Pendente (distribuição):** servir os pacotes via repo apt/yum com Release/repo
+    assinada (verificação automática no `apt`/`dnf`).
 - **macOS (.pkg) e Windows (MSI): pendentes** — exigem credenciais de assinatura
   (Apple Developer ID + notarytool; Authenticode/signtool) que ficam com o operador.

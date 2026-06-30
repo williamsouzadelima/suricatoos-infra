@@ -17,6 +17,25 @@ A instalação coloca o binário em `/usr/bin/suricatoos-agent`, a unit systemd 
 `/lib/systemd/system/suricatoos-agent.service` (NÃO habilitada) e cria
 `/var/lib/suricatoos-agent` (state).
 
+## Verificar a assinatura (recomendado)
+
+Os pacotes são assinados pela chave **Suricatoos Agent Packages**
+(`packaging/keys/suricatoos-agent-pkg-pub.asc`, fingerprint
+`12CB 5520 BBCF 8388 D2D2 3BF1 7EA8 AFD3 C0A8 A055`).
+
+**RPM** (RHEL/Fedora/SUSE):
+
+```sh
+sudo rpm --import suricatoos-agent-pkg-pub.asc
+rpm -K suricatoos-agent-*.rpm        # → "digests signatures OK"
+```
+
+**DEB** (Debian/Ubuntu): o `.deb` carrega assinatura GPG `_gpgorigin`. A
+verificação automática real vem do **repositório apt** (Release assinada) — ao
+servir os pacotes, assine o repo e adicione a chave em
+`/etc/apt/keyrings/`. Para checar um `.deb` avulso, use `debsig-verify` com uma
+policy apontando para esta chave.
+
 ## Enrolar + habilitar
 
 1. Gere um **token de enrollment** no control-plane (admin da GSA → bundle).

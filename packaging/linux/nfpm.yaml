@@ -33,8 +33,5 @@ scripts:
   preremove: ./packaging/linux/scripts/preremove.sh
   postremove: ./packaging/linux/scripts/postremove.sh
 
-# state dir (certs do enrollment) é tratado como config: preservado no upgrade/remove.
-deb:
-  signature: {}
-rpm:
-  signature: {}
+# Assinatura GPG: opcional, injetada pelo build.sh quando SIGN_KEY_FILE está
+# definido (CI usa o segredo). Sem ela, os pacotes saem sem assinatura.
