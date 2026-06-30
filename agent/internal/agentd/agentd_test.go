@@ -70,6 +70,56 @@ func TestTickCollectErrorStillFlushesBacklog(t *testing.T) {
 	}
 }
 
+// concurrencySender records the peak number of overlapping Send calls. tick()
+// must hold tickMu across collect+flush so the main loop and commandLoop never
+// flush the queue concurrently (which would re-POST the same backlog items).
+type concurrencySender struct {
+	mu        sync.Mutex
+	active    int
+	maxActive int
+}
+
+func (c *concurrencySender) Send(context.Context, []byte) error {
+	c.mu.Lock()
+	c.active++
+	if c.active > c.maxActive {
+		c.maxActive = c.active
+	}
+	c.mu.Unlock()
+	time.Sleep(5 * time.Millisecond) // widen the overlap window
+	c.mu.Lock()
+	c.active--
+	c.mu.Unlock()
+	return nil
+}
+
+func (c *concurrencySender) peak() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.maxActive
+}
+
+func TestTickSerializesConcurrentCallers(t *testing.T) {
+	inv := &inventory.Inventory{SchemaVersion: inventory.SchemaVersion, OS: inventory.OS{Family: inventory.Linux}}
+	cs := &concurrencySender{}
+	a := newTestAgent(t, fakeCollector{inv: inv}, cs)
+
+	const n = 8
+	var wg sync.WaitGroup
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, _ = a.tick(context.Background())
+		}()
+	}
+	wg.Wait()
+
+	if p := cs.peak(); p != 1 {
+		t.Fatalf("tick() not serialized: peak concurrent Send = %d, want 1 (commandLoop + main loop must not flush concurrently)", p)
+	}
+}
+
 func TestRunStopsOnContextCancel(t *testing.T) {
 	inv := &inventory.Inventory{SchemaVersion: inventory.SchemaVersion, OS: inventory.OS{Family: inventory.Linux}}
 	a := newTestAgent(t, fakeCollector{inv: inv}, &recSender{})

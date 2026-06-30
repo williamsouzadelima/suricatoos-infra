@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"path/filepath"
 	"runtime"
+	"sync"
 	"time"
 
 	"github.com/williamsouzadelima/suricatoos-infra/agent/internal/collect"
@@ -68,6 +69,13 @@ type Agent struct {
 	sender    transport.Sender
 	interval  time.Duration
 	rnd       func() float64
+
+	// tickMu serializes tick() so the main Run loop and commandLoop (scan_now)
+	// never flush the offline queue concurrently — Queue.Flush assumes a single
+	// flusher (it releases its lock during Send, so two concurrent flushers would
+	// re-POST the same backlog items). An on-demand scan_now waits for any
+	// in-flight tick, then runs a fresh collect+flush.
+	tickMu sync.Mutex
 
 	updateInterval time.Duration
 	currentVersion string
@@ -195,6 +203,8 @@ func buildUpdater(cfg Config, id *enroll.Identity) func(context.Context) bool {
 // tick runs one cycle: collect, enqueue, and flush the backlog. A collection
 // error is non-fatal (the backlog is still flushed).
 func (a *Agent) tick(ctx context.Context) (int, error) {
+	a.tickMu.Lock()
+	defer a.tickMu.Unlock()
 	if inv, err := a.collector.Collect(); err == nil {
 		if a.agentID != "" {
 			inv.Agent.AgentID = a.agentID // identidade lógica enrolada > hostname do SO
