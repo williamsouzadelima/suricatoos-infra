@@ -48,7 +48,7 @@ func TestTickCollectsEnqueuesAndFlushes(t *testing.T) {
 	inv := &inventory.Inventory{SchemaVersion: inventory.SchemaVersion, OS: inventory.OS{Family: inventory.Linux}}
 	rs := &recSender{}
 	a := newTestAgent(t, fakeCollector{inv: inv}, rs)
-	sent, err := a.tick(context.Background())
+	sent, err := a.tick(context.Background(), false)
 	if err != nil || sent != 1 {
 		t.Fatalf("tick: sent=%d err=%v", sent, err)
 	}
@@ -64,7 +64,7 @@ func TestTickCollectErrorStillFlushesBacklog(t *testing.T) {
 	if err := a.queue.Enqueue([]byte(`{"old":1}`)); err != nil {
 		t.Fatal(err)
 	}
-	sent, err := a.tick(context.Background())
+	sent, err := a.tick(context.Background(), false)
 	if err != nil || sent != 1 {
 		t.Fatalf("backlog deveria ser enviado apesar do erro de coleta: sent=%d err=%v", sent, err)
 	}
@@ -110,7 +110,7 @@ func TestTickSerializesConcurrentCallers(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			_, _ = a.tick(context.Background())
+			_, _ = a.tick(context.Background(), false)
 		}()
 	}
 	wg.Wait()

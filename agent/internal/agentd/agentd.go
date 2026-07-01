@@ -202,13 +202,14 @@ func buildUpdater(cfg Config, id *enroll.Identity) func(context.Context) bool {
 
 // tick runs one cycle: collect, enqueue, and flush the backlog. A collection
 // error is non-fatal (the backlog is still flushed).
-func (a *Agent) tick(ctx context.Context) (int, error) {
+func (a *Agent) tick(ctx context.Context, force bool) (int, error) {
 	a.tickMu.Lock()
 	defer a.tickMu.Unlock()
 	if inv, err := a.collector.Collect(); err == nil {
 		if a.agentID != "" {
 			inv.Agent.AgentID = a.agentID // identidade lógica enrolada > hostname do SO
 		}
+		inv.Force = force // on-demand scan_now → ingest importa mesmo se inalterado
 		if b, err := json.Marshal(inv); err == nil {
 			_ = a.queue.Enqueue(b)
 		}
@@ -230,7 +231,7 @@ func (a *Agent) Run(ctx context.Context) error {
 	}
 	attempt := 0
 	for {
-		if _, err := a.tick(ctx); err != nil {
+		if _, err := a.tick(ctx, false); err != nil {
 			attempt++
 		} else {
 			attempt = 0
@@ -287,7 +288,7 @@ func (a *Agent) commandLoop(ctx context.Context) {
 		switch cmd.Type {
 		case command.ScanNow:
 			log.Printf("comando scan_now (%s): coletando e reportando agora", cmd.ID)
-			if _, err := a.tick(ctx); err != nil {
+			if _, err := a.tick(ctx, true); err != nil {
 				log.Printf("command scan_now tick: %v", err)
 			}
 		default:

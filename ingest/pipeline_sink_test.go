@@ -142,3 +142,46 @@ func TestPipelineSink_CycleDedup(t *testing.T) {
 		t.Fatal("a failed cycle must remain retryable")
 	}
 }
+
+func TestPipelineSink_Force_BypassesDedup(t *testing.T) {
+	ps, err := NewPipelineSink(PipelineConfig{NotusDir: "../correlation/testdata"})
+	if err != nil {
+		t.Fatalf("NewPipelineSink: %v", err)
+	}
+	base := Inventory{
+		SchemaVersion: "1.0.0",
+		Agent: struct {
+			AgentID  string `json:"agent_id"`
+			Hostname string `json:"hostname"`
+		}{AgentID: "fa"},
+		OS: struct {
+			Family  string `json:"family"`
+			Distro  string `json:"distro"`
+			Release string `json:"release"`
+		}{Family: "linux", Distro: "debian", Release: "12"},
+		CycleHash: "h1",
+	}
+	// A normal report records the cycle in the dedup state.
+	if err := ps.Put(base); err != nil {
+		t.Fatalf("Put(normal): %v", err)
+	}
+	if ps.lastCycle["fa"] != "h1" {
+		t.Fatalf("normal import should record lastCycle, got %q", ps.lastCycle["fa"])
+	}
+	// A forced (scan_now) report for a fresh agent imports WITHOUT recording the
+	// cycle — proving it took the bypass path (else lastCycle would be set) and
+	// leaves periodic dedup intact.
+	fb := base
+	fb.Agent.AgentID = "fb"
+	fb.CycleHash = "h2"
+	fb.Force = true
+	if err := ps.Put(fb); err != nil {
+		t.Fatalf("Put(force): %v", err)
+	}
+	if ps.lastCycle["fb"] != "" {
+		t.Fatalf("force must not record lastCycle, got %q", ps.lastCycle["fb"])
+	}
+	if !ps.beginCycle("fb", "h2") {
+		t.Fatal("a periodic report after a forced scan must still process (not pre-deduped)")
+	}
+}

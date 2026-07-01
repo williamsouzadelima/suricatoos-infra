@@ -127,16 +127,24 @@ func (s *PipelineSink) endCycle(agentID, cycleHash string, ok bool) {
 // Put correlates the inventory and, if findings are produced, imports them to
 // gvmd. Errors are logged but never returned — the agent always gets 202.
 func (s *PipelineSink) Put(inv Inventory) error {
-	// Skip re-delivered or concurrently-duplicated cycles: the agent retries when
-	// an ack is lost, and re-running the bridge would duplicate the gvmd report.
-	// Unchanged inventories (same cycle_hash) are also skipped, avoiding a bridge
-	// subprocess + GMP round-trips on every 15-minute check-in.
-	if !s.beginCycle(inv.Agent.AgentID, inv.CycleHash) {
-		log.Printf("pipeline: agent=%s cycle inalterado/duplicado — skip", inv.Agent.AgentID)
-		return nil
-	}
 	ok := false
-	defer func() { s.endCycle(inv.Agent.AgentID, inv.CycleHash, ok) }()
+	// An on-demand scan (Force) always imports a fresh report — even if the
+	// inventory is unchanged — so the operator's "scan now" produces a visible,
+	// timestamped result. It does NOT touch the dedup state, so the periodic
+	// 15-minute cycles keep deduping normally.
+	if inv.Force {
+		log.Printf("pipeline: agent=%s scan sob demanda (force) — importando", inv.Agent.AgentID)
+	} else {
+		// Skip re-delivered or concurrently-duplicated cycles: the agent retries when
+		// an ack is lost, and re-running the bridge would duplicate the gvmd report.
+		// Unchanged inventories (same cycle_hash) are also skipped, avoiding a bridge
+		// subprocess + GMP round-trips on every 15-minute check-in.
+		if !s.beginCycle(inv.Agent.AgentID, inv.CycleHash) {
+			log.Printf("pipeline: agent=%s cycle inalterado/duplicado — skip", inv.Agent.AgentID)
+			return nil
+		}
+		defer func() { s.endCycle(inv.Agent.AgentID, inv.CycleHash, ok) }()
+	}
 
 	corrInv := toCorrelationInventory(inv)
 

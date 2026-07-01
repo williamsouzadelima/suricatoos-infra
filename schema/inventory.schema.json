@@ -67,6 +67,7 @@
         "services": { "type": "array", "items": { "type": "string" } }
       }
     },
-    "cycle_hash": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+    "cycle_hash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "force": { "type": "boolean" }
   }
 }
