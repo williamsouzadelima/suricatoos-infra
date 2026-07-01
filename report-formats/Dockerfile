@@ -13,25 +13,30 @@
 # the format installs regardless of the configured FEED_RELEASE.  All stock
 # formats are left untouched (this image is purely additive).
 #
+# The report ships as THREE per-language objects (EN / PT-BR / ES), one feed XML
+# each (pdf-suricatoos-<uuid>.xml), so all three appear in the GSA "Download
+# report" dropdown and the user picks the language there.
+#
 # Build:
-#   python3 build-feed-xml.py   # regenerate the embedded XML from the bundle
+#   python3 build-feed-xml.py   # regenerate the three embedded XMLs from the bundle
 #   docker build -t ghcr.io/williamsouzadelima/suricatoos-report-formats:stable \
 #       report-formats
 FROM registry.community.greenbone.net/community/report-formats
 
-ARG FORMAT_XML=pdf-suricatoos-c6482c1b-57bb-406b-a501-c97eed86ad05.xml
-
 USER root
-COPY ${FORMAT_XML} /tmp/${FORMAT_XML}
+COPY pdf-suricatoos-*.xml /tmp/suricatoos-formats/
 
-# Install into every per-release report-formats source directory.
+# Install every Suricatoos feed object into every per-release report-formats
+# source directory.
 RUN set -eu; \
+    count=$(ls -1 /tmp/suricatoos-formats/pdf-suricatoos-*.xml | wc -l); \
+    [ "$count" -gt 0 ] || { echo "no feed XMLs to install" >&2; exit 1; }; \
     found=0; \
     for d in "${STORAGE_PATH}"/*/report-formats; do \
         [ -d "$d" ] || continue; \
-        cp "/tmp/${FORMAT_XML}" "$d/${FORMAT_XML}"; \
+        cp /tmp/suricatoos-formats/pdf-suricatoos-*.xml "$d/"; \
         found=$((found + 1)); \
     done; \
-    rm -f "/tmp/${FORMAT_XML}"; \
-    echo "Suricatoos: installed ${FORMAT_XML} into ${found} report-formats release dir(s)"; \
+    rm -rf /tmp/suricatoos-formats; \
+    echo "Suricatoos: installed ${count} report format(s) into ${found} release dir(s)"; \
     [ "$found" -gt 0 ]

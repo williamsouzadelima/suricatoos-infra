@@ -38,7 +38,11 @@ cp ./suricatoos-*.pdf "${TMP}/" 2>/dev/null
 # The stock template hardcodes /tmp/err.out, which gvmd (running as the non-root
 # gvmd user) cannot create/overwrite if another user owns it — that makes the
 # whole generator fail with exit 1 and the report downloads as 0 bytes.
-xsltproc ./latex.xsl $1 > ${TMP}/report.tex 2>${TMP}/err.out
+#
+# The `--stringparam lang <code>` selects the report language (en | pt_BR | es).
+# build-feed-xml.py rewrites this exact token per language to produce the three
+# per-language report_format objects, so keep it on one line, verbatim.
+xsltproc --stringparam lang en ./latex.xsl $1 > ${TMP}/report.tex 2>${TMP}/err.out
 
 pdflatex -interaction batchmode -output-directory ${TMP} ${TMP}/report.tex > /dev/null 2>&1
 

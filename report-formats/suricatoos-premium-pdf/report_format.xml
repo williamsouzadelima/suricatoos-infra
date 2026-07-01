@@ -1,8 +1,12 @@
 <!-- Copyright (C) 2026 Suricatoos -->
+<!-- Reference descriptor for the English object. The feed objects actually
+     installed (one per language) are synthesised by ../build-feed-xml.py, which
+     embeds a per-language copy of this file; this on-disk copy is the EN
+     reference and is not read by the build. -->
 <report_format id="c6482c1b-57bb-406b-a501-c97eed86ad05">
-  <name>Suricatoos Premium PDF</name>
-  <summary>Premium branded Portable Document Format report. Version 20260630.</summary>
-  <description>A premium, corporate vulnerability assessment report in Portable Document Format (PDF), with a branded Suricatoos cover page, executive risk summary and full per-host findings. Version 20260630.</description>
+  <name>Suricatoos Premium PDF (EN)</name>
+  <summary>Premium branded PDF vulnerability report (English). Version 20260701.</summary>
+  <description>A premium, corporate vulnerability assessment report in PDF (English): branded cover, executive risk summary with a severity dashboard, a hosts and open-ports inventory, a findings summary table, and detailed findings grouped by vulnerability (CVSS, CVEs, affected systems, remediation). Version 20260701.</description>
   <extension>pdf</extension>
   <content_type>application/pdf</content_type>
   <report_type>all</report_type>
