@@ -39,14 +39,6 @@ from gvm.connections import UnixSocketConnection, TLSConnection
 from gvm.protocols.gmp import Gmp
 from gvm.protocols.gmp.requests.v226 import Authentication, Nvts, Reports, Tasks
 
-# Built-in gvmd objects (stable UUIDs) used to auto-provision a native, playable
-# CVE-scanner task per agent. The CVE scanner is scanless: it matches the host's
-# imported CPE host-details against the SCAP/CVE feed — no network probe — which
-# fits the passive agent model and lets the GSA "play" button work natively.
-CVE_SCANNER_ID = "6acd0832-df90-11e4-b9d5-28d24461215b"  # built-in "CVE" scanner
-EMPTY_CONFIG_ID = "085569ce-73ed-11df-83c3-002264764cea"  # built-in "empty" scan config
-ALL_IANA_TCP_PORT_LIST = "33d0cd82-57c6-11e1-8ed1-406186ea4fc5"  # required by create_target; unused by CVE scanner
-
 # OID for the synthetic "inventory collected" marker. Deliberately OUTSIDE
 # Greenbone's NVT arc (1.3.6.1.4.1.25623…) so it can never collide with — or be
 # relabelled by — a real feed NVT. 55683 is an unassigned private-enterprise arc
@@ -164,7 +156,6 @@ def fetch_nvt_meta(gmp: Gmp, oid: str) -> NVTMeta | None:
 def finding_report_to_xml(
     report: dict,
     nvt_meta: dict[str, NVTMeta | None] | None = None,
-    cpes: list[str] | None = None,
 ) -> str:
     """Convert a FindingReport dict to a GMP report XML string.
 
@@ -187,8 +178,6 @@ def finding_report_to_xml(
     """
     if nvt_meta is None:
         nvt_meta = {}
-    if cpes is None:
-        cpes = []
 
     root = ET.Element("report", id=str(uuid.uuid4()))
     # Identity is the UNIQUE agent_id (the enrolled cert CN), NOT the OS hostname:
@@ -264,10 +253,9 @@ def finding_report_to_xml(
         ET.SubElement(qod, "value").text = "70"
         ET.SubElement(qod, "type").text = "package"
 
-    # gvmd only registers a host (and its host-details, incl. the CPEs the CVE
-    # scanner consumes) when at least one <result> references it. A clean host
-    # with no Notus findings would otherwise not appear at all, so emit a single
-    # Log-severity "inventory collected" marker result to anchor the host.
+    # gvmd only registers a host when at least one <result> references it. A clean
+    # host with no Notus findings would otherwise not appear at all, so emit a
+    # single Log-severity "inventory collected" marker result to anchor the host.
     if not report.get("findings"):
         r = ET.SubElement(results_el, "result", id=str(uuid.uuid4()))
         ET.SubElement(r, "host").text = host_ip
@@ -278,8 +266,7 @@ def finding_report_to_xml(
         ET.SubElement(nvt_el, "family").text = "General"
         ET.SubElement(nvt_el, "cvss_base").text = "0.0"
         ET.SubElement(r, "description").text = (
-            f"Suricatoos agent inventory collected: {len(cpes)} CPE(s) catalogued "
-            f"for CVE assessment. Agent: {report.get('agent_id', '')}"
+            f"Suricatoos agent inventory collected. Agent: {report.get('agent_id', '')}"
         )
         ET.SubElement(r, "severity").text = "0.0"
         ET.SubElement(r, "threat").text = "Log"
@@ -297,13 +284,6 @@ def finding_report_to_xml(
     ET.SubElement(report_host_el, "ip").text = host_ip
     ET.SubElement(report_host_el, "start").text = scan_time
     ET.SubElement(report_host_el, "end").text = scan_time
-    # CPE host-details: gvmd stores these as App detections on the host asset
-    # (in_assets=1), which the CVE scanner then matches against the SCAP/CVE feed
-    # when its task is played. One <detail> per CPE (cpe:/a:vendor:product:version).
-    for cpe in cpes:
-        d = ET.SubElement(report_host_el, "detail")
-        ET.SubElement(d, "name").text = "App"
-        ET.SubElement(d, "value").text = cpe
     ET.SubElement(root, "scan_end").text = scan_time
 
     return ET.tostring(root, encoding="unicode")
@@ -323,14 +303,10 @@ def run_import(
     password: str,
     task_name: str | None,
     dry_run: bool,
-    cpes: list[str] | None = None,
-    provision_cve: bool = False,
 ) -> None:
     """Enrich + import the FindingReport into gvmd, or dry-run print the XML."""
-    if cpes is None:
-        cpes = []
     if dry_run:
-        report_xml = finding_report_to_xml(report_dict, cpes=cpes)
+        report_xml = finding_report_to_xml(report_dict)
         print(report_xml)
         return
 
@@ -353,28 +329,18 @@ def run_import(
         auth_req = Authentication.authenticate(username=username, password=password)
         _assert_ok(gmp.send_command(str(auth_req)), "authenticate")
 
-        if provision_cve:
-            # CVE-only mode (the agent pipeline). gvmd SKIPS CVE-scanning a host
-            # that already carries NVT results, so importing the Notus findings to
-            # this host would zero out its CVE scan. Import a findings-FREE CPE
-            # inventory instead (the synthetic marker result + App/CPE host-details
-            # the CVE scanner consumes); the precise Notus findings stay in the
-            # pipeline, not in gvmd. Verified: findings-free host -> CVE results.
-            report_xml = finding_report_to_xml({**report_dict, "findings": []}, cpes=cpes)
-            comment = f"Suricatoos Agent CPE inventory for host {report_dict.get('host', '')}"
-        else:
-            # Legacy mode: enrich findings from the VT feed and import them.
-            unique_oids = {f.get("oid", "") for f in (report_dict.get("findings") or []) if f.get("oid")}
-            nvt_meta: dict[str, NVTMeta | None] = {}
-            for oid in unique_oids:
-                meta = fetch_nvt_meta(gmp, oid)
-                nvt_meta[oid] = meta
-                if meta is None:
-                    print(f"VT {oid}: no feed evidence (severity 0/Log)", file=sys.stderr)
-                else:
-                    print(f"VT {oid}: cvss={meta.cvss_base} cves={len(meta.cves)}", file=sys.stderr)
-            report_xml = finding_report_to_xml(report_dict, nvt_meta=nvt_meta, cpes=cpes)
-            comment = f"Suricatoos Agent findings for host {report_dict.get('host', '')}"
+        # Enrich findings from the VT feed and import them.
+        unique_oids = {f.get("oid", "") for f in (report_dict.get("findings") or []) if f.get("oid")}
+        nvt_meta: dict[str, NVTMeta | None] = {}
+        for oid in unique_oids:
+            meta = fetch_nvt_meta(gmp, oid)
+            nvt_meta[oid] = meta
+            if meta is None:
+                print(f"VT {oid}: no feed evidence (severity 0/Log)", file=sys.stderr)
+            else:
+                print(f"VT {oid}: cvss={meta.cvss_base} cves={len(meta.cves)}", file=sys.stderr)
+        report_xml = finding_report_to_xml(report_dict, nvt_meta=nvt_meta)
+        comment = f"Suricatoos Agent findings for host {report_dict.get('host', '')}"
 
         # Reuse the per-agent container task if it already exists (the name is
         # per-agent), so repeated reports accumulate in ONE task instead of
@@ -394,36 +360,8 @@ def run_import(
         report_id = _extract_id(import_resp)
         print(f"Imported report: {report_id}", file=sys.stderr)
 
-        # Auto-provision a native, playable CVE-scanner task for this host so the
-        # agent appears in the GSA and can be (re)scanned with the play button.
-        provision_failed = False
-        if provision_cve:
-            agent_host = safe_host_id(report_dict.get("agent_id") or report_dict.get("host", ""))
-            if agent_host:
-                # The CPE inventory already landed (import succeeded). Provisioning
-                # is find-or-create (idempotent), so a failure is safe to retry; we
-                # signal it (non-zero exit below) so the ingest leaves the cycle
-                # uncached and the next check-in re-provisions — otherwise a stable
-                # host whose first provisioning failed would never get its task.
-                try:
-                    tgt, cve_task = provision_cve_task(gmp, agent_host)
-                    print(f"CVE task ready: {cve_task} target={tgt} ({len(cpes)} CPEs)", file=sys.stderr)
-                except (SystemExit, Exception) as e:  # noqa: B014 - _assert_ok raises SystemExit
-                    print(f"WARN: CVE task provisioning failed (import OK, will retry): {e}", file=sys.stderr)
-                    provision_failed = True
-
     n_findings = len(report_dict.get("findings") or [])  # findings may be JSON null
-    if provision_cve:
-        print(f"ok: CPE inventory imported ({len(cpes)} CPEs) — task={task_id} report={report_id} "
-              f"({n_findings} Notus findings kept in pipeline, not gvmd)")
-    else:
-        print(f"ok: {n_findings} finding(s) imported — task={task_id} report={report_id}")
-
-    # Signal a provisioning failure to the caller (non-zero exit) so the ingest
-    # does not cache this cycle as fully done and re-provisions on the next
-    # check-in. The CPE import is already committed; the retry is idempotent.
-    if provision_cve and provision_failed:
-        sys.exit("CVE task provisioning failed — leaving cycle uncached for retry")
+    print(f"ok: {n_findings} finding(s) imported — task={task_id} report={report_id}")
 
 
 def _assert_ok(xml_str: str, cmd: str) -> None:
@@ -454,53 +392,6 @@ def _find_task_id(gmp: Gmp, name: str) -> str | None:
         if (t.findtext("name") or "") == name:
             return t.get("id")
     return None
-
-
-def _find_target_id(gmp: Gmp, name: str) -> str | None:
-    """Return the id of the target whose name matches EXACTLY, or None."""
-    resp = gmp.get_targets(filter_string=f'name="{_esc_filter(name)}" rows=50 first=1')
-    for t in ET.fromstring(resp).findall(".//target[@id]"):
-        if (t.findtext("name") or "") == name:
-            return t.get("id")
-    return None
-
-
-def provision_cve_task(gmp: Gmp, host: str) -> tuple[str, str]:
-    """Find-or-create a native CVE-scanner Target + Task for an agent host so it
-    appears in the GSA and is scannable via the play button. Idempotent: reuses
-    existing objects by exact name. Returns (target_id, task_id)."""
-    target_name = f"Suricatoos Agent: {host}"
-    task_name = f"Suricatoos Agent CVE: {host}"
-
-    target_id = _find_target_id(gmp, target_name)
-    if not target_id:
-        resp = gmp.create_target(
-            name=target_name,
-            hosts=[host],
-            port_list_id=ALL_IANA_TCP_PORT_LIST,
-            comment="Suricatoos agent host — CVE scanner (scanless, CPE-based)",
-        )
-        _assert_ok(resp, "create_target")
-        target_id = _extract_id(resp)
-
-    task_id = _find_task_id(gmp, task_name)
-    if not task_id:
-        resp = gmp.create_task(
-            name=task_name,
-            config_id=EMPTY_CONFIG_ID,
-            target_id=target_id,
-            scanner_id=CVE_SCANNER_ID,
-            comment=(
-                "Play to assess this agent's catalogued software (CPEs) against the "
-                "CVE feed. Note: CVE-scanner matching is upstream-version based and "
-                "is NOT distro-backport aware, so expect some false positives on "
-                "Debian/Ubuntu/RHEL — the precise per-distro findings are in the "
-                "Notus task 'suricatoos-agent-<id>'."
-            ),
-        )
-        _assert_ok(resp, "create_task(cve)")
-        task_id = _extract_id(resp)
-    return target_id, task_id
 
 
 # --------------------------------------------------------------------------- #
@@ -537,16 +428,6 @@ def main() -> None:
         help="Container task name (default: suricatoos-agent-{host})",
     )
     p.add_argument(
-        "--cpe-file",
-        metavar="PATH",
-        help="Path to a JSON array of CPE URIs to attach as host-details (feeds the CVE scanner)",
-    )
-    p.add_argument(
-        "--provision-cve",
-        action="store_true",
-        help="Find-or-create a native CVE-scanner Target+Task for the host so it appears in the GSA and is playable",
-    )
-    p.add_argument(
         "--dry-run",
         action="store_true",
         help="Print the report XML without connecting to gvmd",
@@ -559,11 +440,6 @@ def main() -> None:
         with open(args.report) as f:
             report_dict = json.load(f)
 
-    cpes: list[str] = []
-    if args.cpe_file:
-        with open(args.cpe_file) as f:
-            cpes = json.load(f)
-
     run_import(
         report_dict,
         socket_path=args.socket if not args.host else None,
@@ -573,8 +449,6 @@ def main() -> None:
         password=args.password,
         task_name=args.task_name,
         dry_run=args.dry_run,
-        cpes=cpes,
-        provision_cve=args.provision_cve,
     )
 
 
