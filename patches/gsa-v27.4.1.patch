@@ -11300,10 +11300,10 @@ index 0000000..feb68a1
 +export default DownloadsPage;
 diff --git a/src/web/pages/endpoint-agents/EndpointAgentsPage.tsx b/src/web/pages/endpoint-agents/EndpointAgentsPage.tsx
 new file mode 100644
-index 0000000..157d60f
+index 0000000..f923e28
 --- /dev/null
 +++ b/src/web/pages/endpoint-agents/EndpointAgentsPage.tsx
-@@ -0,0 +1,267 @@
+@@ -0,0 +1,276 @@
 +/* SPDX-FileCopyrightText: 2024 Greenbone AG
 + *
 + * SPDX-License-Identifier: AGPL-3.0-or-later
@@ -11530,7 +11530,9 @@ index 0000000..157d60f
 +                        <SeverityBadge agent={agent} />
 +                      </TableData>
 +                      <TableData>
-+                        <b>{agent.findings}</b> {_('achados')}
++                        <span style={{whiteSpace: 'nowrap'}}>
++                          <b>{agent.findings}</b> {_('achados')}
++                        </span>
 +                        {agent.findings > 0 ? (
 +                          <div style={{color: Theme.mediumGray, fontSize: '11px'}}>
 +                            {agent.critical} crít. · {agent.high} altos · {agent.medium} médios
@@ -11544,7 +11546,14 @@ index 0000000..157d60f
 +                        </div>
 +                      </TableData>
 +                      <TableData>
-+                        <Layout>
++                        <div
++                          style={{
++                            display: 'flex',
++                            gap: '14px',
++                            alignItems: 'center',
++                            whiteSpace: 'nowrap',
++                          }}
++                        >
 +                          {agent.report_id ? (
 +                            <Link to={`report/${agent.report_id}`}>
 +                              {_('Ver achados')}
@@ -11556,7 +11565,7 @@ index 0000000..157d60f
 +                          >
 +                            {_('Escanear agora')}
 +                          </Button>
-+                        </Layout>
++                        </div>
 +                      </TableData>
 +                    </TableRow>
 +                  ))}
