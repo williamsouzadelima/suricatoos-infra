@@ -19,7 +19,10 @@ FROM python:3.12-slim
 RUN pip install --no-cache-dir "python-gvm>=27.0.0"
 COPY --from=build /ingest /usr/local/bin/ingest
 COPY gmp-bridge/bridge.py /usr/local/share/suricatoos/bridge.py
+# agents_query.py powers GET /agents (the Agents UI): read-only gvmd posture query.
+COPY gmp-bridge/agents_query.py /usr/local/share/suricatoos/agents_query.py
 # Defaults wiring the bridge; override the rest (NOTUS_DIR, GMP_SOCKET, GVM_PASSWORD) at deploy.
 ENV BRIDGE_SCRIPT=/usr/local/share/suricatoos/bridge.py \
+    AGENTS_QUERY_SCRIPT=/usr/local/share/suricatoos/agents_query.py \
     BRIDGE_PYTHON=python3
 ENTRYPOINT ["ingest"]

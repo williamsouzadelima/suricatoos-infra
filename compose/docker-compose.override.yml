@@ -27,6 +27,9 @@ services:
       # Página de Downloads do agente (estática) — servida em /downloads/ pela
       # location no default.conf. Hot-swappable: editar o HTML e recarregar o nginx.
       - ./web/downloads:/usr/share/suricatoos/downloads:ro
+      # Página "Agentes" (estática) — servida em /agents/ pela location no
+      # default.conf. Hot-swappable: editar o HTML e recarregar o nginx.
+      - ./web/agents:/usr/share/suricatoos/agents:ro
       # Scripts de instalação one-shot servidos em /install.sh e /install.ps1.
       - ../packaging/install:/usr/share/suricatoos/install:ro
 
