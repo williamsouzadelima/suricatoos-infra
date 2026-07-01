@@ -40,14 +40,23 @@ type Signer interface{ Sign(msg []byte) []byte }
 // Service answers update checks. A nil config means the channel is disabled
 // (the endpoint returns 204) — safe default until an operator configures it.
 type Service struct {
-	cfg    *ManifestConfig
-	signer Signer
+	cfg      *ManifestConfig
+	signer   Signer // primary (the CA key today) — verified by the DEPLOYED fleet
+	signerV2 Signer // secondary dedicated update key (ADR-0007 risk #3); nil = single-sign
 }
 
 // NewService builds a Service. cfg may be nil (auto-update disabled).
 func NewService(cfg *ManifestConfig, signer Signer) *Service {
 	return &Service{cfg: cfg, signer: signer}
 }
+
+// WithUpdateKey adds a SECONDARY signature from a dedicated update-signing key.
+// This is the fleet-migration step for key separation (ADR-0007 risk #3): the
+// primary signature stays signed by the CA key so already-deployed agents (which
+// pinned only the CA pubkey) keep verifying; new agents that received update_pubkey
+// at enroll verify the secondary signature. Once the fleet has re-enrolled, the CA
+// primary signature can be dropped so the CA key no longer signs updates.
+func (s *Service) WithUpdateKey(k Signer) *Service { s.signerV2 = k; return s }
 
 // LoadConfig reads and validates a manifest config file. Each artifact must carry
 // os, arch, an https url and a 64-hex SHA-256, and version must be non-empty.
@@ -87,7 +96,8 @@ type response struct {
 	UpdateAvailable bool      `json:"update_available"`
 	URL             string    `json:"url"`
 	SHA256          string    `json:"sha256"`
-	Signature       string    `json:"signature"`
+	Signature       string    `json:"signature"`              // primary (CA key) — legacy fleet
+	SignatureV2     string    `json:"signature_v2,omitempty"` // dedicated update key (ADR-0007)
 }
 
 // Handler serves GET /update/check?os=&arch=&current=.
@@ -110,7 +120,13 @@ func (s *Service) Handler() http.HandlerFunc {
 			resp.URL = a.URL
 			resp.SHA256 = strings.ToLower(a.SHA256)
 		}
-		resp.Signature = base64.StdEncoding.EncodeToString(s.signer.Sign(canonical(resp)))
+		// Both signatures cover the SAME canonical bytes (which exclude the
+		// signature fields), so a client can verify whichever key it holds.
+		msg := canonical(resp)
+		resp.Signature = base64.StdEncoding.EncodeToString(s.signer.Sign(msg))
+		if s.signerV2 != nil {
+			resp.SignatureV2 = base64.StdEncoding.EncodeToString(s.signerV2.Sign(msg))
+		}
 
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Cache-Control", "no-store")

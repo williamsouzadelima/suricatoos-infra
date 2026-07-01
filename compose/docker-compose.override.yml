@@ -126,6 +126,13 @@ services:
       # Aponta p/ um dir read-only com os arquivos de feed que a nuvem já sincroniza.
       SENSOR_FEED_ROOT: ""
       SENSOR_FEED_VERSION: ""
+      # Chaves de assinatura por-propósito (ADR-0007 risco #3), separadas da chave de
+      # emissão da CA. Persistidas em /data; pubkeys distribuídas no enroll. Se o
+      # arquivo não existir, é gerado no 1º boot (0600).
+      FEED_SIGN_KEY_FILE: /data/feed-sign.key
+      UPDATE_SIGN_KEY_FILE: /data/update-sign.key
+      # TTL curto p/ certs renovados (limita latência de revogação de cert vazado).
+      RENEW_CERT_TTL: 720h
     volumes:
       - /var/lib/suricatoos-cp:/data
 

@@ -32,9 +32,11 @@ type Config struct {
 
 // Result is the enrolled material.
 type Result struct {
-	CertPEM   string
-	KeyPEM    string
-	CACertPEM string
+	CertPEM      string
+	KeyPEM       string
+	CACertPEM    string
+	FeedPubKey   string // PKIX PEM; verifies signed feed manifests (ADR-0007)
+	UpdatePubKey string
 }
 
 // request/response mirror control-plane/enroll.
@@ -47,8 +49,10 @@ type enrollRequest struct {
 }
 
 type enrollResponse struct {
-	Certificate string `json:"certificate"`
-	CACert      string `json:"ca_cert"`
+	Certificate  string `json:"certificate"`
+	CACert       string `json:"ca_cert"`
+	FeedPubKey   string `json:"feed_pubkey"`
+	UpdatePubKey string `json:"update_pubkey"`
 }
 
 // Enroll generates a key + CSR and exchanges the token for a signed cert.
@@ -98,5 +102,8 @@ func Enroll(ctx context.Context, cfg Config) (*Result, error) {
 	if er.Certificate == "" || er.CACert == "" {
 		return nil, fmt.Errorf("enroll: resposta incompleta")
 	}
-	return &Result{CertPEM: er.Certificate, KeyPEM: string(keyPEM), CACertPEM: er.CACert}, nil
+	return &Result{
+		CertPEM: er.Certificate, KeyPEM: string(keyPEM), CACertPEM: er.CACert,
+		FeedPubKey: er.FeedPubKey, UpdatePubKey: er.UpdatePubKey,
+	}, nil
 }

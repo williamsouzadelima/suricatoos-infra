@@ -86,8 +86,27 @@ func New(cfg Config) *Syncer {
 	return &Syncer{cfg: cfg}
 }
 
+// VerifyKeyFromPKIX parses an Ed25519 public key from a PKIX PEM block (the
+// dedicated feed-verify key the cloud distributes at enroll, ADR-0007 risk #3).
+func VerifyKeyFromPKIX(pemBytes []byte) (ed25519.PublicKey, error) {
+	block, _ := pem.Decode(pemBytes)
+	if block == nil {
+		return nil, fmt.Errorf("feed-verify: PEM inválido")
+	}
+	pub, err := x509.ParsePKIXPublicKey(block.Bytes)
+	if err != nil {
+		return nil, err
+	}
+	pk, ok := pub.(ed25519.PublicKey)
+	if !ok {
+		return nil, fmt.Errorf("feed-verify: não é Ed25519")
+	}
+	return pk, nil
+}
+
 // VerifyKeyFromCACert extracts the Ed25519 public key from a PEM CA cert (the
 // ca.crt the sensor received at enroll), for verifying the manifest signature.
+// Fallback when no dedicated feed-verify key was distributed (pre-key-separation).
 func VerifyKeyFromCACert(pemBytes []byte) (ed25519.PublicKey, error) {
 	rest := pemBytes
 	for {

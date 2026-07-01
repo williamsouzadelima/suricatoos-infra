@@ -22,6 +22,7 @@ package main
 
 import (
 	"context"
+	"crypto/ed25519"
 	"encoding/json"
 	"log"
 	"os"
@@ -118,15 +119,26 @@ func startFeedSync(ctx context.Context, base, caFile, stateDir string) {
 		log.Printf("feedsync: desabilitado — defina SENSOR_FEED_DIR para habilitar")
 		return
 	}
-	caPEM, err := os.ReadFile(caFile)
-	if err != nil {
-		log.Printf("feedsync: não consegui ler o ca.crt (%v) — sync desabilitado", err)
-		return
+	// Prefer the dedicated feed-verify key distributed at enroll (ADR-0007 risk #3);
+	// fall back to the CA pubkey when no separate key was provided.
+	var verifyKey ed25519.PublicKey
+	if fp, err := os.ReadFile(filepath.Join(stateDir, "feed-verify.pub")); err == nil {
+		if vk, err := feedsync.VerifyKeyFromPKIX(fp); err == nil {
+			verifyKey = vk
+		}
 	}
-	verifyKey, err := feedsync.VerifyKeyFromCACert(caPEM)
-	if err != nil {
-		log.Printf("feedsync: pubkey de verificação indisponível (%v) — sync desabilitado", err)
-		return
+	if verifyKey == nil {
+		caPEM, err := os.ReadFile(caFile)
+		if err != nil {
+			log.Printf("feedsync: sem feed-verify.pub nem ca.crt (%v) — sync desabilitado", err)
+			return
+		}
+		vk, err := feedsync.VerifyKeyFromCACert(caPEM)
+		if err != nil {
+			log.Printf("feedsync: pubkey de verificação indisponível (%v) — sync desabilitado", err)
+			return
+		}
+		verifyKey = vk
 	}
 	syncer := feedsync.New(feedsync.Config{
 		ManifestURL: base + "/agent/v1/feed/manifest",
@@ -232,6 +244,11 @@ func doEnroll(base, sensorID, certFile, keyFile, caFile, stateDir string) error 
 	}
 	if err := writeFile(caFile, res.CACertPEM, 0o644); err != nil {
 		return err
+	}
+	// Persist the purpose-scoped feed verification key (ADR-0007) if the cloud
+	// distributed one; feedsync prefers it over the CA pubkey.
+	if res.FeedPubKey != "" {
+		_ = writeFile(filepath.Join(stateDir, "feed-verify.pub"), res.FeedPubKey, 0o644)
 	}
 	log.Printf("enroll: %s enrolado (cert em %s)", sensorID, certFile)
 	return nil

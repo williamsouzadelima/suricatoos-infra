@@ -49,6 +49,7 @@ import (
 	cpfeed "github.com/williamsouzadelima/suricatoos-infra/control-plane/feed"
 	cpprovision "github.com/williamsouzadelima/suricatoos-infra/control-plane/provision"
 	cpsensorjobs "github.com/williamsouzadelima/suricatoos-infra/control-plane/sensorjobs"
+	cpsignkeys "github.com/williamsouzadelima/suricatoos-infra/control-plane/signkeys"
 	cptenants "github.com/williamsouzadelima/suricatoos-infra/control-plane/tenants"
 	"github.com/williamsouzadelima/suricatoos-infra/control-plane/tokens"
 	cpupdate "github.com/williamsouzadelima/suricatoos-infra/control-plane/update"
@@ -120,7 +121,22 @@ func main() {
 		log.Printf("ingest URL: unset — set INGEST_URL so agents learn where to report")
 	}
 
-	enrollOpts := []enroll.Option{enroll.WithIngestURL(ingestURL)}
+	// Purpose-scoped signing keys (ADR-0007 risk #3), separate from the CA's cert-
+	// issuing key. Persisted so they survive restarts; their pubkeys are distributed
+	// to sensors/agents at enroll. Absent path → ephemeral (dev).
+	feedKey, err := cpsignkeys.LoadOrCreate(os.Getenv("FEED_SIGN_KEY_FILE"))
+	if err != nil {
+		log.Fatalf("feed sign key: %v", err)
+	}
+	updateKey, err := cpsignkeys.LoadOrCreate(os.Getenv("UPDATE_SIGN_KEY_FILE"))
+	if err != nil {
+		log.Fatalf("update sign key: %v", err)
+	}
+
+	enrollOpts := []enroll.Option{
+		enroll.WithIngestURL(ingestURL),
+		enroll.WithVerificationKeys(feedKey.PublicPEM(), updateKey.PublicPEM()),
+	}
 	// Short renewed-cert TTL bounds revocation latency for a leaked cert (ADR-0007).
 	if v := os.Getenv("RENEW_CERT_TTL"); v != "" {
 		if d, err := time.ParseDuration(v); err == nil && d > 0 {
@@ -143,7 +159,10 @@ func main() {
 	} else {
 		log.Printf("auto-update: disabled — set UPDATE_MANIFEST_FILE to enable")
 	}
-	updateSvc := cpupdate.NewService(updateCfg, authority)
+	// Dual-sign updates: primary = CA key (legacy fleet compat), secondary =
+	// dedicated update key (ADR-0007). Once the fleet has re-enrolled, drop the CA
+	// primary so the CA key no longer signs updates.
+	updateSvc := cpupdate.NewService(updateCfg, authority).WithUpdateKey(updateKey)
 
 	// Frictionless install: mints a short-lived token and returns a ready install
 	// command per OS. Guarded by nginx (GSA session), never bearer — see provision pkg.
@@ -216,7 +235,7 @@ func main() {
 			feedSvc := cpfeed.New(cpfeed.Config{
 				Root:        feedRoot,
 				FeedVersion: func() string { return os.Getenv("SENSOR_FEED_VERSION") },
-				Signer:      authority,
+				Signer:      feedKey, // dedicated feed key, NOT the CA (risk #3)
 				Authz:       sensorJobSvc.AuthorizeRequest,
 			})
 			feedSvc.Register(mux)

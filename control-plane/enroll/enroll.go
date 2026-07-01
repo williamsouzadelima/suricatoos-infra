@@ -36,6 +36,12 @@ type Response struct {
 	Certificate string `json:"certificate"`          // PEM
 	CACert      string `json:"ca_cert"`              // PEM
 	IngestURL   string `json:"ingest_url,omitempty"` // where the agent pushes inventory
+	// Purpose-scoped verification keys (ADR-0007 risk #3), distributed at enroll so
+	// the sensor/agent verifies signed feed/update manifests with a key SEPARATE
+	// from the CA. Empty when key separation isn't configured (verify falls back to
+	// the CA public key). PKIX PEM.
+	FeedPubKey   string `json:"feed_pubkey,omitempty"`
+	UpdatePubKey string `json:"update_pubkey,omitempty"`
 }
 
 // Signer issues a client certificate from a verified CSR. *ca.CA satisfies it;
@@ -54,6 +60,8 @@ type Service struct {
 	certTTL   time.Duration
 	renewTTL  time.Duration // TTL for renewed certs (default: certTTL); shorter = safer
 	ingestURL string
+	feedPub   string // PKIX PEM of the feed-signing pubkey (ADR-0007); empty = omit
+	updatePub string // PKIX PEM of the update-signing pubkey; empty = omit
 }
 
 // Option configures a Service.
@@ -73,6 +81,13 @@ func WithRenewTTL(d time.Duration) Option { return func(s *Service) { s.renewTTL
 // successfully enrolled agent learns where to push inventory without a separate
 // out-of-band flag.
 func WithIngestURL(u string) Option { return func(s *Service) { s.ingestURL = u } }
+
+// WithVerificationKeys distributes the purpose-scoped feed/update verification
+// public keys (PKIX PEM) to agents at enroll, so they verify signed manifests with
+// a key separate from the CA (ADR-0007 risk #3). Empty values are omitted.
+func WithVerificationKeys(feedPubPEM, updatePubPEM string) Option {
+	return func(s *Service) { s.feedPub, s.updatePub = feedPubPEM, updatePubPEM }
+}
 
 // NewService builds an enrollment Service. Default cert TTL is 90 days.
 func NewService(tm *tokens.Manager, s Signer, opts ...Option) *Service {
@@ -214,9 +229,11 @@ func (s *Service) Renew(certVerify, certDN string, req RenewRequest) (Response, 
 		return Response{}, err
 	}
 	return Response{
-		Certificate: string(issued.PEM),
-		CACert:      string(s.signer.CertPEM()),
-		IngestURL:   s.ingestURL,
+		Certificate:  string(issued.PEM),
+		CACert:       string(s.signer.CertPEM()),
+		IngestURL:    s.ingestURL,
+		FeedPubKey:   s.feedPub,
+		UpdatePubKey: s.updatePub,
 	}, nil
 }
 
