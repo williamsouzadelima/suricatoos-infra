@@ -11300,10 +11300,10 @@ index 0000000..feb68a1
 +export default DownloadsPage;
 diff --git a/src/web/pages/endpoint-agents/EndpointAgentsPage.tsx b/src/web/pages/endpoint-agents/EndpointAgentsPage.tsx
 new file mode 100644
-index 0000000..3e35b0a
+index 0000000..6fa437b
 --- /dev/null
 +++ b/src/web/pages/endpoint-agents/EndpointAgentsPage.tsx
-@@ -0,0 +1,248 @@
+@@ -0,0 +1,309 @@
 +/* SPDX-FileCopyrightText: 2024 Greenbone AG
 + *
 + * SPDX-License-Identifier: AGPL-3.0-or-later
@@ -11315,7 +11315,7 @@ index 0000000..3e35b0a
 + * (/agents/scan) — both session-gated by nginx (the GSA cookie). Distinct from
 + * Greenbone's own "Agents" feature (/agents). */
 +
-+import React, {useState, useEffect, useCallback} from 'react';
++import React, {useState, useEffect, useCallback, useMemo} from 'react';
 +import SeverityBar from 'web/components/bar/SeverityBar';
 +import Button from 'web/components/form/Button';
 +import Layout from 'web/components/layout/Layout';
@@ -11326,8 +11326,10 @@ index 0000000..3e35b0a
 +import TableBody from 'web/components/table/TableBody';
 +import TableData from 'web/components/table/TableData';
 +import TableHead from 'web/components/table/TableHead';
++import TableHeader from 'web/components/table/TableHeader';
 +import TableRow from 'web/components/table/TableRow';
 +import useTranslation from 'web/hooks/useTranslation';
++import SortDirection, {type SortDirectionType} from 'web/utils/sort-direction';
 +import Theme from 'web/utils/Theme';
 +
 +interface Agent {
@@ -11411,6 +11413,8 @@ index 0000000..3e35b0a
 +  const [agents, setAgents] = useState<Agent[]>([]);
 +  const [loading, setLoading] = useState<boolean>(true);
 +  const [error, setError] = useState<string | null>(null);
++  const [sortBy, setSortBy] = useState<string>('severity');
++  const [sortDir, setSortDir] = useState<SortDirectionType>(SortDirection.DESC);
 +
 +  const load = useCallback(async () => {
 +    try {
@@ -11422,7 +11426,6 @@ index 0000000..3e35b0a
 +        throw new Error(`HTTP ${resp.status}`);
 +      }
 +      const data: Agent[] = await resp.json();
-+      data.sort((a, b) => b.severity - a.severity || a.host.localeCompare(b.host));
 +      setAgents(data);
 +      setError(null);
 +    } catch (e) {
@@ -11456,6 +11459,50 @@ index 0000000..3e35b0a
 +    [load],
 +  );
 +
++  const onSortChange = useCallback((field: string) => {
++    setSortBy(prev => {
++      if (prev === field) {
++        setSortDir(d =>
++          d === SortDirection.ASC ? SortDirection.DESC : SortDirection.ASC,
++        );
++        return prev;
++      }
++      setSortDir(SortDirection.ASC);
++      return field;
++    });
++  }, []);
++
++  const sorted = useMemo(() => {
++    const dir = sortDir === SortDirection.DESC ? -1 : 1;
++    return [...agents].sort((a, b) => {
++      let cmp = 0;
++      switch (sortBy) {
++        case 'host':
++          cmp = a.host.localeCompare(b.host);
++          break;
++        case 'status':
++          cmp = String(a.status).localeCompare(String(b.status));
++          break;
++        case 'findings':
++          cmp = a.findings - b.findings;
++          break;
++        case 'last':
++          cmp =
++            (Date.parse(a.last_report) || 0) - (Date.parse(b.last_report) || 0);
++          break;
++        default:
++          cmp = a.severity - b.severity;
++      }
++      return cmp * dir;
++    });
++  }, [agents, sortBy, sortDir]);
++
++  const sortProps = {
++    currentSortBy: sortBy,
++    currentSortDir: sortDir,
++    onSortChange,
++  };
++
 +  return (
 +    <React.Fragment>
 +      <PageTitle title={_('Agentes de Endpoint')} />
@@ -11478,16 +11525,30 @@ index 0000000..3e35b0a
 +              </p>
 +            ) : (
 +              <Table>
-+                <TableBody>
++                <TableHeader>
 +                  <TableRow>
-+                    <TableHead>{_('Host')}</TableHead>
-+                    <TableHead>{_('Status')}</TableHead>
-+                    <TableHead>{_('Severidade')}</TableHead>
-+                    <TableHead>{_('Achados')}</TableHead>
-+                    <TableHead>{_('Último relatório')}</TableHead>
-+                    <TableHead>{_('Ações')}</TableHead>
++                    <TableHead {...sortProps} sortBy="host" title={_('Host')} />
++                    <TableHead {...sortProps} sortBy="status" title={_('Status')} />
++                    <TableHead
++                      {...sortProps}
++                      sortBy="severity"
++                      title={_('Severidade')}
++                    />
++                    <TableHead
++                      {...sortProps}
++                      sortBy="findings"
++                      title={_('Achados')}
++                    />
++                    <TableHead
++                      {...sortProps}
++                      sortBy="last"
++                      title={_('Último relatório')}
++                    />
++                    <TableHead title={_('Ações')} />
 +                  </TableRow>
-+                  {agents.map(agent => (
++                </TableHeader>
++                <TableBody>
++                  {sorted.map(agent => (
 +                    <TableRow key={agent.host}>
 +                      <TableData>
 +                        <b>{agent.host}</b>
