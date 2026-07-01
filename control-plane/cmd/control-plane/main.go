@@ -47,6 +47,8 @@ import (
 	cpcommands "github.com/williamsouzadelima/suricatoos-infra/control-plane/commands"
 	"github.com/williamsouzadelima/suricatoos-infra/control-plane/enroll"
 	cpprovision "github.com/williamsouzadelima/suricatoos-infra/control-plane/provision"
+	cpsensorjobs "github.com/williamsouzadelima/suricatoos-infra/control-plane/sensorjobs"
+	cptenants "github.com/williamsouzadelima/suricatoos-infra/control-plane/tenants"
 	"github.com/williamsouzadelima/suricatoos-infra/control-plane/tokens"
 	cpupdate "github.com/williamsouzadelima/suricatoos-infra/control-plane/update"
 )
@@ -143,6 +145,28 @@ func main() {
 	// the agent polls + acks over its mTLS channel and re-collects immediately.
 	cmdSvc := cpcommands.NewService(cpcommands.NewQueue())
 
+	// Sensor dispatch + tenant registry (ADR-0007). The tenant admin API is always
+	// available (bearer-gated); the sensor-facing scan-job routes are mounted only
+	// when SENSOR_JOBS_ENABLED (dark by default).
+	tenantReg, err := cptenants.NewRegistry(os.Getenv("TENANTS_FILE"))
+	if err != nil {
+		log.Fatalf("tenants: %v", err)
+	}
+	tenantSvc := cptenants.NewService(tenantReg, adminSecret)
+	sensorJobReg, err := cpsensorjobs.NewRegistry(cpsensorjobs.Config{
+		Path: os.Getenv("SENSOR_JOBS_FILE"),
+		ScopeOf: func(t string) *cpsensorjobs.Scope {
+			s, _ := cpsensorjobs.NewScope(tenantReg.ScopeSpec(t))
+			return s
+		},
+	})
+	if err != nil {
+		log.Fatalf("sensorjobs: %v", err)
+	}
+	// authority.IsRevoked is authoritative + in-memory → CRL enforced without staleness.
+	sensorJobSvc := cpsensorjobs.NewService(sensorJobReg, tenantReg.Known, authority.IsRevoked)
+	sensorJobsEnabled := os.Getenv("SENSOR_JOBS_ENABLED") == "true"
+
 	mux := http.NewServeMux()
 	mux.Handle("/v1/", http.StripPrefix("/v1", enrollSvc.Handler()))
 	mux.HandleFunc("GET /v1/crl.der", func(w http.ResponseWriter, r *http.Request) {
@@ -166,6 +190,20 @@ func main() {
 	// no bearer; shares the same command queue.
 	mux.HandleFunc("POST /agents/scan", cmdSvc.SessionEnqueueHandler())
 	mux.Handle("/api/", adminAPI.Handler())
+	// Tenant registry admin (ADR-0007) — always available, bearer-gated. More
+	// specific than "/api/" so these win over the adminAPI catch-all.
+	mux.HandleFunc("PUT /api/v1/tenants/{t}", tenantSvc.PutHandler())
+	mux.HandleFunc("GET /api/v1/tenants/{t}", tenantSvc.GetHandler())
+	mux.HandleFunc("GET /api/v1/tenants", tenantSvc.ListHandler())
+	if sensorJobsEnabled {
+		// Sensor-facing dispatch (nginx mTLS-gated + CRL fail-closed in the service).
+		mux.HandleFunc("GET /v1/scan-jobs", sensorJobSvc.PollHandler())
+		mux.HandleFunc("POST /v1/scan-jobs/{id}/ack", sensorJobSvc.AckHandler())
+		mux.HandleFunc("POST /api/v1/tenants/{t}/scan-jobs", sensorJobSvc.EnqueueHandler(adminSecret))
+		log.Printf("sensor: dispatch de scan-jobs HABILITADO")
+	} else {
+		log.Printf("sensor: dispatch de scan-jobs desabilitado (SENSOR_JOBS_ENABLED != true)")
+	}
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("ok"))
 	})

@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"math/big"
 	"os"
+	"strings"
 	"sync"
 	"time"
 )
@@ -212,6 +213,26 @@ func (c *CA) RevokeCertSerial(serialHex string, revokedAt time.Time) error {
 		}
 	}
 	return nil
+}
+
+// IsRevoked reports whether serialHex (a client-cert serial in hex; colons,
+// spaces and a 0x prefix are tolerated) is on the revocation list. The sensor
+// mTLS routes call this to enforce revocation fail-closed at request time (the
+// CA's revoked set is authoritative and in-memory, so there is no staleness).
+func (c *CA) IsRevoked(serialHex string) bool {
+	clean := strings.NewReplacer(":", "", " ", "", "0x", "", "0X", "").Replace(strings.TrimSpace(serialHex))
+	want := new(big.Int)
+	if _, ok := want.SetString(clean, 16); !ok || len(clean) == 0 {
+		return false
+	}
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	for _, e := range c.revoked {
+		if e.SerialNumber != nil && e.SerialNumber.Cmp(want) == 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // IssueCRL signs and returns a DER-encoded CRL valid for 24 hours from now.

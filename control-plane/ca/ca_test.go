@@ -237,3 +237,23 @@ func TestSerialsAreUnique(t *testing.T) {
 		t.Fatal("seriais devem ser únicos")
 	}
 }
+
+func TestIsRevoked(t *testing.T) {
+	now := time.Date(2026, 7, 1, 12, 0, 0, 0, time.UTC)
+	c, _ := NewEphemeral(now)
+	if c.IsRevoked("0a1b2c") {
+		t.Fatal("serial não revogado não deveria ser revogado")
+	}
+	if err := c.RevokeCertSerial("0a1b2c", now); err != nil {
+		t.Fatal(err)
+	}
+	// Match tolerante a colons/uppercase/leading zeros (como o nginx encaminha).
+	for _, s := range []string{"0a1b2c", "0A:1B:2C", "00A1B2C", "0x0a1b2c"} {
+		if !c.IsRevoked(s) {
+			t.Errorf("serial revogado %q deveria bater", s)
+		}
+	}
+	if c.IsRevoked("deadbeef") || c.IsRevoked("") || c.IsRevoked("naoehex") {
+		t.Fatal("serial diferente/vazio/inválido não deveria ser revogado")
+	}
+}
