@@ -11158,10 +11158,10 @@ index 7f74728..b7c8165 100644
  
 diff --git a/src/web/pages/downloads/DownloadsPage.tsx b/src/web/pages/downloads/DownloadsPage.tsx
 new file mode 100644
-index 0000000..feb68a1
+index 0000000..d1faf93
 --- /dev/null
 +++ b/src/web/pages/downloads/DownloadsPage.tsx
-@@ -0,0 +1,136 @@
+@@ -0,0 +1,135 @@
 +/* SPDX-FileCopyrightText: 2024 Greenbone AG
 + *
 + * SPDX-License-Identifier: AGPL-3.0-or-later
@@ -11248,8 +11248,8 @@ index 0000000..feb68a1
 +    <React.Fragment>
 +      <PageTitle title={_('Downloads')} />
 +      <Layout flex="column">
-+        <Section title={_('Instalar o Agente Suricatoos')}>
-+          <Layout flex="column">
++        <Section title={_('Instalar o Agente Suricatoos')} />
++        <Layout flex="column">
 +            <p>
 +              {_(
 +                'Escolha o sistema operacional e copie o comando — o token de enrollment já vem embutido (efêmero, uso único).',
@@ -11290,8 +11290,7 @@ index 0000000..feb68a1
 +                ) : null}
 +              </div>
 +            ) : null}
-+          </Layout>
-+        </Section>
++        </Layout>
 +      </Layout>
 +    </React.Fragment>
 +  );
@@ -11300,10 +11299,10 @@ index 0000000..feb68a1
 +export default DownloadsPage;
 diff --git a/src/web/pages/endpoint-agents/EndpointAgentsPage.tsx b/src/web/pages/endpoint-agents/EndpointAgentsPage.tsx
 new file mode 100644
-index 0000000..6fa437b
+index 0000000..f54323b
 --- /dev/null
 +++ b/src/web/pages/endpoint-agents/EndpointAgentsPage.tsx
-@@ -0,0 +1,309 @@
+@@ -0,0 +1,313 @@
 +/* SPDX-FileCopyrightText: 2024 Greenbone AG
 + *
 + * SPDX-License-Identifier: AGPL-3.0-or-later
@@ -11316,6 +11315,7 @@ index 0000000..6fa437b
 + * Greenbone's own "Agents" feature (/agents). */
 +
 +import React, {useState, useEffect, useCallback, useMemo} from 'react';
++import {showSuccessNotification} from '@greenbone/ui-lib';
 +import SeverityBar from 'web/components/bar/SeverityBar';
 +import Button from 'web/components/form/Button';
 +import Layout from 'web/components/layout/Layout';
@@ -11451,12 +11451,16 @@ index 0000000..6fa437b
 +        if (resp.status !== 202) {
 +          throw new Error(`HTTP ${resp.status}`);
 +        }
++        showSuccessNotification(
++          '',
++          _('Scan solicitado para {{host}} — nova coleta em ~60s.', {host}),
++        );
 +        setTimeout(load, 70000);
 +      } catch (e) {
 +        setError((e as Error).message);
 +      }
 +    },
-+    [load],
++    [load, _],
 +  );
 +
 +  const onSortChange = useCallback((field: string) => {
@@ -11507,9 +11511,9 @@ index 0000000..6fa437b
 +    <React.Fragment>
 +      <PageTitle title={_('Agentes de Endpoint')} />
 +      <Layout flex="column">
-+        <Section title={_('Agentes de Endpoint')}>
-+          <Layout flex="column">
-+            <div style={{margin: '0 0 12px'}}>
++        <Section title={_('Agentes de Endpoint')} />
++        <Layout flex="column">
++          <div style={{margin: '0 0 12px'}}>
 +              <Button title={_('Atualizar')} onClick={() => load()}>
 +                {_('Atualizar')}
 +              </Button>
@@ -11605,8 +11609,7 @@ index 0000000..6fa437b
 +                </TableBody>
 +              </Table>
 +            )}
-+          </Layout>
-+        </Section>
++        </Layout>
 +      </Layout>
 +    </React.Fragment>
 +  );
