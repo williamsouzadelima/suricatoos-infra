@@ -139,11 +139,15 @@ services:
       GMP_SOCKET: /run/gvmd/gvmd.sock
       GMP_USERNAME: admin
       GMP_TASK_NAME: suricatoos-agent
+      # persiste o último check-in por agente (online/offline) entre recreates
+      AGENT_LASTSEEN_FILE: /data/agent-lastseen.json
     volumes:
       # Volumes do compose base do greenbone (mesmo projeto): referenciados por
       # short-name; já declarados no compose.yaml base, não redeclarar aqui.
       - gvmd_socket_vol:/run/gvmd          # socket do gvmd (import_report)
       - notus_data_vol:/notus:ro           # *.notus do feed (WalkDir recursivo)
+      - ingest_state:/data                 # persiste lastSeen (online/offline) entre recreates
 
 volumes:
   feed_updater_state:
+  ingest_state:
