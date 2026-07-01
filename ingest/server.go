@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/williamsouzadelima/suricatoos-infra/ingest/scanlaunch"
+	"github.com/williamsouzadelima/suricatoos-infra/ingest/sensorreport"
 )
 
 // SchemaVersion is the inventory contract version this stub accepts (kept in
@@ -111,12 +112,22 @@ type Server struct {
 	// scanLaunch, when set, mounts the reNgine→OpenVAS scan-request routes on the
 	// same mux (ADR-0006). nil = feature not wired (inventory path unaffected).
 	scanLaunch *scanlaunch.Service
+
+	// sensorReport, when set, mounts the sensor-report import route (ADR-0007).
+	// nil = feature not wired.
+	sensorReport *sensorreport.Service
 }
 
 // AttachScanLaunch wires the reNgine→OpenVAS launch service so its routes are
 // served alongside the inventory endpoints. Call before Handler().
 func (s *Server) AttachScanLaunch(sl *scanlaunch.Service) {
 	s.scanLaunch = sl
+}
+
+// AttachSensorReport wires the internal-sensor report import service (ADR-0007).
+// Call before Handler().
+func (s *Server) AttachSensorReport(sr *sensorreport.Service) {
+	s.sensorReport = sr
 }
 
 // NewServer builds a Server backed by sink.
@@ -248,6 +259,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/agents", s.agentsHandler)
 	if s.scanLaunch != nil {
 		s.scanLaunch.Register(mux)
+	}
+	if s.sensorReport != nil {
+		s.sensorReport.Register(mux)
 	}
 	return mux
 }

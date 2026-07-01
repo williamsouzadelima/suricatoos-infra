@@ -114,6 +114,14 @@ services:
     env_file:
       - path: /var/lib/suricatoos-cp/control-plane.env
         required: false
+    environment:
+      # --- Sensor de scan interno (ADR-0007) — nasce DARK ---
+      # enabled=false → as rotas /v1/scan-jobs, /v1/heartbeat não são montadas
+      # (a API admin de tenants segue disponível). Habilitar é P1. tenants.json é
+      # gravado em /data (=/var/lib/suricatoos-cp no host) e o ingest o lê read-only.
+      SENSOR_JOBS_ENABLED: "false"
+      TENANTS_FILE: /data/tenants.json
+      SENSOR_JOBS_FILE: /data/scan-jobs.json
     volumes:
       - /var/lib/suricatoos-cp:/data
 
@@ -160,12 +168,23 @@ services:
       SCAN_FINDINGS_DIR: /data/findings
       SCAN_CRL_URL: http://control-plane:8080/v1/crl.der
       SCAN_REQUIRE_CRL: "true"
+      # --- Import de report do SENSOR interno (ADR-0007) — nasce DARK ---
+      # enabled=false → a rota /ingest/v1/sensor-report nem é montada. Habilitar é P1.
+      # O ingest lê o registro de tenants (não-secreto: escopo+usuário gvmd) que o
+      # control-plane grava, e as SENHAS gvmd por-tenant de um secret file à parte
+      # (SENSOR_TENANT_SECRETS = {tenant: senha}, host-only 0600). Nunca gravadas aqui.
+      SENSOR_REPORT_ENABLED: "false"
+      TENANTS_FILE: /cp/tenants.json
+      SENSOR_TENANT_SECRETS: /cp/tenant-gvmd-secrets.json
     volumes:
       # Volumes do compose base do greenbone (mesmo projeto): referenciados por
       # short-name; já declarados no compose.yaml base, não redeclarar aqui.
       - gvmd_socket_vol:/run/gvmd          # socket do gvmd (import_report)
       - notus_data_vol:/notus:ro           # *.notus do feed (WalkDir recursivo)
       - ingest_state:/data                 # persiste lastSeen (online/offline) entre recreates
+      # ADR-0007: registro de tenants (control-plane grava) + secrets gvmd por-tenant,
+      # read-only. O control-plane grava tenants.json em /var/lib/suricatoos-cp.
+      - /var/lib/suricatoos-cp:/cp:ro
 
 volumes:
   feed_updater_state:

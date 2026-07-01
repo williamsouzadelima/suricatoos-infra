@@ -87,6 +87,29 @@ func (s *Service) AckHandler() http.HandlerFunc {
 	}
 }
 
+// HeartbeatHandler serves POST /v1/heartbeat: an authenticated liveness ping from
+// a sensor. It validates the mTLS identity + CRL (fail-closed) and returns 204.
+// The body (feed_version/gvmd_up/active_jobs) is accepted for logging; richer
+// posture surfacing (the Sensors UI) is a later slice.
+func (s *Service) HeartbeatHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id, ok := s.auth(w, r)
+		if !ok {
+			return
+		}
+		var hb struct {
+			SensorID    string `json:"sensor_id"`
+			FeedVersion string `json:"feed_version"`
+			GvmdUp      bool   `json:"gvmd_up"`
+			ActiveJobs  int    `json:"active_jobs"`
+		}
+		_ = json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&hb)
+		log.Printf("sensorjobs: heartbeat tenant=%s cn=%s feed=%s gvmd_up=%v jobs=%d",
+			id.O, id.CN, hb.FeedVersion, hb.GvmdUp, hb.ActiveJobs)
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
 // enqueueBody is the admin enqueue payload (POST /api/v1/tenants/{t}/scan-jobs).
 type enqueueBody struct {
 	Targets     []string `json:"targets"`

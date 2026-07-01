@@ -199,6 +199,7 @@ func main() {
 		// Sensor-facing dispatch (nginx mTLS-gated + CRL fail-closed in the service).
 		mux.HandleFunc("GET /v1/scan-jobs", sensorJobSvc.PollHandler())
 		mux.HandleFunc("POST /v1/scan-jobs/{id}/ack", sensorJobSvc.AckHandler())
+		mux.HandleFunc("POST /v1/heartbeat", sensorJobSvc.HeartbeatHandler())
 		mux.HandleFunc("POST /api/v1/tenants/{t}/scan-jobs", sensorJobSvc.EnqueueHandler(adminSecret))
 		log.Printf("sensor: dispatch de scan-jobs HABILITADO")
 	} else {

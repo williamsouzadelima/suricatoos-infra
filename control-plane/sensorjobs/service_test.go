@@ -43,6 +43,23 @@ func TestPollNoCert403(t *testing.T) {
 	}
 }
 
+func TestHeartbeat(t *testing.T) {
+	s, _ := testService(t)
+	w := httptest.NewRecorder()
+	body := map[string]any{"sensor_id": "sensor-acme-1", "feed_version": "v42", "gvmd_up": true}
+	s.HeartbeatHandler()(w, sensorReq("POST", "/v1/heartbeat", body))
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("heartbeat válido deveria 204, got %d", w.Code)
+	}
+	// Sem cert → 403.
+	w2 := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/v1/heartbeat", nil)
+	s.HeartbeatHandler()(w2, req)
+	if w2.Code != http.StatusForbidden {
+		t.Fatalf("heartbeat sem cert deveria 403, got %d", w2.Code)
+	}
+}
+
 func TestPollRevoked403(t *testing.T) {
 	r, _ := NewRegistry(Config{ScopeOf: scopes(map[string]string{"acme": "10.20.0.0/16"})})
 	s := NewService(r, nil, func(string) bool { return true }) // serial revogado
