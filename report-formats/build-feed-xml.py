@@ -18,11 +18,13 @@ BUNDLE = os.path.join(HERE, "suricatoos-premium-pdf")
 
 REPORT_FORMAT_ID = "c6482c1b-57bb-406b-a501-c97eed86ad05"
 NAME = "Suricatoos Premium PDF"
-SUMMARY = "Premium branded Portable Document Format report. Version 20260630."
+SUMMARY = "Premium branded Portable Document Format report. Version 20260701."
 DESCRIPTION = (
     "A premium, corporate vulnerability assessment report in Portable Document "
-    "Format (PDF), with a branded Suricatoos cover page, executive risk summary "
-    "and full per-host findings. Version 20260630."
+    "Format (PDF): branded cover, executive risk summary with a severity "
+    "dashboard, a findings summary table, and detailed findings grouped by "
+    "vulnerability (each with CVSS, CVEs, affected systems and remediation). "
+    "Version 20260701."
 )
 
 # Order mirrors the stock bundle: scripts first, then embedded assets.
