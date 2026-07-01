@@ -93,6 +93,12 @@ type Server struct {
 	onlineWindow time.Duration
 	now          func() time.Time
 
+	// lastSeenPath persists lastSeen across restarts (AGENT_LASTSEEN_FILE) so an
+	// ingest recreate/deploy doesn't reset every agent to "unknown" for up to a
+	// report interval. Empty = in-memory only. persistMu serializes the file write.
+	lastSeenPath string
+	persistMu    sync.Mutex
+
 	// queryAgents returns the gvmd posture list as JSON (default: exec
 	// agents_query.py). Injectable so the handler is testable without a process.
 	queryAgents func(context.Context) ([]byte, error)
@@ -106,12 +112,52 @@ func NewServer(s Sink) *Server {
 			window = d
 		}
 	}
-	return &Server{
+	srv := &Server{
 		sink:         s,
 		lastSeen:     make(map[string]time.Time),
 		onlineWindow: window,
 		now:          time.Now,
 		queryAgents:  execAgentsQuery,
+		lastSeenPath: os.Getenv("AGENT_LASTSEEN_FILE"),
+	}
+	srv.loadLastSeen()
+	return srv
+}
+
+// loadLastSeen restores the persisted check-in times on startup (no-op if the
+// file is absent — first boot — or AGENT_LASTSEEN_FILE is unset).
+func (s *Server) loadLastSeen() {
+	if s.lastSeenPath == "" {
+		return
+	}
+	b, err := os.ReadFile(s.lastSeenPath)
+	if err != nil {
+		return
+	}
+	var m map[string]string
+	if err := json.Unmarshal(b, &m); err != nil {
+		log.Printf("agents: ignoring bad lastSeen file: %v", err)
+		return
+	}
+	for k, v := range m {
+		if t, err := time.Parse(time.RFC3339, v); err == nil {
+			s.lastSeen[k] = t
+		}
+	}
+	log.Printf("agents: restored %d agent check-in(s) from %s", len(s.lastSeen), s.lastSeenPath)
+}
+
+// persist writes the lastSeen snapshot atomically (temp + rename).
+func (s *Server) persist(b []byte) {
+	s.persistMu.Lock()
+	defer s.persistMu.Unlock()
+	tmp := s.lastSeenPath + ".tmp"
+	if err := os.WriteFile(tmp, b, 0o644); err != nil {
+		log.Printf("agents: persist lastSeen: %v", err)
+		return
+	}
+	if err := os.Rename(tmp, s.lastSeenPath); err != nil {
+		log.Printf("agents: rename lastSeen: %v", err)
 	}
 }
 
@@ -129,11 +175,23 @@ func execAgentsQuery(ctx context.Context) ([]byte, error) {
 	return exec.CommandContext(ctx, python, script).Output()
 }
 
-// markSeen records that agentID just checked in.
+// markSeen records that agentID just checked in, and persists the snapshot so
+// the status survives an ingest restart.
 func (s *Server) markSeen(agentID string) {
 	s.mu.Lock()
 	s.lastSeen[agentID] = s.now().UTC()
+	var snap []byte
+	if s.lastSeenPath != "" {
+		m := make(map[string]string, len(s.lastSeen))
+		for k, v := range s.lastSeen {
+			m[k] = v.Format(time.RFC3339)
+		}
+		snap, _ = json.Marshal(m)
+	}
 	s.mu.Unlock()
+	if snap != nil {
+		s.persist(snap)
+	}
 }
 
 // seen returns the agent's last check-in time, if known.

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -151,5 +152,23 @@ func TestAgentsMarkSeenFromInventoryPost(t *testing.T) {
 	r2.Body.Close()
 	if l2[0]["status"] != "online" {
 		t.Fatalf("post-report status=%v, want online", l2[0]["status"])
+	}
+}
+
+func TestLastSeenPersistRoundTrip(t *testing.T) {
+	path := t.TempDir() + "/lastseen.json"
+	now := time.Date(2026, 7, 1, 12, 0, 0, 0, time.UTC)
+	t.Setenv("AGENT_LASTSEEN_FILE", path)
+
+	s1 := NewServer(&MemSink{})
+	s1.now = func() time.Time { return now }
+	s1.markSeen("a1")
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("lastSeen file not written: %v", err)
+	}
+	// a fresh server (simulating a restart) restores the check-in
+	s2 := NewServer(&MemSink{})
+	if got, ok := s2.seen("a1"); !ok || !got.Equal(now) {
+		t.Fatalf("restored lastSeen = %v ok=%v, want %v", got, ok, now)
 	}
 }
