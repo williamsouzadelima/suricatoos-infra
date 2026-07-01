@@ -123,6 +123,7 @@ func buildAgent(args []string) (*agentd.Agent, error) {
 	interval := fs.Duration("interval", 15*time.Minute, "intervalo entre coletas")
 	maxQueue := fs.Int("max-queue", 1000, "máximo de itens na fila offline")
 	updateInterval := fs.Duration("update-interval", 6*time.Hour, "intervalo de checagem de auto-update assinado (0 desliga)")
+	commandInterval := fs.Duration("command-interval", 60*time.Second, "intervalo de poll do canal de comando 'scan now' (0 desliga)")
 	if err := fs.Parse(args); err != nil {
 		return nil, err
 	}
@@ -132,15 +133,16 @@ func buildAgent(args []string) (*agentd.Agent, error) {
 	}
 	binPath, _ := os.Executable()
 	return agentd.New(agentd.Config{
-		StateDir:       *stateDir,
-		QueueDir:       *queueDir,
-		IngestURL:      ingestURL,
-		MaxQueue:       *maxQueue,
-		Interval:       *interval,
-		UpdateInterval: *updateInterval,
-		CurrentVersion: version.Version,
-		BinaryPath:     binPath,
-		Restart:        service.Restart,
+		StateDir:        *stateDir,
+		QueueDir:        *queueDir,
+		IngestURL:       ingestURL,
+		MaxQueue:        *maxQueue,
+		Interval:        *interval,
+		UpdateInterval:  *updateInterval,
+		CommandInterval: *commandInterval,
+		CurrentVersion:  version.Version,
+		BinaryPath:      binPath,
+		Restart:         service.Restart,
 	})
 }
 

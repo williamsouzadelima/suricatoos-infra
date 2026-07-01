@@ -15,9 +15,11 @@ import (
 	"net/http"
 	"path/filepath"
 	"runtime"
+	"sync"
 	"time"
 
 	"github.com/williamsouzadelima/suricatoos-infra/agent/internal/collect"
+	"github.com/williamsouzadelima/suricatoos-infra/agent/internal/command"
 	"github.com/williamsouzadelima/suricatoos-infra/agent/internal/enroll"
 	"github.com/williamsouzadelima/suricatoos-infra/agent/internal/inventory"
 	"github.com/williamsouzadelima/suricatoos-infra/agent/internal/transport"
@@ -52,6 +54,11 @@ type Config struct {
 	CurrentVersion string        // versão deste binário (version.Version)
 	BinaryPath     string        // caminho do binário a substituir (os.Executable)
 	Restart        func() error  // como reiniciar o serviço após a troca
+
+	// CommandInterval is how often the agent polls the control-plane for a pending
+	// command (e.g. "scan_now" → an immediate re-collect). Enabled when > 0 and the
+	// enrolled identity carries a ServerURL. 0 = disabled.
+	CommandInterval time.Duration
 }
 
 // Agent ties a collector, an offline queue and a sender into a loop, plus an
@@ -63,6 +70,13 @@ type Agent struct {
 	interval  time.Duration
 	rnd       func() float64
 
+	// tickMu serializes tick() so the main Run loop and commandLoop (scan_now)
+	// never flush the offline queue concurrently — Queue.Flush assumes a single
+	// flusher (it releases its lock during Send, so two concurrent flushers would
+	// re-POST the same backlog items). An on-demand scan_now waits for any
+	// in-flight tick, then runs a fresh collect+flush.
+	tickMu sync.Mutex
+
 	updateInterval time.Duration
 	currentVersion string
 	stateDir       string
@@ -73,6 +87,13 @@ type Agent struct {
 	// que --agent-id no enroll seja o nome reportado/correlacionado, independente
 	// do hostname da máquina. Vazio = mantém o hostname.
 	agentID string
+
+	// Command channel (optional). When commandInterval > 0 the agent polls
+	// serverURL+"/commands" over cmdClient (its mTLS client) and runs a verified
+	// "scan_now" by forcing an immediate tick().
+	commandInterval time.Duration
+	cmdClient       *http.Client
+	serverURL       string
 }
 
 // New builds an Agent from cfg: loads the enrolled identity, builds an mTLS
@@ -113,6 +134,13 @@ func New(cfg Config) (*Agent, error) {
 		currentVersion: cfg.CurrentVersion,
 		stateDir:       cfg.StateDir,
 		agentID:        id.AgentID(),
+	}
+	// Command channel: poll over the same mTLS client used for ingest. Needs the
+	// control-plane ServerURL (persisted at enroll); pre-update enrollments lack it.
+	if cfg.CommandInterval > 0 && id.ServerURL != "" {
+		a.commandInterval = cfg.CommandInterval
+		a.cmdClient = client
+		a.serverURL = id.ServerURL
 	}
 	if u := buildUpdater(cfg, id); u != nil {
 		a.updateInterval = cfg.UpdateInterval
@@ -175,6 +203,8 @@ func buildUpdater(cfg Config, id *enroll.Identity) func(context.Context) bool {
 // tick runs one cycle: collect, enqueue, and flush the backlog. A collection
 // error is non-fatal (the backlog is still flushed).
 func (a *Agent) tick(ctx context.Context) (int, error) {
+	a.tickMu.Lock()
+	defer a.tickMu.Unlock()
 	if inv, err := a.collector.Collect(); err == nil {
 		if a.agentID != "" {
 			inv.Agent.AgentID = a.agentID // identidade lógica enrolada > hostname do SO
@@ -194,6 +224,9 @@ func (a *Agent) Run(ctx context.Context) error {
 	if a.doUpdate != nil {
 		go a.commitAfterStable(ctx)
 		go a.updateLoop(ctx)
+	}
+	if a.commandInterval > 0 && a.cmdClient != nil {
+		go a.commandLoop(ctx)
 	}
 	attempt := 0
 	for {
@@ -225,6 +258,46 @@ func (a *Agent) commitAfterStable(ctx context.Context) {
 	}
 	if ok, _ := update.CommitIfHealthy(a.stateDir, a.currentVersion); ok {
 		log.Printf("update: versão %s confirmada (estável por %s)", a.currentVersion, commitWindow)
+	}
+}
+
+// commandLoop polls the control-plane for a pending command on a fixed cadence
+// and runs a "scan_now" by forcing an immediate collect+report tick, then acks
+// it. Poll/ack errors are logged and retried on the next tick (transient by
+// nature). The agent always initiates, so no inbound listener is introduced.
+func (a *Agent) commandLoop(ctx context.Context) {
+	t := time.NewTicker(a.commandInterval)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+		pollCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		cmd, err := command.Poll(pollCtx, a.cmdClient, a.serverURL)
+		cancel()
+		if err != nil {
+			log.Printf("command poll: %v", err)
+			continue
+		}
+		if cmd == nil {
+			continue
+		}
+		switch cmd.Type {
+		case command.ScanNow:
+			log.Printf("comando scan_now (%s): coletando e reportando agora", cmd.ID)
+			if _, err := a.tick(ctx); err != nil {
+				log.Printf("command scan_now tick: %v", err)
+			}
+		default:
+			log.Printf("comando desconhecido ignorado: %q", cmd.Type)
+		}
+		ackCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		if err := command.Ack(ackCtx, a.cmdClient, a.serverURL, cmd.ID); err != nil {
+			log.Printf("command ack %s: %v", cmd.ID, err)
+		}
+		cancel()
 	}
 }
 
