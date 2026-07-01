@@ -11300,10 +11300,10 @@ index 0000000..feb68a1
 +export default DownloadsPage;
 diff --git a/src/web/pages/endpoint-agents/EndpointAgentsPage.tsx b/src/web/pages/endpoint-agents/EndpointAgentsPage.tsx
 new file mode 100644
-index 0000000..f923e28
+index 0000000..3e35b0a
 --- /dev/null
 +++ b/src/web/pages/endpoint-agents/EndpointAgentsPage.tsx
-@@ -0,0 +1,276 @@
+@@ -0,0 +1,248 @@
 +/* SPDX-FileCopyrightText: 2024 Greenbone AG
 + *
 + * SPDX-License-Identifier: AGPL-3.0-or-later
@@ -11316,6 +11316,7 @@ index 0000000..f923e28
 + * Greenbone's own "Agents" feature (/agents). */
 +
 +import React, {useState, useEffect, useCallback} from 'react';
++import SeverityBar from 'web/components/bar/SeverityBar';
 +import Button from 'web/components/form/Button';
 +import Layout from 'web/components/layout/Layout';
 +import PageTitle from 'web/components/layout/PageTitle';
@@ -11347,29 +11348,6 @@ index 0000000..f923e28
 +  online: boolean;
 +  status: string;
 +}
-+
-+const THREAT_PT: Record<string, string> = {
-+  Critical: 'Crítico',
-+  High: 'Alto',
-+  Medium: 'Médio',
-+  Low: 'Baixo',
-+  Log: 'Log',
-+};
-+
-+const threatColor = (threat: string): string => {
-+  switch (threat) {
-+    case 'Critical':
-+      return Theme.severityClassCritical;
-+    case 'High':
-+      return Theme.severityClassHigh;
-+    case 'Medium':
-+      return Theme.severityClassMedium;
-+    case 'Low':
-+      return Theme.severityClassLow;
-+    default:
-+      return Theme.severityClassLog;
-+  }
-+};
 +
 +const relTime = (iso: string): string => {
 +  if (!iso) {
@@ -11427,12 +11405,6 @@ index 0000000..f923e28
 +    </span>
 +  );
 +};
-+
-+const SeverityBadge = ({agent}: {agent: Agent}) => (
-+  <span style={badgeStyle(threatColor(agent.threat))}>
-+    {agent.severity.toFixed(1)} {THREAT_PT[agent.threat] ?? agent.threat}
-+  </span>
-+);
 +
 +const EndpointAgentsPage = () => {
 +  const [_] = useTranslation();
@@ -11527,7 +11499,7 @@ index 0000000..f923e28
 +                        <StatusPill agent={agent} />
 +                      </TableData>
 +                      <TableData>
-+                        <SeverityBadge agent={agent} />
++                        <SeverityBar severity={agent.severity} />
 +                      </TableData>
 +                      <TableData>
 +                        <span style={{whiteSpace: 'nowrap'}}>
