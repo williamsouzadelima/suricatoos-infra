@@ -106,6 +106,11 @@ func main() {
 			resolver.Resolve,
 			func(serial string) bool { return crl.Check(serial) != nil },
 		)
+		// Optional push of imported findings to the Score (ADR-0007 G), tenant-tagged.
+		if scoreURL := os.Getenv("SENSOR_SCORE_URL"); scoreURL != "" {
+			sr = sr.WithForwarder(sensorreport.NewForwarder(scoreURL, os.Getenv("SENSOR_SCORE_SECRET")))
+			log.Printf("sensorreport: push p/ Score habilitado (%s)", scoreURL)
+		}
 		server.AttachSensorReport(sr)
 		log.Printf("sensorreport: montado (import de report de sensor habilitado)")
 	} else {

@@ -29,10 +29,11 @@ type importFunc func(ctx context.Context, tc TenantConfig, rep bridgeReport) err
 
 // Service serves POST /v1/sensor-report.
 type Service struct {
-	cfg     Config
-	resolve TenantResolver
-	revoked RevokedFunc
-	imp     importFunc
+	cfg       Config
+	resolve   TenantResolver
+	revoked   RevokedFunc
+	imp       importFunc
+	forwarder *Forwarder // optional push to the Score (ADR-0007 G); nil = disabled
 }
 
 // New builds a Service. resolve maps a tenant → its scoped gvmd user + scope
@@ -42,6 +43,9 @@ func New(cfg Config, resolve TenantResolver, revoked RevokedFunc) *Service {
 	s.imp = s.execBridge
 	return s
 }
+
+// WithForwarder wires an optional push of imported findings to the Score.
+func (s *Service) WithForwarder(f *Forwarder) *Service { s.forwarder = f; return s }
 
 // Register mounts the route.
 func (s *Service) Register(mux *http.ServeMux) {
@@ -113,6 +117,14 @@ func (s *Service) handle(w http.ResponseWriter, r *http.Request) {
 	}
 	log.Printf("sensorreport: tenant=%s corr=%s importado (%d achado(s), %d quarentena)",
 		id.O, rep.CorrelationID, len(kept), dropped)
+
+	// Push to the Score (ADR-0007 G), best-effort — the central GSA already has the
+	// data, and the tenant is the authoritative cert O (never the sensor's claim).
+	if s.forwarder.Enabled() {
+		if err := s.forwarder.Forward(ctx, id.O, rep.CorrelationID, kept); err != nil {
+			log.Printf("sensorreport: push p/ Score falhou (best-effort): %v", err)
+		}
+	}
 	writeJSON(w, http.StatusAccepted, map[string]any{"imported": len(kept), "quarantined": dropped})
 }
 

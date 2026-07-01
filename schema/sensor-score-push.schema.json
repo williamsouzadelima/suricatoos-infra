@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://suricatoos.dev/schema/sensor-score-push.schema.json",
+  "title": "Suricatoos — Sensor→Score Findings Push",
+  "description": "The payload the ingest POSTs to the Score (reNgine) inbound import endpoint after importing a sensor report into the central gvmd (ADR-0007 G). The tenant is the AUTHORITATIVE cert Organization (never what the sensor claimed), and findings are the in-scope, re-attested set. The Score partitions/stores these by tenant. Bound by ingest/sensorreport (Go) and the reNgine Score receiver.",
+  "type": "object",
+  "required": ["schema_version", "tenant", "correlation_id", "source", "findings"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "type": "string", "const": "1.0.0" },
+    "tenant": { "type": "string", "description": "authoritative cert O; the Score partition key" },
+    "correlation_id": { "type": "string" },
+    "source": { "type": "string", "const": "sensor" },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "host": { "type": "string" },
+          "port": { "type": "string" },
+          "oid": { "type": "string" },
+          "name": { "type": "string" },
+          "cvss_base": { "type": "number" },
+          "cves": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    }
+  }
+}

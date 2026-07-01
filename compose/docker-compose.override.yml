@@ -187,6 +187,9 @@ services:
       SENSOR_REPORT_ENABLED: "false"
       TENANTS_FILE: /cp/tenants.json
       SENSOR_TENANT_SECRETS: /cp/tenant-gvmd-secrets.json
+      # Push dos achados do sensor p/ o Score (ADR-0007 G), tagueados pelo tenant do
+      # cert. Vazio → só ficam na GSA central. SENSOR_SCORE_SECRET vem do ingest.env.
+      SENSOR_SCORE_URL: ""
     volumes:
       # Volumes do compose base do greenbone (mesmo projeto): referenciados por
       # short-name; já declarados no compose.yaml base, não redeclarar aqui.

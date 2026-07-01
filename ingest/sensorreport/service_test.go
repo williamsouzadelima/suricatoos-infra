@@ -131,3 +131,47 @@ func TestAllOutOfScope202Zero(t *testing.T) {
 		t.Fatal("com tudo fora de escopo o bridge NÃO deveria ser chamado")
 	}
 }
+
+func TestForwarderPushesToScore(t *testing.T) {
+	var got scorePayload
+	score := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer sc-secret" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		json.NewDecoder(r.Body).Decode(&got)
+		w.WriteHeader(http.StatusAccepted)
+	}))
+	defer score.Close()
+
+	s := New(Config{}, acmeResolver(), notRevoked).
+		WithForwarder(NewForwarder(score.URL, "sc-secret"))
+	var imported *bridgeReport
+	s.imp = func(_ context.Context, _ TenantConfig, rep bridgeReport) error { imported = &rep; return nil }
+
+	body := mkReport("", scanlaunch.Finding{Host: "10.20.5.5", Port: "443/tcp", OID: "o1"},
+		scanlaunch.Finding{Host: "8.8.8.8", Port: "80/tcp", OID: "o2"}) // 8.8.8.8 fora de escopo
+	w := serve(s, reportReq(body, "acme"))
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("deveria 202, got %d", w.Code)
+	}
+	if imported == nil {
+		t.Fatal("import deveria ter rodado")
+	}
+	// O Score recebe: tenant do CERT (não do body), só os achados EM ESCOPO.
+	if got.Tenant != "acme" || got.Source != "sensor" {
+		t.Fatalf("payload p/ o Score errado: %+v", got)
+	}
+	if len(got.Findings) != 1 || got.Findings[0].Host != "10.20.5.5" {
+		t.Fatalf("Score deveria receber só o achado em escopo: %+v", got.Findings)
+	}
+}
+
+func TestForwarderDisabledIsNoop(t *testing.T) {
+	s := New(Config{}, acmeResolver(), notRevoked) // sem forwarder
+	s.imp = func(context.Context, TenantConfig, bridgeReport) error { return nil }
+	body := mkReport("acme", scanlaunch.Finding{Host: "10.20.5.5", Port: "443/tcp", OID: "o1"})
+	if w := serve(s, reportReq(body, "acme")); w.Code != http.StatusAccepted {
+		t.Fatalf("sem forwarder deveria 202 normal, got %d", w.Code)
+	}
+}
