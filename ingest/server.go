@@ -40,6 +40,9 @@ type Inventory struct {
 	// time, which gvmd parses to a garbage epoch that breaks the CVE scanner's
 	// host-detail matching. Parsing + flooring happens downstream (lenient).
 	CollectedAt string `json:"collected_at"`
+	// Force marks an on-demand (scan_now) report: import it even if the inventory
+	// is unchanged, so an operator's manual re-scan always produces a fresh report.
+	Force bool `json:"force"`
 }
 
 // Sink receives validated inventories.

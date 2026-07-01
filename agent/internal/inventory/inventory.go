@@ -92,6 +92,9 @@ type Inventory struct {
 	Packages      []Package `json:"packages"`
 	Facts         Facts     `json:"facts"`
 	CycleHash     string    `json:"cycle_hash,omitempty"`
+	// Force marks an on-demand (scan_now) report so the ingest imports it even if
+	// the inventory is unchanged. Dedup then only skips the periodic 15-min cycles.
+	Force bool `json:"force,omitempty"`
 }
 
 // Collector gathers an Inventory locally. Each platform provides one
