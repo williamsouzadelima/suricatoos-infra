@@ -145,6 +145,21 @@ services:
       GMP_TASK_NAME: suricatoos-agent
       # persiste o último check-in por agente (online/offline) entre recreates
       AGENT_LASTSEEN_FILE: /data/agent-lastseen.json
+      # --- Loop reNgine→OpenVAS (ADR-0006) — nasce DARK ---
+      # enabled=false → POST /ingest/v1/scan-request responde 503; allowlist vazia
+      # → deny-all mesmo se habilitado. Habilitar é P3 (env + up -d --no-deps ingest).
+      # SCAN_GVM_PASSWORD (senha do usuário gvmd 'suricatoos-scan', NÃO admin) vem
+      # do env_file ingest.env — nunca gravado aqui.
+      SCAN_LAUNCH_ENABLED: "false"
+      SCAN_GMP_USERNAME: suricatoos-scan
+      SCAN_HOST_ALLOWLIST: "" # vazia = deny-all; adicionar /32 por engagement na P3
+      SCAN_MAX_CONCURRENT: "2"
+      SCAN_MIN_RESCAN_INTERVAL: 6h
+      SCAN_MAX_DURATION: 6h
+      SCAN_STATE_FILE: /data/scan-requests.json
+      SCAN_FINDINGS_DIR: /data/findings
+      SCAN_CRL_URL: http://control-plane:8080/v1/crl.der
+      SCAN_REQUIRE_CRL: "true"
     volumes:
       # Volumes do compose base do greenbone (mesmo projeto): referenciados por
       # short-name; já declarados no compose.yaml base, não redeclarar aqui.

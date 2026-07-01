@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://suricatoos.dev/schema/scan-request.schema.json",
+  "title": "Suricatoos — reNgine→OpenVAS Scan Request",
+  "description": "Request body reNgine (score) POSTs to the scanner's mTLS /ingest/v1/scan-request endpoint to launch a scoped OpenVAS scan against recon-discovered hosts. Bound in lockstep by ingest/scanlaunch (Go), gmp-bridge/scan_bridge.py (Python), and reNgine web/Suricatoos/scanner_bridge.py. Hosts MUST be IP literals — the scanner is authoritative and never resolves hostnames (no scan-time DNS rebinding).",
+  "type": "object",
+  "required": ["schema_version", "rengine_scan_history_id", "hosts"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "type": "string", "const": "1.0.0" },
+    "rengine_scan_history_id": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "reNgine ScanHistory PK; the correlation/idempotency anchor. Encoded in the GVM task name suricatoos-rengine-{id}."
+    },
+    "target": {
+      "type": "string",
+      "maxLength": 300,
+      "description": "reNgine Domain name, informational only (never used as a scan target)."
+    },
+    "engagement": {
+      "type": "string",
+      "maxLength": 200,
+      "description": "Optional engagement/project label, informational."
+    },
+    "hosts": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 4096,
+      "description": "Live hosts to scan. Each ip MUST be an IP literal (v4 or v6); the scanner rejects anything net.ParseIP cannot parse.",
+      "items": {
+        "type": "object",
+        "required": ["ip", "ports"],
+        "additionalProperties": false,
+        "properties": {
+          "ip": {
+            "type": "string",
+            "description": "IPv4 or IPv6 literal. Hostnames are rejected (422)."
+          },
+          "ports": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 65535,
+            "description": "Open TCP ports discovered by reNgine; the target-wide union scopes the OpenVAS port_range (T:...).",
+            "items": { "type": "integer", "minimum": 1, "maximum": 65535 }
+          }
+        }
+      }
+    }
+  }
+}

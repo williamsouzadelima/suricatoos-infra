@@ -21,8 +21,12 @@ COPY --from=build /ingest /usr/local/bin/ingest
 COPY gmp-bridge/bridge.py /usr/local/share/suricatoos/bridge.py
 # agents_query.py powers GET /agents (the Agents UI): read-only gvmd posture query.
 COPY gmp-bridge/agents_query.py /usr/local/share/suricatoos/agents_query.py
+# scan_bridge.py launches/tracks OpenVAS scans for the reNgine loop (ADR-0006);
+# it imports bridge.py at runtime, so both live in the same dir.
+COPY gmp-bridge/scan_bridge.py /usr/local/share/suricatoos/scan_bridge.py
 # Defaults wiring the bridge; override the rest (NOTUS_DIR, GMP_SOCKET, GVM_PASSWORD) at deploy.
 ENV BRIDGE_SCRIPT=/usr/local/share/suricatoos/bridge.py \
     AGENTS_QUERY_SCRIPT=/usr/local/share/suricatoos/agents_query.py \
+    SCAN_BRIDGE_SCRIPT=/usr/local/share/suricatoos/scan_bridge.py \
     BRIDGE_PYTHON=python3
 ENTRYPOINT ["ingest"]

@@ -12,6 +12,8 @@ import (
 	"os/exec"
 	"sync"
 	"time"
+
+	"github.com/williamsouzadelima/suricatoos-infra/ingest/scanlaunch"
 )
 
 // SchemaVersion is the inventory contract version this stub accepts (kept in
@@ -105,6 +107,16 @@ type Server struct {
 	// queryAgents returns the gvmd posture list as JSON (default: exec
 	// agents_query.py). Injectable so the handler is testable without a process.
 	queryAgents func(context.Context) ([]byte, error)
+
+	// scanLaunch, when set, mounts the reNgine→OpenVAS scan-request routes on the
+	// same mux (ADR-0006). nil = feature not wired (inventory path unaffected).
+	scanLaunch *scanlaunch.Service
+}
+
+// AttachScanLaunch wires the reNgine→OpenVAS launch service so its routes are
+// served alongside the inventory endpoints. Call before Handler().
+func (s *Server) AttachScanLaunch(sl *scanlaunch.Service) {
+	s.scanLaunch = sl
 }
 
 // NewServer builds a Server backed by sink.
@@ -234,6 +246,9 @@ func (s *Server) Handler() http.Handler {
 		w.WriteHeader(http.StatusAccepted)
 	})
 	mux.HandleFunc("/agents", s.agentsHandler)
+	if s.scanLaunch != nil {
+		s.scanLaunch.Register(mux)
+	}
 	return mux
 }
 
