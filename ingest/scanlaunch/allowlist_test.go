@@ -44,6 +44,11 @@ func TestAllowlistDenylist(t *testing.T) {
 		"fe80::1",         // IPv6 link-local
 		"fc00::1",         // IPv6 ULA
 		"fd00::1",         // IPv6 ULA
+		"::127.0.0.1",     // IPv4-compatible IPv6 (::a.b.c.d) — loopback-equivalent
+		"100.64.0.1",      // CGNAT 100.64.0.0/10
+		"0.1.2.3",         // 0.0.0.0/8 this-network
+		"240.0.0.1",       // 240.0.0.0/4 reserved
+		"255.255.255.255", // broadcast (within 240/4)
 	}
 	for _, h := range denied {
 		if _, err := al.CheckHost(h); err == nil {

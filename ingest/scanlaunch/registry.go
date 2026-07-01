@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 	"sync"
 	"time"
@@ -152,6 +153,36 @@ func (r *Registry) CountActive() int {
 		}
 	}
 	return n
+}
+
+// ReapTerminal evicts terminal jobs whose CompletedAt is older than ttl (and
+// their cached findings file), bounding the registry map + persisted file so a
+// long-lived auto-loop doesn't grow without limit. ttl <= 0 disables reaping.
+// Returns the number removed.
+func (r *Registry) ReapTerminal(ttl time.Duration, findingsDir string) int {
+	if ttl <= 0 {
+		return 0
+	}
+	cutoff := r.now().Add(-ttl)
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var removed []string
+	for id, j := range r.jobs {
+		if j.State.terminal() && !j.CompletedAt.IsZero() && j.CompletedAt.Before(cutoff) {
+			removed = append(removed, id)
+		}
+	}
+	if len(removed) == 0 {
+		return 0
+	}
+	for _, id := range removed {
+		delete(r.jobs, id)
+		if findingsDir != "" {
+			os.Remove(filepath.Join(findingsDir, id+".json"))
+		}
+	}
+	_ = r.saveLocked()
+	return len(removed)
 }
 
 func (r *Registry) saveLocked() error {

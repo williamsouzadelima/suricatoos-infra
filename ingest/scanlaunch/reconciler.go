@@ -74,6 +74,11 @@ func (rc *reconciler) tick(ctx context.Context) {
 			slots--
 		}
 	}
+
+	// Evict old terminal jobs so the registry (map + persisted file) stays bounded.
+	if n := rc.reg.ReapTerminal(rc.cfg.Retention, rc.findingsDir); n > 0 {
+		log.Printf("scanlaunch: reaper removeu %d job(s) terminal(is) > retenção", n)
+	}
 }
 
 // launch transitions PENDING → RUNNING via scan_bridge.py launch. Returns true
@@ -102,16 +107,12 @@ func (rc *reconciler) launch(ctx context.Context, j *Job) bool {
 }
 
 // poll updates a RUNNING job from gvmd; on Done it fetches + caches findings.
+//
+// Status is checked BEFORE the SCAN_MAX_DURATION cap on purpose: a scan that gvmd
+// reports Done must be fetched regardless of how long it ran (a finished report
+// past the cap — e.g. an ingest restart during a long scan — must not be discarded
+// as EXPIRED). The cap only auto-stops a scan that is genuinely still running.
 func (rc *reconciler) poll(ctx context.Context, j *Job) {
-	if !j.StartedAt.IsZero() && rc.now().Sub(j.StartedAt) > rc.cfg.MaxDuration {
-		log.Printf("scanlaunch: %s excedeu SCAN_MAX_DURATION — parando", j.RequestID)
-		rc.run(ctx, "stop", j) // best effort
-		rc.reg.Update(j.RequestID, func(job *Job) {
-			job.State = StateExpired
-			job.CompletedAt = rc.now().UTC()
-		})
-		return
-	}
 	res, err := rc.run(ctx, "status", j)
 	if err != nil {
 		log.Printf("scanlaunch: status %s falhou: %v", j.RequestID, err)
@@ -128,7 +129,17 @@ func (rc *reconciler) poll(ctx context.Context, j *Job) {
 			job.Error = "scan " + res.Status
 			job.CompletedAt = rc.now().UTC()
 		})
-	default: // New/Requested/Queued/Running/Processing
+	default: // still New/Requested/Queued/Running/Processing
+		// Auto-stop only a scan that is confirmed still running past the cap.
+		if !j.StartedAt.IsZero() && rc.now().Sub(j.StartedAt) > rc.cfg.MaxDuration {
+			log.Printf("scanlaunch: %s excedeu SCAN_MAX_DURATION — parando", j.RequestID)
+			rc.run(ctx, "stop", j) // best effort
+			rc.reg.Update(j.RequestID, func(job *Job) {
+				job.State = StateExpired
+				job.CompletedAt = rc.now().UTC()
+			})
+			return
+		}
 		rc.reg.Update(j.RequestID, func(job *Job) {
 			job.Progress = res.Progress
 			if res.ReportID != "" {

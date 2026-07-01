@@ -107,8 +107,50 @@ func denyReason(ip net.IP) string {
 		return "endpoint de metadata da cloud"
 	case ip.To4() == nil && isIPv6ULA(ip):
 		return "ULA IPv6"
+	case isIPv4CompatibleV6(ip):
+		// ::a.b.c.d (deprecated) — To4() does NOT unwrap it, so e.g. ::127.0.0.1
+		// would otherwise slip past the v4 loopback/private checks above.
+		return "IPv6 compatível-IPv4 (::a.b.c.d) depreciado"
+	}
+	if ip4 := ip.To4(); ip4 != nil {
+		for _, n := range reservedV4Nets {
+			if n.Contains(ip4) {
+				return "faixa IPv4 reservada/especial"
+			}
+		}
 	}
 	return ""
+}
+
+// reservedV4Nets are IPv4 special-use ranges net.IP's helpers don't classify:
+// 0.0.0.0/8 (this-network), 100.64.0.0/10 (CGNAT), 240.0.0.0/4 (reserved + the
+// 255.255.255.255 broadcast).
+var reservedV4Nets = mustCIDRs("0.0.0.0/8", "100.64.0.0/10", "240.0.0.0/4")
+
+func mustCIDRs(cidrs ...string) []*net.IPNet {
+	out := make([]*net.IPNet, 0, len(cidrs))
+	for _, c := range cidrs {
+		if _, n, err := net.ParseCIDR(c); err == nil {
+			out = append(out, n)
+		}
+	}
+	return out
+}
+
+// isIPv4CompatibleV6 reports whether ip is an ::a.b.c.d IPv4-compatible address
+// (first 12 bytes zero, IPv6 form). :: and ::1 are already handled by the
+// unspecified/loopback checks, so reaching here means a non-trivial embedded v4.
+func isIPv4CompatibleV6(ip net.IP) bool {
+	v16 := ip.To16()
+	if v16 == nil || ip.To4() != nil {
+		return false
+	}
+	for _, b := range v16[:12] {
+		if b != 0 {
+			return false
+		}
+	}
+	return true
 }
 
 // isMetadata blocks the well-known cloud link-local metadata address (Linode/AWS/GCP).

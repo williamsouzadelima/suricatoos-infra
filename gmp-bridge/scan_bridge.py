@@ -212,7 +212,9 @@ def cmd_launch(gmp: Gmp, req: dict, args) -> dict:
     if status in _STARTABLE:
         resp = gmp.send_command(str(Tasks.start_task(task_id)))
         _assert_ok(resp, "start_task")
-        rid = _extract_id(resp)
+        # start_task_response carries the report id in a CHILD <report_id>, not a
+        # root @id attribute — _extract_id would return "" here.
+        rid = ET.fromstring(resp).findtext("report_id") or ""
         if rid:
             report_id = rid
         status = "Requested"
@@ -224,7 +226,10 @@ def cmd_status(gmp: Gmp, req: dict, _args) -> dict:
     name = f"suricatoos-rengine-{int(req['rengine_scan_history_id'])}"
     task_id, status, progress, report_id = _task_info(gmp, name)
     if not task_id:
-        return {"status": "Interrupted", "progress": 0, "report_id": "", "error": "task not found"}
+        # NÃO emitir 'error' aqui: um campo error faz o exec.go do ingest tratar como
+        # falha transitória (retry), então a transição terminal 'Interrupted' nunca
+        # dispararia e o job ficaria preso em RUNNING até o SCAN_MAX_DURATION.
+        return {"status": "Interrupted", "progress": 0, "report_id": ""}
     return {"status": status, "progress": progress, "report_id": report_id or ""}
 
 
