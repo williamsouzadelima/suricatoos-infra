@@ -50,10 +50,22 @@ func releaseComponentsPrefix(adv, host string) bool {
 	return true
 }
 
+// kaliDebianRelease is the fixed Debian release Kali (rolling) is assessed
+// against. Kali-rolling tracks Debian testing and has no fixed release of its
+// own, so it maps to the newest stable Debian carried in the feed (the closest
+// match). Bump this as newer Debian releases land / Kali's base advances.
+const kaliDebianRelease = "13"
+
 // hostScope derives the scope of an inventory from its os-release fields:
 // OS.Distro is the os-release ID, OS.Release the VERSION_ID.
 func hostScope(os OSInfo) productScope {
-	return productScope{distro: canonicalDistro(os.Distro), release: os.Release}
+	release := os.Release
+	// Kali reports its own ID/VERSION_ID (e.g. "kali" / "2026.1") but is Debian-
+	// based; pin it to a fixed Debian release so Debian advisories can apply.
+	if strings.EqualFold(strings.TrimSpace(os.Distro), "kali") {
+		release = kaliDebianRelease
+	}
+	return productScope{distro: canonicalDistro(os.Distro), release: release}
 }
 
 // advisoryScope derives the scope of a Notus advisory from its product_name
@@ -76,6 +88,10 @@ func canonicalDistro(s string) string {
 	// Exact os-release ID values first.
 	switch t {
 	case "debian":
+		return "debian"
+	case "kali":
+		// Kali is Debian-derived (kali-rolling tracks Debian testing); assess it
+		// against Debian advisories. The release it maps to is pinned in hostScope.
 		return "debian"
 	case "ubuntu":
 		return "ubuntu"
