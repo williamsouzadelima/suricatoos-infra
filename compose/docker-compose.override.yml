@@ -70,6 +70,14 @@ services:
     volumes:
       - /root/suricatoos/compose:/compose:ro
       - feed_updater_state:/state
+      # Auth GHCR: um dos feeds (report-formats) é a NOSSA imagem PRIVADA no GHCR.
+      # O `docker compose up --pull always` roda DENTRO deste container e lê a auth
+      # do config.json do docker CLI local — que sem isto está vazio → o pull da
+      # report-formats dá "unauthorized" e ABORTA o batch inteiro (os feeds públicos
+      # do Greenbone nem chegam a puxar). Montamos o config.json do host (já logado
+      # no ghcr.io com o PAT durável) read-only p/ o pull autenticar. Alternativa
+      # permanente: tornar o pacote report-formats público (aí este mount é dispensável).
+      - /root/.docker/config.json:/root/.docker/config.json:ro
 
   # Suricatoos: control-plane do agente de endpoint.
   # Enroll: POST  https://scanner.suricatoos.com/agent/v1/enroll
