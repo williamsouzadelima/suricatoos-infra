@@ -17,6 +17,10 @@ type Store interface {
 	// RegisterAgentID marks agentID as enrolled by tokenID. Must be called under
 	// the Manager lock after Update so the two writes are logically atomic.
 	RegisterAgentID(agentID, tokenID string) error
+	// TokenIDByAgentID returns the token id that enrolled agentID (ok=false if
+	// unknown). Lets a cert-authenticated renewal find and extend its own token
+	// record so a renewed cert's serial stays revocable.
+	TokenIDByAgentID(agentID string) (string, bool, error)
 }
 
 // MemStore is an in-memory, concurrency-safe Store for dev and tests.
@@ -86,6 +90,14 @@ func (s *MemStore) RegisterAgentID(agentID, tokenID string) error {
 	defer s.mu.Unlock()
 	s.agents[agentID] = tokenID
 	return nil
+}
+
+// TokenIDByAgentID returns the token id that enrolled agentID.
+func (s *MemStore) TokenIDByAgentID(agentID string) (string, bool, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	id, ok := s.agents[agentID]
+	return id, ok, nil
 }
 
 // cloneRecord deep-copies the Enrollments slice so copies never share backing.

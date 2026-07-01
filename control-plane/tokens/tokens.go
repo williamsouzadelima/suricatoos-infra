@@ -31,6 +31,7 @@ var (
 	ErrExhausted          = errors.New("token esgotado (limite de enrollments atingido)")
 	ErrScopeMismatch      = errors.New("escopo não autorizado para este token")
 	ErrAgentAlreadyExists = errors.New("agent_id já enrollado — re-enrollment requer revogação prévia")
+	ErrAgentUnknown       = errors.New("agent_id desconhecido — renovação exige um cert válido de um enroll prévio")
 )
 
 // Type is the consumption model of a bootstrap token.
@@ -240,6 +241,37 @@ func (m *Manager) Consume(token string, enr Enrollment) (Record, error) {
 		}
 	}
 	return rec, nil
+}
+
+// AppendEnrollment records an additional enrollment (a renewed cert) on the token
+// record that originally enrolled agentID, WITHOUT consuming a use or checking the
+// agent_id uniqueness (the agent already owns the identity). This keeps a renewed
+// cert's serial in the token's Enrollments audit trail, so revoking the token also
+// revokes every renewed cert. Returns ErrAgentAlreadyExists' sibling when the agent
+// is unknown (never enrolled).
+func (m *Manager) AppendEnrollment(agentID string, enr Enrollment) error {
+	if agentID == "" {
+		return errors.New("agent_id obrigatório")
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	tokenID, ok, err := m.store.TokenIDByAgentID(agentID)
+	if err != nil {
+		return fmt.Errorf("buscar token do agente: %w", err)
+	}
+	if !ok {
+		return ErrAgentUnknown
+	}
+	rec, ok := m.store.Get(tokenID)
+	if !ok {
+		return ErrAgentUnknown
+	}
+	if enr.At.IsZero() {
+		enr.At = m.now()
+	}
+	enr.AgentID = agentID
+	rec.Enrollments = append(rec.Enrollments, enr)
+	return m.store.Update(rec)
 }
 
 // List returns all Records from the store (no secrets — only metadata).

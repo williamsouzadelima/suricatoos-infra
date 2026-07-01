@@ -52,6 +52,7 @@ type Service struct {
 	signer    Signer
 	now       func() time.Time
 	certTTL   time.Duration
+	renewTTL  time.Duration // TTL for renewed certs (default: certTTL); shorter = safer
 	ingestURL string
 }
 
@@ -63,6 +64,10 @@ func WithClock(f func() time.Time) Option { return func(s *Service) { s.now = f 
 
 // WithCertTTL sets the issued client-certificate lifetime.
 func WithCertTTL(d time.Duration) Option { return func(s *Service) { s.certTTL = d } }
+
+// WithRenewTTL sets the lifetime of renewed certs (default: certTTL). A short
+// renew TTL bounds revocation latency for a leaked cert (ADR-0007).
+func WithRenewTTL(d time.Duration) Option { return func(s *Service) { s.renewTTL = d } }
 
 // WithIngestURL sets the ingest endpoint returned to agents on enrollment, so a
 // successfully enrolled agent learns where to push inventory without a separate
@@ -149,9 +154,75 @@ func (s *Service) Enroll(req Request) (Response, error) {
 	}, nil
 }
 
-// Handler returns an http.Handler serving POST /enroll. Client-facing errors are
-// generic (the detailed reason is not echoed, to avoid leaking the token's
-// expected scope or x509 internals).
+// RenewRequest is the body a still-valid client POSTs to rotate its cert. Identity
+// (CN/O/OU) is NOT taken from here — it is derived from the verified client cert
+// the caller presents (forwarded by nginx). Only a fresh CSR is supplied.
+type RenewRequest struct {
+	CSR     string `json:"csr"`      // PEM; CN must equal the current cert CN
+	AgentID string `json:"agent_id"` // must equal the current cert CN (cross-check)
+}
+
+// Renew rotates a client certificate authenticated by the caller's CURRENT valid
+// mTLS cert (its DN forwarded by nginx as certDN, with certVerify=="SUCCESS"). It
+// re-signs a new CSR with the SAME CN/O/OU as the presented cert (the caller can't
+// change its tenant/policy), issues a fresh serial + TTL, and appends that serial
+// to the agent's token record so a token revoke still kills the renewed cert. It
+// does NOT consume a token or hit agent_id uniqueness — the agent already owns its
+// identity. This gives real rotation without ErrAgentAlreadyExists.
+func (s *Service) Renew(certVerify, certDN string, req RenewRequest) (Response, error) {
+	if certVerify != "SUCCESS" {
+		return Response{}, fmt.Errorf("%w: cert cliente não verificado", ErrBadRequest)
+	}
+	dn := parseDN(certDN)
+	cn, org, ou := firstOf(dn, "CN"), firstOf(dn, "O"), firstOf(dn, "OU")
+	if cn == "" || org == "" {
+		return Response{}, fmt.Errorf("%w: DN do cert sem CN/O", ErrBadRequest)
+	}
+	if req.CSR == "" {
+		return Response{}, fmt.Errorf("%w: CSR obrigatório", ErrBadRequest)
+	}
+	csr, err := parseCSR(req.CSR)
+	if err != nil {
+		return Response{}, err
+	}
+	if err := csr.CheckSignature(); err != nil {
+		return Response{}, fmt.Errorf("%w: proof-of-possession falhou", ErrBadRequest)
+	}
+	// The new CSR must keep the same identity as the presented cert (and the
+	// optional body agent_id must agree) — a renewal cannot change who you are.
+	if csr.Subject.CommonName != cn {
+		return Response{}, fmt.Errorf("%w: CN do CSR difere do cert atual", ErrBadRequest)
+	}
+	if req.AgentID != "" && req.AgentID != cn {
+		return Response{}, fmt.Errorf("%w: agent_id difere do cert atual", ErrBadRequest)
+	}
+
+	ttl := s.renewTTL
+	if ttl <= 0 {
+		ttl = s.certTTL
+	}
+	issued, err := s.signer.SignClientCSRIssued(csr, ca.CertProfile{
+		CommonName: cn, Org: org, OrgUnit: ou,
+	}, ttl, s.now())
+	if err != nil {
+		return Response{}, err
+	}
+	// Keep the renewed serial revocable via the agent's original token record.
+	if err := s.tokens.AppendEnrollment(cn, tokens.Enrollment{
+		Subject: cn, CertSerial: issued.SerialHex,
+	}); err != nil {
+		return Response{}, err
+	}
+	return Response{
+		Certificate: string(issued.PEM),
+		CACert:      string(s.signer.CertPEM()),
+		IngestURL:   s.ingestURL,
+	}, nil
+}
+
+// Handler returns an http.Handler serving POST /enroll and POST /renew. Client-
+// facing errors are generic (the detailed reason is not echoed, to avoid leaking
+// the token's expected scope or x509 internals).
 func (s *Service) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/enroll", func(w http.ResponseWriter, r *http.Request) {
@@ -172,7 +243,55 @@ func (s *Service) Handler() http.Handler {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(resp)
 	})
+	mux.HandleFunc("/renew", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		var req RenewRequest
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&req); err != nil {
+			http.Error(w, "requisição inválida", http.StatusBadRequest)
+			return
+		}
+		resp, err := s.Renew(r.Header.Get("X-Client-Cert-Verify"), r.Header.Get("X-Client-Cert-DN"), req)
+		if err != nil {
+			http.Error(w, clientMessage(err), statusFor(err))
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(resp)
+	})
 	return mux
+}
+
+// parseDN parses a subject DN (RFC2253 or OpenSSL oneline) into type→values.
+func parseDN(dn string) map[string][]string {
+	dn = strings.TrimSpace(dn)
+	out := map[string][]string{}
+	if dn == "" {
+		return out
+	}
+	var pairs []string
+	if strings.HasPrefix(dn, "/") && !strings.Contains(dn, ",") {
+		pairs = strings.Split(dn[1:], "/")
+	} else {
+		pairs = strings.Split(dn, ",")
+	}
+	for _, p := range pairs {
+		p = strings.TrimSpace(p)
+		if eq := strings.IndexByte(p, '='); eq > 0 {
+			out[strings.ToUpper(strings.TrimSpace(p[:eq]))] = append(
+				out[strings.ToUpper(strings.TrimSpace(p[:eq]))], strings.TrimSpace(p[eq+1:]))
+		}
+	}
+	return out
+}
+
+func firstOf(m map[string][]string, k string) string {
+	if v := m[k]; len(v) > 0 {
+		return v[0]
+	}
+	return ""
 }
 
 // statusFor maps enrollment errors to HTTP status codes.

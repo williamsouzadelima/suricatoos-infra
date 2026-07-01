@@ -66,10 +66,12 @@ type Client struct {
 	http *http.Client
 }
 
-// New builds a Client with an mTLS transport (client cert + pinned CA).
+// New builds a Client with an mTLS transport (client cert + pinned CA). The client
+// cert is reloaded from disk per TLS handshake (GetClientCertificate), so a cert
+// rotation (ADR-0007 renew) is picked up on the next connection without a restart.
 func New(cfg Config) (*Client, error) {
-	cert, err := tls.LoadX509KeyPair(cfg.CertFile, cfg.KeyFile)
-	if err != nil {
+	// Validate the material up front (a bad path should fail loudly at startup).
+	if _, err := tls.LoadX509KeyPair(cfg.CertFile, cfg.KeyFile); err != nil {
 		return nil, fmt.Errorf("cert cliente: %w", err)
 	}
 	pool := x509.NewCertPool()
@@ -90,9 +92,12 @@ func New(cfg Config) (*Client, error) {
 		Timeout: timeout,
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{
-				Certificates: []tls.Certificate{cert},
-				RootCAs:      pool,
-				MinVersion:   tls.VersionTLS12,
+				GetClientCertificate: func(*tls.CertificateRequestInfo) (*tls.Certificate, error) {
+					c, err := tls.LoadX509KeyPair(cfg.CertFile, cfg.KeyFile)
+					return &c, err
+				},
+				RootCAs:    pool,
+				MinVersion: tls.VersionTLS12,
 			},
 		},
 	}

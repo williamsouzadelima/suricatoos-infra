@@ -120,7 +120,14 @@ func main() {
 		log.Printf("ingest URL: unset — set INGEST_URL so agents learn where to report")
 	}
 
-	enrollSvc := enroll.NewService(tm, authority, enroll.WithIngestURL(ingestURL))
+	enrollOpts := []enroll.Option{enroll.WithIngestURL(ingestURL)}
+	// Short renewed-cert TTL bounds revocation latency for a leaked cert (ADR-0007).
+	if v := os.Getenv("RENEW_CERT_TTL"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil && d > 0 {
+			enrollOpts = append(enrollOpts, enroll.WithRenewTTL(d))
+		}
+	}
+	enrollSvc := enroll.NewService(tm, authority, enrollOpts...)
 	adminAPI := cpapi.New(tm, authority, serverURL, ingestURL, adminSecret)
 
 	// Auto-update channel — optional. When UPDATE_MANIFEST_FILE points at a valid

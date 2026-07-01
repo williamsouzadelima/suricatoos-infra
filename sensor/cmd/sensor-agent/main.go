@@ -34,6 +34,7 @@ import (
 	"github.com/williamsouzadelima/suricatoos-infra/sensor/internal/cloud"
 	"github.com/williamsouzadelima/suricatoos-infra/sensor/internal/enroll"
 	"github.com/williamsouzadelima/suricatoos-infra/sensor/internal/feedsync"
+	"github.com/williamsouzadelima/suricatoos-infra/sensor/internal/renew"
 	"github.com/williamsouzadelima/suricatoos-infra/sensor/internal/scanrun"
 	"github.com/williamsouzadelima/suricatoos-infra/sensor/internal/scope"
 	"github.com/williamsouzadelima/suricatoos-infra/sensor/internal/supervisor"
@@ -100,6 +101,9 @@ func main() {
 	// the CA pubkey the sensor pinned at enroll.
 	startFeedSync(ctx, base, caFile, stateDir)
 
+	// Cert rotation (ADR-0007): renew before expiry over the current mTLS cert.
+	startCertRenew(ctx, base, certFile, keyFile, caFile)
+
 	log.Printf("sensor-agent %s iniciado (cloud=%s)", sensorID, base)
 	sup.Run(ctx)
 	log.Printf("sensor-agent encerrando")
@@ -144,6 +148,43 @@ func startFeedSync(ctx context.Context, base, caFile, stateDir string) {
 			}
 		}
 	}()
+}
+
+// startCertRenew launches a daily check that rotates the cert before it expires.
+// A rotation writes new cert/key atomically; the mTLS clients pick them up on
+// their next request (they LoadX509KeyPair per call in this design).
+func startCertRenew(ctx context.Context, base, certFile, keyFile, caFile string) {
+	renewer := renew.New(renew.Config{
+		RenewURL:    base + "/agent/v1/renew",
+		CertFile:    certFile,
+		KeyFile:     keyFile,
+		CAFile:      caFile,
+		RenewBefore: envDur("RENEW_BEFORE", 7*24*time.Hour),
+	})
+	go func() {
+		t := time.NewTicker(envDur("RENEW_CHECK_INTERVAL", 12*time.Hour))
+		defer t.Stop()
+		checkRenew(ctx, renewer)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+				checkRenew(ctx, renewer)
+			}
+		}
+	}()
+}
+
+func checkRenew(ctx context.Context, renewer *renew.Renewer) {
+	rotated, err := renewer.RenewIfDue(ctx)
+	if err != nil {
+		log.Printf("renew: falhou: %v", err)
+		return
+	}
+	if rotated {
+		log.Printf("renew: certificado rotacionado")
+	}
 }
 
 func runFeedSync(ctx context.Context, syncer *feedsync.Syncer) {
