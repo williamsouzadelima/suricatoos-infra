@@ -162,6 +162,9 @@ func main() {
 	mux.HandleFunc("POST /v1/commands/ack", cmdSvc.AckHandler())
 	// Operator/CLI trigger (admin Bearer) to enqueue an on-demand scan.
 	mux.HandleFunc("POST /api/v1/agents/{id}/commands", cmdSvc.EnqueueHandler(adminSecret))
+	// Agents UI "Escanear agora" trigger — session-gated by nginx (GSAD_SID),
+	// no bearer; shares the same command queue.
+	mux.HandleFunc("POST /agents/scan", cmdSvc.SessionEnqueueHandler())
 	mux.Handle("/api/", adminAPI.Handler())
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("ok"))

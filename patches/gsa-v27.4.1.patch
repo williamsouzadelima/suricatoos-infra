@@ -10923,7 +10923,7 @@ index 13fca0c..f748b38 100644
    FileCheck,
    Server,
    ShieldCheck,
-@@ -647,6 +648,14 @@ const Menu = () => {
+@@ -647,6 +648,22 @@ const Menu = () => {
          to: '/asset-management',
          isExternal: true,
        },
@@ -10933,6 +10933,14 @@ index 13fca0c..f748b38 100644
 +        icon: Download,
 +        label: _('Downloads'),
 +        to: '/downloads',
++        isExternal: true,
++      },
++      // Suricatoos: página "Agentes" — postura dos agentes de endpoint
++      // (severidade, online/offline, re-scan). Servida em /agents, fora da SPA.
++      {
++        icon: Server,
++        label: 'Agentes',
++        to: '/agents',
 +        isExternal: true,
 +      },
      ].filter(Boolean),

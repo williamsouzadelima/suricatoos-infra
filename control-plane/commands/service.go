@@ -75,6 +75,25 @@ func (s *Service) AckHandler() http.HandlerFunc {
 	}
 }
 
+// SessionEnqueueHandler serves POST /agents/scan?id=<agent> for the Agents UI's
+// "Escanear agora" button. It has NO auth of its own and MUST be reached only
+// through the session-gated nginx location (GSAD_SID cookie + same-origin) — the
+// same trust model as the provision endpoint. It enqueues a scan_now (the only
+// UI-triggerable command) on the SAME queue the admin/CLI handler uses.
+func (s *Service) SessionEnqueueHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		agentID := strings.TrimSpace(r.URL.Query().Get("id"))
+		if agentID == "" {
+			http.Error(w, "agent id required", http.StatusBadRequest)
+			return
+		}
+		c := s.q.Enqueue(agentID, CmdScanNow)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusAccepted)
+		_ = json.NewEncoder(w).Encode(c)
+	}
+}
+
 // EnqueueHandler serves POST /api/v1/agents/{id}/commands {"type": "scan_now"}.
 // It is admin-authenticated (Bearer adminSecret) — the operator/CLI trigger for
 // an on-demand scan; gvmd's play button cannot drive a passive agent.

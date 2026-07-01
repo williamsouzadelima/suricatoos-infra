@@ -4,9 +4,14 @@
 package ingest
 
 import (
+	"context"
 	"encoding/json"
+	"log"
 	"net/http"
+	"os"
+	"os/exec"
 	"sync"
+	"time"
 )
 
 // SchemaVersion is the inventory contract version this stub accepts (kept in
@@ -73,13 +78,73 @@ func (m *MemSink) Last() (Inventory, bool) {
 	return m.recv[len(m.recv)-1], true
 }
 
-// Server handles inventory submissions.
-type Server struct{ sink Sink }
+// Server handles inventory submissions and serves the read-only Agents view.
+type Server struct {
+	sink Sink
+
+	// lastSeen records the last time each agent (by agent_id) POSTed an inventory
+	// — updated on EVERY report, including deduplicated ones. It is the source of
+	// truth for online/offline: gvmd's last-report timestamp only advances when the
+	// inventory CHANGES (dedup skips unchanged cycles), so a healthy but unchanged
+	// agent would look stale in gvmd. In-memory: after a restart an agent shows
+	// "unknown" until its next check-in (≤ report interval).
+	mu           sync.Mutex
+	lastSeen     map[string]time.Time
+	onlineWindow time.Duration
+	now          func() time.Time
+
+	// queryAgents returns the gvmd posture list as JSON (default: exec
+	// agents_query.py). Injectable so the handler is testable without a process.
+	queryAgents func(context.Context) ([]byte, error)
+}
 
 // NewServer builds a Server backed by sink.
-func NewServer(s Sink) *Server { return &Server{sink: s} }
+func NewServer(s Sink) *Server {
+	window := 35 * time.Minute // ~2 missed 15m report cycles → offline
+	if v := os.Getenv("AGENT_ONLINE_WINDOW"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil && d > 0 {
+			window = d
+		}
+	}
+	return &Server{
+		sink:         s,
+		lastSeen:     make(map[string]time.Time),
+		onlineWindow: window,
+		now:          time.Now,
+		queryAgents:  execAgentsQuery,
+	}
+}
 
-// Handler serves POST /v1/inventory.
+// execAgentsQuery runs agents_query.py (python-gvm) and returns its JSON stdout.
+// The script reads GMP_SOCKET/GMP_USERNAME/GVM_PASSWORD from the inherited env.
+func execAgentsQuery(ctx context.Context) ([]byte, error) {
+	script := os.Getenv("AGENTS_QUERY_SCRIPT")
+	if script == "" {
+		script = "/usr/local/share/suricatoos/agents_query.py"
+	}
+	python := os.Getenv("BRIDGE_PYTHON")
+	if python == "" {
+		python = "python3"
+	}
+	return exec.CommandContext(ctx, python, script).Output()
+}
+
+// markSeen records that agentID just checked in.
+func (s *Server) markSeen(agentID string) {
+	s.mu.Lock()
+	s.lastSeen[agentID] = s.now().UTC()
+	s.mu.Unlock()
+}
+
+// seen returns the agent's last check-in time, if known.
+func (s *Server) seen(agentID string) (time.Time, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	t, ok := s.lastSeen[agentID]
+	return t, ok
+}
+
+// Handler serves POST /v1/inventory and GET /agents.
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/v1/inventory", func(w http.ResponseWriter, r *http.Request) {
@@ -100,11 +165,65 @@ func (s *Server) Handler() http.Handler {
 			http.Error(w, "inventário incompleto", http.StatusBadRequest)
 			return
 		}
+		s.markSeen(inv.Agent.AgentID) // last check-in for online/offline, even if deduped downstream
 		if err := s.sink.Put(inv); err != nil {
 			http.Error(w, "erro interno", http.StatusInternalServerError)
 			return
 		}
 		w.WriteHeader(http.StatusAccepted)
 	})
+	mux.HandleFunc("/agents", s.agentsHandler)
 	return mux
+}
+
+// agentsHandler serves GET /agents: the endpoint-agent posture list for the
+// Agents UI page. It merges accurate posture from gvmd (severity/findings, via
+// agents_query.py) with the ingest's own last-check-in tracking (online/offline).
+//
+// This MUST only be reachable through the session-gated nginx location (which
+// sets X-Suricatoos-UI: 1). The mTLS /ingest/ location clears that header, so an
+// enrolled agent cannot read the fleet's posture via /ingest/agents.
+func (s *Server) agentsHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if r.Header.Get("X-Suricatoos-UI") != "1" {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+	out, err := s.queryAgents(ctx)
+	if err != nil {
+		log.Printf("agents: query failed: %v", err)
+		http.Error(w, "erro ao consultar gvmd", http.StatusBadGateway)
+		return
+	}
+	var list []map[string]any
+	if err := json.Unmarshal(out, &list); err != nil {
+		log.Printf("agents: bad query output: %v", err)
+		http.Error(w, "resposta inválida", http.StatusBadGateway)
+		return
+	}
+	now := s.now().UTC()
+	for _, a := range list {
+		host, _ := a["host"].(string)
+		if t, ok := s.seen(host); ok {
+			a["last_seen"] = t.Format(time.RFC3339)
+			a["online"] = now.Sub(t) <= s.onlineWindow
+			if now.Sub(t) <= s.onlineWindow {
+				a["status"] = "online"
+			} else {
+				a["status"] = "offline"
+			}
+		} else {
+			a["last_seen"] = ""
+			a["online"] = false
+			a["status"] = "unknown" // ingest hasn't seen a check-in since it started
+		}
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	_ = json.NewEncoder(w).Encode(list)
 }

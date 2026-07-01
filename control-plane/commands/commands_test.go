@@ -155,3 +155,24 @@ func TestEnqueueHandlerAuthAndType(t *testing.T) {
 		t.Fatalf("empty body should default to scan_now: %+v ok=%v", got, ok)
 	}
 }
+
+func TestSessionEnqueueHandler(t *testing.T) {
+	q := NewQueue()
+	h := NewService(q).SessionEnqueueHandler()
+
+	// no id -> 400
+	w := httptest.NewRecorder()
+	h(w, httptest.NewRequest("POST", "/agents/scan", nil))
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("no id = %d, want 400", w.Code)
+	}
+	// valid id -> 202 + queued on the shared queue (no bearer; nginx gates)
+	w = httptest.NewRecorder()
+	h(w, httptest.NewRequest("POST", "/agents/scan?id=agent-7", nil))
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("valid = %d, want 202", w.Code)
+	}
+	if got, ok := q.Pending("agent-7"); !ok || got.Type != CmdScanNow {
+		t.Fatalf("expected pending scan_now for agent-7: %+v ok=%v", got, ok)
+	}
+}
