@@ -15,10 +15,19 @@ import (
 //  1. IP-LITERAL ONLY. A host that net.ParseIP cannot parse is rejected before
 //     it ever reaches gvmd, so gvmd never re-resolves a name at scan time (no
 //     scan-time DNS rebinding).
-//  2. DEFAULT-DENY. A parsed IP must be a public unicast address that is NOT on
-//     the built-in deny-list (loopback/link-local/metadata/private/multicast/
-//     self+sibling prod) AND is a member of an explicit operator allowlist. The
-//     allowlist ships empty, so nothing scans until CIDRs are added.
+//  2. DEFAULT-DENY. A parsed IP must be a member of an explicit operator allowlist
+//     (which ships empty, so nothing scans until CIDRs are added) AND must not be
+//     on the ABSOLUTE deny-list.
+//
+// The absolute deny-list is SELF-PROTECTION only: the scanner's own attack surface
+// and degenerate addresses that can never be a legitimate target — loopback,
+// link-local incl. cloud metadata (169.254.169.254), multicast, unspecified,
+// ::a.b.c.d, 0.0.0.0/8, 240.0.0.0/4, and the prod boxes themselves. It does NOT
+// block RFC1918/ULA/CGNAT: Suricatoos is an authorized scanner and internal
+// networks are legitimate targets, so they are ALLOWLIST-GATED — an operator
+// authorizes a specific internal range by adding its (tight, per-engagement) CIDR
+// to SCAN_HOST_ALLOWLIST. Even then the absolute deny-list still protects the
+// scanner's own infra, so an allowlisted 169.254.0.0/16 can't reach metadata.
 type Allowlist struct {
 	cidrs   []*net.IPNet // operator-provided allow CIDRs (empty = deny-all)
 	denyIPs []net.IP     // explicit host denies (self + sibling prod boxes)
@@ -89,8 +98,11 @@ func (a *Allowlist) CheckHost(host string) (string, error) {
 	return "", fmt.Errorf("host %s fora da allowlist (default-deny)", ip)
 }
 
-// denyReason returns a non-empty reason if ip is in a category that must never
-// be an active-scan target, or "" if it passes the built-in deny checks.
+// denyReason returns a non-empty reason if ip is on the ABSOLUTE deny-list — the
+// scanner's own attack surface or a degenerate address that can never be a
+// legitimate target — or "" if it is allowlist-gated. RFC1918/ULA/CGNAT are
+// deliberately NOT denied here (internal networks are legitimate authorized
+// targets); the allowlist gates them.
 func denyReason(ip net.IP) string {
 	switch {
 	case ip.IsUnspecified():
@@ -98,18 +110,14 @@ func denyReason(ip net.IP) string {
 	case ip.IsLoopback():
 		return "loopback"
 	case ip.IsLinkLocalUnicast(), ip.IsLinkLocalMulticast():
-		return "link-local"
+		return "link-local (inclui metadata da cloud)"
 	case ip.IsMulticast():
 		return "multicast"
-	case ip.IsPrivate():
-		return "RFC1918/ULA privado"
 	case isMetadata(ip):
 		return "endpoint de metadata da cloud"
-	case ip.To4() == nil && isIPv6ULA(ip):
-		return "ULA IPv6"
 	case isIPv4CompatibleV6(ip):
 		// ::a.b.c.d (deprecated) — To4() does NOT unwrap it, so e.g. ::127.0.0.1
-		// would otherwise slip past the v4 loopback/private checks above.
+		// would otherwise slip past the v4 loopback check above.
 		return "IPv6 compatível-IPv4 (::a.b.c.d) depreciado"
 	}
 	if ip4 := ip.To4(); ip4 != nil {
@@ -122,10 +130,11 @@ func denyReason(ip net.IP) string {
 	return ""
 }
 
-// reservedV4Nets are IPv4 special-use ranges net.IP's helpers don't classify:
-// 0.0.0.0/8 (this-network), 100.64.0.0/10 (CGNAT), 240.0.0.0/4 (reserved + the
-// 255.255.255.255 broadcast).
-var reservedV4Nets = mustCIDRs("0.0.0.0/8", "100.64.0.0/10", "240.0.0.0/4")
+// reservedV4Nets are degenerate IPv4 ranges that are never a valid unicast
+// target: 0.0.0.0/8 (this-network) and 240.0.0.0/4 (reserved + the
+// 255.255.255.255 broadcast). CGNAT 100.64.0.0/10 is intentionally NOT here —
+// it's a real (internal) address space and is allowlist-gated like RFC1918.
+var reservedV4Nets = mustCIDRs("0.0.0.0/8", "240.0.0.0/4")
 
 func mustCIDRs(cidrs ...string) []*net.IPNet {
 	out := make([]*net.IPNet, 0, len(cidrs))
@@ -154,15 +163,8 @@ func isIPv4CompatibleV6(ip net.IP) bool {
 }
 
 // isMetadata blocks the well-known cloud link-local metadata address (Linode/AWS/GCP).
+// The IPv6 form fd00:ec2::254 is ULA (which is otherwise allowlist-gated), so it
+// must be denied explicitly here.
 func isMetadata(ip net.IP) bool {
 	return ip.Equal(net.ParseIP("169.254.169.254")) || ip.Equal(net.ParseIP("fd00:ec2::254"))
-}
-
-// isIPv6ULA reports whether ip is in fc00::/7 (unique local). net.IP.IsPrivate
-// already covers this, but kept explicit as defense in depth for clarity.
-func isIPv6ULA(ip net.IP) bool {
-	if ip4 := ip.To4(); ip4 != nil {
-		return false
-	}
-	return len(ip) == net.IPv6len && (ip[0]&0xfe) == 0xfc
 }
