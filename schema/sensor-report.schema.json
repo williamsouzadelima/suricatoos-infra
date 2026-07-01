@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://suricatoos.dev/schema/sensor-report.schema.json",
+  "title": "Suricatoos — Sensor OpenVAS Report",
+  "description": "The findings an internal scanner sensor POSTs to the cloud mTLS /ingest/v1/sensor-report endpoint (ADR-0007). The cloud DISCARDS the sensor's claimed severity/CVE and re-attests them from the central feed by OID (gmp-bridge --mode network); it also drops any finding whose host is outside the tenant's authorized scope. The tenant is derived from the verified cert O, never trusted from this body.",
+  "type": "object",
+  "required": ["schema_version", "correlation_id", "sensor_id", "findings"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "type": "string", "const": "1.0.0" },
+    "correlation_id": { "type": "string", "description": "end-to-end anchor from the dispatched scan-job" },
+    "sensor_id": { "type": "string" },
+    "tenant": { "type": "string", "description": "cross-check only; the cert O is authoritative" },
+    "feed_version": { "type": "string", "description": "the sensor's feed version (surfaced for drift alerting)" },
+    "collected_at": { "type": "string", "format": "date-time" },
+    "findings": {
+      "type": "array",
+      "description": "Normalized OpenVAS results (the scan_bridge fetch shape). severity/cves here are NOT trusted — the cloud re-derives them from the feed by oid.",
+      "items": {
+        "type": "object",
+        "required": ["host", "oid"],
+        "additionalProperties": true,
+        "properties": {
+          "host": { "type": "string", "description": "IP literal; a non-IP host is dropped (no re-resolution)" },
+          "port": { "type": "string" },
+          "oid": { "type": "string", "description": "NVT OID — the ONLY value used to look up authoritative severity/CVE" },
+          "name": { "type": "string" },
+          "cvss_base": { "type": "number" },
+          "cves": { "type": "array", "items": { "type": "string" } },
+          "summary": { "type": "string" },
+          "qod": { "type": "integer", "minimum": 0, "maximum": 100 }
+        }
+      }
+    }
+  }
+}
