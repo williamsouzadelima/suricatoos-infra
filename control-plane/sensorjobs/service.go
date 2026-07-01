@@ -27,6 +27,14 @@ func NewService(reg *Registry, known TenantKnown, revoked RevokedFunc) *Service 
 	return &Service{reg: reg, known: known, revoked: revoked}
 }
 
+// AuthorizeRequest validates the forwarded mTLS identity + CRL (fail-closed) and
+// writes 403 on failure. Exposed so sibling sensor routes (e.g. the feed service)
+// reuse the exact same gate. Returns ok=false when the response was already written.
+func (s *Service) AuthorizeRequest(w http.ResponseWriter, r *http.Request) bool {
+	_, ok := s.auth(w, r)
+	return ok
+}
+
 // auth validates the forwarded mTLS identity + CRL (fail-closed). On failure it
 // writes 403 and returns ok=false.
 func (s *Service) auth(w http.ResponseWriter, r *http.Request) (Identity, bool) {

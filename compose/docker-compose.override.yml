@@ -122,6 +122,10 @@ services:
       SENSOR_JOBS_ENABLED: "false"
       TENANTS_FILE: /data/tenants.json
       SENSOR_JOBS_FILE: /data/scan-jobs.json
+      # Mirror de feed p/ os sensores (ADR-0007). Vazio → rota de feed não montada.
+      # Aponta p/ um dir read-only com os arquivos de feed que a nuvem já sincroniza.
+      SENSOR_FEED_ROOT: ""
+      SENSOR_FEED_VERSION: ""
     volumes:
       - /var/lib/suricatoos-cp:/data
 

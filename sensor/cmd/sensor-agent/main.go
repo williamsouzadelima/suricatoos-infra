@@ -33,6 +33,7 @@ import (
 
 	"github.com/williamsouzadelima/suricatoos-infra/sensor/internal/cloud"
 	"github.com/williamsouzadelima/suricatoos-infra/sensor/internal/enroll"
+	"github.com/williamsouzadelima/suricatoos-infra/sensor/internal/feedsync"
 	"github.com/williamsouzadelima/suricatoos-infra/sensor/internal/scanrun"
 	"github.com/williamsouzadelima/suricatoos-infra/sensor/internal/scope"
 	"github.com/williamsouzadelima/suricatoos-infra/sensor/internal/supervisor"
@@ -93,9 +94,66 @@ func main() {
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+
+	// Feed sync (ADR-0007): keep the LOCAL GVM feed current from the cloud mirror.
+	// The snapshot is baked at install, so this pulls only deltas. Verified against
+	// the CA pubkey the sensor pinned at enroll.
+	startFeedSync(ctx, base, caFile, stateDir)
+
 	log.Printf("sensor-agent %s iniciado (cloud=%s)", sensorID, base)
 	sup.Run(ctx)
 	log.Printf("sensor-agent encerrando")
+}
+
+// startFeedSync launches a background loop that keeps the local feed in sync. A
+// failed sync is logged and retried next tick — the sensor keeps serving the feed
+// it already has. Disabled if SENSOR_FEED_DIR is unset.
+func startFeedSync(ctx context.Context, base, caFile, stateDir string) {
+	feedDir := os.Getenv("SENSOR_FEED_DIR")
+	if feedDir == "" {
+		log.Printf("feedsync: desabilitado — defina SENSOR_FEED_DIR para habilitar")
+		return
+	}
+	caPEM, err := os.ReadFile(caFile)
+	if err != nil {
+		log.Printf("feedsync: não consegui ler o ca.crt (%v) — sync desabilitado", err)
+		return
+	}
+	verifyKey, err := feedsync.VerifyKeyFromCACert(caPEM)
+	if err != nil {
+		log.Printf("feedsync: pubkey de verificação indisponível (%v) — sync desabilitado", err)
+		return
+	}
+	syncer := feedsync.New(feedsync.Config{
+		ManifestURL: base + "/agent/v1/feed/manifest",
+		BlobURLBase: base + "/agent/v1/feed/blob",
+		FeedDir:     feedDir,
+		VerifyKey:   verifyKey,
+	})
+	interval := envDur("FEED_SYNC_INTERVAL", 30*time.Minute)
+	go func() {
+		t := time.NewTicker(interval)
+		defer t.Stop()
+		runFeedSync(ctx, syncer)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+				runFeedSync(ctx, syncer)
+			}
+		}
+	}()
+}
+
+func runFeedSync(ctx context.Context, syncer *feedsync.Syncer) {
+	res, err := syncer.Sync(ctx)
+	if err != nil {
+		log.Printf("feedsync: falhou: %v", err)
+		return
+	}
+	log.Printf("feedsync: ok (feed=%s, baixados=%d, já-locais=%d, total=%d)",
+		res.FeedVersion, res.Downloaded, res.AlreadyLocal, res.TotalFiles)
 }
 
 // scannerAdapter adapts *scanrun.Runner to the supervisor.Scanner interface.

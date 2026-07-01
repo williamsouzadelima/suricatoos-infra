@@ -46,6 +46,7 @@ import (
 	"github.com/williamsouzadelima/suricatoos-infra/control-plane/ca"
 	cpcommands "github.com/williamsouzadelima/suricatoos-infra/control-plane/commands"
 	"github.com/williamsouzadelima/suricatoos-infra/control-plane/enroll"
+	cpfeed "github.com/williamsouzadelima/suricatoos-infra/control-plane/feed"
 	cpprovision "github.com/williamsouzadelima/suricatoos-infra/control-plane/provision"
 	cpsensorjobs "github.com/williamsouzadelima/suricatoos-infra/control-plane/sensorjobs"
 	cptenants "github.com/williamsouzadelima/suricatoos-infra/control-plane/tenants"
@@ -201,6 +202,19 @@ func main() {
 		mux.HandleFunc("POST /v1/scan-jobs/{id}/ack", sensorJobSvc.AckHandler())
 		mux.HandleFunc("POST /v1/heartbeat", sensorJobSvc.HeartbeatHandler())
 		mux.HandleFunc("POST /api/v1/tenants/{t}/scan-jobs", sensorJobSvc.EnqueueHandler(adminSecret))
+		// Feed mirror (ADR-0007): signed manifest + content-addressed blobs to the
+		// sensor's local GVM. Signed with `authority` for now (a dedicated feed key
+		// is the key-separation slice); the sensor verifies with the pinned CA pubkey.
+		if feedRoot := os.Getenv("SENSOR_FEED_ROOT"); feedRoot != "" {
+			feedSvc := cpfeed.New(cpfeed.Config{
+				Root:        feedRoot,
+				FeedVersion: func() string { return os.Getenv("SENSOR_FEED_VERSION") },
+				Signer:      authority,
+				Authz:       sensorJobSvc.AuthorizeRequest,
+			})
+			feedSvc.Register(mux)
+			log.Printf("sensor: mirror de feed HABILITADO (root=%s)", feedRoot)
+		}
 		log.Printf("sensor: dispatch de scan-jobs HABILITADO")
 	} else {
 		log.Printf("sensor: dispatch de scan-jobs desabilitado (SENSOR_JOBS_ENABLED != true)")

@@ -36,6 +36,9 @@ services:
     environment:
       GMP_SOCKET: /run/gvmd/gvmd.sock
       SENSOR_STATE_DIR: /var/lib/suricatoos-sensor
+      # Feed sync (ADR-0007): sincroniza o feed LOCAL do GVM a partir do mirror da
+      # nuvem (só deltas; o snapshot vem baked no install). Vazio → sync desabilitado.
+      SENSOR_FEED_DIR: /var/lib/suricatoos-sensor/feed
     volumes:
       # Shared LOCAL gvmd socket (same volume the base compose gives gvmd). The
       # sensor drives scans through this — never a published TCP port.
