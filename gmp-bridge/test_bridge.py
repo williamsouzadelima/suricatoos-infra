@@ -191,6 +191,17 @@ class TestFindingReportToXML(unittest.TestCase):
         self.assertEqual(results[0].find("threat").text, "Log")
         self.assertEqual((results[0].find("host").text or "").strip(), AGENT)
 
+    def test_null_findings_treated_as_empty(self):
+        # Go marshals a nil slice as JSON null, so a 0-findings agent (e.g. Kali,
+        # which Notus doesn't cover) sends "findings": null. It must NOT crash the
+        # XML builder — treat it like [] (regression for bridge.py findings-null).
+        null = {**SAMPLE_REPORT, "findings": None}
+        xml = finding_report_to_xml(null, cpes=[])
+        root = ET.fromstring(xml)
+        results = root.findall("results/result")
+        self.assertEqual(len(results), 1)  # single inventory marker, no crash
+        self.assertEqual(results[0].find("threat").text, "Log")
+
     def test_cpe_host_details(self):
         # CPEs become <host><detail><name>App</name><value>cpe:...</value> blocks
         # that the CVE scanner consumes; non-empty findings keep their results.

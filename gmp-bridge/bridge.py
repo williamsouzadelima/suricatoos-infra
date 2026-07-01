@@ -206,7 +206,7 @@ def finding_report_to_xml(
 
     results_el = ET.SubElement(root, "results", max="-1", start="1")
 
-    for finding in report.get("findings", []):
+    for finding in (report.get("findings") or []):  # findings may be JSON null (Go nil slice)
         r = ET.SubElement(results_el, "result", id=str(uuid.uuid4()))
 
         pkg_obs = finding.get("package_observed", "")
@@ -364,7 +364,7 @@ def run_import(
             comment = f"Suricatoos Agent CPE inventory for host {report_dict.get('host', '')}"
         else:
             # Legacy mode: enrich findings from the VT feed and import them.
-            unique_oids = {f.get("oid", "") for f in report_dict.get("findings", []) if f.get("oid")}
+            unique_oids = {f.get("oid", "") for f in (report_dict.get("findings") or []) if f.get("oid")}
             nvt_meta: dict[str, NVTMeta | None] = {}
             for oid in unique_oids:
                 meta = fetch_nvt_meta(gmp, oid)
