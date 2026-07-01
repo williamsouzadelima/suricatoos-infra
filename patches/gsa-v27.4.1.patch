@@ -10642,6 +10642,33 @@ index ebc06a0..af63477 100644
          <GlobalStyles />
          <ErrorBoundary message={_('An error occurred on this page')}>
            <GmpContext.Provider value={gmp}>
+diff --git a/src/web/Routes.tsx b/src/web/Routes.tsx
+index e81757d..53f7554 100644
+--- a/src/web/Routes.tsx
++++ b/src/web/Routes.tsx
+@@ -75,6 +75,22 @@ const loggedInRoutes = [
+         }),
+       },
+ 
++      // Suricatoos: native pages for the endpoint agents posture + installer.
++      {
++        path: 'endpoint-agents',
++        lazy: async () => ({
++          Component: (
++            await import('web/pages/endpoint-agents/EndpointAgentsPage')
++          ).default,
++        }),
++      },
++      {
++        path: 'downloads',
++        lazy: async () => ({
++          Component: (await import('web/pages/downloads/DownloadsPage')).default,
++        }),
++      },
++
+       // Alert routes
+       {
+         path: 'alerts',
 diff --git a/src/web/components/chart/Donut.tsx b/src/web/components/chart/Donut.tsx
 index 8244715..c284668 100644
 --- a/src/web/components/chart/Donut.tsx
@@ -10912,7 +10939,7 @@ index d68da89..2bbd0cb 100644
    return (
      <StyledImage
 diff --git a/src/web/components/menu/Menu.tsx b/src/web/components/menu/Menu.tsx
-index 13fca0c..f748b38 100644
+index 13fca0c..af71808 100644
 --- a/src/web/components/menu/Menu.tsx
 +++ b/src/web/components/menu/Menu.tsx
 @@ -7,6 +7,7 @@ import {AppNavigation} from '@greenbone/ui-lib';
@@ -10923,25 +10950,22 @@ index 13fca0c..f748b38 100644
    FileCheck,
    Server,
    ShieldCheck,
-@@ -647,6 +648,22 @@ const Menu = () => {
+@@ -647,6 +648,19 @@ const Menu = () => {
          to: '/asset-management',
          isExternal: true,
        },
-+      // Suricatoos: link para a página estática de download/instalação dos
-+      // agentes de endpoint (servida pelo nginx em /downloads, fora da SPA).
++      // Suricatoos: instalação do agente de endpoint (página nativa da SPA).
 +      {
 +        icon: Download,
 +        label: _('Downloads'),
 +        to: '/downloads',
-+        isExternal: true,
 +      },
-+      // Suricatoos: página "Agentes" — postura dos agentes de endpoint
-+      // (severidade, online/offline, re-scan). Servida em /agents, fora da SPA.
++      // Suricatoos: postura dos agentes de endpoint (severidade, online/offline,
++      // re-scan). Página nativa da SPA — distinta do "Agents" do Greenbone.
 +      {
 +        icon: Server,
-+        label: 'Agentes',
-+        to: '/agents',
-+        isExternal: true,
++        label: _('Agentes de Endpoint'),
++        to: '/endpoint-agents',
 +      },
      ].filter(Boolean),
    ];
@@ -11132,6 +11156,421 @@ index 7f74728..b7c8165 100644
    );
  };
  
+diff --git a/src/web/pages/downloads/DownloadsPage.tsx b/src/web/pages/downloads/DownloadsPage.tsx
+new file mode 100644
+index 0000000..feb68a1
+--- /dev/null
++++ b/src/web/pages/downloads/DownloadsPage.tsx
+@@ -0,0 +1,136 @@
++/* SPDX-FileCopyrightText: 2024 Greenbone AG
++ *
++ * SPDX-License-Identifier: AGPL-3.0-or-later
++ */
++
++/* Suricatoos: native GSA page to install the endpoint agent in one command.
++ * Pick an OS → the control-plane (/agent/provision/install, session-gated by
++ * nginx via the GSA cookie) mints an ephemeral token and returns a ready-to-run
++ * one-liner. Renders inside the GSA shell. */
++
++import React, {useState, useCallback} from 'react';
++import Button from 'web/components/form/Button';
++import Layout from 'web/components/layout/Layout';
++import PageTitle from 'web/components/layout/PageTitle';
++import Section from 'web/components/section/Section';
++import useTranslation from 'web/hooks/useTranslation';
++import Theme from 'web/utils/Theme';
++
++interface ProvisionResponse {
++  os: string;
++  command: string;
++  server: string;
++  ca_pin: string;
++  token_id: string;
++  expires_at: string;
++}
++
++const OSES: Array<{id: string; label: string}> = [
++  {id: 'linux', label: 'Linux'},
++  {id: 'darwin', label: 'macOS'},
++  {id: 'windows', label: 'Windows'},
++];
++
++const codeBoxStyle: React.CSSProperties = {
++  display: 'block',
++  whiteSpace: 'pre-wrap',
++  wordBreak: 'break-all',
++  fontFamily: 'monospace',
++  fontSize: '13px',
++  background: '#f6f8fa',
++  border: `1px solid ${Theme.lightGray}`,
++  borderRadius: '6px',
++  padding: '12px 14px',
++  margin: '10px 0',
++};
++
++const DownloadsPage = () => {
++  const [_] = useTranslation();
++  const [os, setOs] = useState<string>('');
++  const [resp, setResp] = useState<ProvisionResponse | null>(null);
++  const [loading, setLoading] = useState<boolean>(false);
++  const [error, setError] = useState<string | null>(null);
++  const [copied, setCopied] = useState<boolean>(false);
++
++  const pick = useCallback(async (goos: string) => {
++    setOs(goos);
++    setResp(null);
++    setError(null);
++    setCopied(false);
++    setLoading(true);
++    try {
++      const r = await fetch(`/agent/provision/install?os=${encodeURIComponent(goos)}`, {
++        credentials: 'same-origin',
++        headers: {Accept: 'application/json'},
++      });
++      if (!r.ok) {
++        throw new Error(`HTTP ${r.status}`);
++      }
++      setResp(await r.json());
++    } catch (e) {
++      setError((e as Error).message);
++    } finally {
++      setLoading(false);
++    }
++  }, []);
++
++  const copy = useCallback(() => {
++    if (resp?.command) {
++      void navigator.clipboard.writeText(resp.command).then(() => setCopied(true));
++    }
++  }, [resp]);
++
++  return (
++    <React.Fragment>
++      <PageTitle title={_('Downloads')} />
++      <Layout flex="column">
++        <Section title={_('Instalar o Agente Suricatoos')}>
++          <Layout flex="column">
++            <p>
++              {_(
++                'Escolha o sistema operacional e copie o comando — o token de enrollment já vem embutido (efêmero, uso único).',
++              )}
++            </p>
++            <Layout>
++              {OSES.map(o => (
++                <div key={o.id} style={{marginRight: '10px'}}>
++                  <Button title={o.label} onClick={() => pick(o.id)}>
++                    {o.label}
++                  </Button>
++                </div>
++              ))}
++            </Layout>
++
++            {loading ? <p>{_('Gerando comando…')}</p> : null}
++            {error ? (
++              <p style={{color: Theme.errorRed}}>
++                {_('Erro ao gerar o comando')}: {error}
++              </p>
++            ) : null}
++            {resp ? (
++              <div>
++                <p style={{marginTop: '14px'}}>
++                  <b>{OSES.find(o => o.id === os)?.label}</b> —{' '}
++                  {_('rode em um terminal com privilégios:')}
++                </p>
++                <code style={codeBoxStyle}>{resp.command}</code>
++                <Layout>
++                  <Button title={_('Copiar')} onClick={copy}>
++                    {copied ? _('Copiado ✓') : _('Copiar')}
++                  </Button>
++                </Layout>
++                {resp.expires_at ? (
++                  <p style={{color: Theme.mediumGray, fontSize: '12px'}}>
++                    {_('Token expira em')}: {resp.expires_at}
++                  </p>
++                ) : null}
++              </div>
++            ) : null}
++          </Layout>
++        </Section>
++      </Layout>
++    </React.Fragment>
++  );
++};
++
++export default DownloadsPage;
+diff --git a/src/web/pages/endpoint-agents/EndpointAgentsPage.tsx b/src/web/pages/endpoint-agents/EndpointAgentsPage.tsx
+new file mode 100644
+index 0000000..157d60f
+--- /dev/null
++++ b/src/web/pages/endpoint-agents/EndpointAgentsPage.tsx
+@@ -0,0 +1,267 @@
++/* SPDX-FileCopyrightText: 2024 Greenbone AG
++ *
++ * SPDX-License-Identifier: AGPL-3.0-or-later
++ */
++
++/* Suricatoos: native GSA page for the endpoint agents (posture + online/offline
++ * + on-demand scan). Renders inside the GSA shell. Data comes from the ingest
++ * (/agents/data.json) and the "scan now" trigger from the control-plane
++ * (/agents/scan) — both session-gated by nginx (the GSA cookie). Distinct from
++ * Greenbone's own "Agents" feature (/agents). */
++
++import React, {useState, useEffect, useCallback} from 'react';
++import Button from 'web/components/form/Button';
++import Layout from 'web/components/layout/Layout';
++import PageTitle from 'web/components/layout/PageTitle';
++import Link from 'web/components/link/Link';
++import Section from 'web/components/section/Section';
++import Table from 'web/components/table/StripedTable';
++import TableBody from 'web/components/table/TableBody';
++import TableData from 'web/components/table/TableData';
++import TableHead from 'web/components/table/TableHead';
++import TableRow from 'web/components/table/TableRow';
++import useTranslation from 'web/hooks/useTranslation';
++import Theme from 'web/utils/Theme';
++
++interface Agent {
++  host: string;
++  task: string;
++  task_id: string;
++  severity: number;
++  threat: string;
++  findings: number;
++  critical: number;
++  high: number;
++  medium: number;
++  low: number;
++  last_report: string;
++  report_id: string;
++  reports: number;
++  last_seen: string;
++  online: boolean;
++  status: string;
++}
++
++const THREAT_PT: Record<string, string> = {
++  Critical: 'Crítico',
++  High: 'Alto',
++  Medium: 'Médio',
++  Low: 'Baixo',
++  Log: 'Log',
++};
++
++const threatColor = (threat: string): string => {
++  switch (threat) {
++    case 'Critical':
++      return Theme.severityClassCritical;
++    case 'High':
++      return Theme.severityClassHigh;
++    case 'Medium':
++      return Theme.severityClassMedium;
++    case 'Low':
++      return Theme.severityClassLow;
++    default:
++      return Theme.severityClassLog;
++  }
++};
++
++const relTime = (iso: string): string => {
++  if (!iso) {
++    return '—';
++  }
++  const t = Date.parse(iso);
++  if (isNaN(t)) {
++    return '—';
++  }
++  const s = Math.max(0, Math.round((Date.now() - t) / 1000));
++  if (s < 60) {
++    return `há ${s}s`;
++  }
++  const m = Math.round(s / 60);
++  if (m < 60) {
++    return `há ${m} min`;
++  }
++  const h = Math.round(m / 60);
++  if (h < 48) {
++    return `há ${h} h`;
++  }
++  return `há ${Math.round(h / 24)} d`;
++};
++
++const badgeStyle = (bg: string): React.CSSProperties => ({
++  display: 'inline-block',
++  padding: '2px 9px',
++  borderRadius: '10px',
++  fontWeight: 600,
++  fontSize: '12px',
++  color: Theme.white,
++  backgroundColor: bg,
++  whiteSpace: 'nowrap',
++});
++
++const StatusPill = ({agent}: {agent: Agent}) => {
++  const [_] = useTranslation();
++  let bg = Theme.mediumGray;
++  let label = _('Desconhecido');
++  if (agent.status === 'online') {
++    bg = Theme.statusNewGreen;
++    label = _('Online');
++  } else if (agent.status === 'offline') {
++    bg = Theme.errorRed;
++    label = _('Offline');
++  }
++  return (
++    <span>
++      <span style={badgeStyle(bg)}>{label}</span>
++      {agent.last_seen ? (
++        <div style={{color: Theme.mediumGray, fontSize: '11px', marginTop: '3px'}}>
++          check-in {relTime(agent.last_seen)}
++        </div>
++      ) : null}
++    </span>
++  );
++};
++
++const SeverityBadge = ({agent}: {agent: Agent}) => (
++  <span style={badgeStyle(threatColor(agent.threat))}>
++    {agent.severity.toFixed(1)} {THREAT_PT[agent.threat] ?? agent.threat}
++  </span>
++);
++
++const EndpointAgentsPage = () => {
++  const [_] = useTranslation();
++  const [agents, setAgents] = useState<Agent[]>([]);
++  const [loading, setLoading] = useState<boolean>(true);
++  const [error, setError] = useState<string | null>(null);
++
++  const load = useCallback(async () => {
++    try {
++      const resp = await fetch('/agents/data.json', {
++        credentials: 'same-origin',
++        headers: {Accept: 'application/json'},
++      });
++      if (!resp.ok) {
++        throw new Error(`HTTP ${resp.status}`);
++      }
++      const data: Agent[] = await resp.json();
++      data.sort((a, b) => b.severity - a.severity || a.host.localeCompare(b.host));
++      setAgents(data);
++      setError(null);
++    } catch (e) {
++      setError((e as Error).message);
++    } finally {
++      setLoading(false);
++    }
++  }, []);
++
++  useEffect(() => {
++    load();
++    const id = setInterval(load, 30000);
++    return () => clearInterval(id);
++  }, [load]);
++
++  const scanNow = useCallback(
++    async (host: string) => {
++      try {
++        const resp = await fetch(`/agents/scan?id=${encodeURIComponent(host)}`, {
++          method: 'POST',
++          credentials: 'same-origin',
++        });
++        if (resp.status !== 202) {
++          throw new Error(`HTTP ${resp.status}`);
++        }
++        setTimeout(load, 70000);
++      } catch (e) {
++        setError((e as Error).message);
++      }
++    },
++    [load],
++  );
++
++  return (
++    <React.Fragment>
++      <PageTitle title={_('Agentes de Endpoint')} />
++      <Layout flex="column">
++        <Section title={_('Agentes de Endpoint')}>
++          <Layout flex="column">
++            <div style={{margin: '0 0 12px'}}>
++              <Button title={_('Atualizar')} onClick={() => load()}>
++                {_('Atualizar')}
++              </Button>
++            </div>
++            {error ? (
++              <p style={{color: Theme.errorRed}}>{_('Erro ao carregar')}: {error}</p>
++            ) : null}
++            {loading ? (
++              <p>{_('Carregando…')}</p>
++            ) : agents.length === 0 ? (
++              <p>
++                {_('Nenhum agente ainda. Instale um pela página de Downloads.')}
++              </p>
++            ) : (
++              <Table>
++                <TableBody>
++                  <TableRow>
++                    <TableHead>{_('Host')}</TableHead>
++                    <TableHead>{_('Status')}</TableHead>
++                    <TableHead>{_('Severidade')}</TableHead>
++                    <TableHead>{_('Achados')}</TableHead>
++                    <TableHead>{_('Último relatório')}</TableHead>
++                    <TableHead>{_('Ações')}</TableHead>
++                  </TableRow>
++                  {agents.map(agent => (
++                    <TableRow key={agent.host}>
++                      <TableData>
++                        <b>{agent.host}</b>
++                        <div style={{color: Theme.mediumGray, fontSize: '11px'}}>
++                          {agent.task}
++                        </div>
++                      </TableData>
++                      <TableData>
++                        <StatusPill agent={agent} />
++                      </TableData>
++                      <TableData>
++                        <SeverityBadge agent={agent} />
++                      </TableData>
++                      <TableData>
++                        <b>{agent.findings}</b> {_('achados')}
++                        {agent.findings > 0 ? (
++                          <div style={{color: Theme.mediumGray, fontSize: '11px'}}>
++                            {agent.critical} crít. · {agent.high} altos · {agent.medium} médios
++                          </div>
++                        ) : null}
++                      </TableData>
++                      <TableData>
++                        {relTime(agent.last_report)}
++                        <div style={{color: Theme.mediumGray, fontSize: '11px'}}>
++                          {agent.reports} {_('relatório(s)')}
++                        </div>
++                      </TableData>
++                      <TableData>
++                        <Layout>
++                          {agent.report_id ? (
++                            <Link to={`report/${agent.report_id}`}>
++                              {_('Ver achados')}
++                            </Link>
++                          ) : null}
++                          <Button
++                            title={_('Escanear agora')}
++                            onClick={() => scanNow(agent.host)}
++                          >
++                            {_('Escanear agora')}
++                          </Button>
++                        </Layout>
++                      </TableData>
++                    </TableRow>
++                  ))}
++                </TableBody>
++              </Table>
++            )}
++          </Layout>
++        </Section>
++      </Layout>
++    </React.Fragment>
++  );
++};
++
++export default EndpointAgentsPage;
 diff --git a/src/web/pages/extras/FeedStatusPage.tsx b/src/web/pages/extras/FeedStatusPage.tsx
 index b995df4..be67f0d 100644
 --- a/src/web/pages/extras/FeedStatusPage.tsx
