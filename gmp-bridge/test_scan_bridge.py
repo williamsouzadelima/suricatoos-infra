@@ -4,10 +4,14 @@ import unittest
 
 from scan_bridge import (
     sanitize_ips,
+    sanitize_targets,
+    resolve_port_range,
     build_port_range,
     parse_report_results,
     _tag_value,
     _alive_test,
+    _scan_id,
+    _task_name,
 )
 
 SAMPLE_REPORT_XML = """
@@ -75,6 +79,39 @@ class TestBuildPortRange(unittest.TestCase):
             build_port_range([{"ip": "1.1.1.1", "ports": []}])
 
 
+class TestSanitizeTargets(unittest.TestCase):
+    def test_ip_and_cidr(self):
+        req = {"targets": ["10.20.0.0/24", "10.20.5.5", "2001:db8::/64"]}
+        self.assertEqual(sanitize_targets(req), ["10.20.0.0/24", "10.20.5.5", "2001:db8::/64"])
+
+    def test_slash32_becomes_bare(self):
+        self.assertEqual(sanitize_targets({"targets": ["10.0.0.5/32"]}), ["10.0.0.5"])
+
+    def test_hostname_rejected(self):
+        for bad in ("evil.com", "*.evil.com", "notanip", "10.0.0.0/33"):
+            with self.assertRaises(ValueError):
+                sanitize_targets({"targets": [bad]})
+
+    def test_legacy_hosts_fallback(self):
+        req = {"hosts": [{"ip": "10.0.0.5", "ports": [80]}]}
+        self.assertEqual(sanitize_targets(req), ["10.0.0.5"])
+
+    def test_empty_raises(self):
+        with self.assertRaises(ValueError):
+            sanitize_targets({"targets": []})
+
+
+class TestResolvePortRange(unittest.TestCase):
+    def test_explicit_range(self):
+        self.assertEqual(resolve_port_range({"ports": "T:1-65535"}), "T:1-65535")
+        self.assertEqual(resolve_port_range({"ports": "T:22,80,443"}), "T:22,80,443")
+
+    def test_invalid_range_falls_back_to_hosts(self):
+        # An injection-y ports string is ignored; the legacy per-host build is used.
+        req = {"ports": "T:1; DROP", "hosts": [{"ip": "10.0.0.5", "ports": [80, 443]}]}
+        self.assertEqual(resolve_port_range(req), "T:80,443")
+
+
 class TestParseReport(unittest.TestCase):
     def test_parses_finding(self):
         fs = parse_report_results(SAMPLE_REPORT_XML)
@@ -112,6 +149,17 @@ class TestHelpers(unittest.TestCase):
     def test_alive_test(self):
         self.assertIsNotNone(_alive_test("Consider Alive"))
         self.assertIsNone(_alive_test("Bogus Test"))
+
+    def test_scan_id_and_task_name(self):
+        # sensor: correlation UUID via scan_id.
+        self.assertEqual(_scan_id({"scan_id": "b21a-uuid"}), "b21a-uuid")
+        self.assertEqual(_task_name({"scan_id": "b21a"}, "suricatoos-sensor"), "suricatoos-sensor-b21a")
+        # loop: back-compat via rengine_scan_history_id (int) + default prefix.
+        self.assertEqual(_scan_id({"rengine_scan_history_id": 1234}), "1234")
+        self.assertEqual(_task_name({"rengine_scan_history_id": 1234}, "suricatoos-rengine"),
+                         "suricatoos-rengine-1234")
+        # scan_id wins when both present.
+        self.assertEqual(_scan_id({"scan_id": "x", "rengine_scan_history_id": 9}), "x")
 
 
 if __name__ == "__main__":
