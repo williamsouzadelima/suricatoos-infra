@@ -24,12 +24,8 @@ services:
       # Enrollment CA — nginx verifies agent client certs (mTLS) for /ingest/.
       # Same CA the control-plane issues with (CA_CERT_FILE in control-plane.env).
       - /var/lib/suricatoos-cp/ca.crt:/etc/nginx/enroll-ca.crt:ro
-      # Página de Downloads do agente (estática) — servida em /downloads/ pela
-      # location no default.conf. Hot-swappable: editar o HTML e recarregar o nginx.
-      - ./web/downloads:/usr/share/suricatoos/downloads:ro
-      # Página "Agentes" (estática) — servida em /agents/ pela location no
-      # default.conf. Hot-swappable: editar o HTML e recarregar o nginx.
-      - ./web/agents:/usr/share/suricatoos/agents:ro
+      # (Downloads/Agentes migraram para páginas nativas da SPA do GSA — não há
+      # mais HTML estático montado aqui.)
       # Scripts de instalação one-shot servidos em /install.sh e /install.ps1.
       - ../packaging/install:/usr/share/suricatoos/install:ro
 
