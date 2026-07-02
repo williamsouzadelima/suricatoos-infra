@@ -24,14 +24,26 @@ import (
 // prefix, matching advisories that omit the (zero) epoch.
 const rpmQueryFormat = "%{NAME}\t%|EPOCH?{%{EPOCH}:}:{}|%{VERSION}-%{RELEASE}\t%{ARCH}\n"
 
-// defaultRPMList runs `rpm -qa` with a fixed query format. rpm reads its own
-// database (BDB/NDB/SQLite) authoritatively, so results are robust without
-// vendoring a heavy rpmdb/SQLite reader. See docs/adr/0005-coletor-rpm.md.
-func defaultRPMList() ([]byte, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	return exec.CommandContext(ctx, "rpm", "-qa", "--qf", rpmQueryFormat).Output()
+// rpmListRooted returns an rpm lister reading the package db under `root`. Empty
+// reads the running host (`rpm -qa`); a non-empty root (e.g. "/host" when the agent
+// runs in a container bind-mounting the host) adds `--root <root>` so rpm reads the
+// HOST's db at <root>/var/lib/rpm instead of the container's. rpm reads its own
+// database (BDB/NDB/SQLite) authoritatively. See docs/adr/0005-coletor-rpm.md.
+func rpmListRooted(root string) func() ([]byte, error) {
+	return func() ([]byte, error) {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		args := make([]string, 0, 6)
+		if root != "" {
+			args = append(args, "--root", root)
+		}
+		args = append(args, "-qa", "--qf", rpmQueryFormat)
+		return exec.CommandContext(ctx, "rpm", args...).Output()
+	}
 }
+
+// defaultRPMList reads the running host's rpm db (root = "").
+func defaultRPMList() ([]byte, error) { return rpmListRooted("")() }
 
 // parseRPMOutput parses the tab-separated output of `rpm -qa --qf rpmQueryFormat`.
 // gpg-pubkey entries (imported GPG keys, not software) are skipped.
