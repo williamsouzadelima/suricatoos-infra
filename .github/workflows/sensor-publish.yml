@@ -1,0 +1,58 @@
+name: sensor-publish
+
+# Builds the internal-scanner sensor-agent image (Go sensor-agent + python3/python-gvm
+# + gmp-bridge scripts) and publishes it to GHCR on changes to its sources on main.
+# The image is GHCR-private; sensor-install.sh loads it on the appliance via a tarball
+# (docker save/load) or a pull where egress allows.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "sensor/**"
+      - "ingest/**"
+      - "correlation/**"
+      - "gmp-bridge/**"
+      - ".github/workflows/sensor-publish.yml"
+  workflow_dispatch:
+
+env:
+  IMAGE: ghcr.io/williamsouzadelima/suricatoos-sensor-agent
+
+jobs:
+  build-publish:
+    name: build & publish (sensor-agent)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_PAT }}
+
+      # Build context is the repo root: sensor/Dockerfile copies sensor/ + ingest/ +
+      # correlation/ (resolved via an in-image go.work) and the gmp-bridge scripts.
+      - name: Build & push suricatoos-sensor-agent
+        run: |
+          docker build \
+            -f sensor/Dockerfile \
+            -t ${{ env.IMAGE }}:stable \
+            -t ${{ env.IMAGE }}:${{ github.sha }} \
+            .
+          docker push --all-tags ${{ env.IMAGE }}
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### suricatoos-sensor-agent publicado 🐾"
+            echo ""
+            echo "| Imagem | Tags |"
+            echo "|---|---|"
+            echo "| \`${{ env.IMAGE }}\` | stable, ${GITHUB_SHA::12} |"
+          } >> "$GITHUB_STEP_SUMMARY"
