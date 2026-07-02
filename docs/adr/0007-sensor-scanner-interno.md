@@ -426,6 +426,52 @@ dentro do cooldown; `correlation_id` é a âncora ponta a ponta; o `scanrun` loc
   central por-tenant (ou o `scan-orchestrator` dedicado do ADR-0006) reusa este mesmo sensor + `scan_bridge.py`
   + caminho de import inalterados.
 
+## Auditoria adversária pós-implementação P0 (2026-07-01)
+
+O P0 (só-código) passou por uma auditoria adversária (10 dimensões × 2 lentes de
+verificação). 16 defeitos distintos; veredito **go-with-fixes**. Estado:
+
+**Corrigido + testado antes do merge (blockers + funcionais de feed + integridade):**
+
+- **Renew burlava a CRL** — `renew` re-emitia cert p/ identidade revogada. Agora
+  `enroll.Renew` exige o serial e checa `IsRevoked` (fail-closed), `AppendEnrollment`
+  recusa token revogado, wired via `WithRevocationCheck`. Regressão testada.
+- **Score-push fabricava achados** — o push ao Score mandava severity/CVE crua do
+  sensor. Agora `bridge.py --mode network` emite os achados **re-atestados** (feed por
+  OID) via `--reattested-out`, e o ingest encaminha ESSES. Testado nos dois lados.
+- **Path traversal no feedsync → RCE root** — manifest com `../` escapava do FeedDir.
+  Guard de contenção lexical (`filepath.IsLocal` + `Rel`) antes de escrever. Testado.
+- **RootCAs do mTLS matava o feature** — cliente confiava só na CA de enroll e não
+  validava o cert público (LE) da nuvem. Agora `RootCAs=nil` (system trust) no cloud +
+  renew (espelha o agente de endpoint). Regressão testada.
+- **enroll omitia feed/update pubkey** (só renew retornava) + **renew descartava
+  pubkeys rotacionadas** — ambos corrigidos (rotação de chave de feed alcança a frota).
+- **sem location nginx `/agent/v1/feed`** — feed caía na `/agent/` genérica que zera os
+  headers de cert → 403. Location mTLS dedicada adicionada.
+- **supervisor dava ack antes de rodar** — crash/push falho perdia achados. Ack movido
+  p/ **depois** do push; job fica DELIVERED → re-entregue (idempotente). Testado.
+- **Score import não-idempotente** + **colisão de slug de tenant** — ledger
+  `SensorImport` (idempotência por `correlation_id`) + slug injetivo no tenant bruto.
+- **CIDR sweep podia sobrepor metadata/link-local** — rejeição de CIDR sobre espaço
+  degenerado adicionada ao scope-gate baked. Testado.
+- **Módulo `sensor` não tinha CI nem estava no `go.work`** (por isso os bugs acima
+  passaram) — adicionado ao workspace + `sensor-ci.yml` (build/vet/gofmt/test -race).
+
+**Deferido para a fase de rollout (NÃO habilitar o feed até resolver):**
+
+- **#7 (alto) — o mirror de feed verificado é escrito num dir que nenhum container GVM
+  lê**, então o openvas ainda puxaria NASL do Greenbone (a opção "a" rejeitada). É
+  estrutural (montar `SENSOR_FEED_DIR` nos volumes de feed do gvmd/openvas + desligar
+  os containers de feed upstream + snapshot cold-start). **Enquanto não for wired,
+  manter `SENSOR_FEED_ROOT`/`SENSOR_FEED_DIR` DESLIGADOS** — a distribuição de feed
+  cloud→sensor não deve ser ligada no P1/P2. Endereçar antes da P-feed.
+- **Hardening/observabilidade (baixos):** reaper da fila durável de jobs (evita
+  crescimento sem limite de `SENSOR_JOBS_FILE`); canonicalização das chaves de dedup;
+  telemetria real do heartbeat (`gvmd_up`/`active_jobs`); scan em goroutine separada p/
+  não bloquear heartbeats; `ssl_crl` no nginx como defesa-em-profundidade (a CRL do
+  control-plane já é autoritativa); `USER` não-root + rootfs read-only no container do
+  sensor. Follow-up.
+
 ## Questões abertas (para a implementação / P5, não agora)
 
 1. **Chave de emissão em HSM/KMS vs. signer offline** — qual, e o caminho de migração a partir da chave atual

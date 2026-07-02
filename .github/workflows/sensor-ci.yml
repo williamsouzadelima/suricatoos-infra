@@ -1,0 +1,44 @@
+name: sensor-ci
+
+on:
+  push:
+    branches: [main, "feat/**"]
+    paths:
+      - "sensor/**"
+      - "ingest/**"
+      - "go.work"
+      - "go.work.sum"
+      - ".github/workflows/sensor-ci.yml"
+  pull_request:
+    paths:
+      - "sensor/**"
+      - "ingest/**"
+      - "go.work"
+      - "go.work.sum"
+      - ".github/workflows/sensor-ci.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build-test:
+    name: build & test (internal scanner sensor)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+          cache-dependency-path: |
+            sensor/go.mod
+            ingest/go.mod
+      - name: gofmt (sensor)
+        run: |
+          unformatted="$(gofmt -l sensor/)"
+          if [ -n "$unformatted" ]; then echo "$unformatted"; exit 1; fi
+      - name: go vet (sensor)
+        run: go vet ./sensor/...
+      - name: build (sensor)
+        run: go build ./sensor/...
+      - name: test (sensor, race)
+        run: go test -race ./sensor/...
