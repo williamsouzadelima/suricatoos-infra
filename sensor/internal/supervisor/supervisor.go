@@ -92,13 +92,22 @@ func (s *Supervisor) pollOnce(ctx context.Context) {
 		return
 	}
 	log.Printf("supervisor: job %s (corr=%s) — %d alvo(s)", job.JobID, job.CorrelationID, len(job.Targets))
-	if err := s.cloud.AckJob(ctx, job.JobID); err != nil {
-		log.Printf("supervisor: ack %s falhou: %v (segue mesmo assim)", job.JobID, err)
+	// Ack only AFTER the scan ran and the report was pushed. Acking on receipt made
+	// a crash or a transient PushReport failure silently lose that tenant's findings
+	// (the job was already terminal). Keeping the job DELIVERED-but-unacked lets the
+	// cloud re-deliver it after its window; scanrun's find-or-create makes the re-run
+	// idempotent, and this loop is single-goroutine so no concurrent poll runs during
+	// the scan.
+	if err := s.processJob(ctx, job); err != nil {
+		log.Printf("supervisor: job %s não concluído — mantido p/ redelivery: %v", job.JobID, err)
+		return
 	}
-	s.processJob(ctx, job)
+	if err := s.cloud.AckJob(ctx, job.JobID); err != nil {
+		log.Printf("supervisor: ack %s falhou: %v (será re-entregue; re-run é idempotente)", job.JobID, err)
+	}
 }
 
-func (s *Supervisor) processJob(ctx context.Context, job *cloud.Job) {
+func (s *Supervisor) processJob(ctx context.Context, job *cloud.Job) error {
 	findings, dropped, err := s.scanner.Run(ctx, scanrun.Job{
 		CorrelationID: job.CorrelationID,
 		Targets:       job.Targets,
@@ -106,7 +115,7 @@ func (s *Supervisor) processJob(ctx context.Context, job *cloud.Job) {
 	})
 	if err != nil {
 		log.Printf("supervisor: scan corr=%s falhou: %v", job.CorrelationID, err)
-		return
+		return err
 	}
 	if findings == nil {
 		findings = []scanrun.Finding{}
@@ -122,9 +131,10 @@ func (s *Supervisor) processJob(ctx context.Context, job *cloud.Job) {
 	}
 	if err := s.cloud.PushReport(ctx, rep); err != nil {
 		log.Printf("supervisor: push report corr=%s falhou: %v", job.CorrelationID, err)
-		return
+		return err
 	}
 	log.Printf("supervisor: corr=%s concluído (%d achado(s), %d fora-de-escopo)", job.CorrelationID, len(findings), dropped)
+	return nil
 }
 
 func (s *Supervisor) heartbeat(ctx context.Context) {

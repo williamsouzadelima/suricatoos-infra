@@ -8,12 +8,10 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
-	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"time"
 )
 
@@ -66,23 +64,13 @@ type Client struct {
 	http *http.Client
 }
 
-// New builds a Client with an mTLS transport (client cert + pinned CA). The client
-// cert is reloaded from disk per TLS handshake (GetClientCertificate), so a cert
-// rotation (ADR-0007 renew) is picked up on the next connection without a restart.
+// New builds a Client with an mTLS transport. The client cert is reloaded from disk
+// per TLS handshake (GetClientCertificate), so a cert rotation (ADR-0007 renew) is
+// picked up on the next connection without a restart.
 func New(cfg Config) (*Client, error) {
 	// Validate the material up front (a bad path should fail loudly at startup).
 	if _, err := tls.LoadX509KeyPair(cfg.CertFile, cfg.KeyFile); err != nil {
 		return nil, fmt.Errorf("cert cliente: %w", err)
-	}
-	pool := x509.NewCertPool()
-	if cfg.CAFile != "" {
-		caPEM, err := os.ReadFile(cfg.CAFile)
-		if err != nil {
-			return nil, fmt.Errorf("ca: %w", err)
-		}
-		if !pool.AppendCertsFromPEM(caPEM) {
-			return nil, fmt.Errorf("ca PEM inválido")
-		}
 	}
 	timeout := cfg.Timeout
 	if timeout <= 0 {
@@ -96,7 +84,14 @@ func New(cfg Config) (*Client, error) {
 					c, err := tls.LoadX509KeyPair(cfg.CertFile, cfg.KeyFile)
 					return &c, err
 				},
-				RootCAs:    pool,
+				// RootCAs nil → the SERVER cert (the cloud's public Let's Encrypt leaf,
+				// e.g. scanner.suricatoos.com) is verified against the SYSTEM trust
+				// store, NOT the enrollment CA. The enrollment CA is what the SERVER
+				// (nginx) uses to verify the sensor's CLIENT cert (mTLS). Pinning the
+				// enrollment CA here made every phone-home fail with "unable to get
+				// local issuer certificate" — the same regression fixed in the endpoint
+				// agent (see agent/internal/enroll TLSClientConfig). cfg.CAFile is kept
+				// for feed-manifest verification (feedsync), not for server auth.
 				MinVersion: tls.VersionTLS12,
 			},
 		},

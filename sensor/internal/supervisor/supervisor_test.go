@@ -104,15 +104,31 @@ func TestPollOnceIdle(t *testing.T) {
 	}
 }
 
-func TestScanErrorNoReport(t *testing.T) {
+func TestScanErrorNotAcked(t *testing.T) {
 	cl := &fakeCloud{jobs: []*cloud.Job{{JobID: "j1", CorrelationID: "c1", Targets: []string{"10.20.0.0/24"}}}}
 	sc := &fakeScanner{err: fmt.Errorf("gvmd down")}
 	newSup(cl, sc).pollOnce(context.Background())
 	if len(cl.reports) != 0 {
 		t.Fatal("scan com erro não deveria empurrar report")
 	}
-	if len(cl.acked) != 1 {
-		t.Fatal("job deveria ter sido ackado antes do scan")
+	// Fix #9: um scan que falha NÃO é ackado → a nuvem re-entrega após a janela
+	// (scanrun é idempotente via find-or-create). Ackar cedo perdia os achados.
+	if len(cl.acked) != 0 {
+		t.Fatalf("scan com erro NÃO deveria ackar (mantido p/ redelivery), got %v", cl.acked)
+	}
+}
+
+func TestPushErrorNotAcked(t *testing.T) {
+	cl := &fakeCloud{
+		jobs:    []*cloud.Job{{JobID: "j1", CorrelationID: "c1", Targets: []string{"10.20.0.0/24"}}},
+		pushErr: fmt.Errorf("ingest 502"),
+	}
+	sc := &fakeScanner{findings: []scanrun.Finding{{Host: "10.20.5.5", OID: "o1"}}}
+	newSup(cl, sc).pollOnce(context.Background())
+	// Fix #9: PushReport falhou (transiente) → job NÃO ackado, senão os achados do
+	// tenant somem silenciosamente. Fica DELIVERED → re-entregue.
+	if len(cl.acked) != 0 {
+		t.Fatalf("push falho NÃO deveria ackar (findings seriam perdidos), got %v", cl.acked)
 	}
 }
 

@@ -27,6 +27,13 @@ type Config struct {
 	CertFile string
 	KeyFile  string
 	CAFile   string
+	// FeedPubFile/UpdatePubFile receive the rotated verification pubkeys the cloud
+	// returns on renew (ADR-0007 risk #3). Renew is the only graceful refresh channel
+	// for a live sensor (re-enroll hits ErrAgentAlreadyExists), so a feed/update key
+	// rotation must be persisted here or it never reaches the enrolled fleet. Empty =
+	// don't persist.
+	FeedPubFile   string
+	UpdatePubFile string
 	// RenewBefore triggers a renewal when the cert's remaining life is below this.
 	RenewBefore time.Duration
 }
@@ -59,8 +66,10 @@ type renewReq struct {
 	AgentID string `json:"agent_id"`
 }
 type renewResp struct {
-	Certificate string `json:"certificate"`
-	CACert      string `json:"ca_cert"`
+	Certificate  string `json:"certificate"`
+	CACert       string `json:"ca_cert"`
+	FeedPubKey   string `json:"feed_pubkey"`
+	UpdatePubKey string `json:"update_pubkey"`
 }
 
 // RenewIfDue rotates the cert when it is close to expiry. It is a no-op (nil error)
@@ -127,6 +136,15 @@ func (r *Renewer) renewWith(ctx context.Context, client *http.Client) (bool, err
 	if rr.CACert != "" && r.cfg.CAFile != "" {
 		_ = writeAtomic(r.cfg.CAFile, []byte(rr.CACert), 0o644)
 	}
+	// Persist rotated verification pubkeys (ADR-0007 risk #3) so a feed/update-key
+	// rotation reaches this live sensor through the renew channel (feedsync prefers
+	// feed-verify.pub over the CA pubkey).
+	if rr.FeedPubKey != "" && r.cfg.FeedPubFile != "" {
+		_ = writeAtomic(r.cfg.FeedPubFile, []byte(rr.FeedPubKey), 0o644)
+	}
+	if rr.UpdatePubKey != "" && r.cfg.UpdatePubFile != "" {
+		_ = writeAtomic(r.cfg.UpdatePubFile, []byte(rr.UpdatePubKey), 0o644)
+	}
 	return true, nil
 }
 
@@ -135,16 +153,15 @@ func (r *Renewer) mtlsClient() (*http.Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	pool := x509.NewCertPool()
-	if r.cfg.CAFile != "" {
-		if caPEM, err := os.ReadFile(r.cfg.CAFile); err == nil {
-			pool.AppendCertsFromPEM(caPEM)
-		}
-	}
 	return &http.Client{
 		Timeout: 30 * time.Second,
 		Transport: &http.Transport{TLSClientConfig: &tls.Config{
-			Certificates: []tls.Certificate{cert}, RootCAs: pool, MinVersion: tls.VersionTLS12,
+			Certificates: []tls.Certificate{cert},
+			// RootCAs nil → system trust verifies the cloud's public (Let's Encrypt)
+			// server cert; the enrollment CA is what the SERVER uses to verify our
+			// client cert (mTLS). Pinning it here made renew fail like every other
+			// phone-home (same fix as sensor/internal/cloud + the endpoint agent).
+			MinVersion: tls.VersionTLS12,
 		}},
 	}, nil
 }

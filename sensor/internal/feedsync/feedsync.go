@@ -152,6 +152,14 @@ func (s *Syncer) Sync(ctx context.Context) (*Result, error) {
 
 	res := &Result{FeedVersion: m.FeedVersion, TotalFiles: len(m.Files)}
 	for _, f := range m.Files {
+		// Containment (ADR-0007 risk #2): a validly-signed manifest is NOT enough —
+		// a compromised cloud (feed-key holder) could publish a "../" path that
+		// escapes FeedDir and overwrites scan_bridge.py or the sensor binary (root
+		// RCE). Reject any entry that is absolute or escapes the feed root BEFORE we
+		// touch the filesystem.
+		if !contained(s.cfg.FeedDir, f.Path) {
+			return res, fmt.Errorf("path do manifest fora do FeedDir (rejeitado, possível cloud comprometida): %q", f.Path)
+		}
 		dest := filepath.Join(s.cfg.FeedDir, filepath.FromSlash(f.Path))
 		if hashMatches(dest, f.SHA256) {
 			res.AlreadyLocal++
@@ -244,6 +252,23 @@ func (s *Syncer) writeVersion(v string) error {
 		return err
 	}
 	return os.Rename(tmp, p)
+}
+
+// contained reports whether the manifest-relative path rel stays strictly inside
+// root once joined — rejecting absolute paths and any ".." escape. Belt-and-
+// suspenders: filepath.IsLocal catches absolute/".."/reserved names lexically, and
+// the Rel check re-confirms the cleaned join never climbs above root.
+func contained(root, rel string) bool {
+	local := filepath.FromSlash(rel)
+	if local == "" || !filepath.IsLocal(local) {
+		return false
+	}
+	dest := filepath.Join(root, local)
+	r, err := filepath.Rel(root, dest)
+	if err != nil || r == ".." || strings.HasPrefix(r, ".."+string(filepath.Separator)) {
+		return false
+	}
+	return true
 }
 
 // hashMatches reports whether the file at path already has the given SHA-256.

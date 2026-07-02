@@ -76,6 +76,13 @@ func (s *Scope) CheckHost(host string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("%q não é IP/CIDR literal", host)
 	}
+	// Even a CIDR that is ⊆ the allow-set must not overlap degenerate space
+	// (loopback/link-local/metadata/multicast/unspecified). Normally ⊆ allow already
+	// excludes it, but this holds the invariant even if an allow range is ever
+	// mis-set too broadly — a swept CIDR can never reach 169.254.169.254 & co.
+	if reason := degenerateOverlap(tnet); reason != "" {
+		return "", fmt.Errorf("CIDR %s negado: sobrepõe %s", tnet, reason)
+	}
 	tOnes, tBits := tnet.Mask.Size()
 	for _, n := range s.allow {
 		nOnes, nBits := n.Mask.Size()
@@ -112,6 +119,34 @@ func degenerate(ip net.IP) string {
 		return "link-local (inclui metadata da cloud)"
 	case ip.IsMulticast():
 		return "multicast"
+	}
+	return ""
+}
+
+// degenerateNets are ranges a scan target must never reach, regardless of the
+// allow-set: loopback, link-local (incl. 169.254.169.254 cloud metadata), multicast
+// and the unspecified address, in both v4 and v6.
+var degenerateNets = func() []*net.IPNet {
+	var out []*net.IPNet
+	for _, c := range []string{
+		"127.0.0.0/8", "169.254.0.0/16", "224.0.0.0/4", "0.0.0.0/8",
+		"::1/128", "fe80::/10", "ff00::/8", "::/128",
+	} {
+		if _, n, err := net.ParseCIDR(c); err == nil {
+			out = append(out, n)
+		}
+	}
+	return out
+}()
+
+// degenerateOverlap returns a reason if tnet overlaps any degenerate range. Two
+// CIDRs overlap iff one contains the other's network address (CIDRs are aligned
+// power-of-two blocks).
+func degenerateOverlap(tnet *net.IPNet) string {
+	for _, d := range degenerateNets {
+		if d.Contains(tnet.IP) || tnet.Contains(d.IP) {
+			return "espaço degenerado (loopback/link-local/metadata/multicast)"
+		}
 	}
 	return ""
 }

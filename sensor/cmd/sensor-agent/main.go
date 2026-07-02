@@ -103,7 +103,7 @@ func main() {
 	startFeedSync(ctx, base, caFile, stateDir)
 
 	// Cert rotation (ADR-0007): renew before expiry over the current mTLS cert.
-	startCertRenew(ctx, base, certFile, keyFile, caFile)
+	startCertRenew(ctx, base, certFile, keyFile, caFile, stateDir)
 
 	log.Printf("sensor-agent %s iniciado (cloud=%s)", sensorID, base)
 	sup.Run(ctx)
@@ -165,13 +165,15 @@ func startFeedSync(ctx context.Context, base, caFile, stateDir string) {
 // startCertRenew launches a daily check that rotates the cert before it expires.
 // A rotation writes new cert/key atomically; the mTLS clients pick them up on
 // their next request (they LoadX509KeyPair per call in this design).
-func startCertRenew(ctx context.Context, base, certFile, keyFile, caFile string) {
+func startCertRenew(ctx context.Context, base, certFile, keyFile, caFile, stateDir string) {
 	renewer := renew.New(renew.Config{
-		RenewURL:    base + "/agent/v1/renew",
-		CertFile:    certFile,
-		KeyFile:     keyFile,
-		CAFile:      caFile,
-		RenewBefore: envDur("RENEW_BEFORE", 7*24*time.Hour),
+		RenewURL:      base + "/agent/v1/renew",
+		CertFile:      certFile,
+		KeyFile:       keyFile,
+		CAFile:        caFile,
+		FeedPubFile:   filepath.Join(stateDir, "feed-verify.pub"),
+		UpdatePubFile: filepath.Join(stateDir, "update-verify.pub"),
+		RenewBefore:   envDur("RENEW_BEFORE", 7*24*time.Hour),
 	})
 	go func() {
 		t := time.NewTicker(envDur("RENEW_CHECK_INTERVAL", 12*time.Hour))
@@ -245,10 +247,13 @@ func doEnroll(base, sensorID, certFile, keyFile, caFile, stateDir string) error 
 	if err := writeFile(caFile, res.CACertPEM, 0o644); err != nil {
 		return err
 	}
-	// Persist the purpose-scoped feed verification key (ADR-0007) if the cloud
-	// distributed one; feedsync prefers it over the CA pubkey.
+	// Persist the purpose-scoped verification keys (ADR-0007 risk #3) if the cloud
+	// distributed them; feedsync prefers feed-verify.pub over the CA pubkey.
 	if res.FeedPubKey != "" {
 		_ = writeFile(filepath.Join(stateDir, "feed-verify.pub"), res.FeedPubKey, 0o644)
+	}
+	if res.UpdatePubKey != "" {
+		_ = writeFile(filepath.Join(stateDir, "update-verify.pub"), res.UpdatePubKey, 0o644)
 	}
 	log.Printf("enroll: %s enrolado (cert em %s)", sensorID, certFile)
 	return nil

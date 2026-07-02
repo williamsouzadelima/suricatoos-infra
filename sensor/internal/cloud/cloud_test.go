@@ -2,12 +2,21 @@ package cloud
 
 import (
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
+	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/json"
+	"encoding/pem"
 	"io"
+	"math/big"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // newTestClient wires the Client at a test server (bypassing real mTLS — the
@@ -112,6 +121,59 @@ func TestHeartbeat(t *testing.T) {
 	}))
 	defer srv.Close()
 	if err := newTestClient(srv).Heartbeat(context.Background(), Heartbeat{SensorID: "s1", GvmdUp: true}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestNewUsesSystemTrustForServer is the regression guard for the feature-dead
+// blocker (ADR-0007): the mTLS client must verify the cloud's PUBLIC server cert
+// against the system trust store (RootCAs nil), NOT the enrollment CA — otherwise
+// every phone-home fails after enroll. It must still present the client cert (mTLS).
+func TestNewUsesSystemTrustForServer(t *testing.T) {
+	dir := t.TempDir()
+	certFile := filepath.Join(dir, "sensor.crt")
+	keyFile := filepath.Join(dir, "sensor.key")
+	writeSelfSigned(t, certFile, keyFile)
+
+	cl, err := New(Config{JobsURL: "https://x/agent/v1/scan-jobs", CertFile: certFile, KeyFile: keyFile, CAFile: certFile})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	tr, ok := cl.http.Transport.(*http.Transport)
+	if !ok || tr.TLSClientConfig == nil {
+		t.Fatal("transport/tls config ausente")
+	}
+	if tr.TLSClientConfig.RootCAs != nil {
+		t.Fatal("RootCAs deveria ser nil (system trust p/ o cert público do servidor), não a CA de enroll")
+	}
+	if tr.TLSClientConfig.GetClientCertificate == nil {
+		t.Fatal("GetClientCertificate deveria estar setado (mTLS: sensor apresenta o cert cliente)")
+	}
+}
+
+// writeSelfSigned writes a throwaway self-signed cert+key so New() can LoadX509KeyPair.
+func writeSelfSigned(t *testing.T, certFile, keyFile string) {
+	t.Helper()
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tmpl := &x509.Certificate{
+		SerialNumber: big.NewInt(1), Subject: pkix.Name{CommonName: "test-sensor"},
+		NotBefore: time.Now().Add(-time.Hour), NotAfter: time.Now().Add(time.Hour),
+	}
+	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, pub, priv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	keyDER, err := x509.MarshalPKCS8PrivateKey(priv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(certFile, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(keyFile, pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: keyDER}), 0o600); err != nil {
 		t.Fatal(err)
 	}
 }
