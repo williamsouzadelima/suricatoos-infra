@@ -266,6 +266,13 @@ func (m *Manager) AppendEnrollment(agentID string, enr Enrollment) error {
 	if !ok {
 		return ErrAgentUnknown
 	}
+	// Defense in depth (ADR-0007 risk #6): never append a renewed cert to a REVOKED
+	// token's audit trail. The renew CRL check (enroll.Renew) is the primary gate;
+	// this stops a revoked identity from acquiring a fresh serial even if that gate
+	// were ever bypassed, mirroring check()/Consume which also refuse a revoked token.
+	if rec.Revoked {
+		return ErrRevoked
+	}
 	if enr.At.IsZero() {
 		enr.At = m.now()
 	}

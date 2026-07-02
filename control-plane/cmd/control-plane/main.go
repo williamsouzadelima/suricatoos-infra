@@ -136,6 +136,9 @@ func main() {
 	enrollOpts := []enroll.Option{
 		enroll.WithIngestURL(ingestURL),
 		enroll.WithVerificationKeys(feedKey.PublicPEM(), updateKey.PublicPEM()),
+		// CRL enforcement on /renew (ADR-0007 risk #6): a revoked cert cannot renew
+		// itself into a fresh serial. authority.IsRevoked is authoritative + in-memory.
+		enroll.WithRevocationCheck(authority.IsRevoked),
 	}
 	// Short renewed-cert TTL bounds revocation latency for a leaked cert (ADR-0007).
 	if v := os.Getenv("RENEW_CERT_TTL"); v != "" {

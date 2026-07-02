@@ -21,6 +21,13 @@ import (
 // rejection, which surfaces the tokens.* sentinel errors).
 var ErrBadRequest = errors.New("requisição de enrollment inválida")
 
+// RevokedFunc reports whether a client-cert serial (hex) is revoked. Wired to the
+// CA's authoritative in-memory revoked set. When set, Renew refuses a renewal
+// presented by a REVOKED cert, so a revoked-but-unexpired cert cannot launder
+// itself into a fresh, non-revoked serial (ADR-0007 risk #6 — defeating the CRL
+// kill switch). nil = fail-closed: Renew denies everything.
+type RevokedFunc func(serialHex string) bool
+
 // Request is the enrollment payload an agent POSTs.
 type Request struct {
 	Token   string `json:"token"`
@@ -60,8 +67,9 @@ type Service struct {
 	certTTL   time.Duration
 	renewTTL  time.Duration // TTL for renewed certs (default: certTTL); shorter = safer
 	ingestURL string
-	feedPub   string // PKIX PEM of the feed-signing pubkey (ADR-0007); empty = omit
-	updatePub string // PKIX PEM of the update-signing pubkey; empty = omit
+	feedPub   string      // PKIX PEM of the feed-signing pubkey (ADR-0007); empty = omit
+	updatePub string      // PKIX PEM of the update-signing pubkey; empty = omit
+	revoked   RevokedFunc // CRL check for Renew (nil = fail-closed)
 }
 
 // Option configures a Service.
@@ -88,6 +96,12 @@ func WithIngestURL(u string) Option { return func(s *Service) { s.ingestURL = u 
 func WithVerificationKeys(feedPubPEM, updatePubPEM string) Option {
 	return func(s *Service) { s.feedPub, s.updatePub = feedPubPEM, updatePubPEM }
 }
+
+// WithRevocationCheck wires the CRL check Renew enforces (ADR-0007 risk #6): a
+// renewal presented by a REVOKED cert is refused, closing the bypass where a
+// revoked cert renews itself into a new, non-revoked serial. When unset, Renew
+// fails closed (denies every renewal).
+func WithRevocationCheck(f RevokedFunc) Option { return func(s *Service) { s.revoked = f } }
 
 // NewService builds an enrollment Service. Default cert TTL is 90 days.
 func NewService(tm *tokens.Manager, s Signer, opts ...Option) *Service {
@@ -163,9 +177,11 @@ func (s *Service) Enroll(req Request) (Response, error) {
 		return Response{}, err
 	}
 	return Response{
-		Certificate: string(issued.PEM),
-		CACert:      string(s.signer.CertPEM()),
-		IngestURL:   s.ingestURL,
+		Certificate:  string(issued.PEM),
+		CACert:       string(s.signer.CertPEM()),
+		IngestURL:    s.ingestURL,
+		FeedPubKey:   s.feedPub,   // fresh sensors need these to verify feed/update
+		UpdatePubKey: s.updatePub, // manifests (ADR-0007 risk #3) — Renew already returns them
 	}, nil
 }
 
@@ -184,9 +200,16 @@ type RenewRequest struct {
 // to the agent's token record so a token revoke still kills the renewed cert. It
 // does NOT consume a token or hit agent_id uniqueness — the agent already owns its
 // identity. This gives real rotation without ErrAgentAlreadyExists.
-func (s *Service) Renew(certVerify, certDN string, req RenewRequest) (Response, error) {
+func (s *Service) Renew(certVerify, certDN, certSerial string, req RenewRequest) (Response, error) {
 	if certVerify != "SUCCESS" {
 		return Response{}, fmt.Errorf("%w: cert cliente não verificado", ErrBadRequest)
+	}
+	// Revocation gate (ADR-0007 risk #6): a revoked-but-unexpired cert must NOT be
+	// able to renew itself into a fresh, non-revoked serial — that would defeat the
+	// CRL kill switch (DELETE /api/v1/tokens/{id}). The CA's revoked set is
+	// authoritative + in-memory, so there is no staleness. Fail closed when unwired.
+	if s.revoked == nil || s.revoked(certSerial) {
+		return Response{}, fmt.Errorf("%w: renovação negada", tokens.ErrRevoked)
 	}
 	dn := parseDN(certDN)
 	cn, org, ou := firstOf(dn, "CN"), firstOf(dn, "O"), firstOf(dn, "OU")
@@ -270,7 +293,7 @@ func (s *Service) Handler() http.Handler {
 			http.Error(w, "requisição inválida", http.StatusBadRequest)
 			return
 		}
-		resp, err := s.Renew(r.Header.Get("X-Client-Cert-Verify"), r.Header.Get("X-Client-Cert-DN"), req)
+		resp, err := s.Renew(r.Header.Get("X-Client-Cert-Verify"), r.Header.Get("X-Client-Cert-DN"), r.Header.Get("X-Client-Cert-Serial"), req)
 		if err != nil {
 			http.Error(w, clientMessage(err), statusFor(err))
 			return

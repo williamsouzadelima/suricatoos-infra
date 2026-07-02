@@ -27,14 +27,21 @@ func genCSR(t *testing.T, cn string) string {
 	return string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: der}))
 }
 
-func newService(t *testing.T, now *time.Time) (*Service, *tokens.Manager) {
+func newServiceWithCA(t *testing.T, now *time.Time) (*Service, *tokens.Manager, *ca.CA) {
 	t.Helper()
 	authority, err := ca.NewEphemeral(*now)
 	if err != nil {
 		t.Fatal(err)
 	}
 	tm := tokens.NewManager(tokens.NewMemStore(), tokens.WithClock(func() time.Time { return *now }))
-	svc := NewService(tm, authority, WithClock(func() time.Time { return *now }), WithCertTTL(24*time.Hour))
+	svc := NewService(tm, authority, WithClock(func() time.Time { return *now }), WithCertTTL(24*time.Hour),
+		WithRevocationCheck(authority.IsRevoked)) // renew is CRL-gated (ADR-0007 risk #6)
+	return svc, tm, authority
+}
+
+func newService(t *testing.T, now *time.Time) (*Service, *tokens.Manager) {
+	t.Helper()
+	svc, tm, _ := newServiceWithCA(t, now)
 	return svc, tm
 }
 
@@ -208,7 +215,7 @@ func TestRenewRotatesSameIdentity(t *testing.T) {
 	svc, tm, tokenID := enrollAgent(t, &now)
 
 	dn := "CN=sensor-acme-1,O=acme,OU=scanner-sensor"
-	resp, err := svc.Renew("SUCCESS", dn, RenewRequest{CSR: genCSR(t, "sensor-acme-1"), AgentID: "sensor-acme-1"})
+	resp, err := svc.Renew("SUCCESS", dn, "0a1b", RenewRequest{CSR: genCSR(t, "sensor-acme-1"), AgentID: "sensor-acme-1"})
 	if err != nil {
 		t.Fatalf("renew válido deveria funcionar: %v", err)
 	}
@@ -235,10 +242,10 @@ func TestRenewRequiresVerifiedCert(t *testing.T) {
 	now := time.Now().UTC()
 	svc, _, _ := enrollAgent(t, &now)
 	dn := "CN=sensor-acme-1,O=acme,OU=scanner-sensor"
-	if _, err := svc.Renew("", dn, RenewRequest{CSR: genCSR(t, "sensor-acme-1")}); err == nil {
+	if _, err := svc.Renew("", dn, "0a1b", RenewRequest{CSR: genCSR(t, "sensor-acme-1")}); err == nil {
 		t.Fatal("renew sem cert verificado deveria falhar")
 	}
-	if _, err := svc.Renew("FAILED", dn, RenewRequest{CSR: genCSR(t, "sensor-acme-1")}); err == nil {
+	if _, err := svc.Renew("FAILED", dn, "0a1b", RenewRequest{CSR: genCSR(t, "sensor-acme-1")}); err == nil {
 		t.Fatal("renew com verify=FAILED deveria falhar")
 	}
 }
@@ -248,11 +255,11 @@ func TestRenewCannotChangeIdentity(t *testing.T) {
 	svc, _, _ := enrollAgent(t, &now)
 	dn := "CN=sensor-acme-1,O=acme,OU=scanner-sensor"
 	// CSR com CN diferente do cert → rejeitado (não pode virar outro agente).
-	if _, err := svc.Renew("SUCCESS", dn, RenewRequest{CSR: genCSR(t, "sensor-evil-9"), AgentID: "sensor-acme-1"}); err == nil {
+	if _, err := svc.Renew("SUCCESS", dn, "0a1b", RenewRequest{CSR: genCSR(t, "sensor-evil-9"), AgentID: "sensor-acme-1"}); err == nil {
 		t.Fatal("CN divergente deveria ser rejeitado")
 	}
 	// body agent_id divergente → rejeitado.
-	if _, err := svc.Renew("SUCCESS", dn, RenewRequest{CSR: genCSR(t, "sensor-acme-1"), AgentID: "outro"}); err == nil {
+	if _, err := svc.Renew("SUCCESS", dn, "0a1b", RenewRequest{CSR: genCSR(t, "sensor-acme-1"), AgentID: "outro"}); err == nil {
 		t.Fatal("agent_id divergente deveria ser rejeitado")
 	}
 }
@@ -261,7 +268,61 @@ func TestRenewUnknownAgentRejected(t *testing.T) {
 	now := time.Now().UTC()
 	svc, _ := newService(t, &now) // ninguém enrolado
 	dn := "CN=sensor-ghost-1,O=acme,OU=scanner-sensor"
-	if _, err := svc.Renew("SUCCESS", dn, RenewRequest{CSR: genCSR(t, "sensor-ghost-1")}); err == nil {
+	if _, err := svc.Renew("SUCCESS", dn, "0a1b", RenewRequest{CSR: genCSR(t, "sensor-ghost-1")}); err == nil {
 		t.Fatal("renew de agente nunca enrolado deveria falhar (não há record p/ ancorar a revogação)")
+	}
+}
+
+// TestRenewRejectsRevokedCert is the regression test for the CRL-bypass blocker
+// (ADR-0007 risk #6): a REVOKED-but-unexpired cert must NOT renew itself into a
+// fresh, non-revoked serial. Without the fix the renew kill switch was defeated.
+func TestRenewRejectsRevokedCert(t *testing.T) {
+	now := time.Now().UTC()
+	svc, tm, authority := newServiceWithCA(t, &now)
+	mint := mustMint(t, tm, tokens.MintRequest{Type: tokens.SingleHost,
+		Scope: tokens.Scope{Tenant: "acme", Policy: "scanner-sensor", OS: "linux"}, TTL: time.Hour})
+	if _, err := svc.Enroll(Request{Token: mint.Token, CSR: genCSR(t, "sensor-acme-1"),
+		AgentID: "sensor-acme-1", OS: "linux", Arch: "amd64"}); err != nil {
+		t.Fatal(err)
+	}
+	// The serial the enroll issued (what the sensor would present at renew).
+	recs, _ := tm.List()
+	serial := recs[0].Enrollments[0].CertSerial
+	if serial == "" {
+		t.Fatal("enrollment sem serial")
+	}
+	dn := "CN=sensor-acme-1,O=acme,OU=scanner-sensor"
+
+	// Not revoked yet → renew works.
+	if _, err := svc.Renew("SUCCESS", dn, serial, RenewRequest{CSR: genCSR(t, "sensor-acme-1"), AgentID: "sensor-acme-1"}); err != nil {
+		t.Fatalf("renew de cert válido deveria funcionar: %v", err)
+	}
+
+	// Operator revokes the cert (kill switch). The revoked cert must NOT renew.
+	if err := authority.RevokeCertSerial(serial, now); err != nil {
+		t.Fatal(err)
+	}
+	_, err := svc.Renew("SUCCESS", dn, serial, RenewRequest{CSR: genCSR(t, "sensor-acme-1"), AgentID: "sensor-acme-1"})
+	if err == nil {
+		t.Fatal("cert REVOGADO NÃO deveria conseguir renovar (bypass da CRL)")
+	}
+	if !errors.Is(err, tokens.ErrRevoked) {
+		t.Fatalf("erro esperado ErrRevoked, got %v", err)
+	}
+}
+
+// TestRenewFailClosedWithoutCRL confirms renew denies when no revocation check is
+// wired (fail-closed) — a misconfiguration must never open the kill-switch bypass.
+func TestRenewFailClosedWithoutCRL(t *testing.T) {
+	now := time.Now().UTC()
+	authority, err := ca.NewEphemeral(now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tm := tokens.NewManager(tokens.NewMemStore(), tokens.WithClock(func() time.Time { return now }))
+	svc := NewService(tm, authority, WithClock(func() time.Time { return now }), WithCertTTL(24*time.Hour)) // no WithRevocationCheck
+	dn := "CN=sensor-acme-1,O=acme,OU=scanner-sensor"
+	if _, err := svc.Renew("SUCCESS", dn, "0a1b", RenewRequest{CSR: genCSR(t, "sensor-acme-1")}); err == nil {
+		t.Fatal("renew sem CRL conectada deveria falhar (fail-closed)")
 	}
 }
