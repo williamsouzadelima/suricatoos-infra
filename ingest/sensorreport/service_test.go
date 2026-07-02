@@ -89,12 +89,12 @@ func TestUnknownTenant403(t *testing.T) {
 func TestScopeQuarantineAndTenantFromCert(t *testing.T) {
 	s := New(Config{}, acmeResolver(), notRevoked)
 	var got *bridgeReport
-	s.imp = func(_ context.Context, tc TenantConfig, rep bridgeReport) error {
+	s.imp = func(_ context.Context, tc TenantConfig, rep bridgeReport) ([]scanlaunch.Finding, error) {
 		if tc.GmpUsername != "tenant-acme" {
 			t.Errorf("import deveria usar o usuário gvmd do tenant, got %s", tc.GmpUsername)
 		}
 		got = &rep
-		return nil
+		return rep.Findings, nil
 	}
 	// One in-scope host, one out-of-scope (co-tenant/arbitrary).
 	body := mkReport("", // body tenant vazio: o O do cert é a autoridade
@@ -121,7 +121,10 @@ func TestScopeQuarantineAndTenantFromCert(t *testing.T) {
 func TestAllOutOfScope202Zero(t *testing.T) {
 	s := New(Config{}, acmeResolver(), notRevoked)
 	called := false
-	s.imp = func(context.Context, TenantConfig, bridgeReport) error { called = true; return nil }
+	s.imp = func(context.Context, TenantConfig, bridgeReport) ([]scanlaunch.Finding, error) {
+		called = true
+		return nil, nil
+	}
 	body := mkReport("acme", scanlaunch.Finding{Host: "1.2.3.4", Port: "80/tcp", OID: "o1"})
 	w := serve(s, reportReq(body, "acme"))
 	if w.Code != http.StatusAccepted {
@@ -147,9 +150,22 @@ func TestForwarderPushesToScore(t *testing.T) {
 	s := New(Config{}, acmeResolver(), notRevoked).
 		WithForwarder(NewForwarder(score.URL, "sc-secret"))
 	var imported *bridgeReport
-	s.imp = func(_ context.Context, _ TenantConfig, rep bridgeReport) error { imported = &rep; return nil }
+	// Simulate what bridge.py --mode network does: DISCARD the sensor's claimed
+	// severity/CVE and return the FEED-re-attested finding (feed says Log/0.0 here).
+	s.imp = func(_ context.Context, _ TenantConfig, rep bridgeReport) ([]scanlaunch.Finding, error) {
+		imported = &rep
+		reatt := make([]scanlaunch.Finding, len(rep.Findings))
+		for i, f := range rep.Findings {
+			reatt[i] = scanlaunch.Finding{Host: f.Host, Port: f.Port, OID: f.OID,
+				CVSSBase: 0.0, Threat: "Log", CVEs: nil} // feed evidence, not the sensor's claim
+		}
+		return reatt, nil
+	}
 
-	body := mkReport("", scanlaunch.Finding{Host: "10.20.5.5", Port: "443/tcp", OID: "o1"},
+	// The sensor FORGES a Critical + CVE for an in-scope host; the feed says Log.
+	body := mkReport("",
+		scanlaunch.Finding{Host: "10.20.5.5", Port: "443/tcp", OID: "o1",
+			CVSSBase: 10.0, Threat: "Critical", CVEs: []string{"CVE-9999-0001"}},
 		scanlaunch.Finding{Host: "8.8.8.8", Port: "80/tcp", OID: "o2"}) // 8.8.8.8 fora de escopo
 	w := serve(s, reportReq(body, "acme"))
 	if w.Code != http.StatusAccepted {
@@ -165,11 +181,16 @@ func TestForwarderPushesToScore(t *testing.T) {
 	if len(got.Findings) != 1 || got.Findings[0].Host != "10.20.5.5" {
 		t.Fatalf("Score deveria receber só o achado em escopo: %+v", got.Findings)
 	}
+	// Non-fabrication (ADR-0007 risk #1): the forged Critical/CVE must NOT reach the
+	// Score — it receives the feed-re-attested Log/0.0 with no CVE.
+	if got.Findings[0].CVSSBase != 0.0 || got.Findings[0].Threat != "Log" || len(got.Findings[0].CVEs) != 0 {
+		t.Fatalf("Score recebeu severity/CVE FABRICADA do sensor (deveria ser re-atestada do feed): %+v", got.Findings[0])
+	}
 }
 
 func TestForwarderDisabledIsNoop(t *testing.T) {
 	s := New(Config{}, acmeResolver(), notRevoked) // sem forwarder
-	s.imp = func(context.Context, TenantConfig, bridgeReport) error { return nil }
+	s.imp = func(context.Context, TenantConfig, bridgeReport) ([]scanlaunch.Finding, error) { return nil, nil }
 	body := mkReport("acme", scanlaunch.Finding{Host: "10.20.5.5", Port: "443/tcp", OID: "o1"})
 	if w := serve(s, reportReq(body, "acme")); w.Code != http.StatusAccepted {
 		t.Fatalf("sem forwarder deveria 202 normal, got %d", w.Code)

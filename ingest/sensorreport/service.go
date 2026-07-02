@@ -10,6 +10,8 @@ import (
 	"os"
 	"os/exec"
 	"time"
+
+	"github.com/williamsouzadelima/suricatoos-infra/ingest/scanlaunch"
 )
 
 // RevokedFunc reports whether a client-cert serial (hex) is revoked. nil = the CRL
@@ -24,8 +26,10 @@ type Config struct {
 	GmpSocket    string // gvmd socket
 }
 
-// importFunc imports a re-attested report into gvmd as the tenant's gvmd user.
-type importFunc func(ctx context.Context, tc TenantConfig, rep bridgeReport) error
+// importFunc imports a re-attested report into gvmd as the tenant's gvmd user and
+// returns the FEED-re-attested findings (severity/CVE derived from the central feed
+// by OID) — the set safe to forward to the Score, never the sensor's raw claim.
+type importFunc func(ctx context.Context, tc TenantConfig, rep bridgeReport) ([]scanlaunch.Finding, error)
 
 // Service serves POST /v1/sensor-report.
 type Service struct {
@@ -110,7 +114,8 @@ func (s *Service) handle(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Minute)
 	defer cancel()
 	report := bridgeReport{Tenant: id.O, ScanTime: rep.CollectedAt, Findings: kept}
-	if err := s.imp(ctx, tc, report); err != nil {
+	reattested, err := s.imp(ctx, tc, report)
+	if err != nil {
 		log.Printf("sensorreport: import tenant=%s corr=%s falhou: %v", id.O, rep.CorrelationID, err)
 		http.Error(w, "erro ao importar", http.StatusBadGateway)
 		return
@@ -119,9 +124,12 @@ func (s *Service) handle(w http.ResponseWriter, r *http.Request) {
 		id.O, rep.CorrelationID, len(kept), dropped)
 
 	// Push to the Score (ADR-0007 G), best-effort — the central GSA already has the
-	// data, and the tenant is the authoritative cert O (never the sensor's claim).
+	// data. The tenant is the authoritative cert O (never the sensor's claim), and
+	// we forward the FEED-RE-ATTESTED findings (severity/CVE from the central feed by
+	// OID), NOT the sensor's raw values — so a compromised sensor cannot forge
+	// criticals/CVEs on the Score path either (ADR-0007 risk #1).
 	if s.forwarder.Enabled() {
-		if err := s.forwarder.Forward(ctx, id.O, rep.CorrelationID, kept); err != nil {
+		if err := s.forwarder.Forward(ctx, id.O, rep.CorrelationID, reattested); err != nil {
 			log.Printf("sensorreport: push p/ Score falhou (best-effort): %v", err)
 		}
 	}
@@ -129,21 +137,33 @@ func (s *Service) handle(w http.ResponseWriter, r *http.Request) {
 }
 
 // execBridge writes the re-attestable report to a temp file and runs
-// bridge.py --mode network as the tenant's scoped gvmd user (never admin).
-func (s *Service) execBridge(ctx context.Context, tc TenantConfig, rep bridgeReport) error {
+// bridge.py --mode network as the tenant's scoped gvmd user (never admin). The
+// bridge re-attests severity/CVE from the central feed by OID and writes the
+// re-attested findings to a second temp file, which we read back and return so the
+// Score push forwards feed-attested values — never the sensor's raw claim.
+func (s *Service) execBridge(ctx context.Context, tc TenantConfig, rep bridgeReport) ([]scanlaunch.Finding, error) {
 	if s.cfg.BridgeScript == "" {
-		return fmt.Errorf("BRIDGE_SCRIPT não configurado")
+		return nil, fmt.Errorf("BRIDGE_SCRIPT não configurado")
 	}
 	tmp, err := os.CreateTemp("", "suricatoos-sensor-*.json")
 	if err != nil {
-		return fmt.Errorf("temp file: %w", err)
+		return nil, fmt.Errorf("temp file: %w", err)
 	}
 	defer os.Remove(tmp.Name())
 	if err := json.NewEncoder(tmp).Encode(rep); err != nil {
 		tmp.Close()
-		return fmt.Errorf("encode: %w", err)
+		return nil, fmt.Errorf("encode: %w", err)
 	}
 	tmp.Close()
+
+	// bridge.py writes the feed-re-attested findings here (non-fabrication invariant).
+	outTmp, err := os.CreateTemp("", "suricatoos-sensor-reatt-*.json")
+	if err != nil {
+		return nil, fmt.Errorf("temp file: %w", err)
+	}
+	outPath := outTmp.Name()
+	outTmp.Close()
+	defer os.Remove(outPath)
 
 	python := s.cfg.BridgePython
 	if python == "" {
@@ -154,15 +174,26 @@ func (s *Service) execBridge(ctx context.Context, tc TenantConfig, rep bridgeRep
 		"--mode", "network",
 		"--socket", s.cfg.GmpSocket,
 		"--username", tc.GmpUsername,
+		"--reattested-out", outPath,
 	}
 	var stderr bytes.Buffer
 	cmd := exec.CommandContext(ctx, python, args...)
 	cmd.Env = append(os.Environ(), "GVM_PASSWORD="+tc.GmpPassword)
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("bridge.py --mode network: %w\n%s", err, stderr.String())
+		return nil, fmt.Errorf("bridge.py --mode network: %w\n%s", err, stderr.String())
 	}
-	return nil
+	data, err := os.ReadFile(outPath)
+	if err != nil {
+		return nil, fmt.Errorf("ler achados re-atestados: %w", err)
+	}
+	var reatt []scanlaunch.Finding
+	if len(bytes.TrimSpace(data)) > 0 {
+		if err := json.Unmarshal(data, &reatt); err != nil {
+			return nil, fmt.Errorf("parse achados re-atestados: %w", err)
+		}
+	}
+	return reatt, nil
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

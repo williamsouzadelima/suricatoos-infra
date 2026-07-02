@@ -372,6 +372,47 @@ def _safe_qod(value) -> int:
     return q if 0 <= q <= 100 else 80
 
 
+def reattest_findings(findings: list[dict], nvt_meta: dict[str, "NVTMeta | None"] | None) -> list[dict]:
+    """Return the sensor findings with severity/CVE/threat REPLACED by feed evidence
+    (by OID) and the host validated to an IP literal — the SAME non-fabrication
+    transform network_report_to_xml applies to the central-gvmd XML.
+
+    Emitted via --reattested-out so the ingest forwards FEED-attested values to the
+    Score, never the sensor's claimed severity/CVE (ADR-0007 risk #1: a compromised
+    sensor must not be able to forge criticals nor suppress a real finding — on the
+    Score path too, not only in the central GSA). Fields not derivable from the feed
+    here (cvss_vector/references/impact/solution) are cleared rather than passed
+    through from the sensor. The output shape matches scanlaunch.Finding."""
+    if nvt_meta is None:
+        nvt_meta = {}
+    out: list[dict] = []
+    for f in findings or []:
+        try:
+            host_ip = str(ipaddress.ip_address(str(f.get("host", "")).strip()))
+        except ValueError:
+            continue  # non-IP host — never trusted/re-resolved (ingest also pre-scopes)
+        oid = f.get("oid", "")
+        meta = nvt_meta.get(oid)
+        severity = meta.cvss_base if meta is not None else 0.0
+        cves = meta.cves if meta is not None else []
+        out.append({
+            "host": host_ip,
+            "port": _safe_port(f.get("port")),
+            "oid": oid,
+            "name": str(f.get("name", "") or oid),
+            "cvss_base": severity,                 # FEED-derived, never the sensor's claim
+            "cvss_vector": "",                     # not feed-attested here → not forwarded
+            "threat": severity_to_threat(severity),
+            "cves": cves,                          # FEED-derived
+            "references": [],
+            "summary": str(f.get("summary", "") or ""),
+            "impact": "",
+            "solution": "",
+            "qod": _safe_qod(f.get("qod")),
+        })
+    return out
+
+
 # --------------------------------------------------------------------------- #
 # Main import logic
 # --------------------------------------------------------------------------- #
@@ -396,12 +437,22 @@ def run_import(
     task_name: str | None,
     dry_run: bool,
     mode: str = "agent",
+    reattested_out: str | None = None,
 ) -> None:
     """Enrich + import the FindingReport (mode='agent') or a sensor OpenVAS report
     (mode='network', ADR-0007) into gvmd, or dry-run print the XML. In BOTH modes
-    severity/CVE come only from the feed by OID (non-fabrication)."""
+    severity/CVE come only from the feed by OID (non-fabrication). When mode='network'
+    and reattested_out is set, the feed-re-attested findings are also written there as
+    JSON (the ingest forwards THOSE to the Score, never the sensor's raw claim)."""
+
+    def _emit_reattested(nvt_meta) -> None:
+        if mode == "network" and reattested_out:
+            with open(reattested_out, "w") as fo:
+                json.dump(reattest_findings(report_dict.get("findings") or [], nvt_meta), fo)
+
     if dry_run:
         print(_build_report_xml(mode, report_dict, {}))
+        _emit_reattested({})
         return
 
     if not password:
@@ -437,6 +488,7 @@ def run_import(
             else:
                 print(f"VT {oid}: cvss={meta.cvss_base} cves={len(meta.cves)}", file=sys.stderr)
         report_xml = _build_report_xml(mode, report_dict, nvt_meta)
+        _emit_reattested(nvt_meta)
         if mode == "network":
             comment = f"Suricatoos sensor findings (tenant {report_dict.get('tenant', '')})"
         else:
@@ -538,6 +590,12 @@ def main() -> None:
         action="store_true",
         help="Print the report XML without connecting to gvmd",
     )
+    p.add_argument(
+        "--reattested-out",
+        metavar="PATH",
+        help="network mode: write the FEED-re-attested findings (JSON) here, so the "
+        "ingest forwards feed-attested severity/CVE to the Score, never the sensor's claim",
+    )
     args = p.parse_args()
 
     if args.report == "-":
@@ -556,6 +614,7 @@ def main() -> None:
         task_name=args.task_name,
         dry_run=args.dry_run,
         mode=args.mode,
+        reattested_out=args.reattested_out,
     )
 
 

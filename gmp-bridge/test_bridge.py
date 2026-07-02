@@ -396,5 +396,44 @@ class NetworkReportTests(unittest.TestCase):
         self.assertEqual(root.find(".//results/result").findtext("port"), "general/tcp")
 
 
+class TestReattestFindings(unittest.TestCase):
+    """The Score-push non-fabrication fix (ADR-0007 risk #1): the findings emitted
+    for the Score must carry FEED-derived severity/CVE, never the sensor's claim."""
+
+    def test_discards_sensor_forged_severity_and_cve(self):
+        from bridge import reattest_findings
+        # Sensor forges a Critical + CVE; the feed (nvt_meta) says Log/0.0 for the OID.
+        findings = [{"host": "10.20.5.5", "port": "443/tcp", "oid": OID_0,
+                     "cvss_base": 10.0, "threat": "Critical", "cves": ["CVE-9999-0001"],
+                     "name": "forged", "qod": 99, "cvss_vector": "evil"}]
+        out = reattest_findings(findings, {OID_0: NVTMeta(cvss_base=0.0, cves=[])})
+        self.assertEqual(len(out), 1)
+        f = out[0]
+        self.assertEqual(f["cvss_base"], 0.0)     # feed, not the sensor's 10.0
+        self.assertEqual(f["threat"], "Log")
+        self.assertEqual(f["cves"], [])           # forged CVE discarded
+        self.assertEqual(f["cvss_vector"], "")    # not feed-attested → cleared
+        self.assertEqual(f["host"], "10.20.5.5")
+
+    def test_uses_feed_evidence_and_drops_non_ip(self):
+        from bridge import reattest_findings
+        findings = [
+            {"host": "10.20.5.6", "oid": OID_1},
+            {"host": "not-an-ip", "oid": OID_1},   # non-IP host dropped (never re-resolved)
+        ]
+        out = reattest_findings(findings, {OID_1: NVTMeta(cvss_base=7.5, cves=["CVE-2024-1"])})
+        self.assertEqual(len(out), 1)
+        self.assertEqual(out[0]["cvss_base"], 7.5)
+        self.assertEqual(out[0]["threat"], "High")
+        self.assertEqual(out[0]["cves"], ["CVE-2024-1"])
+
+    def test_no_feed_evidence_is_log(self):
+        from bridge import reattest_findings
+        # OID absent from the feed (meta None) → 0.0/Log, no CVE (never fabricated).
+        out = reattest_findings([{"host": "10.20.5.7", "oid": "unknown", "cvss_base": 9.9}], {})
+        self.assertEqual(out[0]["cvss_base"], 0.0)
+        self.assertEqual(out[0]["threat"], "Log")
+
+
 if __name__ == "__main__":
     unittest.main()
