@@ -18,6 +18,7 @@
 package main
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
@@ -27,6 +28,7 @@ import (
 	"time"
 
 	"github.com/williamsouzadelima/suricatoos-infra/ingest"
+	"github.com/williamsouzadelima/suricatoos-infra/ingest/scanlaunch"
 )
 
 func main() {
@@ -64,9 +66,25 @@ func main() {
 		log.Printf("pipeline: correlation disabled — set NOTUS_DIR to enable")
 	}
 
+	server := ingest.NewServer(sink)
+
+	// reNgine→OpenVAS scan-launch (ADR-0006). Wired whenever SCAN_BRIDGE_SCRIPT is
+	// set; the POST route still 503s until SCAN_LAUNCH_ENABLED=true (dark deploy).
+	if slCfg := scanlaunch.ConfigFromEnv(); slCfg.BridgeScript != "" {
+		sl, err := scanlaunch.New(slCfg)
+		if err != nil {
+			log.Fatalf("scanlaunch: %v", err)
+		}
+		sl.Start(context.Background())
+		server.AttachScanLaunch(sl)
+		log.Printf("scanlaunch: montado (enabled=%v)", slCfg.Enabled)
+	} else {
+		log.Printf("scanlaunch: desabilitado — defina SCAN_BRIDGE_SCRIPT para habilitar")
+	}
+
 	srv := &http.Server{
 		Addr:         addr,
-		Handler:      ingest.NewServer(sink).Handler(),
+		Handler:      server.Handler(),
 		ReadTimeout:  30 * time.Second,
 		WriteTimeout: 30 * time.Second,
 		IdleTimeout:  60 * time.Second,
