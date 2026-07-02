@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://suricatoos.dev/schema/feed-manifest.schema.json",
+  "title": "Suricatoos — Sensor Feed Manifest",
+  "description": "The signed manifest the cloud serves at GET /agent/v1/feed/manifest (ADR-0007). Lists every Greenbone feed file, addressed by SHA-256, so a sensor downloads only the blobs it lacks (each verified by hash) from GET /agent/v1/feed/blob/{sha256}. The signature is Ed25519 over the canonical form (domain-tag 'suricatoos-feed-manifest-v1' + feed_version + path\\tsha256\\tsize per file, sorted by path), verified sensor-side against the CA public key pinned at enroll. Bound in lockstep by control-plane/feed (Go) and sensor/internal/feedsync (Go).",
+  "type": "object",
+  "required": ["feed_version", "files", "signature"],
+  "additionalProperties": false,
+  "properties": {
+    "feed_version": { "type": "string", "description": "the feed snapshot serial/timestamp" },
+    "files": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["path", "sha256", "size"],
+        "additionalProperties": false,
+        "properties": {
+          "path": { "type": "string", "description": "path relative to the feed root, forward slashes" },
+          "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$", "description": "content hash = the blob id" },
+          "size": { "type": "integer", "minimum": 0 }
+        }
+      }
+    },
+    "signature": { "type": "string", "description": "base64 Ed25519 over the canonical form" }
+  }
+}

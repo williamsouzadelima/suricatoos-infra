@@ -1,0 +1,51 @@
+# Suricatoos internal scanner sensor (ADR-0007) — compose OVERLAY.
+#
+# The sensor runs the FULL Greenbone GVM stack (gvmd + openvasd + ospd + feeds +
+# pg-gvm + redis) LOCALLY, plus the sensor-agent supervisor. This file is an
+# overlay applied ON TOP of the upstream Greenbone community `compose.yaml`
+# (fetched by sensor-install.sh), exactly like the cloud's docker-compose.override.yml
+# extends the same base:
+#
+#   docker compose -f compose.yaml -f docker-compose.sensor.yml up -d
+#
+# SECURITY (ADR-0007):
+# - The gvmd/openvasd sockets live ONLY on the compose network volume; they are
+#   NEVER published to a host port. The sensor-agent reaches gvmd via the shared
+#   gvmd_socket_vol, and NOTHING listens for inbound connections.
+# - The sensor-agent is phone-home only (outbound :443 mTLS to the cloud).
+# - The local gvmd admin password is generated PER SENSOR at install (sensor.env),
+#   never a shared secret; it grants control of the LOCAL gvmd only.
+
+services:
+  # The full GVM stack (gvmd, openvasd, ospd-openvas, pg-gvm, redis-server, the
+  # feed containers) comes verbatim from the upstream compose.yaml. We only ADD
+  # the sensor-agent and, where needed, pin images/volumes — we never publish a
+  # scanner port.
+
+  sensor-agent:
+    image: ghcr.io/williamsouzadelima/suricatoos-sensor-agent:stable
+    restart: unless-stopped
+    depends_on:
+      - gvmd
+    # Config comes from the host env_file written by sensor-install.sh. Holds the
+    # bootstrap ENROLL_TOKEN (first boot only), CLOUD_BASE_URL, SCAN_SCOPE,
+    # SCAN_SELF_DENY_IPS, SENSOR_GMP_USER/SENSOR_GVM_PASSWORD (LOCAL gvmd).
+    env_file:
+      - path: /var/lib/suricatoos-sensor/sensor.env
+        required: false
+    environment:
+      GMP_SOCKET: /run/gvmd/gvmd.sock
+      SENSOR_STATE_DIR: /var/lib/suricatoos-sensor
+      # Feed sync (ADR-0007): sincroniza o feed LOCAL do GVM a partir do mirror da
+      # nuvem (só deltas; o snapshot vem baked no install). Vazio → sync desabilitado.
+      SENSOR_FEED_DIR: /var/lib/suricatoos-sensor/feed
+    volumes:
+      # Shared LOCAL gvmd socket (same volume the base compose gives gvmd). The
+      # sensor drives scans through this — never a published TCP port.
+      - gvmd_socket_vol:/run/gvmd
+      # Persist the enrolled cert/key/ca + the synced feed version across restarts.
+      - sensor_state:/var/lib/suricatoos-sensor
+
+volumes:
+  # gvmd_socket_vol is declared by the base compose.yaml (referenced by short name).
+  sensor_state:

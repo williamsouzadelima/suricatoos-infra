@@ -5,4 +5,5 @@ use (
 	./control-plane
 	./correlation
 	./ingest
+	./sensor
 )

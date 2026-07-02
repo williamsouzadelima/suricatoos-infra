@@ -27,6 +27,7 @@ import argparse
 import ipaddress
 import json
 import os
+import re
 import sys
 from xml.etree import ElementTree as ET
 
@@ -80,6 +81,41 @@ def build_port_range(hosts) -> str:
     if not ports:
         raise ValueError("no ports")
     return "T:" + ",".join(str(p) for p in sorted(ports))
+
+
+# A GVM port_range string: T:/U: then digits, commas and hyphens only. This bounds
+# what the sensor's job may set (e.g. "T:1-65535") — no injection into the target.
+_PORT_RANGE_RE = re.compile(r"^[TU]:[0-9,\-]+$")
+
+
+def sanitize_targets(req: dict) -> list[str]:
+    """Return canonical IP/CIDR literals for the scan targets, raising if ANY is
+    not a literal (hostnames are refused → no scan-time DNS re-resolution). Accepts
+    the sensor's req['targets'] (ip/cidr strings) OR the legacy req['hosts']
+    ([{ip, ports}]). A /32 or /128 is emitted as a bare host."""
+    raw = req.get("targets")
+    if raw is None:
+        raw = [h.get("ip") for h in (req.get("hosts") or [])]
+    out = []
+    for t in raw or []:
+        t = str(t).strip()
+        try:
+            net = ipaddress.ip_network(t, strict=False)  # IP or CIDR; rejects names
+        except ValueError:
+            raise ValueError(f"target inválido (não é IP/CIDR literal): {t!r}")
+        out.append(str(net.network_address) if net.prefixlen == net.max_prefixlen else str(net))
+    if not out:
+        raise ValueError("no targets")
+    return out
+
+
+def resolve_port_range(req: dict) -> str:
+    """Use an explicit req['ports'] GVM range string (sensor) if valid, else build
+    it from the legacy per-host int ports (loop)."""
+    p = req.get("ports")
+    if isinstance(p, str) and _PORT_RANGE_RE.match(p.strip()):
+        return p.strip()
+    return build_port_range(req.get("hosts"))
 
 
 def _tag_value(tags: str, key: str) -> str:
@@ -178,16 +214,29 @@ def _alive_test(value: str):
         return None
 
 
+def _scan_id(req: dict) -> str:
+    """The scan identity as a string: a generic scan_id (the sensor: a correlation
+    UUID) or the legacy rengine_scan_history_id (the reNgine loop, an int)."""
+    v = req.get("scan_id")
+    if v is None:
+        v = req.get("rengine_scan_history_id")
+    return str(v) if v is not None else ""
+
+
+def _task_name(req: dict, prefix: str) -> str:
+    return f"{prefix}-{_scan_id(req)}"
+
+
 def cmd_launch(gmp: Gmp, req: dict, args) -> dict:
-    sid = int(req["rengine_scan_history_id"])
-    name = f"suricatoos-rengine-{sid}"
+    scan_id = _scan_id(req)
+    name = _task_name(req, args.task_prefix)
     comment = json.dumps({
-        "rengine_scan_history_id": sid,
+        "scan_id": scan_id,
         "target": req.get("target", ""),
         "engagement": req.get("engagement", ""),
     })
-    hosts = sanitize_ips(req.get("hosts"))
-    port_range = build_port_range(req.get("hosts"))
+    hosts = sanitize_targets(req)
+    port_range = resolve_port_range(req)
 
     # (a) target — find-or-create by exact name (idempotent).
     target_id = _find_target_id(gmp, name)
@@ -222,8 +271,8 @@ def cmd_launch(gmp: Gmp, req: dict, args) -> dict:
     return {"target_id": target_id, "task_id": task_id, "report_id": report_id or "", "status": status}
 
 
-def cmd_status(gmp: Gmp, req: dict, _args) -> dict:
-    name = f"suricatoos-rengine-{int(req['rengine_scan_history_id'])}"
+def cmd_status(gmp: Gmp, req: dict, args) -> dict:
+    name = _task_name(req, args.task_prefix)
     task_id, status, progress, report_id = _task_info(gmp, name)
     if not task_id:
         # NÃO emitir 'error' aqui: um campo error faz o exec.go do ingest tratar como
@@ -233,8 +282,8 @@ def cmd_status(gmp: Gmp, req: dict, _args) -> dict:
     return {"status": status, "progress": progress, "report_id": report_id or ""}
 
 
-def cmd_fetch(gmp: Gmp, req: dict, _args) -> dict:
-    name = f"suricatoos-rengine-{int(req['rengine_scan_history_id'])}"
+def cmd_fetch(gmp: Gmp, req: dict, args) -> dict:
+    name = _task_name(req, args.task_prefix)
     _tid, _status, _progress, report_id = _task_info(gmp, name)
     if not report_id:
         return {"findings": []}
@@ -245,8 +294,8 @@ def cmd_fetch(gmp: Gmp, req: dict, _args) -> dict:
     return {"findings": parse_report_results(resp)}
 
 
-def cmd_stop(gmp: Gmp, req: dict, _args) -> dict:
-    name = f"suricatoos-rengine-{int(req['rengine_scan_history_id'])}"
+def cmd_stop(gmp: Gmp, req: dict, args) -> dict:
+    name = _task_name(req, args.task_prefix)
     task_id, _status, _progress, _report_id = _task_info(gmp, name)
     if task_id:
         gmp.send_command(str(Tasks.stop_task(task_id)))  # best effort
@@ -268,6 +317,11 @@ def main() -> None:
     p.add_argument("--config-id", default=CONFIG_FULL_AND_FAST)
     p.add_argument("--scanner-id", default=SCANNER_OPENVAS_DEFAULT)
     p.add_argument("--alive-test", default="Consider Alive")
+    p.add_argument(
+        "--task-prefix",
+        default="suricatoos-rengine",
+        help="gvmd task/target name prefix (default suricatoos-rengine; sensor: suricatoos-sensor)",
+    )
     args = p.parse_args()
 
     req = json.load(sys.stdin) if args.request == "-" else json.load(open(args.request))

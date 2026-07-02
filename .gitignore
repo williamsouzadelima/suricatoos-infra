@@ -6,3 +6,8 @@ __pycache__/
 .venv/
 .pytest_cache/
 dist/
+
+# Compiled Go binaries (built via Dockerfile for release, never committed)
+/sensor/sensor-agent
+/agent/suricatoos-agent
+*.test

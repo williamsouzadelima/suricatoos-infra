@@ -29,6 +29,7 @@ import (
 
 	"github.com/williamsouzadelima/suricatoos-infra/ingest"
 	"github.com/williamsouzadelima/suricatoos-infra/ingest/scanlaunch"
+	"github.com/williamsouzadelima/suricatoos-infra/ingest/sensorreport"
 )
 
 func main() {
@@ -80,6 +81,40 @@ func main() {
 		log.Printf("scanlaunch: montado (enabled=%v)", slCfg.Enabled)
 	} else {
 		log.Printf("scanlaunch: desabilitado — defina SCAN_BRIDGE_SCRIPT para habilitar")
+	}
+
+	// Internal-sensor report import (ADR-0007). Wired when SENSOR_REPORT_ENABLED=true.
+	// Reuses the scanlaunch CRL fetcher (fail-closed) for revocation and reads the
+	// tenant registry + secrets from host-mounted files (ingest can't import the
+	// control-plane module).
+	if os.Getenv("SENSOR_REPORT_ENABLED") == "true" {
+		crl := scanlaunch.NewCRL(
+			envOr("SCAN_CRL_URL", "http://control-plane:8080/v1/crl.der"),
+			os.Getenv("SCAN_REQUIRE_CRL") != "false",
+		)
+		crl.Start(context.Background())
+		resolver := sensorreport.NewFileResolver(
+			envOr("TENANTS_FILE", "/data/tenants.json"),
+			os.Getenv("SENSOR_TENANT_SECRETS"),
+		)
+		sr := sensorreport.New(
+			sensorreport.Config{
+				BridgeScript: envOr("SENSOR_BRIDGE_SCRIPT", bridgeScript),
+				BridgePython: envOr("BRIDGE_PYTHON", "python3"),
+				GmpSocket:    envOr("GMP_SOCKET", "/run/gvmd/gvmd.sock"),
+			},
+			resolver.Resolve,
+			func(serial string) bool { return crl.Check(serial) != nil },
+		)
+		// Optional push of imported findings to the Score (ADR-0007 G), tenant-tagged.
+		if scoreURL := os.Getenv("SENSOR_SCORE_URL"); scoreURL != "" {
+			sr = sr.WithForwarder(sensorreport.NewForwarder(scoreURL, os.Getenv("SENSOR_SCORE_SECRET")))
+			log.Printf("sensorreport: push p/ Score habilitado (%s)", scoreURL)
+		}
+		server.AttachSensorReport(sr)
+		log.Printf("sensorreport: montado (import de report de sensor habilitado)")
+	} else {
+		log.Printf("sensorreport: desabilitado — defina SENSOR_REPORT_ENABLED=true para habilitar")
 	}
 
 	srv := &http.Server{

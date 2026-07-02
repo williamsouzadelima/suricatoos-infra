@@ -27,6 +27,7 @@ Environment:
 """
 
 import argparse
+import ipaddress
 import json
 import os
 import re
@@ -289,9 +290,141 @@ def finding_report_to_xml(
     return ET.tostring(root, encoding="unicode")
 
 
+_PORT_RE = re.compile(r"^(general|\d{1,5})/(tcp|udp)$")
+
+
+def _safe_port(value) -> str:
+    """Return a gvmd-valid result port ('443/tcp', 'general/tcp'), or 'general/tcp'
+    for anything malformed. ElementTree escapes text, but a sane token avoids odd
+    gvmd parsing."""
+    v = str(value or "").strip().lower()
+    return v if _PORT_RE.match(v) else "general/tcp"
+
+
+def network_report_to_xml(
+    findings: list[dict],
+    nvt_meta: dict[str, "NVTMeta | None"] | None = None,
+    scan_time=None,
+) -> str:
+    """Convert SENSOR OpenVAS findings (ADR-0007 --mode network) into a GMP report
+    XML, registering EACH scanned host. Like finding_report_to_xml, severity and
+    CVEs come from FEED EVIDENCE ONLY (nvt_meta by OID) — the sensor's claimed
+    severity/CVE are DISCARDED, so a compromised sensor can neither forge criticals
+    nor suppress a real finding. The host is a validated IP literal (a non-IP host
+    is dropped: the cloud never re-resolves a name)."""
+    if nvt_meta is None:
+        nvt_meta = {}
+    scan_time = valid_scan_time(scan_time)
+
+    root = ET.Element("report", id=str(uuid.uuid4()))
+    ET.SubElement(root, "scan_start").text = scan_time
+    results_el = ET.SubElement(root, "results", max="-1", start="1")
+
+    hosts_seen: dict[str, bool] = {}
+    for f in findings or []:
+        try:
+            host_ip = str(ipaddress.ip_address(str(f.get("host", "")).strip()))
+        except ValueError:
+            continue  # non-IP host — never trusted (ingest also pre-validates ⊆ scope)
+
+        oid = f.get("oid", "")
+        meta = nvt_meta.get(oid)
+        severity = meta.cvss_base if meta is not None else 0.0
+        cves = meta.cves if meta is not None else []
+
+        r = ET.SubElement(results_el, "result", id=str(uuid.uuid4()))
+        ET.SubElement(r, "host").text = host_ip
+        ET.SubElement(r, "port").text = _safe_port(f.get("port"))
+        ET.SubElement(r, "description").text = str(f.get("summary", "") or "")
+
+        nvt_el = ET.SubElement(r, "nvt", oid=oid)
+        ET.SubElement(nvt_el, "type").text = "nvt"
+        # name is display-only; gvmd re-enriches it from the feed by OID on import.
+        ET.SubElement(nvt_el, "name").text = str(f.get("name", "") or oid)
+        ET.SubElement(nvt_el, "family").text = "General"
+        ET.SubElement(nvt_el, "cvss_base").text = str(severity)
+        ET.SubElement(nvt_el, "tags").text = ""
+        refs_el = ET.SubElement(nvt_el, "refs")
+        for cve in cves:
+            ET.SubElement(refs_el, "ref", type="cve", id=cve)
+
+        ET.SubElement(r, "severity").text = str(severity)
+        ET.SubElement(r, "threat").text = severity_to_threat(severity)
+        qod = ET.SubElement(r, "qod")
+        ET.SubElement(qod, "value").text = str(_safe_qod(f.get("qod")))
+        ET.SubElement(qod, "type").text = "remote_vul"
+        hosts_seen[host_ip] = True
+
+    for ip in hosts_seen:
+        h = ET.SubElement(root, "host")
+        ET.SubElement(h, "ip").text = ip
+        ET.SubElement(h, "start").text = scan_time
+        ET.SubElement(h, "end").text = scan_time
+    ET.SubElement(root, "scan_end").text = scan_time
+    return ET.tostring(root, encoding="unicode")
+
+
+def _safe_qod(value) -> int:
+    try:
+        q = int(value)
+    except (TypeError, ValueError):
+        return 80
+    return q if 0 <= q <= 100 else 80
+
+
+def reattest_findings(findings: list[dict], nvt_meta: dict[str, "NVTMeta | None"] | None) -> list[dict]:
+    """Return the sensor findings with severity/CVE/threat REPLACED by feed evidence
+    (by OID) and the host validated to an IP literal — the SAME non-fabrication
+    transform network_report_to_xml applies to the central-gvmd XML.
+
+    Emitted via --reattested-out so the ingest forwards FEED-attested values to the
+    Score, never the sensor's claimed severity/CVE (ADR-0007 risk #1: a compromised
+    sensor must not be able to forge criticals nor suppress a real finding — on the
+    Score path too, not only in the central GSA). Fields not derivable from the feed
+    here (cvss_vector/references/impact/solution) are cleared rather than passed
+    through from the sensor. The output shape matches scanlaunch.Finding."""
+    if nvt_meta is None:
+        nvt_meta = {}
+    out: list[dict] = []
+    for f in findings or []:
+        try:
+            host_ip = str(ipaddress.ip_address(str(f.get("host", "")).strip()))
+        except ValueError:
+            continue  # non-IP host — never trusted/re-resolved (ingest also pre-scopes)
+        oid = f.get("oid", "")
+        meta = nvt_meta.get(oid)
+        severity = meta.cvss_base if meta is not None else 0.0
+        cves = meta.cves if meta is not None else []
+        out.append({
+            "host": host_ip,
+            "port": _safe_port(f.get("port")),
+            "oid": oid,
+            "name": str(f.get("name", "") or oid),
+            "cvss_base": severity,                 # FEED-derived, never the sensor's claim
+            "cvss_vector": "",                     # not feed-attested here → not forwarded
+            "threat": severity_to_threat(severity),
+            "cves": cves,                          # FEED-derived
+            "references": [],
+            "summary": str(f.get("summary", "") or ""),
+            "impact": "",
+            "solution": "",
+            "qod": _safe_qod(f.get("qod")),
+        })
+    return out
+
+
 # --------------------------------------------------------------------------- #
 # Main import logic
 # --------------------------------------------------------------------------- #
+
+def _build_report_xml(mode: str, report_dict: dict, nvt_meta) -> str:
+    """Dispatch to the agent (Notus) or network (sensor OpenVAS) report builder."""
+    if mode == "network":
+        return network_report_to_xml(
+            report_dict.get("findings") or [], nvt_meta, report_dict.get("scan_time")
+        )
+    return finding_report_to_xml(report_dict, nvt_meta=nvt_meta)
+
 
 def run_import(
     report_dict: dict,
@@ -303,11 +436,23 @@ def run_import(
     password: str,
     task_name: str | None,
     dry_run: bool,
+    mode: str = "agent",
+    reattested_out: str | None = None,
 ) -> None:
-    """Enrich + import the FindingReport into gvmd, or dry-run print the XML."""
+    """Enrich + import the FindingReport (mode='agent') or a sensor OpenVAS report
+    (mode='network', ADR-0007) into gvmd, or dry-run print the XML. In BOTH modes
+    severity/CVE come only from the feed by OID (non-fabrication). When mode='network'
+    and reattested_out is set, the feed-re-attested findings are also written there as
+    JSON (the ingest forwards THOSE to the Score, never the sensor's raw claim)."""
+
+    def _emit_reattested(nvt_meta) -> None:
+        if mode == "network" and reattested_out:
+            with open(reattested_out, "w") as fo:
+                json.dump(reattest_findings(report_dict.get("findings") or [], nvt_meta), fo)
+
     if dry_run:
-        report_xml = finding_report_to_xml(report_dict)
-        print(report_xml)
+        print(_build_report_xml(mode, report_dict, {}))
+        _emit_reattested({})
         return
 
     if not password:
@@ -322,8 +467,11 @@ def run_import(
     )
 
     if not task_name:
-        agent_host = report_dict.get("host", "unknown")
-        task_name = f"suricatoos-agent-{agent_host}"
+        if mode == "network":
+            task_name = f"suricatoos-sensor-{report_dict.get('tenant', 'unknown')}"
+        else:
+            agent_host = report_dict.get("host", "unknown")
+            task_name = f"suricatoos-agent-{agent_host}"
 
     with Gmp(connection=conn) as gmp:
         auth_req = Authentication.authenticate(username=username, password=password)
@@ -339,8 +487,12 @@ def run_import(
                 print(f"VT {oid}: no feed evidence (severity 0/Log)", file=sys.stderr)
             else:
                 print(f"VT {oid}: cvss={meta.cvss_base} cves={len(meta.cves)}", file=sys.stderr)
-        report_xml = finding_report_to_xml(report_dict, nvt_meta=nvt_meta)
-        comment = f"Suricatoos Agent findings for host {report_dict.get('host', '')}"
+        report_xml = _build_report_xml(mode, report_dict, nvt_meta)
+        _emit_reattested(nvt_meta)
+        if mode == "network":
+            comment = f"Suricatoos sensor findings (tenant {report_dict.get('tenant', '')})"
+        else:
+            comment = f"Suricatoos Agent findings for host {report_dict.get('host', '')}"
 
         # Reuse the per-agent container task if it already exists (the name is
         # per-agent), so repeated reports accumulate in ONE task instead of
@@ -417,6 +569,12 @@ def main() -> None:
     p.add_argument("--port", metavar="PORT", type=int, default=9390, help="gvmd TCP port")
     p.add_argument("--username", metavar="USER", default="admin", help="GMP username")
     p.add_argument(
+        "--mode",
+        choices=["agent", "network"],
+        default="agent",
+        help="agent = Notus FindingReport (default); network = sensor OpenVAS report (ADR-0007)",
+    )
+    p.add_argument(
         "--password",
         metavar="PASS",
         default=os.environ.get("GVM_PASSWORD", ""),
@@ -431,6 +589,12 @@ def main() -> None:
         "--dry-run",
         action="store_true",
         help="Print the report XML without connecting to gvmd",
+    )
+    p.add_argument(
+        "--reattested-out",
+        metavar="PATH",
+        help="network mode: write the FEED-re-attested findings (JSON) here, so the "
+        "ingest forwards feed-attested severity/CVE to the Score, never the sensor's claim",
     )
     args = p.parse_args()
 
@@ -449,6 +613,8 @@ def main() -> None:
         password=args.password,
         task_name=args.task_name,
         dry_run=args.dry_run,
+        mode=args.mode,
+        reattested_out=args.reattested_out,
     )
 
 

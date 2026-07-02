@@ -96,3 +96,38 @@ func TestHandlerUpToDateNotAvailable(t *testing.T) {
 		t.Fatal("should not offer update when current == latest")
 	}
 }
+
+// TestDualSignBothVerify proves the fleet-migration dual-sign (ADR-0007): the
+// primary signature verifies with the CA key (legacy fleet) AND the secondary with
+// the dedicated update key (new agents), over the SAME canonical bytes.
+func TestDualSignBothVerify(t *testing.T) {
+	caPub, caPriv, _ := ed25519.GenerateKey(nil)
+	upPub, upPriv, _ := ed25519.GenerateKey(nil)
+	cfg := &ManifestConfig{Version: "0.2.0", Artifacts: []Artifact{
+		{OS: "linux", Arch: "amd64", URL: "https://example.test/bin", SHA256: sha64},
+	}}
+	svc := NewService(cfg, edSigner{caPriv}).WithUpdateKey(edSigner{upPriv})
+	rec := httptest.NewRecorder()
+	svc.Handler()(rec, httptest.NewRequest(http.MethodGet, "/update/check?os=linux&arch=amd64&current=0.1.0", nil))
+
+	var r response
+	if err := json.Unmarshal(rec.Body.Bytes(), &r); err != nil {
+		t.Fatal(err)
+	}
+	if r.Signature == "" || r.SignatureV2 == "" {
+		t.Fatal("dual-sign deveria produzir as duas assinaturas")
+	}
+	msg := canonical(r)
+	sig1, _ := base64.StdEncoding.DecodeString(r.Signature)
+	sig2, _ := base64.StdEncoding.DecodeString(r.SignatureV2)
+	if !ed25519.Verify(caPub, msg, sig1) {
+		t.Fatal("primary deveria verificar com a chave da CA (frota legada)")
+	}
+	if !ed25519.Verify(upPub, msg, sig2) {
+		t.Fatal("secondary deveria verificar com a chave de update dedicada")
+	}
+	// Cross-check: a primary NÃO verifica com a chave de update (chaves distintas).
+	if ed25519.Verify(upPub, msg, sig1) {
+		t.Fatal("as chaves deveriam ser realmente distintas")
+	}
+}

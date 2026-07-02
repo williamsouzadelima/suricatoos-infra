@@ -116,3 +116,16 @@ func (s *BoltStore) RegisterAgentID(agentID, tokenID string) error {
 		return tx.Bucket(agentsBucket).Put([]byte(agentID), []byte(tokenID))
 	})
 }
+
+// TokenIDByAgentID returns the token id that enrolled agentID.
+func (s *BoltStore) TokenIDByAgentID(agentID string) (string, bool, error) {
+	var id string
+	var ok bool
+	err := s.db.View(func(tx *bolt.Tx) error {
+		if v := tx.Bucket(agentsBucket).Get([]byte(agentID)); v != nil {
+			id, ok = string(v), true
+		}
+		return nil
+	})
+	return id, ok, err
+}

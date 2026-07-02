@@ -114,6 +114,25 @@ services:
     env_file:
       - path: /var/lib/suricatoos-cp/control-plane.env
         required: false
+    environment:
+      # --- Sensor de scan interno (ADR-0007) — nasce DARK ---
+      # enabled=false → as rotas /v1/scan-jobs, /v1/heartbeat não são montadas
+      # (a API admin de tenants segue disponível). Habilitar é P1. tenants.json é
+      # gravado em /data (=/var/lib/suricatoos-cp no host) e o ingest o lê read-only.
+      SENSOR_JOBS_ENABLED: "false"
+      TENANTS_FILE: /data/tenants.json
+      SENSOR_JOBS_FILE: /data/scan-jobs.json
+      # Mirror de feed p/ os sensores (ADR-0007). Vazio → rota de feed não montada.
+      # Aponta p/ um dir read-only com os arquivos de feed que a nuvem já sincroniza.
+      SENSOR_FEED_ROOT: ""
+      SENSOR_FEED_VERSION: ""
+      # Chaves de assinatura por-propósito (ADR-0007 risco #3), separadas da chave de
+      # emissão da CA. Persistidas em /data; pubkeys distribuídas no enroll. Se o
+      # arquivo não existir, é gerado no 1º boot (0600).
+      FEED_SIGN_KEY_FILE: /data/feed-sign.key
+      UPDATE_SIGN_KEY_FILE: /data/update-sign.key
+      # TTL curto p/ certs renovados (limita latência de revogação de cert vazado).
+      RENEW_CERT_TTL: 720h
     volumes:
       - /var/lib/suricatoos-cp:/data
 
@@ -160,12 +179,26 @@ services:
       SCAN_FINDINGS_DIR: /data/findings
       SCAN_CRL_URL: http://control-plane:8080/v1/crl.der
       SCAN_REQUIRE_CRL: "true"
+      # --- Import de report do SENSOR interno (ADR-0007) — nasce DARK ---
+      # enabled=false → a rota /ingest/v1/sensor-report nem é montada. Habilitar é P1.
+      # O ingest lê o registro de tenants (não-secreto: escopo+usuário gvmd) que o
+      # control-plane grava, e as SENHAS gvmd por-tenant de um secret file à parte
+      # (SENSOR_TENANT_SECRETS = {tenant: senha}, host-only 0600). Nunca gravadas aqui.
+      SENSOR_REPORT_ENABLED: "false"
+      TENANTS_FILE: /cp/tenants.json
+      SENSOR_TENANT_SECRETS: /cp/tenant-gvmd-secrets.json
+      # Push dos achados do sensor p/ o Score (ADR-0007 G), tagueados pelo tenant do
+      # cert. Vazio → só ficam na GSA central. SENSOR_SCORE_SECRET vem do ingest.env.
+      SENSOR_SCORE_URL: ""
     volumes:
       # Volumes do compose base do greenbone (mesmo projeto): referenciados por
       # short-name; já declarados no compose.yaml base, não redeclarar aqui.
       - gvmd_socket_vol:/run/gvmd          # socket do gvmd (import_report)
       - notus_data_vol:/notus:ro           # *.notus do feed (WalkDir recursivo)
       - ingest_state:/data                 # persiste lastSeen (online/offline) entre recreates
+      # ADR-0007: registro de tenants (control-plane grava) + secrets gvmd por-tenant,
+      # read-only. O control-plane grava tenants.json em /var/lib/suricatoos-cp.
+      - /var/lib/suricatoos-cp:/cp:ro
 
 volumes:
   feed_updater_state:

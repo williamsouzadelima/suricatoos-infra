@@ -46,7 +46,11 @@ import (
 	"github.com/williamsouzadelima/suricatoos-infra/control-plane/ca"
 	cpcommands "github.com/williamsouzadelima/suricatoos-infra/control-plane/commands"
 	"github.com/williamsouzadelima/suricatoos-infra/control-plane/enroll"
+	cpfeed "github.com/williamsouzadelima/suricatoos-infra/control-plane/feed"
 	cpprovision "github.com/williamsouzadelima/suricatoos-infra/control-plane/provision"
+	cpsensorjobs "github.com/williamsouzadelima/suricatoos-infra/control-plane/sensorjobs"
+	cpsignkeys "github.com/williamsouzadelima/suricatoos-infra/control-plane/signkeys"
+	cptenants "github.com/williamsouzadelima/suricatoos-infra/control-plane/tenants"
 	"github.com/williamsouzadelima/suricatoos-infra/control-plane/tokens"
 	cpupdate "github.com/williamsouzadelima/suricatoos-infra/control-plane/update"
 )
@@ -117,7 +121,32 @@ func main() {
 		log.Printf("ingest URL: unset — set INGEST_URL so agents learn where to report")
 	}
 
-	enrollSvc := enroll.NewService(tm, authority, enroll.WithIngestURL(ingestURL))
+	// Purpose-scoped signing keys (ADR-0007 risk #3), separate from the CA's cert-
+	// issuing key. Persisted so they survive restarts; their pubkeys are distributed
+	// to sensors/agents at enroll. Absent path → ephemeral (dev).
+	feedKey, err := cpsignkeys.LoadOrCreate(os.Getenv("FEED_SIGN_KEY_FILE"))
+	if err != nil {
+		log.Fatalf("feed sign key: %v", err)
+	}
+	updateKey, err := cpsignkeys.LoadOrCreate(os.Getenv("UPDATE_SIGN_KEY_FILE"))
+	if err != nil {
+		log.Fatalf("update sign key: %v", err)
+	}
+
+	enrollOpts := []enroll.Option{
+		enroll.WithIngestURL(ingestURL),
+		enroll.WithVerificationKeys(feedKey.PublicPEM(), updateKey.PublicPEM()),
+		// CRL enforcement on /renew (ADR-0007 risk #6): a revoked cert cannot renew
+		// itself into a fresh serial. authority.IsRevoked is authoritative + in-memory.
+		enroll.WithRevocationCheck(authority.IsRevoked),
+	}
+	// Short renewed-cert TTL bounds revocation latency for a leaked cert (ADR-0007).
+	if v := os.Getenv("RENEW_CERT_TTL"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil && d > 0 {
+			enrollOpts = append(enrollOpts, enroll.WithRenewTTL(d))
+		}
+	}
+	enrollSvc := enroll.NewService(tm, authority, enrollOpts...)
 	adminAPI := cpapi.New(tm, authority, serverURL, ingestURL, adminSecret)
 
 	// Auto-update channel — optional. When UPDATE_MANIFEST_FILE points at a valid
@@ -133,7 +162,10 @@ func main() {
 	} else {
 		log.Printf("auto-update: disabled — set UPDATE_MANIFEST_FILE to enable")
 	}
-	updateSvc := cpupdate.NewService(updateCfg, authority)
+	// Dual-sign updates: primary = CA key (legacy fleet compat), secondary =
+	// dedicated update key (ADR-0007). Once the fleet has re-enrolled, drop the CA
+	// primary so the CA key no longer signs updates.
+	updateSvc := cpupdate.NewService(updateCfg, authority).WithUpdateKey(updateKey)
 
 	// Frictionless install: mints a short-lived token and returns a ready install
 	// command per OS. Guarded by nginx (GSA session), never bearer — see provision pkg.
@@ -142,6 +174,28 @@ func main() {
 	// Command channel: operators enqueue "scan_now" for an agent (admin Bearer);
 	// the agent polls + acks over its mTLS channel and re-collects immediately.
 	cmdSvc := cpcommands.NewService(cpcommands.NewQueue())
+
+	// Sensor dispatch + tenant registry (ADR-0007). The tenant admin API is always
+	// available (bearer-gated); the sensor-facing scan-job routes are mounted only
+	// when SENSOR_JOBS_ENABLED (dark by default).
+	tenantReg, err := cptenants.NewRegistry(os.Getenv("TENANTS_FILE"))
+	if err != nil {
+		log.Fatalf("tenants: %v", err)
+	}
+	tenantSvc := cptenants.NewService(tenantReg, adminSecret)
+	sensorJobReg, err := cpsensorjobs.NewRegistry(cpsensorjobs.Config{
+		Path: os.Getenv("SENSOR_JOBS_FILE"),
+		ScopeOf: func(t string) *cpsensorjobs.Scope {
+			s, _ := cpsensorjobs.NewScope(tenantReg.ScopeSpec(t))
+			return s
+		},
+	})
+	if err != nil {
+		log.Fatalf("sensorjobs: %v", err)
+	}
+	// authority.IsRevoked is authoritative + in-memory → CRL enforced without staleness.
+	sensorJobSvc := cpsensorjobs.NewService(sensorJobReg, tenantReg.Known, authority.IsRevoked)
+	sensorJobsEnabled := os.Getenv("SENSOR_JOBS_ENABLED") == "true"
 
 	mux := http.NewServeMux()
 	mux.Handle("/v1/", http.StripPrefix("/v1", enrollSvc.Handler()))
@@ -166,6 +220,34 @@ func main() {
 	// no bearer; shares the same command queue.
 	mux.HandleFunc("POST /agents/scan", cmdSvc.SessionEnqueueHandler())
 	mux.Handle("/api/", adminAPI.Handler())
+	// Tenant registry admin (ADR-0007) — always available, bearer-gated. More
+	// specific than "/api/" so these win over the adminAPI catch-all.
+	mux.HandleFunc("PUT /api/v1/tenants/{t}", tenantSvc.PutHandler())
+	mux.HandleFunc("GET /api/v1/tenants/{t}", tenantSvc.GetHandler())
+	mux.HandleFunc("GET /api/v1/tenants", tenantSvc.ListHandler())
+	if sensorJobsEnabled {
+		// Sensor-facing dispatch (nginx mTLS-gated + CRL fail-closed in the service).
+		mux.HandleFunc("GET /v1/scan-jobs", sensorJobSvc.PollHandler())
+		mux.HandleFunc("POST /v1/scan-jobs/{id}/ack", sensorJobSvc.AckHandler())
+		mux.HandleFunc("POST /v1/heartbeat", sensorJobSvc.HeartbeatHandler())
+		mux.HandleFunc("POST /api/v1/tenants/{t}/scan-jobs", sensorJobSvc.EnqueueHandler(adminSecret))
+		// Feed mirror (ADR-0007): signed manifest + content-addressed blobs to the
+		// sensor's local GVM. Signed with `authority` for now (a dedicated feed key
+		// is the key-separation slice); the sensor verifies with the pinned CA pubkey.
+		if feedRoot := os.Getenv("SENSOR_FEED_ROOT"); feedRoot != "" {
+			feedSvc := cpfeed.New(cpfeed.Config{
+				Root:        feedRoot,
+				FeedVersion: func() string { return os.Getenv("SENSOR_FEED_VERSION") },
+				Signer:      feedKey, // dedicated feed key, NOT the CA (risk #3)
+				Authz:       sensorJobSvc.AuthorizeRequest,
+			})
+			feedSvc.Register(mux)
+			log.Printf("sensor: mirror de feed HABILITADO (root=%s)", feedRoot)
+		}
+		log.Printf("sensor: dispatch de scan-jobs HABILITADO")
+	} else {
+		log.Printf("sensor: dispatch de scan-jobs desabilitado (SENSOR_JOBS_ENABLED != true)")
+	}
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("ok"))
 	})

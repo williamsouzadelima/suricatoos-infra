@@ -9,6 +9,7 @@ from bridge import (
     _find_task_id,
     fetch_nvt_meta,
     finding_report_to_xml,
+    network_report_to_xml,
     safe_host_id,
     severity_to_threat,
     valid_scan_time,
@@ -342,6 +343,96 @@ class TestFindTaskId(unittest.TestCase):
         self.assertEqual(_find_task_id(g, "Suricatoos Agent CVE: a-1"), "ID-1")
         self.assertEqual(_find_task_id(g, "Suricatoos Agent CVE: a-10"), "ID-10")
         self.assertIsNone(_find_task_id(g, "Suricatoos Agent CVE: a-99"))
+
+
+class NetworkReportTests(unittest.TestCase):
+    """ADR-0007 --mode network: severity/CVE from the FEED by OID only; the
+    sensor's claimed values are discarded (non-fabrication in hostile turf)."""
+
+    def test_severity_and_cves_from_feed_not_sensor(self):
+        # Sensor CLAIMS critical + a fake CVE; feed says the OID is 7.5 with a real CVE.
+        findings = [{
+            "host": "10.20.5.5", "port": "443/tcp", "oid": "1.3.6.1.4.1.25623.1.0.111",
+            "name": "TLS weak", "cvss_base": 10.0, "cves": ["CVE-9999-0000"], "summary": "s", "qod": 80,
+        }]
+        meta = {"1.3.6.1.4.1.25623.1.0.111": NVTMeta(cvss_base=7.5, cves=["CVE-2023-1"])}
+        root = ET.fromstring(network_report_to_xml(findings, meta))
+        res = root.find(".//results/result")
+        self.assertEqual(res.findtext("severity"), "7.5")          # feed, not 10.0
+        self.assertEqual(res.findtext("threat"), "High")
+        cves = [r.get("id") for r in res.findall(".//nvt/refs/ref[@type='cve']")]
+        self.assertEqual(cves, ["CVE-2023-1"])                     # feed CVE, not the fake
+        self.assertEqual(res.findtext("host"), "10.20.5.5")
+        self.assertEqual(res.findtext("port"), "443/tcp")
+
+    def test_oid_absent_from_feed_is_log(self):
+        findings = [{"host": "10.20.5.6", "port": "22/tcp", "oid": "1.2.3.unknown",
+                     "cvss_base": 9.9, "cves": ["CVE-x"]}]
+        root = ET.fromstring(network_report_to_xml(findings, {"1.2.3.unknown": None}))
+        res = root.find(".//results/result")
+        self.assertEqual(res.findtext("severity"), "0.0")          # no feed evidence → Log
+        self.assertEqual(res.findtext("threat"), "Log")
+        self.assertEqual(res.findall(".//nvt/refs/ref"), [])       # no fabricated CVE
+
+    def test_registers_each_host(self):
+        findings = [
+            {"host": "10.20.5.5", "port": "443/tcp", "oid": "o1"},
+            {"host": "10.20.5.6", "port": "80/tcp", "oid": "o2"},
+        ]
+        root = ET.fromstring(network_report_to_xml(findings, {}))
+        ips = sorted(h.findtext("ip") for h in root.findall("host"))
+        self.assertEqual(ips, ["10.20.5.5", "10.20.5.6"])
+
+    def test_non_ip_host_dropped(self):
+        findings = [{"host": "evil.com", "port": "443/tcp", "oid": "o1"},
+                    {"host": "10.20.5.5", "port": "443/tcp", "oid": "o2"}]
+        root = ET.fromstring(network_report_to_xml(findings, {}))
+        self.assertEqual(len(root.findall(".//results/result")), 1)   # hostname dropped
+        self.assertEqual(root.find(".//results/result").findtext("host"), "10.20.5.5")
+
+    def test_malformed_port_neutralized(self):
+        findings = [{"host": "10.20.5.5", "port": "not a port", "oid": "o1"}]
+        root = ET.fromstring(network_report_to_xml(findings, {}))
+        self.assertEqual(root.find(".//results/result").findtext("port"), "general/tcp")
+
+
+class TestReattestFindings(unittest.TestCase):
+    """The Score-push non-fabrication fix (ADR-0007 risk #1): the findings emitted
+    for the Score must carry FEED-derived severity/CVE, never the sensor's claim."""
+
+    def test_discards_sensor_forged_severity_and_cve(self):
+        from bridge import reattest_findings
+        # Sensor forges a Critical + CVE; the feed (nvt_meta) says Log/0.0 for the OID.
+        findings = [{"host": "10.20.5.5", "port": "443/tcp", "oid": OID_0,
+                     "cvss_base": 10.0, "threat": "Critical", "cves": ["CVE-9999-0001"],
+                     "name": "forged", "qod": 99, "cvss_vector": "evil"}]
+        out = reattest_findings(findings, {OID_0: NVTMeta(cvss_base=0.0, cves=[])})
+        self.assertEqual(len(out), 1)
+        f = out[0]
+        self.assertEqual(f["cvss_base"], 0.0)     # feed, not the sensor's 10.0
+        self.assertEqual(f["threat"], "Log")
+        self.assertEqual(f["cves"], [])           # forged CVE discarded
+        self.assertEqual(f["cvss_vector"], "")    # not feed-attested → cleared
+        self.assertEqual(f["host"], "10.20.5.5")
+
+    def test_uses_feed_evidence_and_drops_non_ip(self):
+        from bridge import reattest_findings
+        findings = [
+            {"host": "10.20.5.6", "oid": OID_1},
+            {"host": "not-an-ip", "oid": OID_1},   # non-IP host dropped (never re-resolved)
+        ]
+        out = reattest_findings(findings, {OID_1: NVTMeta(cvss_base=7.5, cves=["CVE-2024-1"])})
+        self.assertEqual(len(out), 1)
+        self.assertEqual(out[0]["cvss_base"], 7.5)
+        self.assertEqual(out[0]["threat"], "High")
+        self.assertEqual(out[0]["cves"], ["CVE-2024-1"])
+
+    def test_no_feed_evidence_is_log(self):
+        from bridge import reattest_findings
+        # OID absent from the feed (meta None) → 0.0/Log, no CVE (never fabricated).
+        out = reattest_findings([{"host": "10.20.5.7", "oid": "unknown", "cvss_base": 9.9}], {})
+        self.assertEqual(out[0]["cvss_base"], 0.0)
+        self.assertEqual(out[0]["threat"], "Log")
 
 
 if __name__ == "__main__":

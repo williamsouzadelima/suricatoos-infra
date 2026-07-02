@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://suricatoos.dev/schema/scan-job.schema.json",
+  "title": "Suricatoos — Sensor Scan Job",
+  "description": "A scan job the cloud dispatches to a tenant's internal scanner sensor over the mTLS phone-home channel (ADR-0007). The cloud is authoritative: it assigns job_id/correlation_id/tenant server-side and gates targets to the tenant's authorized scope. targets are IP/CIDR LITERALS only (no hostname → no scan-time DNS rebinding).",
+  "type": "object",
+  "required": ["schema_version", "job_id", "correlation_id", "tenant", "targets"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "type": "string", "const": "1.0.0" },
+    "job_id": { "type": "string", "description": "cloud-assigned, unguessable (closes IDOR)" },
+    "correlation_id": { "type": "string", "description": "end-to-end anchor: job → local gvmd task → sensor-report → central report → Score" },
+    "tenant": { "type": "string", "description": "= cert O; server-set and server-re-derived; the sensor re-checks (defense in depth)" },
+    "source": { "enum": ["operator-scope", "score-discovery", "agent-discovery"] },
+    "targets": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 4096,
+      "description": "IPv4/IPv6 or CIDR literals; every entry must be within the tenant's authorized scope.",
+      "items": { "type": "string" }
+    },
+    "ports": { "type": "string", "description": "GVM port_range, e.g. T:1-65535" },
+    "scan_config": { "type": "string", "description": "e.g. full-and-fast" },
+    "alive_test": { "type": "string" },
+    "max_duration": { "type": "string", "description": "Go duration, e.g. 6h" },
+    "state": { "enum": ["PENDING", "DELIVERED", "ACKED", "DONE", "EXPIRED"] },
+    "not_before": { "type": "string", "format": "date-time" },
+    "expires_at": { "type": "string", "format": "date-time" },
+    "created_at": { "type": "string", "format": "date-time" }
+  }
+}
