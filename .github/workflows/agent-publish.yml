@@ -1,0 +1,55 @@
+name: agent-publish
+
+# Builds the Suricatoos Agent container (Go endpoint agent + auto-enroll entrypoint +
+# rpm for RHEL-family host inventory) and publishes it to GHCR on changes to the agent
+# sources on main. This is the "docker run and it works" image: it auto-enrolls into
+# the tenant from ENROLL_TOKEN/CLOUD_BASE_URL and inventories the host via HOST_ROOT.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "agent/**"
+      - ".github/workflows/agent-publish.yml"
+  workflow_dispatch:
+
+env:
+  IMAGE: ghcr.io/williamsouzadelima/suricatoos-agent
+
+jobs:
+  build-publish:
+    name: build & publish (agent container)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_PAT }}
+
+      # Build context = repo root; agent/Dockerfile copies agent/ (standalone module)
+      # + the auto-enroll entrypoint.
+      - name: Build & push suricatoos-agent
+        run: |
+          docker build \
+            -f agent/Dockerfile \
+            -t ${{ env.IMAGE }}:stable \
+            -t ${{ env.IMAGE }}:${{ github.sha }} \
+            .
+          docker push --all-tags ${{ env.IMAGE }}
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### suricatoos-agent (container) publicado 🐾"
+            echo ""
+            echo "| Imagem | Tags |"
+            echo "|---|---|"
+            echo "| \`${{ env.IMAGE }}\` | stable, ${GITHUB_SHA::12} |"
+          } >> "$GITHUB_STEP_SUMMARY"

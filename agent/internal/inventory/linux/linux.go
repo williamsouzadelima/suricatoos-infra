@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"path/filepath"
 	"runtime"
 	"time"
 
@@ -24,11 +25,18 @@ type Collector struct {
 }
 
 // New returns a Collector reading the standard Linux system paths.
+//
+// HOST_ROOT (env) prefixes those paths so the agent can inventory the HOST when it
+// runs inside a container that bind-mounts the host filesystem read-only. Empty
+// (the default) reads the running system directly — set HOST_ROOT=/host in the
+// container image and run with `-v /:/host:ro`. Without it a containerized agent
+// would inventory its own (near-empty) image, not the host.
 func New() *Collector {
+	root := os.Getenv("HOST_ROOT")
 	return &Collector{
-		osReleasePath:  defaultOSReleasePath,
-		dpkgStatusPath: defaultDpkgStatusPath,
-		rpmList:        defaultRPMList,
+		osReleasePath:  filepath.Join(root, defaultOSReleasePath),
+		dpkgStatusPath: filepath.Join(root, defaultDpkgStatusPath),
+		rpmList:        rpmListRooted(root),
 	}
 }
 
