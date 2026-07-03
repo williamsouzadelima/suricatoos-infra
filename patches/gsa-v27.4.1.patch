@@ -10375,10 +10375,10 @@ index 10e592f..a9354c3 100644
 \ No newline at end of file
 diff --git a/public/suricatoos-theme.css b/public/suricatoos-theme.css
 new file mode 100644
-index 0000000..3d463cb
+index 0000000..9413ed1
 --- /dev/null
 +++ b/public/suricatoos-theme.css
-@@ -0,0 +1,269 @@
+@@ -0,0 +1,305 @@
 +@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 +
 +/* ============================================================
@@ -10648,6 +10648,42 @@ index 0000000..3d463cb
 +  background:transparent!important; color:var(--sur-accent)!important; border-color:var(--sur-accent)!important;
 +}
 +[role="tab"][aria-selected='true'] { border-bottom:2px solid var(--sur-accent)!important; }
++
++/* ============================================================
++   13. TABELAS — mais legíveis e definidas (sóbrio, CSS-reachable)
++   ============================================================ */
++/* zebra nas linhas (leitura em tabelas densas) — visível mas sóbria */
++table tbody tr:nth-child(even) { background:#edf1f8!important; }
++[data-mantine-color-scheme='dark'] table tbody tr:nth-child(even) { background:rgba(125,151,255,.05)!important; }
++/* hover vence a zebra (re-declarado DEPOIS p/ ganhar por ordem de fonte) */
++table tbody tr:hover { background:var(--sur-accent-soft)!important; }
++/* header mais definido: divisória forte */
++table thead th, table th { border-bottom:2px solid var(--sur-border-strong)!important; }
++/* linhas com divisória mais suave + primeira célula (nome) com leve peso */
++table tbody td { border-bottom:1px solid var(--sur-border)!important; }
++table tbody td:first-child { font-weight:500!important; }
++
++/* ============================================================
++   14. GRÁFICOS — modernização (CSS-reachable) p/ tirar a cara "antiga"
++   Donut com gaps entre segmentos + barras arredondadas + eixos leves.
++   ============================================================ */
++/* donut: stroke da cor do card entre segmentos = "gaps" modernos */
++svg path[fill="#83A9DE"], svg path[fill="#EAA83D"], svg path[fill="#EE8654"],
++svg path[fill="#D5383C"], svg path[fill="#D4DAE1"], svg path[fill="#DDDDDD"] {
++  stroke:var(--sur-surface, #fff)!important; stroke-width:2.5px!important; stroke-linejoin:round!important;
++}
++/* números dentro dos segmentos: brancos e limpos (não cinza clunky) */
++.pie-label { fill:#ffffff!important; font-weight:600!important; font-size:12px!important; font-family:'Space Grotesk',sans-serif!important; }
++/* barras: pontas arredondadas */
++svg rect[fill="#83A9DE"], svg rect[fill="#EAA83D"], svg rect[fill="#EE8654"], svg rect[fill="#D5383C"],
++svg rect[fill="#719ECE"], svg rect[fill="#4f91c7"], svg rect[fill="#c83814"], svg rect[fill="#f0a519"] {
++  rx:4px!important; ry:4px!important;
++}
++/* eixos/grades/ticks mais leves (menos "planilha") */
++svg .domain, svg path.domain, svg .axis-line { stroke:var(--sur-border, #e5e9f0)!important; stroke-opacity:.7!important; }
++svg .tick line { stroke:var(--sur-border, #e5e9f0)!important; stroke-opacity:.5!important; }
++svg .tick text, svg .axis-label { fill:var(--sur-chart-text)!important; }
++
 diff --git a/src/gmp/locale/languages.ts b/src/gmp/locale/languages.ts
 index 4d337bd..60048e5 100644
 --- a/src/gmp/locale/languages.ts
@@ -10738,15 +10774,15 @@ index 8244715..c284668 100644
        onDataClick,
        onLegendItemClick,
 diff --git a/src/web/components/dashboard/display/Display.tsx b/src/web/components/dashboard/display/Display.tsx
-index 4895369..9dc5c63 100644
+index 4895369..83a7e1c 100644
 --- a/src/web/components/dashboard/display/Display.tsx
 +++ b/src/web/components/dashboard/display/Display.tsx
 @@ -24,6 +24,9 @@ export const DISPLAY_BORDER_WIDTH = 2;
  
  const HeaderContainer = styled.div`
    position: relative;
-+  border-radius: 12px;
-+  box-shadow: var(--sur-shadow, 0 1px 3px rgba(16,32,48,.10));
++  border-radius: 16px 16px 0 0;
++  box-shadow: none;
 +  overflow: hidden;
    z-index: ${Theme.Layers.higher};
    height: ${DISPLAY_HEADER_HEIGHT}px;
@@ -10759,23 +10795,25 @@ index 4895369..9dc5c63 100644
 -  border: 1px solid ${Theme.lightGray};
 -  color: ${Theme.black};
 +  background-color: var(--sur-header, ${Theme.lightGray});
-+  border: 1px solid var(--sur-border, ${Theme.lightGray});
++  border-bottom: 1px solid var(--sur-border, ${Theme.lightGray});
 +  color: var(--sur-text, ${Theme.black});
    text-overflow: ellipsis;
 -  padding: 0px 5px;
-+  padding: 2px 12px;
++  padding: 4px 14px;
    user-select: none;
    overflow: hidden;
  `;
-@@ -63,17 +66,20 @@ const DisplayView = styled.div`
+@@ -63,17 +66,19 @@ const DisplayView = styled.div`
    flex-grow: 1;
    flex-shrink: 1;
    flex-basis: 0;
 -  background-color: ${Theme.white};
 +  background-color: var(--sur-surface, ${Theme.white});
    position: relative;
-+  border-radius: 12px;
-+  box-shadow: var(--sur-shadow, 0 1px 3px rgba(16,32,48,.10));
++  border-radius: 16px;
++  border: 1px solid var(--sur-border, ${Theme.lightGray});
++  box-shadow: 0 1px 2px rgba(15,28,50,.04), 0 6px 18px rgba(15,28,50,.08),
++    0 18px 42px rgba(15,28,50,.05);
 +  overflow: hidden;
  `;
  
@@ -10786,13 +10824,10 @@ index 4895369..9dc5c63 100644
 -  border-left: 1px solid ${Theme.lightGray};
 -  border-right: 1px solid ${Theme.lightGray};
 -  border-bottom: 1px solid ${Theme.lightGray};
-+  border-left: 1px solid var(--sur-border, ${Theme.lightGray});
-+  border-right: 1px solid var(--sur-border, ${Theme.lightGray});
-+  border-bottom: 1px solid var(--sur-border, ${Theme.lightGray});
    overflow: hidden;
  `;
  
-@@ -83,7 +89,7 @@ const DisplayOverlay = styled.div`
+@@ -83,7 +88,7 @@ const DisplayOverlay = styled.div`
    display: flex;
    align-items: center;
    justify-content: center;
@@ -10801,7 +10836,7 @@ index 4895369..9dc5c63 100644
    z-index: ${Theme.Layers.aboveAll};
  `;
  
-@@ -95,7 +101,13 @@ const DisplayTitle = styled.div`
+@@ -95,7 +100,13 @@ const DisplayTitle = styled.div`
    word-break: keep-all;
    text-overflow: ellipsis;
    overflow: hidden;
