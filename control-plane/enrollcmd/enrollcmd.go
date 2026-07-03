@@ -28,11 +28,12 @@ type TenantKnown func(name string) bool
 // Config wires the command renderer.
 type Config struct {
 	TM          *tokens.Manager
-	Known       TenantKnown // nil → any non-empty tenant is accepted (dev only)
-	CAPin       string      // authority.Fingerprint() → --ca-pin / CA_PIN
-	ServerURL   string      // CONTROL_PLANE_URL (e.g. https://scanner.suricatoos.com/agent/v1)
-	Image       string      // container image ref (docker target); empty → a sane default
-	AdminSecret string      // Bearer gate
+	Known       TenantKnown     // nil → any non-empty tenant is accepted (dev only)
+	Tenants     func() []string // enabled tenant names, for the UI selector (session handler)
+	CAPin       string          // authority.Fingerprint() → --ca-pin / CA_PIN
+	ServerURL   string          // CONTROL_PLANE_URL (e.g. https://scanner.suricatoos.com/agent/v1)
+	Image       string          // container image ref (docker target); empty → a sane default
+	AdminSecret string          // Bearer gate
 }
 
 // Service renders per-tenant enrollment commands backed by fresh tokens.
@@ -65,77 +66,107 @@ type response struct {
 	ExpiresAt time.Time `json:"expires_at"`
 }
 
-// Handler serves GET /api/v1/tenants/{t}/enroll-command. Query params:
-//
-//	target     docker (default) | linux | windows
-//	max_uses   deployment cap (default 100; 1 = single host)
-//	ttl_hours  token lifetime (default 72; capped at 720)
-//
-// Admin-bearer gated; the {t} tenant is validated against the registry.
+// Handler serves GET /api/v1/tenants/{t}/enroll-command (ADMIN-BEARER). The tenant
+// comes from the {t} path. Query params: target (docker|linux|windows), max_uses,
+// ttl_hours. For automation/CLI.
 func (s *Service) Handler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if s.cfg.AdminSecret == "" || r.Header.Get("Authorization") != "Bearer "+s.cfg.AdminSecret {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
-		tenant := r.PathValue("t")
-		if tenant == "" {
-			http.Error(w, "tenant obrigatório", http.StatusBadRequest)
-			return
-		}
-		// Cross-tenant guard: only mint for a tenant the registry actually knows.
-		if s.cfg.Known != nil && !s.cfg.Known(tenant) {
-			http.Error(w, "tenant desconhecido ou desabilitado", http.StatusNotFound)
-			return
-		}
+		s.serve(w, r, r.PathValue("t"))
+	}
+}
 
-		target := r.URL.Query().Get("target")
-		if target == "" {
-			target = "docker"
-		}
-		switch target {
-		case "docker", "linux", "windows":
-		default:
-			http.Error(w, "target deve ser docker, linux ou windows", http.StatusBadRequest)
-			return
-		}
+// SessionHandler serves GET /provision/enroll-command?tenant=<t> for the GSA UI.
+// It is NOT bearer-gated: it MUST be mounted behind the nginx session gate (cookie
+// GSAD_SID + same-origin), exactly like /provision/install. The tenant comes from
+// the ?tenant= query. The GSA is single-admin (only the admin logs into the web),
+// so the session gate is an admin gate in practice; the {t} is still validated
+// against the registry, so an unknown tenant is refused regardless.
+func (s *Service) SessionHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		s.serve(w, r, r.URL.Query().Get("tenant"))
+	}
+}
 
-		maxUses := clampInt(r.URL.Query().Get("max_uses"), defaultMaxUses, 1, tokens.MaxDeploymentUses)
-		ttlHours := clampInt(r.URL.Query().Get("ttl_hours"), defaultTTLHours, 1, maxTTLHours)
-
-		typ := tokens.Deployment
-		if maxUses == 1 {
-			typ = tokens.SingleHost
+// SessionTenantsHandler serves GET /provision/tenants (session-gated by nginx) —
+// the enabled tenant names for the UI selector. No token minted, no secrets.
+func (s *Service) SessionTenantsHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var names []string
+		if s.cfg.Tenants != nil {
+			names = s.cfg.Tenants()
 		}
-		minted, err := s.cfg.TM.Mint(tokens.MintRequest{
-			Type:      typ,
-			Scope:     tokens.Scope{Tenant: tenant, Policy: "agent-endpoint"},
-			TTL:       time.Duration(ttlHours) * time.Hour,
-			MaxUses:   maxUses,
-			CreatedBy: "enroll-command (" + tenant + ")",
-		})
-		if err != nil {
-			http.Error(w, "falha ao gerar token", http.StatusInternalServerError)
-			return
-		}
-
-		resp := response{
-			Tenant:    tenant,
-			Target:    target,
-			Command:   s.command(target, minted.Token),
-			Server:    s.cfg.ServerURL,
-			CAPin:     s.cfg.CAPin,
-			TokenID:   minted.ID,
-			MaxUses:   maxUses,
-			ExpiresAt: minted.Record.ExpiresAt,
-		}
-		if target == "docker" {
-			resp.Image = s.cfg.Image
+		if names == nil {
+			names = []string{}
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Cache-Control", "no-store")
-		_ = json.NewEncoder(w).Encode(resp)
+		_ = json.NewEncoder(w).Encode(map[string]any{"tenants": names})
 	}
+}
+
+// serve is the shared core: validate tenant, mint a scoped token, render the command.
+// Query params (both handlers): target=docker|linux|windows, max_uses, ttl_hours.
+func (s *Service) serve(w http.ResponseWriter, r *http.Request, tenant string) {
+	if tenant == "" {
+		http.Error(w, "tenant obrigatório", http.StatusBadRequest)
+		return
+	}
+	// Cross-tenant guard: only mint for a tenant the registry actually knows.
+	if s.cfg.Known != nil && !s.cfg.Known(tenant) {
+		http.Error(w, "tenant desconhecido ou desabilitado", http.StatusNotFound)
+		return
+	}
+
+	target := r.URL.Query().Get("target")
+	if target == "" {
+		target = "docker"
+	}
+	switch target {
+	case "docker", "linux", "windows":
+	default:
+		http.Error(w, "target deve ser docker, linux ou windows", http.StatusBadRequest)
+		return
+	}
+
+	maxUses := clampInt(r.URL.Query().Get("max_uses"), defaultMaxUses, 1, tokens.MaxDeploymentUses)
+	ttlHours := clampInt(r.URL.Query().Get("ttl_hours"), defaultTTLHours, 1, maxTTLHours)
+
+	typ := tokens.Deployment
+	if maxUses == 1 {
+		typ = tokens.SingleHost
+	}
+	minted, err := s.cfg.TM.Mint(tokens.MintRequest{
+		Type:      typ,
+		Scope:     tokens.Scope{Tenant: tenant, Policy: "agent-endpoint"},
+		TTL:       time.Duration(ttlHours) * time.Hour,
+		MaxUses:   maxUses,
+		CreatedBy: "enroll-command (" + tenant + ")",
+	})
+	if err != nil {
+		http.Error(w, "falha ao gerar token", http.StatusInternalServerError)
+		return
+	}
+
+	resp := response{
+		Tenant:    tenant,
+		Target:    target,
+		Command:   s.command(target, minted.Token),
+		Server:    s.cfg.ServerURL,
+		CAPin:     s.cfg.CAPin,
+		TokenID:   minted.ID,
+		MaxUses:   maxUses,
+		ExpiresAt: minted.Record.ExpiresAt,
+	}
+	if target == "docker" {
+		resp.Image = s.cfg.Image
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	_ = json.NewEncoder(w).Encode(resp)
 }
 
 // command renders the paste-ready command with the token embedded.

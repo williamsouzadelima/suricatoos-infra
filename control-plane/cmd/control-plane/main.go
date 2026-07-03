@@ -232,8 +232,22 @@ func main() {
 	enrollCmdSvc := cpenrollcmd.New(cpenrollcmd.Config{
 		TM: tm, Known: tenantReg.Known, CAPin: authority.Fingerprint(),
 		ServerURL: serverURL, Image: os.Getenv("AGENT_IMAGE"), AdminSecret: adminSecret,
+		Tenants: func() []string {
+			var out []string
+			for _, t := range tenantReg.List() {
+				if t.Enabled {
+					out = append(out, t.Name)
+				}
+			}
+			return out
+		},
 	})
+	// Admin-bearer (automation/CLI).
 	mux.HandleFunc("GET /api/v1/tenants/{t}/enroll-command", enrollCmdSvc.Handler())
+	// Session-gated (GSA UI, behind nginx cookie gate) — the tenant selector + the
+	// per-tenant enrollment command with a fresh token embedded.
+	mux.HandleFunc("GET /provision/tenants", enrollCmdSvc.SessionTenantsHandler())
+	mux.HandleFunc("GET /provision/enroll-command", enrollCmdSvc.SessionHandler())
 	if sensorJobsEnabled {
 		// Sensor-facing dispatch (nginx mTLS-gated + CRL fail-closed in the service).
 		mux.HandleFunc("GET /v1/scan-jobs", sensorJobSvc.PollHandler())

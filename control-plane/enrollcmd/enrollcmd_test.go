@@ -15,6 +15,7 @@ func newSvc(known TenantKnown) (*Service, *tokens.Manager) {
 	s := New(Config{
 		TM:          tm,
 		Known:       known,
+		Tenants:     func() []string { return []string{"acme", "globex"} },
 		CAPin:       "sha256:abc123",
 		ServerURL:   "https://scanner.suricatoos.com/agent/v1",
 		AdminSecret: "sekret",
@@ -100,6 +101,51 @@ func TestBadTarget400(t *testing.T) {
 	s, _ := newSvc(knownAcme)
 	if w := do(s, "GET", "/api/v1/tenants/acme/enroll-command?target=bogus", "sekret"); w.Code != http.StatusBadRequest {
 		t.Fatalf("target inválido deveria 400, got %d", w.Code)
+	}
+}
+
+func TestSessionHandlerMintsForQueryTenant(t *testing.T) {
+	s, tm := newSvc(knownAcme)
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /provision/enroll-command", s.SessionHandler())
+	// No bearer (nginx does the session gate); tenant via ?tenant=.
+	req := httptest.NewRequest("GET", "/provision/enroll-command?tenant=acme&target=docker", nil)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("session handler deveria 200 (nginx gate), got %d", w.Code)
+	}
+	var r response
+	json.Unmarshal(w.Body.Bytes(), &r)
+	if r.Tenant != "acme" || !strings.Contains(r.Command, "docker run") {
+		t.Fatalf("resposta errada: %+v", r)
+	}
+	recs, _ := tm.List()
+	if recs[0].Scope.Tenant != "acme" {
+		t.Fatalf("token deveria ser do tenant acme, got %s", recs[0].Scope.Tenant)
+	}
+	// Unknown tenant still refused even session-gated.
+	req2 := httptest.NewRequest("GET", "/provision/enroll-command?tenant=evilcorp", nil)
+	w2 := httptest.NewRecorder()
+	mux.ServeHTTP(w2, req2)
+	if w2.Code != http.StatusNotFound {
+		t.Fatalf("tenant desconhecido deveria 404 mesmo session-gated, got %d", w2.Code)
+	}
+}
+
+func TestSessionTenantsHandler(t *testing.T) {
+	s, _ := newSvc(knownAcme)
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /provision/tenants", s.SessionTenantsHandler())
+	req := httptest.NewRequest("GET", "/provision/tenants", nil)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+	var r struct {
+		Tenants []string `json:"tenants"`
+	}
+	json.Unmarshal(w.Body.Bytes(), &r)
+	if len(r.Tenants) != 2 || r.Tenants[0] != "acme" {
+		t.Fatalf("lista de tenants errada: %+v", r.Tenants)
 	}
 }
 
