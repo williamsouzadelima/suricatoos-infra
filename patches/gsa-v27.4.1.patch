@@ -10375,7 +10375,7 @@ index 10e592f..a9354c3 100644
 \ No newline at end of file
 diff --git a/public/suricatoos-theme.css b/public/suricatoos-theme.css
 new file mode 100644
-index 0000000..5e82346
+index 0000000..3d463cb
 --- /dev/null
 +++ b/public/suricatoos-theme.css
 @@ -0,0 +1,269 @@
@@ -12084,7 +12084,7 @@ index 39824b8..3834681 100644
        return _('NVD');
      default:
 diff --git a/src/web/utils/Theme.tsx b/src/web/utils/Theme.tsx
-index dd0b390..6b7b520 100644
+index dd0b390..9316ed8 100644
 --- a/src/web/utils/Theme.tsx
 +++ b/src/web/utils/Theme.tsx
 @@ -61,8 +61,8 @@ interface ThemeInterface {
@@ -12098,6 +12098,23 @@ index dd0b390..6b7b520 100644
  
    lightGray: '#e5e5e5', // used by: disabled inputs
    mediumDarkGray: '#c2c2c2',
+@@ -95,11 +95,11 @@ const Theme: ThemeInterface = {
+ 
+   severityWarnYellow: '#f0a519', // used by: progressbar
+ 
+-  severityClassLog: '#DDDDDD',
+-  severityClassLow: '#A0C5F9',
+-  severityClassMedium: '#F3B865',
+-  severityClassHigh: '#F0868A',
+-  severityClassCritical: '#C12C30',
++  severityClassLog: '#D4DAE1',
++  severityClassLow: '#83A9DE',
++  severityClassMedium: '#EAA83D',
++  severityClassHigh: '#EE8654',
++  severityClassCritical: '#D5383C',
+ 
+   statusNewGreen: '#99be48', // used by: progressbar
+   statusRunGreen: '#70c000', // used by: progressbar
 @@ -107,7 +107,7 @@ const Theme: ThemeInterface = {
    paleGreen: '#99BE48', // used by: compliance status bar
  
