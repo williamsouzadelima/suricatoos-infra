@@ -10378,13 +10378,14 @@ new file mode 100644
 index 0000000..5e82346
 --- /dev/null
 +++ b/public/suricatoos-theme.css
-@@ -0,0 +1,218 @@
+@@ -0,0 +1,269 @@
 +@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 +
 +/* ============================================================
 +   SURICATOOS — Tema Premium v2 (claro + escuro) — GSA / Mantine v7
 +   Carregado por ULTIMO. Foco: profundidade, cards, tabelas, nav,
 +   tipografia corporativa (Inter body + Space Grotesk headings).
++   Assinatura "De Vigília" no login (suricato-sentinela).
 +   ============================================================ */
 +
 +/* ---- Tokens de superficie ---- */
@@ -10406,6 +10407,9 @@ index 0000000..5e82346
 +  --sur-login-bg:radial-gradient(125% 125% at 16% 6%, #32428a 0%, #1a2547 45%, #070d18 100%);
 +  --sur-accent:#7d97ff; --sur-accent-soft:rgba(125,151,255,.14); --sur-accent-line:rgba(125,151,255,.34);
 +}
++
++/* sinal coral do suricato (usado com parcimonia: login + severidade critica) */
++:root { --sur-coral:#f2595b; --sur-coral-soft:rgba(242,89,91,.16); }
 +
 +/* ============================================================
 +   1. ACCENT: rampas Mantine green/teal/blue -> indigo #5b7cfa
@@ -10481,11 +10485,7 @@ index 0000000..5e82346
 +  border-radius:14px!important;
 +  box-shadow:var(--sur-shadow)!important;
 +}
-+/* Cards do dashboard (styled-components que usam --sur-surface): borda+sombra+raio via atributo de cor de fundo */
-+[style*="--sur-surface"], [class*="sc-"][style*="background"] {
-+  border-radius:14px!important;
-+}
-+/* eleva cards ao passar o mouse (quando aplicavel) */
++[style*="--sur-surface"], [class*="sc-"][style*="background"] { border-radius:14px!important; }
 +.mantine-Card-root:hover, .mantine-Paper-root:hover { box-shadow:var(--sur-shadow), 0 0 0 1px var(--sur-border-strong)!important; }
 +
 +/* ============================================================
@@ -10501,11 +10501,7 @@ index 0000000..5e82346
 +  border-bottom:1px solid var(--sur-border-strong)!important;
 +  white-space:nowrap!important;
 +}
-+table tbody td {
-+  padding:11px 14px!important;
-+  border-bottom:1px solid var(--sur-border)!important;
-+  font-size:13.5px!important;
-+}
++table tbody td { padding:11px 14px!important; border-bottom:1px solid var(--sur-border)!important; font-size:13.5px!important; }
 +table tbody tr { transition:background-color .14s ease!important; }
 +table tbody tr:hover { background:var(--sur-accent-soft)!important; }
 +table a { color:var(--sur-accent)!important; font-weight:500!important; }
@@ -10552,11 +10548,73 @@ index 0000000..5e82346
 +.mantine-Input-input, input, textarea { border-radius:9px!important; }
 +
 +/* ============================================================
-+   10. LOGIN — fundo premium + card elevado
++   10. LOGIN — assinatura "DE VIGÍLIA" (suricato-sentinela)
++   Backdrop = horizonte noturno + varredura de radar (a sentinela
++   vigiando o perimetro ao anoitecer). Card 'torre de guarda'
++   nitido e legivel. Sinal coral do suricato com parcimonia.
++   Deteccao de login: #app sem topbar (_header_).
 +   ============================================================ */
-+[class*="_header_"] + *, body [class*="login"], [data-testid] form {
-+  /* hooks genericos; o fundo real vem de --sur-login-bg no componente */
++/* backdrop: noite sobre o horizonte, em qualquer esquema */
++#app:not(:has([class*="_header_"])) > div {
++  background:
++    radial-gradient(110% 78% at 50% 116%, rgba(242,89,91,.20) 0%, rgba(242,89,91,0) 42%),
++    radial-gradient(92% 74% at 50% -8%, rgba(125,151,255,.22) 0%, transparent 52%),
++    linear-gradient(179deg, #0c1424 0%, #0a1019 52%, #06090f 100%) !important;
++  position:relative !important; overflow:hidden !important;
 +}
++/* grade de perimetro / estrelas — bem sutil, mascarada */
++#app:not(:has([class*="_header_"])) > div::before {
++  content:''; position:absolute; inset:0; pointer-events:none; z-index:0;
++  background-image:radial-gradient(rgba(255,255,255,.055) 1px, transparent 1.5px);
++  background-size:32px 32px;
++  -webkit-mask-image:radial-gradient(125% 95% at 50% 42%, #000 26%, transparent 74%);
++          mask-image:radial-gradient(125% 95% at 50% 42%, #000 26%, transparent 74%);
++}
++/* varredura de radar: feixe conico girando lento a partir do horizonte */
++#app:not(:has([class*="_header_"])) > div::after {
++  content:''; position:absolute; left:50%; top:116%; z-index:0;
++  width:170vmax; height:170vmax; transform:translate(-50%,-50%) rotate(0deg); pointer-events:none;
++  background:conic-gradient(from -96deg,
++     rgba(125,151,255,.16) 0deg, rgba(125,151,255,.03) 22deg, transparent 44deg, transparent 360deg);
++  -webkit-mask-image:radial-gradient(closest-side, #000 0%, rgba(0,0,0,.4) 55%, transparent 74%);
++          mask-image:radial-gradient(closest-side, #000 0%, rgba(0,0,0,.4) 55%, transparent 74%);
++  animation:sur-sweep 11s linear infinite;
++}
++@keyframes sur-sweep { to { transform:translate(-50%,-50%) rotate(360deg); } }
++@media (prefers-reduced-motion: reduce) {
++  #app:not(:has([class*="_header_"])) > div::after { animation:none; opacity:.5; }
++}
++/* card 'torre de guarda' (filho direto do backdrop) — legivel, elevado */
++#app:not(:has([class*="_header_"])) > div > div {
++  position:relative !important; z-index:2 !important;
++  border-radius:18px !important;
++  border:1px solid rgba(255,255,255,.10) !important;
++  box-shadow:0 1px 0 rgba(255,255,255,.55) inset, 0 24px 70px rgba(3,7,14,.58), 0 6px 20px rgba(3,7,14,.40) !important;
++  overflow:hidden !important;
++}
++/* fita de acento no topo do card: coral -> indigo (o sinal do sentinela) */
++#app:not(:has([class*="_header_"])) > div > div::before {
++  content:''; position:absolute; left:0; right:0; top:0; height:3px;
++  background:linear-gradient(90deg, var(--sur-coral) 0%, #7d97ff 55%, #5b7cfa 100%);
++}
++/* eyebrow 'de vigilia' ACIMA do heading (absolute p/ driblar o flex do H1) */
++#app:not(:has([class*="_header_"])) h1 { position:relative !important; overflow:visible !important; }
++#app:not(:has([class*="_header_"])) h1::before {
++  content:'· DE VIGÍLIA ·';
++  position:absolute; left:0; bottom:calc(100% + 4px); white-space:nowrap;
++  font:600 10.5px/1 'Space Grotesk','Inter',sans-serif;
++  letter-spacing:.24em; text-transform:uppercase; color:var(--sur-coral);
++}
++/* foco coral (sinal do suricato) nos campos do login */
++#app:not(:has([class*="_header_"])) input:focus {
++  border-color:var(--sur-coral) !important; box-shadow:0 0 0 3px var(--sur-coral-soft) !important;
++}
++/* rodape (copyright) legivel sobre a noite */
++#app:not(:has([class*="_header_"])) > div > footer,
++#app:not(:has([class*="_header_"])) > div > footer * {
++  position:relative; z-index:2; color:rgba(210,220,235,.5) !important;
++}
++
 +/* badges / pills de status */
 +[class*="Badge"], [class*="badge"] { font-weight:600!important; letter-spacing:.01em!important; border-radius:999px!important; }
 +
@@ -10573,9 +10631,7 @@ index 0000000..5e82346
 +}
 +
 +/* ============================================================
-+   12. FIX dark: item de nav/aba ativos vinham VERDE -> indigo
-+   (GSA usa CSS module _root-active_ proprio, e green-light do
-+   Mantine no dark nao estava sobrescrito)
++   12. FIX dark: item de nav/aba ativos -> indigo (nao verde)
 +   ============================================================ */
 +[data-mantine-color-scheme='dark'] {
 +  --mantine-color-green-light:rgba(125,151,255,.16)!important;
@@ -10584,17 +10640,12 @@ index 0000000..5e82346
 +  --mantine-color-blue-light:rgba(125,151,255,.16)!important;
 +  --mantine-primary-color-light:rgba(125,151,255,.16)!important;
 +}
-+/* item de nav ativo (modulo CSS proprio do GSA) — ambos esquemas */
 +[class*="_root-active_"], [class*="navigation-item"][data-active='true'] {
-+  background:var(--sur-accent-soft)!important;
-+  color:var(--sur-accent)!important;
++  background:var(--sur-accent-soft)!important; color:var(--sur-accent)!important;
 +}
 +[class*="_root-active_"] *, [class*="_root-active_"] svg { color:var(--sur-accent)!important; }
-+/* abas ativas -> acento indigo, sem fundo verde */
 +[role="tab"][aria-selected='true'], [class*="Tabs-tab"][data-active], [class*="Tab"][data-active='true'] {
-+  background:transparent!important;
-+  color:var(--sur-accent)!important;
-+  border-color:var(--sur-accent)!important;
++  background:transparent!important; color:var(--sur-accent)!important; border-color:var(--sur-accent)!important;
 +}
 +[role="tab"][aria-selected='true'] { border-bottom:2px solid var(--sur-accent)!important; }
 diff --git a/src/gmp/locale/languages.ts b/src/gmp/locale/languages.ts
