@@ -10375,10 +10375,10 @@ index 10e592f..a9354c3 100644
 \ No newline at end of file
 diff --git a/public/suricatoos-theme.css b/public/suricatoos-theme.css
 new file mode 100644
-index 0000000..9413ed1
+index 0000000..a9b61cc
 --- /dev/null
 +++ b/public/suricatoos-theme.css
-@@ -0,0 +1,305 @@
+@@ -0,0 +1,313 @@
 +@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 +
 +/* ============================================================
@@ -10684,6 +10684,14 @@ index 0000000..9413ed1
 +svg .tick line { stroke:var(--sur-border, #e5e9f0)!important; stroke-opacity:.5!important; }
 +svg .tick text, svg .axis-label { fill:var(--sur-chart-text)!important; }
 +
++/* ============================================================
++   15. COESÃO dos gráficos — tipografia unificada (moderno/consistente)
++   ============================================================ */
++svg text { font-family:'Inter','Space Grotesk',system-ui,sans-serif!important; }
++svg .tick text, svg .axis-tick text { fill:var(--sur-text-dim)!important; font-size:11px!important; }
++/* rótulo de eixo (ex.: "Pontuacao de Vulnerabilidade") discreto */
++svg .axis-label, svg text.axis-label { fill:var(--sur-text-dim)!important; font-size:11px!important; font-weight:500!important; }
++
 diff --git a/src/gmp/locale/languages.ts b/src/gmp/locale/languages.ts
 index 4d337bd..60048e5 100644
 --- a/src/gmp/locale/languages.ts
@@ -10773,6 +10781,36 @@ index 8244715..c284668 100644
        showLegend = true,
        onDataClick,
        onLegendItemClick,
+diff --git a/src/web/components/chart/base/Legend.tsx b/src/web/components/chart/base/Legend.tsx
+index a04766c..bc94562 100644
+--- a/src/web/components/chart/base/Legend.tsx
++++ b/src/web/components/chart/base/Legend.tsx
+@@ -47,8 +47,9 @@ const StyledLegend = styled.div`
+   display: flex;
+   flex-direction: column;
+   user-select: none;
+-  color: ${Theme.black};
+-  opacity: 0.75;
++  color: var(--sur-text-dim, ${Theme.black});
++  font-size: 12px;
++  opacity: 1;
+ `;
+ 
+ export const Item = styled.div`
+@@ -67,8 +68,11 @@ export const Item = styled.div`
+ const Rect = styled.div<RectProps>`
+   display: flex;
+   align-items: center;
+-  width: ${DEFAULT_SHAPE_SIZE}px;
+-  height: 10px;
++  flex-shrink: 0;
++  width: 11px;
++  height: 11px;
++  margin-right: 3px;
++  border-radius: 50%;
+   background-color: ${props => props.color};
+ `;
+ 
 diff --git a/src/web/components/dashboard/display/Display.tsx b/src/web/components/dashboard/display/Display.tsx
 index 4895369..83a7e1c 100644
 --- a/src/web/components/dashboard/display/Display.tsx
