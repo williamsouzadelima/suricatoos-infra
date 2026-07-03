@@ -7,6 +7,14 @@ services:
   gsad:
     image: ghcr.io/williamsouzadelima/suricatoos-gsad:stable
 
+  # Suricatoos: aumenta o timeout da sessao web (--auth-timeout, default 15min → 45min)
+  # p/ reduzir logouts durante o uso ativo. GVMD_ARGS reescreve o default do wrapper
+  # start-gvmd ("-f --listen-mode=666"), preservando esses flags. Trade-off de seguranca:
+  # sessao logada dura mais.
+  gvmd:
+    environment:
+      GVMD_ARGS: "-f --listen-mode=666 --auth-timeout=45"
+
   # Suricatoos: report-formats feed fork. Adds the "Suricatoos Premium PDF"
   # report format to the Greenbone feed so gvmd installs it as predefined +
   # trusted (aparece automaticamente no dropdown "Download report" da GSA, sem
