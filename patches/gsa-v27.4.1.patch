@@ -10939,7 +10939,7 @@ index d68da89..2bbd0cb 100644
    return (
      <StyledImage
 diff --git a/src/web/components/menu/Menu.tsx b/src/web/components/menu/Menu.tsx
-index 13fca0c..af71808 100644
+index 13fca0c..5f44a5a 100644
 --- a/src/web/components/menu/Menu.tsx
 +++ b/src/web/components/menu/Menu.tsx
 @@ -7,6 +7,7 @@ import {AppNavigation} from '@greenbone/ui-lib';
@@ -10954,10 +10954,10 @@ index 13fca0c..af71808 100644
          to: '/asset-management',
          isExternal: true,
        },
-+      // Suricatoos: instalação do agente de endpoint (página nativa da SPA).
++      // Suricatoos: ativação do agente de endpoint (página nativa da SPA).
 +      {
 +        icon: Download,
-+        label: _('Downloads'),
++        label: _('Ativar Agente'),
 +        to: '/downloads',
 +      },
 +      // Suricatoos: postura dos agentes de endpoint (severidade, online/offline,
