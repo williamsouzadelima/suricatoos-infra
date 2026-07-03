@@ -46,6 +46,7 @@ import (
 	"github.com/williamsouzadelima/suricatoos-infra/control-plane/ca"
 	cpcommands "github.com/williamsouzadelima/suricatoos-infra/control-plane/commands"
 	"github.com/williamsouzadelima/suricatoos-infra/control-plane/enroll"
+	cpenrollcmd "github.com/williamsouzadelima/suricatoos-infra/control-plane/enrollcmd"
 	cpfeed "github.com/williamsouzadelima/suricatoos-infra/control-plane/feed"
 	cpprovision "github.com/williamsouzadelima/suricatoos-infra/control-plane/provision"
 	cpsensorjobs "github.com/williamsouzadelima/suricatoos-infra/control-plane/sensorjobs"
@@ -225,6 +226,28 @@ func main() {
 	mux.HandleFunc("PUT /api/v1/tenants/{t}", tenantSvc.PutHandler())
 	mux.HandleFunc("GET /api/v1/tenants/{t}", tenantSvc.GetHandler())
 	mux.HandleFunc("GET /api/v1/tenants", tenantSvc.ListHandler())
+	// Per-tenant enrollment command (admin-bearer): mints a fresh token for the
+	// validated tenant and returns a ready-to-paste `docker run` (or install.sh) with
+	// the token embedded — the "dynamic per-tenant token" that activates an agent.
+	enrollCmdSvc := cpenrollcmd.New(cpenrollcmd.Config{
+		TM: tm, Known: tenantReg.Known, CAPin: authority.Fingerprint(),
+		ServerURL: serverURL, Image: os.Getenv("AGENT_IMAGE"), AdminSecret: adminSecret,
+		Tenants: func() []string {
+			var out []string
+			for _, t := range tenantReg.List() {
+				if t.Enabled {
+					out = append(out, t.Name)
+				}
+			}
+			return out
+		},
+	})
+	// Admin-bearer (automation/CLI).
+	mux.HandleFunc("GET /api/v1/tenants/{t}/enroll-command", enrollCmdSvc.Handler())
+	// Session-gated (GSA UI, behind nginx cookie gate) — the tenant selector + the
+	// per-tenant enrollment command with a fresh token embedded.
+	mux.HandleFunc("GET /provision/tenants", enrollCmdSvc.SessionTenantsHandler())
+	mux.HandleFunc("GET /provision/enroll-command", enrollCmdSvc.SessionHandler())
 	if sensorJobsEnabled {
 		// Sensor-facing dispatch (nginx mTLS-gated + CRL fail-closed in the service).
 		mux.HandleFunc("GET /v1/scan-jobs", sensorJobSvc.PollHandler())
