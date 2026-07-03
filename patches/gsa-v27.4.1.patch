@@ -11348,6 +11348,24 @@ index 7f74728..b7c8165 100644
    );
  };
  
+diff --git a/src/web/pages/cves/dashboard/CreatedDisplay.jsx b/src/web/pages/cves/dashboard/CreatedDisplay.jsx
+index a057cf9..409c93b 100644
+--- a/src/web/pages/cves/dashboard/CreatedDisplay.jsx
++++ b/src/web/pages/cves/dashboard/CreatedDisplay.jsx
+@@ -21,11 +21,11 @@ export const CvesCreatedDisplay = createDisplay({
+   y2AxisLabel: _l('Total CVEs'),
+   xAxisLabel: _l('Time'),
+   yLine: {
+-    color: Theme.darkGreenTransparent,
++    color: Theme.green,
+     label: _l('Created CVEs'),
+   },
+   y2Line: {
+-    color: Theme.darkGreenTransparent,
++    color: Theme.lightGreen,
+     dashArray: '3, 2',
+     label: _l('Total CVEs'),
+   },
 diff --git a/src/web/pages/downloads/DownloadsPage.tsx b/src/web/pages/downloads/DownloadsPage.tsx
 new file mode 100644
 index 0000000..326ee49
