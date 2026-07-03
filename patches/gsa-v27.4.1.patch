@@ -11158,21 +11158,22 @@ index 7f74728..b7c8165 100644
  
 diff --git a/src/web/pages/downloads/DownloadsPage.tsx b/src/web/pages/downloads/DownloadsPage.tsx
 new file mode 100644
-index 0000000..d1faf93
+index 0000000..326ee49
 --- /dev/null
 +++ b/src/web/pages/downloads/DownloadsPage.tsx
-@@ -0,0 +1,135 @@
+@@ -0,0 +1,197 @@
 +/* SPDX-FileCopyrightText: 2024 Greenbone AG
 + *
 + * SPDX-License-Identifier: AGPL-3.0-or-later
 + */
 +
-+/* Suricatoos: native GSA page to install the endpoint agent in one command.
-+ * Pick an OS → the control-plane (/agent/provision/install, session-gated by
-+ * nginx via the GSA cookie) mints an ephemeral token and returns a ready-to-run
-+ * one-liner. Renders inside the GSA shell. */
++/* Suricatoos: native GSA page to activate a Suricatoos agent for a tenant in one
++ * command. Pick a TENANT + a platform → the control-plane
++ * (/agent/provision/enroll-command, session-gated by nginx via the GSA cookie)
++ * mints a fresh per-tenant token and returns a ready-to-run command with the token
++ * already embedded — the dynamic per-tenant token. Renders inside the GSA shell. */
 +
-+import React, {useState, useCallback} from 'react';
++import React, {useState, useCallback, useEffect} from 'react';
 +import Button from 'web/components/form/Button';
 +import Layout from 'web/components/layout/Layout';
 +import PageTitle from 'web/components/layout/PageTitle';
@@ -11180,16 +11181,20 @@ index 0000000..d1faf93
 +import useTranslation from 'web/hooks/useTranslation';
 +import Theme from 'web/utils/Theme';
 +
-+interface ProvisionResponse {
-+  os: string;
++interface EnrollResponse {
++  tenant: string;
++  target: string;
 +  command: string;
 +  server: string;
 +  ca_pin: string;
++  image?: string;
 +  token_id: string;
++  max_uses: number;
 +  expires_at: string;
 +}
 +
-+const OSES: Array<{id: string; label: string}> = [
++const TARGETS: Array<{id: string; label: string}> = [
++  {id: 'docker', label: 'Docker'},
 +  {id: 'linux', label: 'Linux'},
 +  {id: 'darwin', label: 'macOS'},
 +  {id: 'windows', label: 'Windows'},
@@ -11208,35 +11213,69 @@ index 0000000..d1faf93
 +  margin: '10px 0',
 +};
 +
++const selectStyle: React.CSSProperties = {
++  padding: '6px 10px',
++  fontSize: '14px',
++  border: `1px solid ${Theme.lightGray}`,
++  borderRadius: '4px',
++  minWidth: '220px',
++};
++
 +const DownloadsPage = () => {
 +  const [_] = useTranslation();
-+  const [os, setOs] = useState<string>('');
-+  const [resp, setResp] = useState<ProvisionResponse | null>(null);
++  const [tenants, setTenants] = useState<string[]>([]);
++  const [tenant, setTenant] = useState<string>('');
++  const [target, setTarget] = useState<string>('');
++  const [resp, setResp] = useState<EnrollResponse | null>(null);
 +  const [loading, setLoading] = useState<boolean>(false);
 +  const [error, setError] = useState<string | null>(null);
 +  const [copied, setCopied] = useState<boolean>(false);
 +
-+  const pick = useCallback(async (goos: string) => {
-+    setOs(goos);
-+    setResp(null);
-+    setError(null);
-+    setCopied(false);
-+    setLoading(true);
-+    try {
-+      const r = await fetch(`/agent/provision/install?os=${encodeURIComponent(goos)}`, {
-+        credentials: 'same-origin',
-+        headers: {Accept: 'application/json'},
-+      });
-+      if (!r.ok) {
-+        throw new Error(`HTTP ${r.status}`);
-+      }
-+      setResp(await r.json());
-+    } catch (e) {
-+      setError((e as Error).message);
-+    } finally {
-+      setLoading(false);
-+    }
++  // Load the tenant list on mount (session-gated by nginx via the GSA cookie).
++  useEffect(() => {
++    fetch('/agent/provision/tenants', {
++      credentials: 'same-origin',
++      headers: {Accept: 'application/json'},
++    })
++      .then(r => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
++      .then(d => {
++        const ts: string[] = d.tenants || [];
++        setTenants(ts);
++        if (ts.length === 1) {
++          setTenant(ts[0]);
++        }
++      })
++      .catch(e => setError((e as Error).message));
 +  }, []);
++
++  const pick = useCallback(
++    async (tgt: string) => {
++      if (!tenant) {
++        setError(_('Selecione um tenant primeiro'));
++        return;
++      }
++      setTarget(tgt);
++      setResp(null);
++      setError(null);
++      setCopied(false);
++      setLoading(true);
++      try {
++        const r = await fetch(
++          `/agent/provision/enroll-command?tenant=${encodeURIComponent(tenant)}&target=${encodeURIComponent(tgt)}`,
++          {credentials: 'same-origin', headers: {Accept: 'application/json'}},
++        );
++        if (!r.ok) {
++          throw new Error(`HTTP ${r.status}`);
++        }
++        setResp(await r.json());
++      } catch (e) {
++        setError((e as Error).message);
++      } finally {
++        setLoading(false);
++      }
++    },
++    [tenant, _],
++  );
 +
 +  const copy = useCallback(() => {
 +    if (resp?.command) {
@@ -11246,50 +11285,73 @@ index 0000000..d1faf93
 +
 +  return (
 +    <React.Fragment>
-+      <PageTitle title={_('Downloads')} />
++      <PageTitle title={_('Ativar Agente')} />
 +      <Layout flex="column">
-+        <Section title={_('Instalar o Agente Suricatoos')} />
++        <Section title={_('Ativar um Agente Suricatoos')} />
 +        <Layout flex="column">
-+            <p>
-+              {_(
-+                'Escolha o sistema operacional e copie o comando — o token de enrollment já vem embutido (efêmero, uso único).',
-+              )}
-+            </p>
-+            <Layout>
-+              {OSES.map(o => (
-+                <div key={o.id} style={{marginRight: '10px'}}>
-+                  <Button title={o.label} onClick={() => pick(o.id)}>
-+                    {o.label}
-+                  </Button>
-+                </div>
++          <p>
++            {_(
++              'Escolha o tenant e a plataforma — o comando já vem com o token do tenant embutido (dinâmico). Copie e rode no host.',
++            )}
++          </p>
++          <Layout>
++            <label style={{marginRight: '10px', alignSelf: 'center'}}>
++              {_('Tenant')}:
++            </label>
++            <select
++              value={tenant}
++              onChange={e => {
++                setTenant(e.target.value);
++                setResp(null);
++                setError(null);
++              }}
++              style={selectStyle}
++            >
++              <option value="">{_('— selecione —')}</option>
++              {tenants.map(t => (
++                <option key={t} value={t}>
++                  {t}
++                </option>
 +              ))}
-+            </Layout>
-+
-+            {loading ? <p>{_('Gerando comando…')}</p> : null}
-+            {error ? (
-+              <p style={{color: Theme.errorRed}}>
-+                {_('Erro ao gerar o comando')}: {error}
-+              </p>
-+            ) : null}
-+            {resp ? (
-+              <div>
-+                <p style={{marginTop: '14px'}}>
-+                  <b>{OSES.find(o => o.id === os)?.label}</b> —{' '}
-+                  {_('rode em um terminal com privilégios:')}
-+                </p>
-+                <code style={codeBoxStyle}>{resp.command}</code>
-+                <Layout>
-+                  <Button title={_('Copiar')} onClick={copy}>
-+                    {copied ? _('Copiado ✓') : _('Copiar')}
-+                  </Button>
-+                </Layout>
-+                {resp.expires_at ? (
-+                  <p style={{color: Theme.mediumGray, fontSize: '12px'}}>
-+                    {_('Token expira em')}: {resp.expires_at}
-+                  </p>
-+                ) : null}
++            </select>
++          </Layout>
++          <Layout style={{marginTop: '12px'}}>
++            {TARGETS.map(t => (
++              <div key={t.id} style={{marginRight: '10px'}}>
++                <Button title={t.label} onClick={() => pick(t.id)} disabled={!tenant}>
++                  {t.label}
++                </Button>
 +              </div>
-+            ) : null}
++            ))}
++          </Layout>
++
++          {loading ? <p>{_('Gerando comando…')}</p> : null}
++          {error ? (
++            <p style={{color: Theme.errorRed}}>
++              {_('Erro ao gerar o comando')}: {error}
++            </p>
++          ) : null}
++          {resp ? (
++            <div>
++              <p style={{marginTop: '14px'}}>
++                <b>{TARGETS.find(t => t.id === target)?.label}</b> — {_('tenant')}{' '}
++                <b>{resp.tenant}</b>
++                {_(', rode no host:')}
++              </p>
++              <code style={codeBoxStyle}>{resp.command}</code>
++              <Layout>
++                <Button title={_('Copiar')} onClick={copy}>
++                  {copied ? _('Copiado ✓') : _('Copiar')}
++                </Button>
++              </Layout>
++              <p style={{color: Theme.mediumGray, fontSize: '12px'}}>
++                {resp.max_uses > 1
++                  ? `${_('Token de deployment')} (${_('até')} ${resp.max_uses} ${_('hosts')})`
++                  : _('Token de uso único')}
++                {resp.expires_at ? ` · ${_('expira em')} ${resp.expires_at}` : ''}
++              </p>
++            </div>
++          ) : null}
 +        </Layout>
 +      </Layout>
 +    </React.Fragment>
