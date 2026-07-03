@@ -90,11 +90,29 @@ func (r *Registry) FindOrCreate(req *ScanRequest, id certIdentity, cooldown time
 	defer r.mu.Unlock()
 
 	if existing := r.findByScanHistoryLocked(req.RengineScanHistoryID); existing != nil {
+		// A prior job for this scan_history_id that FAILED (or was stopped/expired) is
+		// reopened for a fresh retry — reusing the same request_id, back to PENDING —
+		// instead of being returned as-is (which stranded the scan until manual DELETE).
+		// A pending/running/completed job is returned unchanged (idempotent replay).
+		if failedState(existing.State) {
+			existing.State = StatePending
+			existing.SubmittedAt = r.now().UTC()
+			existing.Error = ""
+			existing.Progress = 0
+			_ = r.saveLocked()
+		}
 		return existing.clone(), false, nil
 	}
 	if req.Target != "" && cooldown > 0 {
 		cutoff := r.now().Add(-cooldown)
 		for _, j := range r.jobs {
+			// A failed/stopped/expired job of the same target must NOT trigger the
+			// anti-storm cooldown — only an in-flight (pending/running) or a recently
+			// SUCCEEDED (completed) scan does. Otherwise one failed scan blocked every
+			// retry of that target for the whole cooldown window (6h).
+			if failedState(j.State) {
+				continue
+			}
 			if j.Target == req.Target && j.Tenant == id.O && j.SubmittedAt.After(cutoff) {
 				return j.clone(), false, nil
 			}
