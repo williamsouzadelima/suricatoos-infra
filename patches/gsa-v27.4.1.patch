@@ -10375,10 +10375,10 @@ index 10e592f..a9354c3 100644
 \ No newline at end of file
 diff --git a/public/suricatoos-theme.css b/public/suricatoos-theme.css
 new file mode 100644
-index 0000000..a9b61cc
+index 0000000..5782021
 --- /dev/null
 +++ b/public/suricatoos-theme.css
-@@ -0,0 +1,313 @@
+@@ -0,0 +1,314 @@
 +@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 +
 +/* ============================================================
@@ -10673,7 +10673,8 @@ index 0000000..a9b61cc
 +  stroke:var(--sur-surface, #fff)!important; stroke-width:2.5px!important; stroke-linejoin:round!important;
 +}
 +/* números dentro dos segmentos: brancos e limpos (não cinza clunky) */
-+.pie-label { fill:#ffffff!important; font-weight:600!important; font-size:12px!important; font-family:'Space Grotesk',sans-serif!important; }
++.pie-label { fill:#ffffff!important; font-weight:600!important; font-size:10px!important; font-family:'Space Grotesk',sans-serif!important;
++  paint-order:stroke!important; stroke:rgba(15,28,50,.4)!important; stroke-width:2.5px!important; stroke-linejoin:round!important; }
 +/* barras: pontas arredondadas */
 +svg rect[fill="#83A9DE"], svg rect[fill="#EAA83D"], svg rect[fill="#EE8654"], svg rect[fill="#D5383C"],
 +svg rect[fill="#719ECE"], svg rect[fill="#4f91c7"], svg rect[fill="#c83814"], svg rect[fill="#f0a519"] {
@@ -10867,7 +10868,7 @@ index 966a360..d354c38 100644
      {showToggleLegend && (
        <LegendIcon
 diff --git a/src/web/components/dashboard/display/Display.tsx b/src/web/components/dashboard/display/Display.tsx
-index 4895369..83a7e1c 100644
+index 4895369..dd97938 100644
 --- a/src/web/components/dashboard/display/Display.tsx
 +++ b/src/web/components/dashboard/display/Display.tsx
 @@ -24,6 +24,9 @@ export const DISPLAY_BORDER_WIDTH = 2;
@@ -10880,23 +10881,22 @@ index 4895369..83a7e1c 100644
    z-index: ${Theme.Layers.higher};
    height: ${DISPLAY_HEADER_HEIGHT}px;
    display: flex;
-@@ -38,11 +41,11 @@ const Header = styled.div`
+@@ -38,11 +41,10 @@ const Header = styled.div`
    display: flex;
    flex-grow: 1;
    flex-shrink: 1;
 -  background-color: ${Theme.lightGray};
 -  border: 1px solid ${Theme.lightGray};
 -  color: ${Theme.black};
-+  background-color: var(--sur-header, ${Theme.lightGray});
-+  border-bottom: 1px solid var(--sur-border, ${Theme.lightGray});
++  background-color: transparent;
 +  color: var(--sur-text, ${Theme.black});
    text-overflow: ellipsis;
 -  padding: 0px 5px;
-+  padding: 4px 14px;
++  padding: 6px 16px;
    user-select: none;
    overflow: hidden;
  `;
-@@ -63,17 +66,19 @@ const DisplayView = styled.div`
+@@ -63,17 +65,18 @@ const DisplayView = styled.div`
    flex-grow: 1;
    flex-shrink: 1;
    flex-basis: 0;
@@ -10904,7 +10904,6 @@ index 4895369..83a7e1c 100644
 +  background-color: var(--sur-surface, ${Theme.white});
    position: relative;
 +  border-radius: 16px;
-+  border: 1px solid var(--sur-border, ${Theme.lightGray});
 +  box-shadow: 0 1px 2px rgba(15,28,50,.04), 0 6px 18px rgba(15,28,50,.08),
 +    0 18px 42px rgba(15,28,50,.05);
 +  overflow: hidden;
@@ -10920,7 +10919,7 @@ index 4895369..83a7e1c 100644
    overflow: hidden;
  `;
  
-@@ -83,7 +88,7 @@ const DisplayOverlay = styled.div`
+@@ -83,7 +86,7 @@ const DisplayOverlay = styled.div`
    display: flex;
    align-items: center;
    justify-content: center;
@@ -10929,7 +10928,7 @@ index 4895369..83a7e1c 100644
    z-index: ${Theme.Layers.aboveAll};
  `;
  
-@@ -95,7 +100,13 @@ const DisplayTitle = styled.div`
+@@ -95,7 +98,13 @@ const DisplayTitle = styled.div`
    word-break: keep-all;
    text-overflow: ellipsis;
    overflow: hidden;
