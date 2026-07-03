@@ -73,6 +73,59 @@ func TestRegistryCooldownCollapsesStorm(t *testing.T) {
 	}
 }
 
+// TestRegistryCooldownIgnoresFailedJob: a FAILED scan of a target must NOT block a
+// retry of that target during the cooldown window (the fixed defect).
+func TestRegistryCooldownIgnoresFailedJob(t *testing.T) {
+	r, _ := NewRegistry("")
+	now := time.Date(2026, 7, 1, 12, 0, 0, 0, time.UTC)
+	r.now = func() time.Time { return now }
+	id := testIdentity()
+
+	j1, _, _ := r.FindOrCreate(testReq(1, "acme.com"), id, 6*time.Hour)
+	r.Update(j1.RequestID, func(j *Job) { j.State = StateFailed; j.Error = "gvmd down" })
+
+	// A DIFFERENT scan_history_id, SAME target, still within cooldown → retry allowed.
+	now = now.Add(time.Hour)
+	_, created2, _ := r.FindOrCreate(testReq(2, "acme.com"), id, 6*time.Hour)
+	if !created2 {
+		t.Fatal("um job FAILED do mesmo alvo NÃO deveria bloquear retry pelo cooldown")
+	}
+}
+
+// TestRegistryCooldownStillHonorsCompleted: a SUCCEEDED scan still collapses the storm.
+func TestRegistryCooldownStillHonorsCompleted(t *testing.T) {
+	r, _ := NewRegistry("")
+	now := time.Date(2026, 7, 1, 12, 0, 0, 0, time.UTC)
+	r.now = func() time.Time { return now }
+	id := testIdentity()
+
+	j1, _, _ := r.FindOrCreate(testReq(1, "acme.com"), id, 6*time.Hour)
+	r.Update(j1.RequestID, func(j *Job) { j.State = StateCompleted })
+
+	now = now.Add(time.Hour)
+	_, created2, _ := r.FindOrCreate(testReq(2, "acme.com"), id, 6*time.Hour)
+	if created2 {
+		t.Fatal("scan COMPLETED do mesmo alvo dentro do cooldown ainda deveria colapsar (anti-storm)")
+	}
+}
+
+// TestRegistryReopensFailedScanHistory: re-submitting the SAME scan_history_id that
+// failed reopens the job (same request_id, back to PENDING) for a clean retry.
+func TestRegistryReopensFailedScanHistory(t *testing.T) {
+	r, _ := NewRegistry("")
+	id := testIdentity()
+	j1, _, _ := r.FindOrCreate(testReq(99, "acme.com"), id, time.Hour)
+	r.Update(j1.RequestID, func(j *Job) { j.State = StateFailed; j.Error = "boom"; j.Progress = 40 })
+
+	j2, created2, _ := r.FindOrCreate(testReq(99, "acme.com"), id, time.Hour)
+	if created2 || j2.RequestID != j1.RequestID {
+		t.Fatalf("deveria REABRIR o mesmo job (created=false, mesmo request_id), got created=%v id=%s", created2, j2.RequestID)
+	}
+	if j2.State != StatePending || j2.Error != "" || j2.Progress != 0 {
+		t.Fatalf("reabrir deveria voltar a PENDING e limpar error/progress, got state=%s err=%q prog=%d", j2.State, j2.Error, j2.Progress)
+	}
+}
+
 func TestRegistryCooldownDistinctTargets(t *testing.T) {
 	r, _ := NewRegistry("")
 	id := testIdentity()

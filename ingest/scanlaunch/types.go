@@ -42,6 +42,17 @@ func (s State) terminal() bool {
 	return false
 }
 
+// failedState reports whether s is a terminal FAILURE (not a success). A failed scan
+// must not block a retry of the same target/scan_history — unlike Completed, which is
+// a genuine success the anti-storm cooldown should honor.
+func failedState(s State) bool {
+	switch s {
+	case StateFailed, StateStopped, StateExpired:
+		return true
+	}
+	return false
+}
+
 // Host is one live host to scan: an IP literal plus its open TCP ports.
 type Host struct {
 	IP    string `json:"ip"`
