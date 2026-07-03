@@ -10811,6 +10811,61 @@ index a04766c..bc94562 100644
    background-color: ${props => props.color};
  `;
  
+diff --git a/src/web/components/dashboard/display/DataDisplayIcons.tsx b/src/web/components/dashboard/display/DataDisplayIcons.tsx
+index 966a360..d354c38 100644
+--- a/src/web/components/dashboard/display/DataDisplayIcons.tsx
++++ b/src/web/components/dashboard/display/DataDisplayIcons.tsx
+@@ -6,11 +6,9 @@
+ import React from 'react';
+ import {_} from 'gmp/locale/lang';
+ import {
+-  DownloadSvgIcon,
+-  DownloadCsvIcon,
++  DownloadIcon,
+   FilterIcon,
+   LegendIcon,
+-  Toggle3dIcon,
+ } from 'web/components/icon';
+ interface DataDisplayIconsState {
+   showLegend?: boolean;
+@@ -37,24 +35,14 @@ export const renderDonutChartIcons = <S extends DonutChartState>({
+   setState,
+   ...iconsProps
+ }: DataDisplayIconsProps<S>): React.ReactNode => (
+-  <>
+-    <DataDisplayIcons {...iconsProps} setState={setState} />
+-    <Toggle3dIcon
+-      title={_('Toggle 2D/3D view')}
+-      onClick={() => {
+-        setState(({show3d}: S) => ({show3d: !show3d}) as S);
+-      }}
+-    />
+-  </>
++  <DataDisplayIcons {...iconsProps} setState={setState} />
+ );
+ 
+ const DataDisplayIcons = <S extends DataDisplayIconsState>({
+   setState,
+-  showCsvDownload = true,
+   showSvgDownload = true,
+   showFilterSelection = true,
+   showToggleLegend = true,
+-  onDownloadCsvClick,
+   onDownloadSvgClick,
+   onSelectFilterClick,
+ }: DataDisplayIconsProps<S>) => (
+@@ -63,10 +51,7 @@ const DataDisplayIcons = <S extends DataDisplayIconsState>({
+       <FilterIcon title={_('Select Filter')} onClick={onSelectFilterClick} />
+     )}
+     {showSvgDownload && (
+-      <DownloadSvgIcon title={_('Download SVG')} onClick={onDownloadSvgClick} />
+-    )}
+-    {showCsvDownload && (
+-      <DownloadCsvIcon title={_('Download CSV')} onClick={onDownloadCsvClick} />
++      <DownloadIcon title={_('Download SVG')} onClick={onDownloadSvgClick} />
+     )}
+     {showToggleLegend && (
+       <LegendIcon
 diff --git a/src/web/components/dashboard/display/Display.tsx b/src/web/components/dashboard/display/Display.tsx
 index 4895369..83a7e1c 100644
 --- a/src/web/components/dashboard/display/Display.tsx
