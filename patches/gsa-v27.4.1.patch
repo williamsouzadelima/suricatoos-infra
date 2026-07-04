@@ -10771,18 +10771,10 @@ index 9ae0b3f..cdd8a7e 100644
                        x={horizontal ? 1 : xScale(d.x)}
                        y={horizontal ? xScale(d.x) : yScale(d.y)}
 diff --git a/src/web/components/chart/Donut.tsx b/src/web/components/chart/Donut.tsx
-index 8244715..7fde3b3 100644
+index 8244715..272741c 100644
 --- a/src/web/components/chart/Donut.tsx
 +++ b/src/web/components/chart/Donut.tsx
-@@ -14,7 +14,6 @@ import Legend, {
- } from 'web/components/chart/base/Legend';
- import Svg from 'web/components/chart/base/Svg';
- import Arc2d from 'web/components/chart/donut/Arc2d';
--import Arc3d from 'web/components/chart/donut/Arc3d';
- import Labels from 'web/components/chart/donut/Labels';
- import {
-   PieInnerPath,
-@@ -235,10 +234,10 @@ class DonutChart<
+@@ -235,10 +235,10 @@ class DonutChart<
      const {width} = this.state;
      const {
        data = [],
@@ -10795,7 +10787,7 @@ index 8244715..7fde3b3 100644
        showLegend = true,
        onDataClick,
        onLegendItemClick,
-@@ -247,8 +246,8 @@ class DonutChart<
+@@ -247,8 +247,8 @@ class DonutChart<
      const horizontalMargin = margin.left + margin.right;
      const verticalMargin = margin.top + margin.bottom;
  
@@ -10806,7 +10798,7 @@ index 8244715..7fde3b3 100644
  
      let donutWidth = width;
      let donutHeight = height;
-@@ -269,19 +268,22 @@ class DonutChart<
+@@ -269,18 +269,23 @@ class DonutChart<
      const centerX = width / 2;
      const centerY = (height - donutThickness) / 2;
  
@@ -10831,12 +10823,12 @@ index 8244715..7fde3b3 100644
 +      innerRadiusY: innerR,
      };
  
--    const Arc = show3d ? Arc3d<TData> : Arc2d<TData>;
-+    const Arc = Arc2d<TData>;
++    // Runtime é sempre Arc2d (show3d=false + donutThickness=0 → flat); a união é
++    // mantida só para o type-check das props (Arc2dProps não declara donutHeight/ângulos).
+     const Arc = show3d ? Arc3d<TData> : Arc2d<TData>;
      return (
        <StyledLayout align={['start', 'start']}>
-         <Svg
-@@ -294,6 +296,7 @@ class DonutChart<
+@@ -294,6 +299,7 @@ class DonutChart<
                <Pie
                  data={data}
                  left={centerX}
