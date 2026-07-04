@@ -10375,10 +10375,10 @@ index 10e592f..a9354c3 100644
 \ No newline at end of file
 diff --git a/public/suricatoos-theme.css b/public/suricatoos-theme.css
 new file mode 100644
-index 0000000..5782021
+index 0000000..37be1ae
 --- /dev/null
 +++ b/public/suricatoos-theme.css
-@@ -0,0 +1,314 @@
+@@ -0,0 +1,306 @@
 +@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 +
 +/* ============================================================
@@ -10664,24 +10664,16 @@ index 0000000..5782021
 +table tbody td:first-child { font-weight:500!important; }
 +
 +/* ============================================================
-+   14. GRÁFICOS — modernização (CSS-reachable) p/ tirar a cara "antiga"
-+   Donut com gaps entre segmentos + barras arredondadas + eixos leves.
++   14. GRÁFICOS — modernização Recharts-like (referência HawkEye)
++   Gaps do donut e cantos das barras agora são GEOMETRIA REAL (padAngle
++   no Pie.tsx + rx no Bar.tsx) — não mais truque por-hex no CSS, então
++   decoplado das cores de severidade. Aqui só polish de texto + eixos.
 +   ============================================================ */
-+/* donut: stroke da cor do card entre segmentos = "gaps" modernos */
-+svg path[fill="#83A9DE"], svg path[fill="#EAA83D"], svg path[fill="#EE8654"],
-+svg path[fill="#D5383C"], svg path[fill="#D4DAE1"], svg path[fill="#DDDDDD"] {
-+  stroke:var(--sur-surface, #fff)!important; stroke-width:2.5px!important; stroke-linejoin:round!important;
-+}
-+/* números dentro dos segmentos: brancos e limpos (não cinza clunky) */
-+.pie-label { fill:#ffffff!important; font-weight:600!important; font-size:10px!important; font-family:'Space Grotesk',sans-serif!important;
-+  paint-order:stroke!important; stroke:rgba(15,28,50,.4)!important; stroke-width:2.5px!important; stroke-linejoin:round!important; }
-+/* barras: pontas arredondadas */
-+svg rect[fill="#83A9DE"], svg rect[fill="#EAA83D"], svg rect[fill="#EE8654"], svg rect[fill="#D5383C"],
-+svg rect[fill="#719ECE"], svg rect[fill="#4f91c7"], svg rect[fill="#c83814"], svg rect[fill="#f0a519"] {
-+  rx:4px!important; ry:4px!important;
-+}
-+/* eixos/grades/ticks mais leves (menos "planilha") */
-+svg .domain, svg path.domain, svg .axis-line { stroke:var(--sur-border, #e5e9f0)!important; stroke-opacity:.7!important; }
++/* números dentro dos segmentos: brancos, pequenos, com contorno (legível no anel fino) */
++.pie-label { fill:#ffffff!important; font-weight:600!important; font-size:9px!important; font-family:'Space Grotesk',sans-serif!important;
++  paint-order:stroke!important; stroke:rgba(15,28,50,.45)!important; stroke-width:2.5px!important; stroke-linejoin:round!important; }
++/* eixos chrome-less (Recharts: axisLine=false) — a linha do eixo some, ficam só os ticks leves */
++svg .domain, svg path.domain, svg .axis-line { stroke:none!important; }
 +svg .tick line { stroke:var(--sur-border, #e5e9f0)!important; stroke-opacity:.5!important; }
 +svg .tick text, svg .axis-label { fill:var(--sur-chart-text)!important; }
 +
@@ -10765,16 +10757,37 @@ index e81757d..53f7554 100644
        // Alert routes
        {
          path: 'alerts',
+diff --git a/src/web/components/chart/Bar.tsx b/src/web/components/chart/Bar.tsx
+index 9ae0b3f..cdd8a7e 100644
+--- a/src/web/components/chart/Bar.tsx
++++ b/src/web/components/chart/Bar.tsx
+@@ -215,6 +215,8 @@ class BarChart extends React.Component<BarChartProps, BarChartState> {
+                           ? xScale.bandwidth()
+                           : maxHeight - yScale(d.y)
+                       }
++                      rx={4}
++                      ry={4}
+                       width={horizontal ? yScale(d.y) : xScale.bandwidth()}
+                       x={horizontal ? 1 : xScale(d.x)}
+                       y={horizontal ? xScale(d.x) : yScale(d.y)}
 diff --git a/src/web/components/chart/Donut.tsx b/src/web/components/chart/Donut.tsx
-index 8244715..c284668 100644
+index 8244715..7fde3b3 100644
 --- a/src/web/components/chart/Donut.tsx
 +++ b/src/web/components/chart/Donut.tsx
-@@ -235,10 +235,10 @@ class DonutChart<
+@@ -14,7 +14,6 @@ import Legend, {
+ } from 'web/components/chart/base/Legend';
+ import Svg from 'web/components/chart/base/Svg';
+ import Arc2d from 'web/components/chart/donut/Arc2d';
+-import Arc3d from 'web/components/chart/donut/Arc3d';
+ import Labels from 'web/components/chart/donut/Labels';
+ import {
+   PieInnerPath,
+@@ -235,10 +234,10 @@ class DonutChart<
      const {width} = this.state;
      const {
        data = [],
 -      innerRadius = 0,
-+      innerRadius = 0.62,
++      innerRadius = 0.7,
        height,
        svgRef,
 -      show3d = true,
@@ -10782,6 +10795,55 @@ index 8244715..c284668 100644
        showLegend = true,
        onDataClick,
        onLegendItemClick,
+@@ -247,8 +246,8 @@ class DonutChart<
+     const horizontalMargin = margin.left + margin.right;
+     const verticalMargin = margin.top + margin.bottom;
+ 
+-    // thickness of the donut
+-    const donutThickness = show3d ? Math.min(height, width) / 8 : 0;
++    // Suricatoos: donut sempre flat (sem extrusão pseudo-3D) — Recharts-like.
++    const donutThickness = 0;
+ 
+     let donutWidth = width;
+     let donutHeight = height;
+@@ -269,19 +268,22 @@ class DonutChart<
+     const centerX = width / 2;
+     const centerY = (height - donutThickness) / 2;
+ 
++    // Suricatoos: círculo perfeito — usa o menor dos dois eixos p/ ambos os
++    // raios (mata o squash elíptico herdado da projeção 3D). Donut redondo e
++    // concêntrico, independente do aspect-ratio do container.
+     const outerRadiusX = donutWidth / 2 - horizontalMargin;
+     const outerRadiusY = (donutHeight - donutThickness) / 2 - verticalMargin;
+-    const innerRadiusX = outerRadiusX * innerRadius;
+-    const innerRadiusY = outerRadiusY * innerRadius;
++    const r = Math.min(outerRadiusX, outerRadiusY);
++    const innerR = r * innerRadius;
+ 
+     const donutProps = {
+-      outerRadiusX,
+-      outerRadiusY,
+-      innerRadiusX,
+-      innerRadiusY,
++      outerRadiusX: r,
++      outerRadiusY: r,
++      innerRadiusX: innerR,
++      innerRadiusY: innerR,
+     };
+ 
+-    const Arc = show3d ? Arc3d<TData> : Arc2d<TData>;
++    const Arc = Arc2d<TData>;
+     return (
+       <StyledLayout align={['start', 'start']}>
+         <Svg
+@@ -294,6 +296,7 @@ class DonutChart<
+               <Pie
+                 data={data}
+                 left={centerX}
++                padAngle={0.035}
+                 pieValue={d => d.value}
+                 top={centerY}
+                 {...donutProps}
 diff --git a/src/web/components/chart/base/Legend.tsx b/src/web/components/chart/base/Legend.tsx
 index a04766c..bc94562 100644
 --- a/src/web/components/chart/base/Legend.tsx
@@ -10812,6 +10874,29 @@ index a04766c..bc94562 100644
    background-color: ${props => props.color};
  `;
  
+diff --git a/src/web/components/chart/donut/Pie.tsx b/src/web/components/chart/donut/Pie.tsx
+index ab34daa..5fe67cd 100644
+--- a/src/web/components/chart/donut/Pie.tsx
++++ b/src/web/components/chart/donut/Pie.tsx
+@@ -66,11 +66,17 @@ const Pie = ({
+     <Group className={className} left={left} top={top}>
+       {arcs.map((currentArc, i) => {
+         const {x, y} = arcPath.centroid(currentArc);
++        // Suricatoos: gaps reais entre segmentos — o Arc.path() ignora padAngle,
++        // então insetamos os ângulos por padAngle/2 (0 quando não há padAngle).
++        const pad = currentArc.padAngle ?? 0;
+         return children({
+           index: i,
+           x,
+           y,
+-          path: arcPath.path(currentArc),
++          path: arcPath.path({
++            startAngle: currentArc.startAngle + pad / 2,
++            endAngle: currentArc.endAngle - pad / 2,
++          }),
+           startAngle: currentArc.startAngle,
+           endAngle: currentArc.endAngle,
+           padAngle: currentArc.padAngle,
 diff --git a/src/web/components/dashboard/display/DataDisplayIcons.tsx b/src/web/components/dashboard/display/DataDisplayIcons.tsx
 index 966a360..d354c38 100644
 --- a/src/web/components/dashboard/display/DataDisplayIcons.tsx
