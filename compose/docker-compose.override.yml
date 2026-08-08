@@ -208,6 +208,65 @@ services:
       # read-only. O control-plane grava tenants.json em /var/lib/suricatoos-cp.
       - /var/lib/suricatoos-cp:/cp:ro
 
+  # ------------------------------------------------------------------
+  # Controle de admissao de scans + teto de processos do scanner.
+  #
+  # BUG QUE ISSO CORRIGE (medido em producao): com min_free_mem_scan_queue=0
+  # (default) o ospd nao espaca as partidas. Cada exec_scan varre os indices
+  # 1..1024 do Redis abrindo CONEXAO NOVA por indice => ~2.048 comandos KEYS
+  # bloqueantes por scan. Com 5 scans partindo no mesmo segundo dao ~10.240
+  # KEYS x 9,16 ms = ~94 s, contra o SOCKET_TIMEOUT=60 CRAVADO em
+  # ospd_openvas/db.py:21 (nao e env, nao e conf, nao e CLI).
+  # O laco principal (run -> scheduler -> check_feed -> LINDEX) estoura junto,
+  # e run() so captura KeyboardInterrupt => o daemon MORRE e leva todos os
+  # scans. Pior: no restart, create_context captura (ConnectionError,
+  # FileNotFoundError) e TimeoutError NAO e subclasse de ConnectionError =>
+  # crash-loop. KEYS e o maior consumidor de CPU do Redis nessa carga
+  # (45,6% de todo o tempo de comando).
+  #
+  # --min-free-mem-scan-queue: o nome engana. Alem do teto de memoria, ele
+  # ATIVA o MIN_TIME_BETWEEN_START_SCAN=60s (ospd.py:1182-1191) => no maximo
+  # UM scan parte por minuto e as varreduras nunca se sobrepoem. Escolhido em
+  # vez de depender so de max_scans porque is_enough_free_memory() le
+  # time.time() e psutil.virtual_memory().available, NAO len(scan_processes)
+  # => nao existe slot preso por scan travado (fail-open). E vale tambem
+  # quando o disparo vem da interface web, nao so de script.
+  #
+  # --scaninfo-store-time 1: liga clean_forgotten_scans(), a unica perna que
+  # devolve o slot sem depender do gvmd nem de watchdog. Default 0 = desligado.
+  # Obrigatorio se for usar --max-scans.
+  #
+  # ATENCAO: NAO editar /etc/gvm/ospd-openvas.conf dentro do container —
+  # /etc/gvm nao tem volume, entao a edicao some no proximo pull/up. O array
+  # `command` tem precedencia sobre o .conf.
+  #
+  # pids_limit: sem ele o container herda o DefaultTasksMax do systemd
+  # (15% de kernel.threads-max). Formula:
+  #   4 x max_scans x (1 + max_hosts x (1 + max_checks)) + 32
+  # Com max_scans=5, max_hosts=20, max_checks=4 => 2052 -> 2048.
+  # NAO usar valores enormes (ex.: 32768): num host de 8 GiB isso fica ~10x
+  # acima do muro de memoria e troca um EAGAIN limpo por swap-thrash do HOST.
+  # ------------------------------------------------------------------
+  ospd-openvas:
+    pids_limit: 2048
+    command:
+      [
+        "ospd-openvas",
+        "-f",
+        "--config",
+        "/etc/gvm/ospd-openvas.conf",
+        "--notus-feed-dir",
+        "/var/lib/notus/advisories",
+        "-m",
+        "666",
+        "--min-free-mem-scan-queue",
+        "1024",
+        "--max-scans",
+        "2",
+        "--scaninfo-store-time",
+        "1",
+      ]
+
 volumes:
   feed_updater_state:
   ingest_state:
