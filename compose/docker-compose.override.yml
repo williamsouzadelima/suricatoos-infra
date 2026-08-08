@@ -211,18 +211,18 @@ services:
   # ------------------------------------------------------------------
   # Controle de admissao de scans + teto de processos do scanner.
   #
-  # BUG QUE ISSO CORRIGE (medido em producao): com min_free_mem_scan_queue=0
+  # BUG QUE ISSO CORRIGE: com min_free_mem_scan_queue=0
   # (default) o ospd nao espaca as partidas. Cada exec_scan varre os indices
   # 1..1024 do Redis abrindo CONEXAO NOVA por indice => ~2.048 comandos KEYS
-  # bloqueantes por scan. Com 5 scans partindo no mesmo segundo dao ~10.240
-  # KEYS x 9,16 ms = ~94 s, contra o SOCKET_TIMEOUT=60 CRAVADO em
-  # ospd_openvas/db.py:21 (nao e env, nao e conf, nao e CLI).
+  # bloqueantes por scan. O custo agregado cresce linearmente com o numero de
+  # scans partindo juntos e ultrapassa o SOCKET_TIMEOUT=60 CRAVADO em
+  # ospd_openvas/db.py:21 (nao e env, nao e conf, nao e CLI). KEYS e O(N) sobre
+  # o keyspace e bloqueia o Redis, que e single-thread.
   # O laco principal (run -> scheduler -> check_feed -> LINDEX) estoura junto,
   # e run() so captura KeyboardInterrupt => o daemon MORRE e leva todos os
   # scans. Pior: no restart, create_context captura (ConnectionError,
   # FileNotFoundError) e TimeoutError NAO e subclasse de ConnectionError =>
-  # crash-loop. KEYS e o maior consumidor de CPU do Redis nessa carga
-  # (45,6% de todo o tempo de comando).
+  # crash-loop.
   #
   # --min-free-mem-scan-queue: o nome engana. Alem do teto de memoria, ele
   # ATIVA o MIN_TIME_BETWEEN_START_SCAN=60s (ospd.py:1182-1191) => no maximo
@@ -243,7 +243,9 @@ services:
   # pids_limit: sem ele o container herda o DefaultTasksMax do systemd
   # (15% de kernel.threads-max). Formula:
   #   4 x max_scans x (1 + max_hosts x (1 + max_checks)) + 32
-  # Com max_scans=5, max_hosts=20, max_checks=4 => 2052 -> 2048.
+  # Com --max-scans 2, max_hosts=20 e max_checks=4 (defaults do scan config)
+  # da 4x2x101 + 32 = 840. Fixado em 2048 para caber uma eventual subida de
+  # --max-scans ate 5 (2052) sem precisar de novo deploy.
   # NAO usar valores enormes (ex.: 32768): num host de 8 GiB isso fica ~10x
   # acima do muro de memoria e troca um EAGAIN limpo por swap-thrash do HOST.
   # ------------------------------------------------------------------

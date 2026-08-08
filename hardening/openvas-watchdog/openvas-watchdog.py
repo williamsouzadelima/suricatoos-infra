@@ -5,31 +5,34 @@ Watchdog de scan openvas travado (Greenbone CE / ospd-openvas).
 CONTEXTO: o Boreas (alive detection) pode bloquear para sempre em
 stop_sniffer_thread() -> pthread_join(), quando o pcap_breakloop nao acorda o
 poll() pendente. Resultado: o processo `openvas --scan-start <uuid>` fica VIVO,
-com 0% de CPU e ZERO filhos, e o ospd-openvas NAO detecta (o laco dele so sai
-por scan terminado / processo morto / stop do cliente). Observado em producao:
-~21 h de "Running" mentiroso antes de alguem perceber.
+com 0% de CPU e ZERO filhos. O ospd-openvas NAO detecta: o laco de exec_scan so
+sai por scan terminado, processo morto ou stop do cliente — nao ha criterio de
+"sem progresso ha N minutos". Logo um openvas vivo porem travado permanece
+Running indefinidamente, ate alguem intervir.
 
-DISCRIMINADOR (medido, nao suposto):
-  - scan SAUDAVEL: a janela com ZERO filhos durou ~1 segundo (o ultimo host
-    terminou 20h46.25 e o scan terminou 20h46.26).
-  - scan TRAVADO: ZERO filhos por ~21 horas, com CPU parada.
-  NAO usar "tempo desde o ultimo fork": um scan saudavel passou 1h43m sem
-  forkar (um unico host levou 7.001 s) — esse criterio mataria scan bom.
+DISCRIMINADOR: a contagem de DESCENDENTES, nao o tempo desde o ultimo fork.
+  NAO usar tempo desde o ultimo fork: na cauda de um scan a fila de hosts drena
+  e sobram poucos alvos lentos, entao um unico host demorado mantem o scan sem
+  forkar por horas sem que ele esteja travado — esse criterio mata scan bom.
+  Num scan saudavel a janela com ZERO filhos se fecha em segundos (o ultimo
+  filho sai e o scan encerra em seguida); num scan travado ela nao termina.
 
 Exige as condicoes SIMULTANEAS, por MIN_OBS passagens consecutivas:
   1. o gvmd considera a task Running
   2. o processo openvas principal tem ZERO filhos
   3. a CPU (utime+stime) NAO avancou desde a passagem anterior
 
-SIMPLIFICACAO DELIBERADA vs. o desenho original: nao le o openvas.log (12,8 GB,
-taxa de 1,3 a 33 MB/min). O estado "congelado desde" e mantido em disco, o que
-elimina a leitura do log, o rastreio de offset/inode e a classe inteira de erro
-de "lacuna de leitura". Mesma deteccao, custo ~0.
+SIMPLIFICACAO DELIBERADA vs. o desenho original: nao le o openvas.log. Aquele
+arquivo cresce sem limite sob carga, e rastrear offset+inode para ler so o
+delta introduz uma classe inteira de erro de lacuna de leitura. O estado
+"congelado desde" mantido em disco da a mesma deteccao com custo ~0.
 
 MATA com SIGKILL apenas no PID principal, NUNCA no process group: o ospd faz
 os.setsid() no handler do scan, e o grupo inclui o processo que roda o
 post-mortem. Matando so o openvas, o ospd detecta 'not openvas_process_is_alive',
-libera as KBs do redis e marca a task como Interrupted (retomavel).
+libera as KBs do redis e marca a task como Interrupted — retomavel pela
+GSA/gvmd. Para scans lancados pelo scanlaunch, Interrupted e convertido em
+FAILED e exige nova requisicao.
 """
 
 import json
@@ -85,7 +88,7 @@ def running_scan_uuids():
         out = subprocess.run(
             ["docker", "exec", PG, "psql", "-U", "gvmd", "-d", "gvmd", "-tAc",
              "SELECT r.uuid FROM reports r JOIN tasks t ON t.id=r.task "
-             "WHERE t.run_status=4;"],
+             "WHERE t.run_status=4 AND COALESCE(r.end_time,0)=0;"],
             capture_output=True, text=True, timeout=60, stdin=subprocess.DEVNULL)
     except (subprocess.SubprocessError, OSError) as e:
         log(f"ERRO: nao consegui consultar o gvmd ({e}) — abortando a passada")
@@ -144,19 +147,23 @@ def main():
     new_state = {}
 
     for uuid in sorted(running):
+        prev = state.get(uuid, {})
         pid = procs.get(uuid)
         if pid is None:
-            log(f"{uuid[:8]}: gvmd diz Running mas nao ha processo openvas "
-                f"(ospd deve reconciliar; watchdog nao age)")
+            # normal entre o start_task e o fork do openvas; so vira ruido se
+            # persistir, entao so registra quando ja tinhamos visto o scan antes
+            if prev:
+                log(f"{uuid[:8]}: gvmd diz Running mas nao ha processo openvas "
+                    f"(ospd deve reconciliar; watchdog nao age)")
             continue
 
         kids = child_count(pid)
         ticks = cpu_ticks(pid)
         if kids < 0 or ticks is None:
             log(f"{uuid[:8]}: nao consegui ler /proc/{pid} — ignorando a passada")
+            new_state[uuid] = prev   # preserva o relogio; nao reinicia a contagem
             continue
 
-        prev = state.get(uuid, {})
         cpu_parado = (prev.get("ticks") == ticks)
         congelado = (kids == 0 and cpu_parado)
 
@@ -179,11 +186,18 @@ def main():
             continue
 
         if parado_s >= KILL_S and kills < MAX_KILLS_PER_PASS:
+            # reconfirma que o PID ainda e ESTE scan: rodamos como root e o
+            # kernel recicla PIDs — matar o pid errado seria grave
+            if openvas_procs().get(uuid) != pid:
+                log(f"{uuid[:8]} pid={pid}: PID mudou entre a leitura e o kill "
+                    f"— abortando por seguranca")
+                new_state[uuid] = {"pid": None, "ticks": None, "obs": 0, "desde": None}
+                continue
             try:
                 os.kill(pid, signal.SIGKILL)   # SO o pid, nunca -pid
                 log(f"{uuid[:8]} pid={pid}: MATANDO com SIGKILL — congelado ha "
                     f"{parado_s}s ({parado_s//60} min), {obs} observacoes. "
-                    f"O ospd deve marcar a task como Interrupted (retomavel).")
+                    f"O ospd deve marcar a task como Interrupted.")
                 kills += 1
                 new_state[uuid] = {"pid": pid, "ticks": ticks, "obs": 0, "desde": None}
             except OSError as e:
