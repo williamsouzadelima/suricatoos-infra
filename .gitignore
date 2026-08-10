@@ -11,3 +11,5 @@ dist/
 /sensor/sensor-agent
 /agent/suricatoos-agent
 *.test
+# Snippets locais de nginx (hostnames de infra ficam fora do repo).
+compose/nginx/extra/*.conf

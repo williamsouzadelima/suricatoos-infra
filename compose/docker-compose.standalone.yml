@@ -1,0 +1,79 @@
+# Suricatoos — perfil STANDALONE.
+#
+# Camada para deploys que rodam a stack SEM os pré-requisitos do host de
+# produção: sem domínio público, sem certificado Let's Encrypt e sem a CA de
+# enrollment. É o caso de um scanner instalado dentro da rede que ele audita,
+# alcançado por navegador local, túnel SSH ou VPN.
+#
+# Uso (o override base continua valendo; este arquivo vem por último):
+#   docker compose -p greenbone-community-edition \
+#     -f compose.yaml -f docker-compose.override.yml -f docker-compose.standalone.yml \
+#     up -d
+#
+# O que ele NÃO contém, de propósito: nada que identifique um host específico.
+# O endereço de bind vem de SCANNER_BIND_IP (.env ao lado do compose) e as
+# origens extras do anti-CSRF vêm de um snippet local — ver nginx/standalone.conf.
+
+services:
+  # ------------------------------------------------------------------
+  # nginx sem domínio: certificado self-signed gerado pelo gvm-config e
+  # publicação restrita.
+  #
+  # O compose base publica 0.0.0.0:443, o que exporia a UI do scanner — e o
+  # login do admin — para toda a rede que a máquina audita. `!override` é
+  # obrigatório: sem ele o compose CONCATENA as listas de ports e os dois
+  # bindings disputam a porta.
+  #
+  # SCANNER_BIND_IP é o endereço adicional em que a UI deve escutar (uma
+  # interface de VPN, por exemplo). O default 127.0.0.1 repete o loopback, o
+  # que é inofensivo, e faz um deploy sem .env subir acessível só localmente
+  # em vez de falhar.
+  # ------------------------------------------------------------------
+  nginx:
+    ports: !override
+      - "127.0.0.1:443:443"
+      - "${SCANNER_BIND_IP:-127.0.0.1}:443:443"
+      - "127.0.0.1:9392:9392"
+    volumes: !override
+      - ./nginx/standalone.conf:/etc/nginx/conf.d/default.conf:ro
+      # Snippets locais do anti-CSRF do /feed-sync/ (ex.: o nome deste host
+      # numa VPN). O diretório é versionado VAZIO e seus .conf são ignorados
+      # pelo git, então hostnames de infraestrutura ficam fora do repositório.
+      # Montar um DIRETÓRIO (e não um arquivo) evita a armadilha de o Docker
+      # criar um diretório no lugar de um arquivo que não existe.
+      - ./nginx/extra:/etc/nginx/conf.d/extra:ro
+
+  # ------------------------------------------------------------------
+  # Controle de admissão do ospd.
+  #
+  # `max_scans=0` e `min_free_mem_scan_queue=0` são o porteiro DESLIGADO, não
+  # "limite zero": is_new_scan_allowed() curto-circuita em `max_scans != 0`.
+  # Com isso, várias tasks disparadas juntas entram todas de uma vez, o ospd
+  # estoura o teto de threads e os scans morrem sem escrever resultado —
+  # parecendo vivos na árvore de processos por horas.
+  #
+  # --min-free-mem-scan-queue também ATIVA o espaçamento entre partidas
+  # (MIN_TIME_BETWEEN_START_SCAN), o que evita a largada simultânea.
+  #
+  # NOTA: este bloco existe também no PR de admission control do ospd; quando
+  # aquele PR entrar no override base, ele pode sair daqui.
+  # ------------------------------------------------------------------
+  ospd-openvas:
+    pids_limit: 2048
+    command:
+      [
+        "ospd-openvas",
+        "-f",
+        "--config",
+        "/etc/gvm/ospd-openvas.conf",
+        "--notus-feed-dir",
+        "/var/lib/notus/advisories",
+        "-m",
+        "666",
+        "--min-free-mem-scan-queue",
+        "1024",
+        "--max-scans",
+        "2",
+        "--scaninfo-store-time",
+        "1",
+      ]
