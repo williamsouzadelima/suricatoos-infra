@@ -76,16 +76,24 @@ services:
       COMPOSE_DIR: /compose
       DOCKER_HOST: tcp://docker-socket-proxy:2375
     volumes:
-      - /root/suricatoos/compose:/compose:ro
+      # Diretório do compose COMO O DAEMON DO HOST o enxerga: o `docker compose`
+      # roda dentro deste container, mas os binds são resolvidos pelo daemon.
+      # O default preserva o deploy de produção; um host que rode a stack de
+      # outro caminho (um clone git, por exemplo) define COMPOSE_DIR_HOST no
+      # .env ao lado do compose.
+      - ${COMPOSE_DIR_HOST:-/root/suricatoos/compose}:/compose:ro
       - feed_updater_state:/state
-      # Auth GHCR: um dos feeds (report-formats) é a NOSSA imagem PRIVADA no GHCR.
-      # O `docker compose up --pull always` roda DENTRO deste container e lê a auth
-      # do config.json do docker CLI local — que sem isto está vazio → o pull da
-      # report-formats dá "unauthorized" e ABORTA o batch inteiro (os feeds públicos
-      # do Greenbone nem chegam a puxar). Montamos o config.json do host (já logado
-      # no ghcr.io com o PAT durável) read-only p/ o pull autenticar. Alternativa
-      # permanente: tornar o pacote report-formats público (aí este mount é dispensável).
-      - /root/.docker/config.json:/root/.docker/config.json:ro
+      # SEM mount de credencial do Docker: o pacote report-formats é PÚBLICO no
+      # GHCR, então os 8 feeds puxam anônimo. Antes disso, o `docker compose up
+      # --pull always` que roda DENTRO deste container precisava da auth do CLI,
+      # e sem ela o pull da imagem privada era negado e o Docker CANCELAVA o
+      # batch inteiro — os 7 feeds públicos do Greenbone nem chegavam a baixar.
+      #
+      # Não reintroduzir o mount sem necessidade real: é um PAT durável em disco,
+      # e em deploys standalone a máquina fica dentro da rede que ela audita.
+      # Se um dia voltar a ser preciso, lembrar que bind mount de ARQUIVO congela
+      # o inode: `docker login`/`logout` reescreve o config.json por rename, e o
+      # container só enxerga o valor novo depois de recriado.
 
   # Suricatoos: control-plane do agente de endpoint.
   # Enroll: POST  https://scanner.suricatoos.com/agent/v1/enroll
