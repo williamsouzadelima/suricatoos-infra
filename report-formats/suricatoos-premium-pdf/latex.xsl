@@ -48,6 +48,13 @@ SPDX-License-Identifier: GPL-2.0-or-later
     </xsl:choose>
   </xsl:variable>
 
+  <!-- Detection-quality threshold. At or above it a result is reported as a
+       confirmed finding; below it, as an indicator that must be validated by
+       hand. 70 mirrors the min_qod the GSA offers by default. Results carrying
+       no <qod> at all are treated as confirmed: absence of the field is not
+       evidence of low quality. -->
+  <xsl:param name="qod-min" select="70"/>
+
   <!-- Group all result elements by their NVT oid (Muenchian grouping). -->
   <xsl:key name="by-nvt" match="result" use="nvt/@oid"/>
   <!-- Composite key to de-duplicate a vulnerability's affected systems: the same
@@ -57,6 +64,28 @@ SPDX-License-Identifier: GPL-2.0-or-later
   <!-- Distinct host:port pairs, used to derive a host's port inventory from the
        results when the report has no <ports> element for that host. -->
   <xsl:key name="by-host-port" match="result" use="concat(host/text(), '|', port)"/>
+
+  <!-- Cumulative-advisory grouping. Only vendor-fix results participate: those
+       are the "upgrade the product" advisories that pile up per release. The
+       group key is the product's first two words, which is where advisory
+       names carry vendor + product. Restricting to VendorFix is what keeps the
+       heuristic safe: name families that merely share a prefix (protocol or
+       inventory checks, say) do not carry a vendor fix and never group. Host is
+       deliberately NOT part of the key: an NVT seen on several hosts would then
+       be only partly collapsed, and suppressing its card would hide the
+       instances on the hosts that did not reach the threshold. The consolidated
+       card lists every affected host instead. -->
+  <xsl:key name="by-updgrp" match="result[nvt/solution/@type='VendorFix']"
+           use="concat(substring-before(concat(normalize-space(nvt/name),' '),' '),' ',substring-before(concat(substring-after(normalize-space(nvt/name),' '),' '),' '))"/>
+  <!-- Same grouping, further split per NVT, so distinct advisories can be
+       counted WITHIN a group (a plain by-nvt key is global and would count
+       occurrences on other hosts too). -->
+  <xsl:key name="by-updgrp-nvt" match="result[nvt/solution/@type='VendorFix']"
+           use="concat(concat(substring-before(concat(normalize-space(nvt/name),' '),' '),' ',substring-before(concat(substring-after(normalize-space(nvt/name),' '),' '),' ')),'||',nvt/@oid)"/>
+
+  <!-- Minimum distinct advisories for a group to be collapsed into one card.
+       Below it the individual cards are more informative than a roll-up. -->
+  <xsl:param name="group-min" select="5"/>
 
   <!-- ================================================================= -->
   <!-- Internationalised strings                                          -->
@@ -94,6 +123,34 @@ SPDX-License-Identifier: GPL-2.0-or-later
     <s k="no_findings" en="No findings above informational severity were recorded for this assessment." pt="Nenhum achado acima da severidade informativa foi registrado nesta avaliação." es="No se registraron hallazgos por encima de la severidad informativa en esta evaluación."/>
     <s k="timeline" en="Assessment timeline" pt="Linha do tempo da avaliação" es="Cronología de la evaluación"/>
     <s k="t_generated" en="REPORT GENERATED" pt="RELATÓRIO GERADO" es="INFORME GENERADO"/>
+    <!-- Sampling disclosure: shown only when the report filter returned fewer
+         results than the scan actually produced, so the reader is never led to
+         believe a truncated window is the whole scan. -->
+    <s k="m_analyzed" en="DETAILED HERE" pt="DETALHADOS AQUI" es="DETALLADOS AQUÍ"/>
+    <s k="sample_hdr" en="Partial view of the scan" pt="Visão parcial da varredura" es="Vista parcial del escaneo"/>
+    <s k="sample_a" en="This report details " pt="Este relatório detalha " es="Este informe detalla "/>
+    <s k="sample_b" en=" of the " pt=" dos " es=" de los "/>
+    <s k="sample_c" en=" results the scan produced, because a display filter was applied when it was exported. Findings outside that filter are NOT described here." pt=" resultados que a varredura produziu, porque um filtro de exibição foi aplicado na exportação. Achados fora desse filtro NÃO estão descritos aqui." es=" resultados que produjo el escaneo, porque se aplicó un filtro de visualización al exportarlo. Los hallazgos fuera de ese filtro NO se describen aquí."/>
+    <!-- Detection confidence (QoD). Anything below the threshold is reported as
+         an indicator to validate, never as a confirmed finding. -->
+    <s k="lbl_lowconf" en="LOW CONFIDENCE" pt="BAIXA CONFIANÇA" es="BAJA CONFIANZA"/>
+    <!-- Consolidated update card -->
+    <s k="grp_title" en="Outstanding update" pt="Atualização pendente" es="Actualización pendiente"/>
+    <s k="grp_badge" en="CONSOLIDATED" pt="CONSOLIDADO" es="CONSOLIDADO"/>
+    <s k="grp_intro_a" en="The scanner reported " pt="O scanner reportou " es="El escáner reportó "/>
+    <s k="grp_intro_b" en=" separate advisories for this product. They accumulate one per vendor release and are resolved by a SINGLE action: updating the product to a supported version. They are listed together below instead of as one finding each." pt=" advisories separados para este produto. Eles se acumulam um por versão do fornecedor e são resolvidos por uma ÚNICA ação: atualizar o produto para uma versão suportada. São listados juntos abaixo em vez de um achado para cada." es=" advisories separados para este producto. Se acumulan uno por versión del proveedor y se resuelven con una ÚNICA acción: actualizar el producto a una versión soportada. Se listan juntos abajo en lugar de un hallazgo para cada uno."/>
+    <s k="grp_th_adv" en="Advisory" pt="Advisory" es="Advisory"/>
+    <s k="grp_action" en="Single remediation action" pt="Ação única de remediação" es="Acción única de remediación"/>
+    <s k="grp_host" en="Affected hosts" pt="Hosts afetados" es="Hosts afectados"/>
+    <s k="sub_confirmed" en="Confirmed findings" pt="Achados confirmados" es="Hallazgos confirmados"/>
+    <s k="sub_indicators" en="Indicators to validate" pt="Indicadores a validar" es="Indicadores a validar"/>
+    <s k="conf_intro" en="Findings below were reported by the scanner with a detection quality of at least " pt="Os achados abaixo foram reportados pelo scanner com qualidade de detecção de pelo menos " es="Los hallazgos siguientes fueron reportados por el escáner con una calidad de detección de al menos "/>
+    <s k="ind_intro" en="The scanner reported the items below with LOW detection quality (under " pt="O scanner reportou os itens abaixo com BAIXA qualidade de detecção (abaixo de " es="El escáner reportó los elementos siguientes con BAJA calidad de detección (por debajo de "/>
+    <s k="ind_intro2" en="). They are inconclusive by nature and must be validated manually before any remediation effort — treat the severity shown as an upper bound, not as a confirmed fact." pt="). São inconclusivos por natureza e precisam ser validados manualmente antes de qualquer esforço de remediação — trate a severidade exibida como um teto, não como fato confirmado." es="). Son inconclusos por naturaleza y deben validarse manualmente antes de cualquier esfuerzo de remediación — trate la severidad mostrada como un techo, no como un hecho confirmado."/>
+    <s k="none_confirmed" en="No confirmed findings above informational severity were recorded." pt="Nenhum achado confirmado acima da severidade informativa foi registrado." es="No se registraron hallazgos confirmados por encima de la severidad informativa."/>
+    <!-- Appended after a bare count, so it must read correctly for 1 and for N:
+         no conjugated verb agreeing with the number. -->
+    <s k="of_which_lowconf" en=" of low confidence (manual validation required)" pt=" de baixa confiança (validação manual necessária)" es=" de baja confianza (validación manual necesaria)"/>
     <!-- Risk words (uppercase, used in the risk badge and narrative) -->
     <s k="risk_critical" en="CRITICAL" pt="CRÍTICO" es="CRÍTICO"/>
     <s k="risk_high" en="HIGH" pt="ALTO" es="ALTO"/>
@@ -639,9 +696,30 @@ SPDX-License-Identifier: GPL-2.0-or-later
     <xsl:variable name="low"  select="count(gvm:report()/results/result[number(severity) &gt;= 0.1 and number(severity) &lt; 4.0])"/>
     <xsl:variable name="logc" select="count(gvm:report()/results/result[not(number(severity) &gt;= 0.1)])"/>
     <xsl:variable name="hosts" select="count(gvm:report()/host)"/>
+    <!-- Results actually carried by this XML: what the document can describe. -->
     <xsl:variable name="total" select="count(gvm:report()/results/result)"/>
+    <!-- Results the SCAN produced. gvmd reports it as the text node of
+         <result_count>, with the post-filter count in <filtered> (same contract
+         the stock GVM formats rely on). Counting <result> elements instead
+         reports the size of the filter window as if it were the whole scan:
+         any export carrying a row limit then understates the total, silently
+         and by an arbitrary factor. Fall back to $total when it is missing or
+         inconsistent, and never claim FEWER results than we actually list. -->
+    <xsl:variable name="rc-full" select="normalize-space(gvm:report()/result_count/text())"/>
+    <xsl:variable name="total-full">
+      <xsl:choose>
+        <xsl:when test="string-length($rc-full) &gt; 0 and floor(number($rc-full)) = number($rc-full) and number($rc-full) &gt;= $total">
+          <xsl:value-of select="number($rc-full)"/>
+        </xsl:when>
+        <xsl:otherwise><xsl:value-of select="$total"/></xsl:otherwise>
+      </xsl:choose>
+    </xsl:variable>
+    <xsl:variable name="truncated" select="number($total-full) &gt; $total"/>
     <xsl:variable name="rated" select="$crit + $high + $med + $low"/>
     <xsl:variable name="uniq" select="count(gvm:report()/results/result[generate-id() = generate-id(key('by-nvt', nvt/@oid)[1])])"/>
+    <!-- High/critical results the scanner is NOT confident about. Reported apart
+         so "warrant prompt remediation" never silently includes guesses. -->
+    <xsl:variable name="lowconf-hi" select="count(gvm:report()/results/result[number(severity) &gt;= 7.0][qod/value][number(qod/value) &lt; number($qod-min)])"/>
 
     <!-- Overall risk rating derivation -->
     <xsl:variable name="riskWord">
@@ -678,9 +756,13 @@ SPDX-License-Identifier: GPL-2.0-or-later
         <xsl:text>Este relatório apresenta os resultados de uma avaliação de vulnerabilidades realizada pela Plataforma de Segurança Suricatoos. O projeto ``</xsl:text>
         <xsl:value-of select="$taskname"/>
         <xsl:text>'' avaliou </xsl:text><xsl:value-of select="$hosts"/><xsl:text> host(s) e produziu </xsl:text>
-        <xsl:value-of select="$total"/><xsl:text> resultado(s), correspondendo a </xsl:text>
-        <xsl:value-of select="$uniq"/><xsl:text> vulnerabilidade(s) única(s). Destes, \textbf{</xsl:text>
-        <xsl:value-of select="$hicrit"/><xsl:text>} achado(s) são de severidade Alta ou Crítica e exigem remediação imediata. A exposição geral ao risco do ambiente avaliado é classificada como \textbf{</xsl:text>
+        <xsl:value-of select="$total-full"/><xsl:text> resultado(s). Este relatório descreve </xsl:text>
+        <xsl:value-of select="$uniq"/><xsl:text> vulnerabilidade(s) única(s). Destas, \textbf{</xsl:text>
+        <xsl:value-of select="$hicrit"/><xsl:text>} achado(s) são de severidade Alta ou Crítica e exigem remediação imediata</xsl:text>
+        <xsl:if test="$lowconf-hi &gt; 0">
+          <xsl:text> --- </xsl:text><xsl:value-of select="$lowconf-hi"/><xsl:value-of select="gvm:t('of_which_lowconf')"/>
+        </xsl:if>
+        <xsl:text>. A exposição geral ao risco do ambiente avaliado é classificada como \textbf{</xsl:text>
         <xsl:value-of select="$riskWord"/><xsl:text>}.\par
 </xsl:text>
       </xsl:when>
@@ -688,9 +770,13 @@ SPDX-License-Identifier: GPL-2.0-or-later
         <xsl:text>Este informe presenta los resultados de una evaluación de vulnerabilidades realizada por la Plataforma de Seguridad Suricatoos. El proyecto ``</xsl:text>
         <xsl:value-of select="$taskname"/>
         <xsl:text>'' evaluó </xsl:text><xsl:value-of select="$hosts"/><xsl:text> host(s) y produjo </xsl:text>
-        <xsl:value-of select="$total"/><xsl:text> resultado(s), correspondientes a </xsl:text>
-        <xsl:value-of select="$uniq"/><xsl:text> vulnerabilidad(es) única(s). De estos, \textbf{</xsl:text>
-        <xsl:value-of select="$hicrit"/><xsl:text>} hallazgo(s) son de severidad Alta o Crítica y requieren remediación inmediata. La exposición general al riesgo del entorno evaluado se clasifica como \textbf{</xsl:text>
+        <xsl:value-of select="$total-full"/><xsl:text> resultado(s). Este informe describe </xsl:text>
+        <xsl:value-of select="$uniq"/><xsl:text> vulnerabilidad(es) única(s). De estas, \textbf{</xsl:text>
+        <xsl:value-of select="$hicrit"/><xsl:text>} hallazgo(s) son de severidad Alta o Crítica y requieren remediación inmediata</xsl:text>
+        <xsl:if test="$lowconf-hi &gt; 0">
+          <xsl:text> --- </xsl:text><xsl:value-of select="$lowconf-hi"/><xsl:value-of select="gvm:t('of_which_lowconf')"/>
+        </xsl:if>
+        <xsl:text>. La exposición general al riesgo del entorno evaluado se clasifica como \textbf{</xsl:text>
         <xsl:value-of select="$riskWord"/><xsl:text>}.\par
 </xsl:text>
       </xsl:when>
@@ -698,11 +784,15 @@ SPDX-License-Identifier: GPL-2.0-or-later
         <xsl:text>This report presents the findings of a vulnerability assessment performed by the Suricatoos Security Platform. The engagement ``</xsl:text>
         <xsl:value-of select="$taskname"/>
         <xsl:text>'' assessed </xsl:text><xsl:value-of select="$hosts"/><xsl:text> host(s) and produced </xsl:text>
-        <xsl:value-of select="$total"/><xsl:text> result(s), corresponding to </xsl:text>
+        <xsl:value-of select="$total-full"/><xsl:text> result(s). This report describes </xsl:text>
         <xsl:value-of select="$uniq"/><xsl:text> unique vulnerabilit</xsl:text>
         <xsl:choose><xsl:when test="$uniq = 1">y</xsl:when><xsl:otherwise>ies</xsl:otherwise></xsl:choose>
         <xsl:text>. Of these, \textbf{</xsl:text><xsl:value-of select="$hicrit"/>
-        <xsl:text>} finding(s) are of High or Critical severity and warrant prompt remediation. The overall risk exposure of the assessed environment is rated \textbf{</xsl:text>
+        <xsl:text>} finding(s) are of High or Critical severity and warrant prompt remediation</xsl:text>
+        <xsl:if test="$lowconf-hi &gt; 0">
+          <xsl:text> --- </xsl:text><xsl:value-of select="$lowconf-hi"/><xsl:value-of select="gvm:t('of_which_lowconf')"/>
+        </xsl:if>
+        <xsl:text>. The overall risk exposure of the assessed environment is rated \textbf{</xsl:text>
         <xsl:value-of select="$riskWord"/><xsl:text>}.\par
 </xsl:text>
       </xsl:otherwise>
@@ -726,10 +816,11 @@ SPDX-License-Identifier: GPL-2.0-or-later
       <xsl:with-param name="value" select="$hosts"/>
       <xsl:with-param name="label" select="gvm:t('m_hosts')"/>
     </xsl:call-template>
+    <!-- Total the SCAN produced, not the number of rows this export carries. -->
     <xsl:call-template name="metric-tile">
       <xsl:with-param name="xl" select="102"/>
       <xsl:with-param name="xr" select="132"/>
-      <xsl:with-param name="value" select="$total"/>
+      <xsl:with-param name="value" select="$total-full"/>
       <xsl:with-param name="label" select="gvm:t('m_total')"/>
     </xsl:call-template>
     <xsl:call-template name="metric-tile">
@@ -742,6 +833,23 @@ SPDX-License-Identifier: GPL-2.0-or-later
 \end{center}
 \vspace{5mm}
 </xsl:text>
+
+    <!-- Sampling disclosure. Only rendered when the export really is partial,
+         so a complete report carries no needless caveat. -->
+    <xsl:if test="$truncated">
+      <xsl:text>\begin{tcolorbox}[colback=surMist,colframe=gvm_warning,boxrule=0.9pt,arc=1.4mm,left=3mm,right=3mm,top=2mm,bottom=2mm]
+{\bfseries\color{surInk}</xsl:text><xsl:value-of select="gvm:t('sample_hdr')"/><xsl:text>}\par\vspace{1mm}
+{\small\color{surInk}</xsl:text>
+      <xsl:value-of select="gvm:t('sample_a')"/>
+      <xsl:text>\textbf{</xsl:text><xsl:value-of select="$total"/><xsl:text>}</xsl:text>
+      <xsl:value-of select="gvm:t('sample_b')"/>
+      <xsl:text>\textbf{</xsl:text><xsl:value-of select="$total-full"/><xsl:text>}</xsl:text>
+      <xsl:value-of select="gvm:t('sample_c')"/>
+      <xsl:text>}
+\end{tcolorbox}
+\vspace{4mm}
+</xsl:text>
+    </xsl:if>
 
     <!-- Severity breakdown chart (pgfplots). The symbolic y coords stay as the
          language-neutral class tokens; the DISPLAYED tick labels are localised
@@ -1008,13 +1116,55 @@ SPDX-License-Identifier: GPL-2.0-or-later
   <!-- ================================================================= -->
 
   <xsl:template name="findings-summary">
-    <xsl:variable name="rated" select="count(gvm:report()/results/result[number(severity) &gt;= 0.1])"/>
+    <xsl:variable name="n-low" select="count(gvm:report()/results/result[generate-id() = generate-id(key('by-nvt', nvt/@oid)[1])][qod/value][number(qod/value) &lt; number($qod-min)])"/>
+    <xsl:variable name="n-ok" select="count(gvm:report()/results/result[generate-id() = generate-id(key('by-nvt', nvt/@oid)[1])][not(qod/value) or number(qod/value) &gt;= number($qod-min)])"/>
     <xsl:text>\section{</xsl:text><xsl:value-of select="gvm:t('sec_findings_summary')"/><xsl:text>}
 </xsl:text>
     <xsl:value-of select="gvm:t('fs_intro')"/>
     <xsl:text>\par
 \vspace{3mm}
 </xsl:text>
+
+    <!-- Confirmed findings. Sub-headed only when low-confidence items exist, so
+         a clean report keeps the original single-table layout. -->
+    <xsl:if test="$n-low &gt; 0">
+      <xsl:text>\subsection*{</xsl:text><xsl:value-of select="gvm:t('sub_confirmed')"/><xsl:text>}
+{\color{surMuted}\small </xsl:text><xsl:value-of select="gvm:t('conf_intro')"/>
+      <xsl:value-of select="$qod-min"/><xsl:text>\%.}\par\vspace{2mm}
+</xsl:text>
+    </xsl:if>
+    <xsl:choose>
+      <xsl:when test="$n-ok = 0">
+        <xsl:text>{\color{surMuted}</xsl:text><xsl:value-of select="gvm:t('none_confirmed')"/><xsl:text>}\par\vspace{3mm}
+</xsl:text>
+      </xsl:when>
+      <xsl:otherwise>
+        <xsl:call-template name="findings-summary-table">
+          <xsl:with-param name="low" select="0"/>
+        </xsl:call-template>
+      </xsl:otherwise>
+    </xsl:choose>
+
+    <!-- Indicators to validate: what the scanner is not confident about. -->
+    <xsl:if test="$n-low &gt; 0">
+      <xsl:text>\vspace{4mm}
+\subsection*{</xsl:text><xsl:value-of select="gvm:t('sub_indicators')"/><xsl:text>}
+{\color{surMuted}\small </xsl:text><xsl:value-of select="gvm:t('ind_intro')"/>
+      <xsl:value-of select="$qod-min"/><xsl:text>\%</xsl:text><xsl:value-of select="gvm:t('ind_intro2')"/>
+      <xsl:text>}\par\vspace{2mm}
+</xsl:text>
+      <xsl:call-template name="findings-summary-table">
+        <xsl:with-param name="low" select="1"/>
+      </xsl:call-template>
+    </xsl:if>
+  </xsl:template>
+
+  <!-- One summary table. low=1 selects the NVTs whose detection quality is under
+       the threshold; low=0 selects the rest. The filter lives in the select
+       expression rather than inside the loop, so position() numbers each table
+       from 1 independently. -->
+  <xsl:template name="findings-summary-table">
+    <xsl:param name="low" select="0"/>
     <xsl:text>\renewcommand{\arraystretch}{1.35}
 \begin{longtable}{@{}p{9mm} p{92mm} p{15mm} p{35mm}@{}}
 \rowcolor{surInk}
@@ -1024,7 +1174,37 @@ SPDX-License-Identifier: GPL-2.0-or-later
 \textcolor{white}{\bfseries </xsl:text><xsl:value-of select="gvm:t('th_num')"/><xsl:text>} &amp; \textcolor{white}{\bfseries </xsl:text><xsl:value-of select="gvm:t('th_vuln')"/><xsl:text>} &amp; \textcolor{white}{\bfseries </xsl:text><xsl:value-of select="gvm:t('th_inst')"/><xsl:text>} &amp; \textcolor{white}{\bfseries </xsl:text><xsl:value-of select="gvm:t('th_severity')"/><xsl:text>} \\
 \endhead
 </xsl:text>
-    <xsl:for-each select="gvm:report()/results/result[generate-id() = generate-id(key('by-nvt', nvt/@oid)[1])]">
+    <xsl:variable name="rows" select="gvm:report()/results/result[generate-id() = generate-id(key('by-nvt', nvt/@oid)[1])]"/>
+    <!-- Consolidated groups get one row each, at the top of the confirmed
+         table, so the summary and the detail section describe the same set. -->
+    <xsl:variable name="groups" select="gvm:report()/results/result[nvt/solution/@type='VendorFix'][generate-id() = generate-id(key('by-updgrp',concat(substring-before(concat(normalize-space(nvt/name),' '),' '),' ',substring-before(concat(substring-after(normalize-space(nvt/name),' '),' '),' ')))[1])][count(key('by-updgrp',concat(substring-before(concat(normalize-space(nvt/name),' '),' '),' ',substring-before(concat(substring-after(normalize-space(nvt/name),' '),' '),' ')))[generate-id() = generate-id(key('by-updgrp-nvt',concat(concat(substring-before(concat(normalize-space(nvt/name),' '),' '),' ',substring-before(concat(substring-after(normalize-space(nvt/name),' '),' '),' ')),'||',nvt/@oid))[1])]) &gt;= $group-min]"/>
+    <xsl:variable name="ngroups">
+      <xsl:choose>
+        <xsl:when test="$low = 0"><xsl:value-of select="count($groups)"/></xsl:when>
+        <xsl:otherwise>0</xsl:otherwise>
+      </xsl:choose>
+    </xsl:variable>
+    <xsl:if test="$low = 0">
+      <xsl:for-each select="$groups">
+        <xsl:sort select="severity" data-type="number" order="descending"/>
+        <xsl:if test="position() mod 2 = 0"><xsl:text>\rowcolor{surMist}</xsl:text></xsl:if>
+        <xsl:text>{\bfseries </xsl:text><xsl:value-of select="position()"/><xsl:text>} &amp; </xsl:text>
+        <xsl:text>\hyperlink{</xsl:text><xsl:value-of select="concat('grp-', translate(concat(substring-before(concat(normalize-space(nvt/name),' '),' '),' ',substring-before(concat(substring-after(normalize-space(nvt/name),' '),' '),' ')), ' ./:,()', '-------'))"/><xsl:text>}{\color{surInk}</xsl:text>
+        <xsl:call-template name="escape_text">
+          <xsl:with-param name="string" select="concat(substring-before(concat(normalize-space(nvt/name),' '),' '),' ',substring-before(concat(substring-after(normalize-space(nvt/name),' '),' '),' '))"/>
+        </xsl:call-template>
+        <xsl:text> --- </xsl:text><xsl:value-of select="gvm:t('grp_title')"/>
+        <xsl:text>} &amp; </xsl:text>
+        <xsl:value-of select="count(key('by-updgrp',concat(substring-before(concat(normalize-space(nvt/name),' '),' '),' ',substring-before(concat(substring-after(normalize-space(nvt/name),' '),' '),' ')))[generate-id() = generate-id(key('by-updgrp-nvt',concat(concat(substring-before(concat(normalize-space(nvt/name),' '),' '),' ',substring-before(concat(substring-after(normalize-space(nvt/name),' '),' '),' ')),'||',nvt/@oid))[1])])"/>
+        <xsl:text> &amp; </xsl:text>
+        <xsl:call-template name="severity-pill">
+          <xsl:with-param name="severity" select="severity"/>
+        </xsl:call-template>
+        <xsl:text> \\[0.6mm]
+</xsl:text>
+      </xsl:for-each>
+    </xsl:if>
+    <xsl:for-each select="$rows[($low = 1 and qod/value and number(qod/value) &lt; number($qod-min)) or ($low = 0 and (not(qod/value) or number(qod/value) &gt;= number($qod-min)))][not((nvt/solution/@type='VendorFix' and count(key('by-updgrp',concat(substring-before(concat(normalize-space(nvt/name),' '),' '),' ',substring-before(concat(substring-after(normalize-space(nvt/name),' '),' '),' ')))[generate-id() = generate-id(key('by-updgrp-nvt',concat(concat(substring-before(concat(normalize-space(nvt/name),' '),' '),' ',substring-before(concat(substring-after(normalize-space(nvt/name),' '),' '),' ')),'||',nvt/@oid))[1])]) &gt;= $group-min))]">
       <xsl:sort select="severity" data-type="number" order="descending"/>
       <xsl:variable name="oid" select="nvt/@oid"/>
       <xsl:variable name="anchor" select="concat('fnd-', translate($oid, '.', '-'))"/>
@@ -1039,7 +1219,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
       <xsl:if test="position() mod 2 = 0">
         <xsl:text>\rowcolor{surMist}</xsl:text>
       </xsl:if>
-      <xsl:text>{\bfseries </xsl:text><xsl:value-of select="position()"/><xsl:text>} &amp; </xsl:text>
+      <xsl:text>{\bfseries </xsl:text><xsl:value-of select="position() + number($ngroups)"/><xsl:text>} &amp; </xsl:text>
       <xsl:text>\hyperlink{</xsl:text><xsl:value-of select="$anchor"/><xsl:text>}{\color{surInk}</xsl:text>
       <xsl:call-template name="escape_text">
         <xsl:with-param name="string" select="nvt/name"/>
@@ -1091,9 +1271,41 @@ SPDX-License-Identifier: GPL-2.0-or-later
   </func:function>
 
   <xsl:template name="detailed-findings">
+    <xsl:variable name="n-low" select="count(gvm:report()/results/result[generate-id() = generate-id(key('by-nvt', nvt/@oid)[1])][qod/value][number(qod/value) &lt; number($qod-min)])"/>
     <xsl:text>\section{</xsl:text><xsl:value-of select="gvm:t('sec_detailed')"/><xsl:text>}
 </xsl:text>
-    <xsl:for-each select="gvm:report()/results/result[generate-id() = generate-id(key('by-nvt', nvt/@oid)[1])]">
+    <!-- Confirmed first; the low-confidence block is only introduced when there
+         is something in it, so a clean report reads exactly as before. -->
+    <xsl:if test="$n-low &gt; 0">
+      <xsl:text>\subsection*{</xsl:text><xsl:value-of select="gvm:t('sub_confirmed')"/><xsl:text>}
+</xsl:text>
+    </xsl:if>
+    <xsl:call-template name="consolidated-update-cards"/>
+    <xsl:call-template name="finding-cards">
+      <xsl:with-param name="low" select="0"/>
+    </xsl:call-template>
+    <xsl:if test="$n-low &gt; 0">
+      <xsl:text>\subsection*{</xsl:text><xsl:value-of select="gvm:t('sub_indicators')"/><xsl:text>}
+{\color{surMuted}\small </xsl:text><xsl:value-of select="gvm:t('ind_intro')"/>
+      <xsl:value-of select="$qod-min"/><xsl:text>\%</xsl:text><xsl:value-of select="gvm:t('ind_intro2')"/>
+      <xsl:text>}\par\vspace{3mm}
+</xsl:text>
+      <xsl:call-template name="finding-cards">
+        <xsl:with-param name="low" select="1"/>
+      </xsl:call-template>
+    </xsl:if>
+  </xsl:template>
+
+  <!-- Detail cards for one confidence bucket. low=1 renders the findings whose
+       detection quality is under the threshold, low=0 the rest. -->
+  <xsl:template name="finding-cards">
+    <xsl:param name="low" select="0"/>
+    <xsl:variable name="rows" select="gvm:report()/results/result[generate-id() = generate-id(key('by-nvt', nvt/@oid)[1])]"/>
+    <!-- Advisories already described by a consolidated update card are dropped
+         here so the same vulnerability is not told twice. The trailing
+         predicate is the "was I absorbed?" test spelled out inline: XSLT 1.0
+         has no way to hoist it into a variable and still use it in a select. -->
+    <xsl:for-each select="$rows[($low = 1 and qod/value and number(qod/value) &lt; number($qod-min)) or ($low = 0 and (not(qod/value) or number(qod/value) &gt;= number($qod-min)))][not((nvt/solution/@type='VendorFix' and count(key('by-updgrp',concat(substring-before(concat(normalize-space(nvt/name),' '),' '),' ',substring-before(concat(substring-after(normalize-space(nvt/name),' '),' '),' ')))[generate-id() = generate-id(key('by-updgrp-nvt',concat(concat(substring-before(concat(normalize-space(nvt/name),' '),' '),' ',substring-before(concat(substring-after(normalize-space(nvt/name),' '),' '),' ')),'||',nvt/@oid))[1])]) &gt;= $group-min))]">
       <xsl:sort select="severity" data-type="number" order="descending"/>
       <xsl:variable name="oid" select="nvt/@oid"/>
       <xsl:variable name="anchor" select="concat('fnd-', translate($oid, '.', '-'))"/>
@@ -1143,6 +1355,13 @@ SPDX-License-Identifier: GPL-2.0-or-later
         <xsl:text>{\setlength{\fboxsep}{2.2pt}\colorbox{surCloud}{\color{surInk}\scriptsize\bfseries~QoD </xsl:text>
         <xsl:value-of select="qod/value"/>
         <xsl:text>\%~}}\hspace{2mm}</xsl:text>
+      </xsl:if>
+      <!-- Loud badge so a low-quality detection is never read as a fact, no
+           matter how high its CVSS looks next to it. -->
+      <xsl:if test="qod/value and number(qod/value) &lt; number($qod-min)">
+        <xsl:text>{\setlength{\fboxsep}{2.2pt}\colorbox{gvm_warning}{\color{white}\scriptsize\bfseries~</xsl:text>
+        <xsl:value-of select="gvm:t('lbl_lowconf')"/>
+        <xsl:text>~}}\hspace{2mm}</xsl:text>
       </xsl:if>
       <xsl:text>{\setlength{\fboxsep}{2.2pt}\colorbox{surCloud}{\color{surInk}\scriptsize\bfseries~</xsl:text>
       <xsl:value-of select="$instances"/>
@@ -1293,6 +1512,125 @@ SPDX-License-Identifier: GPL-2.0-or-later
   <!-- ================================================================= -->
   <!-- Closing colophon                                                  -->
   <!-- ================================================================= -->
+
+
+  <!-- One card per product whose vendor-fix advisories piled up past the
+       threshold. Replaces N nearly identical cards with the single action that
+       actually resolves them. -->
+  <xsl:template name="consolidated-update-cards">
+    <xsl:for-each select="gvm:report()/results/result[nvt/solution/@type='VendorFix'][generate-id() = generate-id(key('by-updgrp',concat(substring-before(concat(normalize-space(nvt/name),' '),' '),' ',substring-before(concat(substring-after(normalize-space(nvt/name),' '),' '),' ')))[1])]">
+      <xsl:sort select="severity" data-type="number" order="descending"/>
+      <xsl:variable name="g" select="concat(substring-before(concat(normalize-space(nvt/name),' '),' '),' ',substring-before(concat(substring-after(normalize-space(nvt/name),' '),' '),' '))"/>
+      <xsl:variable name="ndist" select="count(key('by-updgrp',concat(substring-before(concat(normalize-space(nvt/name),' '),' '),' ',substring-before(concat(substring-after(normalize-space(nvt/name),' '),' '),' ')))[generate-id() = generate-id(key('by-updgrp-nvt',concat(concat(substring-before(concat(normalize-space(nvt/name),' '),' '),' ',substring-before(concat(substring-after(normalize-space(nvt/name),' '),' '),' ')),'||',nvt/@oid))[1])])"/>
+      <xsl:if test="$ndist &gt;= $group-min">
+        <xsl:variable name="members" select="key('by-updgrp', $g)"/>
+        <!-- Highest severity in the group drives the card colour. -->
+        <xsl:variable name="maxsev">
+          <xsl:for-each select="$members">
+            <xsl:sort select="severity" data-type="number" order="descending"/>
+            <xsl:if test="position() = 1"><xsl:value-of select="severity"/></xsl:if>
+          </xsl:for-each>
+        </xsl:variable>
+        <xsl:variable name="sevclass">
+          <xsl:call-template name="sev-class">
+            <xsl:with-param name="severity" select="$maxsev"/>
+          </xsl:call-template>
+        </xsl:variable>
+        <xsl:variable name="tcolor">
+          <xsl:call-template name="threat-color">
+            <xsl:with-param name="threat" select="$sevclass"/>
+          </xsl:call-template>
+        </xsl:variable>
+        <xsl:variable name="gname">
+          <xsl:call-template name="escape_text">
+            <xsl:with-param name="string" select="$g"/>
+          </xsl:call-template>
+        </xsl:variable>
+
+        <xsl:text>\hypertarget{</xsl:text><xsl:value-of select="concat('grp-', translate(concat(substring-before(concat(normalize-space(nvt/name),' '),' '),' ',substring-before(concat(substring-after(normalize-space(nvt/name),' '),' '),' ')), ' ./:,()', '-------'))"/><xsl:text>}{}%
+</xsl:text>
+        <xsl:text>\begin{tcolorbox}[breakable, enhanced, sharp corners=uphill, arc=1.2mm,
+  colback=white, colframe=surBorderLt, boxrule=0.5pt,
+  left=3.5mm, right=3.5mm, top=3mm, bottom=3mm,
+  toptitle=1.6mm, bottomtitle=1.6mm, lefttitle=3.5mm,
+  colbacktitle=</xsl:text><xsl:value-of select="$tcolor"/><xsl:text>, coltitle=white,
+  fonttitle=\bfseries,
+  title={</xsl:text><xsl:value-of select="gvm:t('grp_title')"/><xsl:text>:\hspace{2mm} </xsl:text>
+        <xsl:value-of select="$gname"/><xsl:text>}]
+</xsl:text>
+        <xsl:text>\noindent </xsl:text>
+        <xsl:call-template name="severity-pill">
+          <xsl:with-param name="severity" select="$maxsev"/>
+        </xsl:call-template>
+        <xsl:text>\hspace{2mm}{\setlength{\fboxsep}{2.2pt}\colorbox{surInk}{\color{white}\scriptsize\bfseries~</xsl:text>
+        <xsl:value-of select="gvm:t('grp_badge')"/>
+        <xsl:text>~}}\par\vspace{2mm}
+</xsl:text>
+        <xsl:text>{\small </xsl:text><xsl:value-of select="gvm:t('grp_intro_a')"/>
+        <xsl:text>\textbf{</xsl:text><xsl:value-of select="$ndist"/><xsl:text>}</xsl:text>
+        <xsl:value-of select="gvm:t('grp_intro_b')"/><xsl:text>}\par\vspace{2mm}
+</xsl:text>
+
+        <!-- Affected hosts (each host once, however many advisories hit it). -->
+        <xsl:text>\fieldlabel{</xsl:text><xsl:value-of select="gvm:t('grp_host')"/><xsl:text>}
+\begingroup\ttfamily\footnotesize\raggedright
+</xsl:text>
+        <xsl:for-each select="$members">
+          <xsl:sort select="host/text()"/>
+          <xsl:variable name="h" select="host/text()"/>
+          <xsl:if test="not(preceding::result[nvt/solution/@type='VendorFix'][host/text() = $h][concat(substring-before(concat(normalize-space(nvt/name),' '),' '),' ',substring-before(concat(substring-after(normalize-space(nvt/name),' '),' '),' ')) = $g])">
+            <xsl:if test="position() &gt; 1"><xsl:text>, </xsl:text></xsl:if>
+            <xsl:call-template name="escape_text">
+              <xsl:with-param name="string" select="$h"/>
+            </xsl:call-template>
+          </xsl:if>
+        </xsl:for-each>
+        <xsl:text>
+\par\endgroup\vspace{2mm}
+</xsl:text>
+
+        <!-- The advisories rolled up here, most severe first. -->
+        <xsl:text>\fieldlabel{</xsl:text><xsl:value-of select="gvm:t('grp_th_adv')"/><xsl:text>}
+\renewcommand{\arraystretch}{1.2}
+\begin{longtable}{@{}p{112mm} p{28mm}@{}}
+</xsl:text>
+        <xsl:for-each select="$members[generate-id() = generate-id(key('by-updgrp-nvt',concat($g,'||',nvt/@oid))[1])]">
+          <xsl:sort select="severity" data-type="number" order="descending"/>
+          <xsl:text>{\footnotesize </xsl:text>
+          <xsl:call-template name="escape_text">
+            <xsl:with-param name="string" select="nvt/name"/>
+          </xsl:call-template>
+          <xsl:text>} &amp; </xsl:text>
+          <xsl:call-template name="severity-pill">
+            <xsl:with-param name="severity" select="severity"/>
+          </xsl:call-template>
+          <xsl:text> \\
+</xsl:text>
+        </xsl:for-each>
+        <xsl:text>\end{longtable}
+\vspace{1mm}
+</xsl:text>
+
+        <!-- Single remediation action: the fix of the most severe advisory. -->
+        <xsl:text>\fieldlabel{</xsl:text><xsl:value-of select="gvm:t('grp_action')"/><xsl:text>}
+\begin{tcolorbox}[colback=surMist,colframe=surBorderLt,boxrule=0.4pt,arc=1mm,left=2.5mm,right=2.5mm,top=1.5mm,bottom=1.5mm]
+</xsl:text>
+        <xsl:for-each select="$members">
+          <xsl:sort select="severity" data-type="number" order="descending"/>
+          <xsl:if test="position() = 1">
+            <xsl:call-template name="escape_lines">
+              <xsl:with-param name="string" select="nvt/solution"/>
+            </xsl:call-template>
+          </xsl:if>
+        </xsl:for-each>
+        <xsl:text>
+\end{tcolorbox}
+\end{tcolorbox}
+\vspace{3mm}
+</xsl:text>
+      </xsl:if>
+    </xsl:for-each>
+  </xsl:template>
 
   <xsl:template name="branded-footer">
     <xsl:text>
