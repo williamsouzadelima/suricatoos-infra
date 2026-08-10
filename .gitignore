@@ -13,3 +13,5 @@ dist/
 *.test
 # Snippets locais de nginx (hostnames de infra ficam fora do repo).
 compose/nginx/extra/*.conf
+# .env do deploy (endereços de bind, caminhos do host).
+compose/.env
