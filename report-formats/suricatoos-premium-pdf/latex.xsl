@@ -87,6 +87,11 @@ SPDX-License-Identifier: GPL-2.0-or-later
        Below it the individual cards are more informative than a roll-up. -->
   <xsl:param name="group-min" select="5"/>
 
+  <!-- Quantos advisories o card consolidado lista antes de resumir o resto.
+       Os mais severos são os que orientam a urgência; o restante é enumeração
+       do mesmo produto, resolvida pela mesma ação. -->
+  <xsl:param name="adv-max" select="10"/>
+
   <!-- ================================================================= -->
   <!-- Internationalised strings                                          -->
   <!-- ================================================================= -->
@@ -140,6 +145,8 @@ SPDX-License-Identifier: GPL-2.0-or-later
     <s k="grp_intro_a" en="The scanner reported " pt="O scanner reportou " es="El escáner reportó "/>
     <s k="grp_intro_b" en=" separate advisories for this product. They accumulate one per vendor release and are resolved by a SINGLE action: updating the product to a supported version. They are listed together below instead of as one finding each." pt=" advisories separados para este produto. Eles se acumulam um por versão do fornecedor e são resolvidos por uma ÚNICA ação: atualizar o produto para uma versão suportada. São listados juntos abaixo em vez de um achado para cada." es=" advisories separados para este producto. Se acumulan uno por versión del proveedor y se resuelven con una ÚNICA acción: actualizar el producto a una versión soportada. Se listan juntos abajo en lugar de un hallazgo para cada uno."/>
     <s k="grp_th_adv" en="Advisory" pt="Advisory" es="Advisory"/>
+    <s k="grp_more_a" en=" more advisories for this product, up to " pt=" advisories a mais deste produto, até " es=" advisories más de este producto, hasta "/>
+    <s k="grp_more_b" en=" — all resolved by the same update." pt=" — todos resolvidos pela mesma atualização." es=" — todos resueltos por la misma actualización."/>
     <s k="grp_action" en="Single remediation action" pt="Ação única de remediação" es="Acción única de remediación"/>
     <s k="grp_host" en="Affected hosts" pt="Hosts afetados" es="Hosts afectados"/>
     <s k="sub_confirmed" en="Confirmed findings" pt="Achados confirmados" es="Hallazgos confirmados"/>
@@ -1596,16 +1603,33 @@ SPDX-License-Identifier: GPL-2.0-or-later
 </xsl:text>
         <xsl:for-each select="$members[generate-id() = generate-id(key('by-updgrp-nvt',concat($g,'||',nvt/@oid))[1])]">
           <xsl:sort select="severity" data-type="number" order="descending"/>
-          <xsl:text>{\footnotesize </xsl:text>
-          <xsl:call-template name="escape_text">
-            <xsl:with-param name="string" select="nvt/name"/>
-          </xsl:call-template>
-          <xsl:text>} &amp; </xsl:text>
-          <xsl:call-template name="severity-pill">
-            <xsl:with-param name="severity" select="severity"/>
-          </xsl:call-template>
-          <xsl:text> \\
+          <!-- Lista só os mais severos. O restante vira UMA linha que declara
+               quantos ficaram de fora e até onde vai a severidade deles: um
+               corte silencioso faria o card parecer completo, e este documento
+               é material de auditoria. A ação de remediação é a mesma para
+               todos, então o que se perde é enumeração, não decisão. -->
+          <xsl:if test="position() &lt;= number($adv-max)">
+            <xsl:text>{\footnotesize </xsl:text>
+            <xsl:call-template name="escape_text">
+              <xsl:with-param name="string" select="nvt/name"/>
+            </xsl:call-template>
+            <xsl:text>} &amp; </xsl:text>
+            <xsl:call-template name="severity-pill">
+              <xsl:with-param name="severity" select="severity"/>
+            </xsl:call-template>
+            <xsl:text> \\
 </xsl:text>
+          </xsl:if>
+          <xsl:if test="position() = number($adv-max) + 1">
+            <xsl:text>\multicolumn{2}{@{}l@{}}{\footnotesize\itshape\color{surMuted}</xsl:text>
+            <xsl:text>+ </xsl:text><xsl:value-of select="$ndist - number($adv-max)"/>
+            <xsl:value-of select="gvm:t('grp_more_a')"/>
+            <xsl:text>CVSS </xsl:text>
+            <xsl:value-of select="format-number(severity, '0.0')"/>
+            <xsl:value-of select="gvm:t('grp_more_b')"/>
+            <xsl:text>} \\
+</xsl:text>
+          </xsl:if>
         </xsl:for-each>
         <xsl:text>\end{longtable}
 \vspace{1mm}
