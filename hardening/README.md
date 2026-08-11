@@ -19,3 +19,22 @@ Regra: 8 falhas/10min -> ban 1h. `ignoreip` protege seu IP + redes docker (172.1
 - Renovacao: `certbot.timer` (systemd) roda `certbot renew`; o deploy-hook recarrega o nginx do container (`nginx -s reload` via `docker exec`).
 - Instalar hook: `cp letsencrypt/renewal-hooks/deploy/reload-suricatoos-nginx.sh /etc/letsencrypt/renewal-hooks/deploy/ && chmod +x`.
 - Provado: `certbot renew --force-renewal` gerou serial novo e o nginx passou a servir o cert renovado.
+
+## openvas-watchdog — mata scan do openvas travado em silêncio
+
+O Boreas pode bloquear para sempre em `stop_sniffer_thread()` → `pthread_join()`: o
+processo `openvas --scan-start <uuid>` fica vivo, com 0% de CPU e zero filhos, e o
+`ospd-openvas` **não detecta** — o laço de `exec_scan` não tem critério de "sem progresso
+há N minutos", então a task fica `Running` indefinidamente. Instalar:
+
+    install -m 755 openvas-watchdog/openvas-watchdog.py /usr/local/bin/openvas-watchdog.py
+    install -m 644 openvas-watchdog/openvas-watchdog.{service,timer} /etc/systemd/system/
+    systemctl daemon-reload && systemctl enable --now openvas-watchdog.timer
+
+Discriminador: contagem de **descendentes** (não tempo desde o último fork, que mataria
+scan bom). Exige task `Running` + zero filhos + CPU parada, por 3 passagens consecutivas.
+Alerta em 20 min, `SIGKILL` (só no PID, nunca no grupo) em 60 min.
+
+Knobs opcionais em `/etc/default/openvas-watchdog`: `WATCHDOG_STATE`, `WATCHDOG_LOG`,
+`PG_CONTAINER`. **Rodar o smoke test com um scan ativo** — ver `openvas-watchdog/README.md`;
+sem ele, uma falha de consulta ao gvmd deixa o watchdog mudo com o timer verde.

@@ -1,0 +1,21 @@
+[Unit]
+Description=Watchdog de scan openvas travado (bug stop_sniffer_thread do Boreas)
+Documentation=https://github.com/greenbone/gvm-libs/blob/main/boreas/sniffer.c
+After=docker.service
+Wants=docker.service
+
+[Service]
+Type=oneshot
+# knobs opcionais: WATCHDOG_STATE, WATCHDOG_LOG, PG_CONTAINER
+# (o '-' torna o arquivo opcional)
+EnvironmentFile=-/etc/default/openvas-watchdog
+# -E 0: conflito de lock sai com 0 (nao marca a unit como failed)
+ExecStart=/usr/bin/flock -n -E 0 /run/openvas-watchdog.lock /usr/local/bin/openvas-watchdog.py
+TimeoutStartSec=300
+# nunca disputar IOPS/CPU com o scan em andamento
+Nice=10
+IOSchedulingClass=idle
+CPUSchedulingPolicy=batch
+
+[Install]
+WantedBy=multi-user.target

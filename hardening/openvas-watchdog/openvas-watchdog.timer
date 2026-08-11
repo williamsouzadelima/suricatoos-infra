@@ -1,0 +1,12 @@
+[Unit]
+Description=Roda o watchdog de scan openvas a cada 5 minutos
+
+[Timer]
+OnBootSec=10min
+# OnUnitActiveSec conta a partir do FIM da passada anterior: nunca sobrepoe
+OnUnitActiveSec=5min
+AccuracySec=30s
+Unit=openvas-watchdog.service
+
+[Install]
+WantedBy=timers.target
