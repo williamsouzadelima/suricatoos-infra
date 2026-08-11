@@ -12336,6 +12336,19 @@ index fb9917d..ff5ac77 100644
  );
  
  export const AUDIT_REPORT_RESET_FILTER = RESET_FILTER.copy()
+diff --git a/src/web/pages/reports/AuditReportsListPage.jsx b/src/web/pages/reports/AuditReportsListPage.jsx
+index 8aa8ee6..a211fb7 100644
+--- a/src/web/pages/reports/AuditReportsListPage.jsx
++++ b/src/web/pages/reports/AuditReportsListPage.jsx
+@@ -131,7 +131,7 @@ const reportsReloadInterval = ({entities = []}) =>
+     : USE_DEFAULT_RELOAD_INTERVAL;
+ 
+ const FALLBACK_AUDIT_REPORT_LIST_FILTER = Filter.fromString(
+-  'report_compliance_levels=yniu sort-reverse=date first=1',
++  'min_qod=1 report_compliance_levels=yniu sort-reverse=date first=1',
+ );
+ 
+ export default withEntitiesContainer('auditreport', {
 diff --git a/src/web/pages/reports/DeltaDetailsPage.tsx b/src/web/pages/reports/DeltaDetailsPage.tsx
 index 2e6a94a..dcbd66a 100644
 --- a/src/web/pages/reports/DeltaDetailsPage.tsx
@@ -12383,6 +12396,19 @@ index eeee507..6a82c71 100644
        handleFilterChange(levelFilter);
      }
    }, [reportFilter, handleFilterChange]);
+diff --git a/src/web/pages/reports/ReportListPage.tsx b/src/web/pages/reports/ReportListPage.tsx
+index 292bd22..3c47bab 100644
+--- a/src/web/pages/reports/ReportListPage.tsx
++++ b/src/web/pages/reports/ReportListPage.tsx
+@@ -239,7 +239,7 @@ const reportsReloadInterval = ({entities = []}: {entities: Report[]}) =>
+     : USE_DEFAULT_RELOAD_INTERVAL;
+ 
+ const FALLBACK_REPORT_LIST_FILTER = Filter.fromString(
+-  'sort-reverse=date first=1',
++  'min_qod=1 sort-reverse=date first=1',
+ );
+ 
+ export default withEntitiesContainer<Report>('report', {
 diff --git a/src/web/pages/results/ListPage.jsx b/src/web/pages/results/ListPage.jsx
 index ee694aa..31110bd 100644
 --- a/src/web/pages/results/ListPage.jsx
@@ -12398,6 +12424,33 @@ index ee694aa..31110bd 100644
  
  export default withEntitiesContainer('result', {
    entitiesSelector,
+diff --git a/src/web/pages/tasks/TaskListPage.tsx b/src/web/pages/tasks/TaskListPage.tsx
+index 071674b..76c0652 100644
+--- a/src/web/pages/tasks/TaskListPage.tsx
++++ b/src/web/pages/tasks/TaskListPage.tsx
+@@ -3,7 +3,7 @@
+  * SPDX-License-Identifier: AGPL-3.0-or-later
+  */
+ 
+-import {TASKS_FILTER_FILTER} from 'gmp/models/filter';
++import Filter, {TASKS_FILTER_FILTER} from 'gmp/models/filter';
+ import type Task from 'gmp/models/task';
+ import DashboardControls from 'web/components/dashboard/Controls';
+ import {TaskIcon} from 'web/components/icon';
+@@ -148,8 +148,13 @@ export const taskReloadInterval = ({entities = []}: {entities: Task[]}) =>
+     ? USE_DEFAULT_RELOAD_INTERVAL_ACTIVE
+     : USE_DEFAULT_RELOAD_INTERVAL;
+ 
++// O dialogo de filtro desta pagina oferece o campo QoD, mas a lista nao
++// declarava filtro padrao — o campo abria vazio. Alinha com as demais telas.
++const fallbackFilter = Filter.fromString('min_qod=1 sort=name first=1 rows=10');
++
+ export default withEntitiesContainer('task', {
+   entitiesSelector,
+   loadEntities,
++  fallbackFilter,
+   reloadInterval: taskReloadInterval,
+ })(TaskListPage);
 diff --git a/src/web/pages/vulns/ListPage.jsx b/src/web/pages/vulns/ListPage.jsx
 index 2856c11..1ba5568 100644
 --- a/src/web/pages/vulns/ListPage.jsx
