@@ -34,14 +34,24 @@ services:
       - "127.0.0.1:443:443"
       - "${SCANNER_BIND_IP:-127.0.0.1}:443:443"
       - "127.0.0.1:9392:9392"
+    # `!override` tambem aqui, mas a lista REPETE os volumes do compose base:
+    # nginx_config_vol traz headers.conf, nginx_certificates_vol traz o
+    # certificado self-signed e gsa_data_vol traz o HTML da UI. Omiti-los
+    # derruba o nginx com "headers.conf: No such file or directory".
     volumes: !override
+      - nginx_config_vol:/etc/nginx/conf.d:ro
+      - nginx_certificates_vol:/etc/nginx/certs:ro
+      - gsa_data_vol:/usr/share/nginx/html:ro
       - ./nginx/standalone.conf:/etc/nginx/conf.d/default.conf:ro
       # Snippets locais do anti-CSRF do /feed-sync/ (ex.: o nome deste host
       # numa VPN). O diretório é versionado VAZIO e seus .conf são ignorados
       # pelo git, então hostnames de infraestrutura ficam fora do repositório.
       # Montar um DIRETÓRIO (e não um arquivo) evita a armadilha de o Docker
       # criar um diretório no lugar de um arquivo que não existe.
-      - ./nginx/extra:/etc/nginx/conf.d/extra:ro
+      # Fica FORA de /etc/nginx/conf.d: aquele caminho é o nginx_config_vol
+      # montado read-only, e criar um mountpoint dentro dele falha com
+      # "read-only file system".
+      - ./nginx/extra:/etc/nginx/extra:ro
 
   # ------------------------------------------------------------------
   # Controle de admissão do ospd.
