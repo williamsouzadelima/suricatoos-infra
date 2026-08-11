@@ -15,3 +15,5 @@ dist/
 compose/nginx/extra/*.conf
 # .env do deploy (endereços de bind, caminhos do host).
 compose/.env
+# Redes de administração (faixas internas ficam fora do repo).
+compose/nginx/admin-nets/*.conf
