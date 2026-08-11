@@ -466,12 +466,17 @@ SPDX-License-Identifier: GPL-2.0-or-later
       <xsl:when test="number($severity) &gt;= 7.0">High</xsl:when>
       <xsl:when test="number($severity) &gt;= 4.0">Medium</xsl:when>
       <xsl:when test="number($severity) &gt;= 0.1">Low</xsl:when>
-      <!-- O GVM marca falso positivo com severidade NEGATIVA (-1). Sem este
-           ramo ele cairia no `otherwise` e apareceria como "Log", ou seja,
-           indistinguível de uma detecção informativa legítima — o que é grave
-           quando o filtro inclui a classe (levels=...f) justamente para poder
-           revisá-los. -->
-      <xsl:when test="number($severity) &lt; 0">Falsepos</xsl:when>
+      <!-- O GVM usa severidades negativas como CÓDIGOS, não como pontuação, e
+           cada uma significa uma coisa: -1 falso positivo, -2 debug, -3 erro de
+           scan. Só o -1 é falso positivo, por isso a faixa é fechada em torno
+           dele em vez de "qualquer negativo" — senão um erro de scan (que hoje
+           chega em <errors>, mas nada garante que sempre chegue) seria
+           apresentado ao leitor como falso positivo.
+           A comparação usa faixa, e não igualdade, porque o valor trafega como
+           decimal (-1.0) e igualdade com float é frágil.
+           Sem este ramo o falso positivo cairia no `otherwise` e apareceria
+           como "Log", indistinguível de uma detecção informativa legítima. -->
+      <xsl:when test="number($severity) &lt; 0 and number($severity) &gt; -1.5">Falsepos</xsl:when>
       <xsl:otherwise>Log</xsl:otherwise>
     </xsl:choose>
   </xsl:template>
@@ -715,7 +720,9 @@ SPDX-License-Identifier: GPL-2.0-or-later
          NEGATIVA no GVM e é contado à parte: somá-lo ao Log inflaria o
          informativo com itens que foram explicitamente descartados. -->
     <xsl:variable name="logc" select="count(gvm:report()/results/result[number(severity) &gt;= 0 and number(severity) &lt; 0.1])"/>
-    <xsl:variable name="fpc" select="count(gvm:report()/results/result[number(severity) &lt; 0])"/>
+    <!-- Mesma faixa usada em sev-class: só -1 é falso positivo. Um -3 (erro de
+         scan) não é achado e não entra em contagem nenhuma. -->
+    <xsl:variable name="fpc" select="count(gvm:report()/results/result[number(severity) &lt; 0 and number(severity) &gt; -1.5])"/>
     <xsl:variable name="hosts" select="count(gvm:report()/host)"/>
     <!-- Results actually carried by this XML: what the document can describe. -->
     <xsl:variable name="total" select="count(gvm:report()/results/result)"/>
