@@ -1,0 +1,212 @@
+# Suricatoos — perfil SHARED HOST.
+#
+# Camada para quando a stack divide a máquina com outras plataformas e fica
+# atrás de um roteador L4 do próprio host. Aplicado por cima do compose.yaml
+# (upstream) e do docker-compose.override.yml, que ficam INTOCADOS:
+#
+#   docker compose -p <projeto> \
+#     -f compose.yaml -f docker-compose.override.yml -f docker-compose.shared-host.yml up -d
+#
+#   1. nginx sai de 0.0.0.0:443 para 127.0.0.1:8443 — a camada L4 do host roteia
+#      por SNI até aqui. O TLS e o mTLS de enrollment continuam terminando NESTE
+#      nginx, byte a byte: é exatamente por isso que a L4 faz passthrough em vez
+#      de terminar no host. O vhost precisa de `listen ... proxy_protocol`
+#      (ver nginx/default.conf).
+#   2. mem_limit + mem_reservation em todos os serviços: numa máquina
+#      compartilhada, um serviço sem teto empurra os vizinhos para o swap.
+#   3. Rotação de log: sem ela o log do openvas sozinho passou de 877 MB.
+#
+# ---------------------------------------------------------------------------
+# CALIBRAGEM DOS LIMITES — os valores abaixo são uso MEDIDO com folga, não
+# chute, e revisá-los ao mudar o tamanho da máquina é obrigatório.
+#
+# Dimensionar por intuição custou caro: com limites apertados demais, o gvmd era
+# morto pelo OOM do PRÓPRIO cgroup (CONSTRAINT_MEMCG) a cada ~1,5-2h — 5 vezes em
+# 7h — enquanto sobrava RAM no host; e o pg-gvm acumulava 6,2 MILHÕES de eventos
+# de reclaim em memory.events, sufocado em 1 GiB (ao ganhar 4 GiB subiu na hora
+# para 2,6 GiB de uso real, provando o estrangulamento).
+#
+# O que torna essa falha traiçoeira: quem morria era um processo FILHO do gvmd,
+# então o container nunca ficava "unhealthy" e o monitor não via nada.
+# ---------------------------------------------------------------------------
+
+services:
+  nginx:
+    ports: !override
+      - "127.0.0.1:8443:443"
+      - "127.0.0.1:9392:9392"
+    mem_limit: 192m
+    mem_reservation: 32m
+    logging: { driver: json-file, options: { max-size: "10m", max-file: "3" } }
+  gvmd:
+    # 768m -> 3g: era o que o OOM killer matava a cada ~1,5h durante o sync do SCAP.
+    mem_limit: 3g
+    mem_reservation: 512m
+    logging: { driver: json-file, options: { max-size: "10m", max-file: "3" } }
+  pg-gvm:
+    # 1g -> 4g: 6,2 milhoes de eventos de reclaim; usa 2,6 GiB de fato no rebuild.
+    mem_limit: 4g
+    mem_reservation: 1g
+    logging: { driver: json-file, options: { max-size: "10m", max-file: "3" } }
+  redis-server:
+    # 384m -> 768m: estava a 95,1% do teto.
+    mem_limit: 768m
+    mem_reservation: 128m
+    logging: { driver: json-file, options: { max-size: "10m", max-file: "3" } }
+  ospd-openvas:
+    # 2026-08-07 — controle de admissao de scans.
+    # RAIZ: cada exec_scan varre os indices 1..1024 do Redis abrindo CONEXAO NOVA
+    # por indice => ~2.048 comandos KEYS bloqueantes por scan. Varios scans
+    # partindo no mesmo segundo ultrapassam o SOCKET_TIMEOUT=60 CRAVADO em
+    # ospd_openvas/db.py:21 (nao e env, nao e conf, nao e CLI). O laco principal
+    # (run -> scheduler -> check_feed -> LINDEX) estoura junto e run() so captura
+    # KeyboardInterrupt => o daemon MORRE e leva TODOS os scans. No restart vira
+    # crash-loop, porque create_context captura (ConnectionError, FileNotFoundError)
+    # e TimeoutError NAO e subclasse de ConnectionError.
+    #
+    # --min-free-mem-scan-queue: alem do teto de memoria, ATIVA o
+    # MIN_TIME_BETWEEN_START_SCAN=60s => no maximo UM scan parte por minuto.
+    # Preferido a depender so de max_scans porque is_enough_free_memory() le
+    # relogio e memoria livre real, nao len(scan_processes) => nao ha slot preso
+    # por scan travado. Vale tambem quando o disparo vem da interface web.
+    # 1024 MB e folgado aqui: o host tem ~22 GB disponiveis de 31 GB.
+    #
+    # --scaninfo-store-time 1: liga clean_forgotten_scans(), unica perna que
+    # devolve o slot sem depender do gvmd nem de watchdog.
+    #
+    # O array `command` REPETE os 8 argumentos do compose.yaml — se faltar um, o
+    # override quebra o servico.
+    pids_limit: 2048
+    command:
+      [
+        "ospd-openvas",
+        "-f",
+        "--config",
+        "/etc/gvm/ospd-openvas.conf",
+        "--notus-feed-dir",
+        "/var/lib/notus/advisories",
+        "-m",
+        "666",
+        "--min-free-mem-scan-queue",
+        "1024",
+        "--max-scans",
+        "2",
+        "--scaninfo-store-time",
+        "1",
+      ]
+    mem_limit: 1536m
+    mem_reservation: 256m
+    logging: { driver: json-file, options: { max-size: "10m", max-file: "3" } }
+  openvasd:
+    mem_limit: 512m
+    mem_reservation: 64m
+    logging: { driver: json-file, options: { max-size: "10m", max-file: "3" } }
+  # maior consumidor na origem (1,04 GiB); estava a 96,6% do teto de 640m,
+  # com 11.638 eventos de reclaim.
+  ingest:
+    mem_limit: 1536m
+    mem_reservation: 256m
+    logging: { driver: json-file, options: { max-size: "10m", max-file: "3" } }
+  control-plane:
+    mem_limit: 256m
+    mem_reservation: 32m
+    logging: { driver: json-file, options: { max-size: "10m", max-file: "3" } }
+  gsad:
+    mem_limit: 256m
+    mem_reservation: 32m
+    logging: { driver: json-file, options: { max-size: "10m", max-file: "3" } }
+  feed-updater:
+    mem_limit: 512m
+    mem_reservation: 64m
+    environment:
+      # O helper usa este nome para inspecionar os containers de feed. Sem ele
+      # cai no default do upstream e inspeciona containers INEXISTENTES, deixando
+      # a lista de "feeds atualizados" sempre vazia. Herda o -p do compose.
+      COMPOSE_PROJECT_NAME: ${COMPOSE_PROJECT_NAME:-greenbone-community-edition}
+    logging: { driver: json-file, options: { max-size: "10m", max-file: "3" } }
+    # NB: o diretório do compose montado em /compose vem de COMPOSE_DIR_HOST, no
+    # override base — os binds são resolvidos pelo daemon do HOST, então precisa
+    # ser o caminho do host. Apontar para um caminho inexistente é pior do que
+    # parece: o Docker cria um DIRETÓRIO VAZIO no lugar e o helper passa a operar
+    # sobre o nada.
+    #
+    # LIÇÃO de um incidente: um bind quebrado fez o container falhar no CREATE
+    # (exit 127, "not a directory") e ele ficou 8h fora do ar apesar de
+    # `restart: unless-stopped` — restart-policy cobre falha do PROCESSO, não
+    # falha de criação do container. Não conte com ela para esse caso.
+  docker-socket-proxy:
+    mem_limit: 128m
+    mem_reservation: 16m
+    logging: { driver: json-file, options: { max-size: "10m", max-file: "3" } }
+
+# -----------------------------------------------------------------------
+# VOLUMES COMO EXTERNAL — adicionado 2026-07-30.
+# O .env deste diretorio faz `docker compose` apontar para o projeto REAL de
+# producao. Isso corrigiu o `up -d` nu (que criava stack duplicado com volumes
+# vazios) mas armou o `down -v`, que passaria a apagar ~35 GB — inclusive os
+# 24,5 GB do banco do gvmd em psql_data_vol.
+# `external: true` tira os volumes do controle do compose: `down -v` os IGNORA.
+# Efeito colateral desejado: se um volume sumir, o `up` falha ALTO em vez de
+# subir com volume VAZIO em silencio.
+# `name:` e obrigatorio — external usa o nome literal, sem prefixo de projeto.
+# -----------------------------------------------------------------------
+volumes:
+  cert_data_vol:
+    external: true
+    name: soos-scanner_cert_data_vol
+  data_objects_vol:
+    external: true
+    name: soos-scanner_data_objects_vol
+  feed_updater_state:
+    external: true
+    name: soos-scanner_feed_updater_state
+  gpg_data_vol:
+    external: true
+    name: soos-scanner_gpg_data_vol
+  gsa_data_vol:
+    external: true
+    name: soos-scanner_gsa_data_vol
+  gvmd_data_vol:
+    external: true
+    name: soos-scanner_gvmd_data_vol
+  gvmd_socket_vol:
+    external: true
+    name: soos-scanner_gvmd_socket_vol
+  ingest_state:
+    external: true
+    name: soos-scanner_ingest_state
+  nginx_certificates_vol:
+    external: true
+    name: soos-scanner_nginx_certificates_vol
+  nginx_config_vol:
+    external: true
+    name: soos-scanner_nginx_config_vol
+  notus_data_vol:
+    external: true
+    name: soos-scanner_notus_data_vol
+  openvas_data_vol:
+    external: true
+    name: soos-scanner_openvas_data_vol
+  openvas_log_data_vol:
+    external: true
+    name: soos-scanner_openvas_log_data_vol
+  ospd_openvas_socket_vol:
+    external: true
+    name: soos-scanner_ospd_openvas_socket_vol
+  psql_data_vol:
+    external: true
+    name: soos-scanner_psql_data_vol
+  psql_socket_vol:
+    external: true
+    name: soos-scanner_psql_socket_vol
+  redis_socket_vol:
+    external: true
+    name: soos-scanner_redis_socket_vol
+  scap_data_vol:
+    external: true
+    name: soos-scanner_scap_data_vol
+  vt_data_vol:
+    external: true
+    name: soos-scanner_vt_data_vol
+
+# 19 volumes protegidos
