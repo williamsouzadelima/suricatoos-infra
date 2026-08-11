@@ -12293,9 +12293,18 @@ index 83df316..aea5f19 100644
                    items={renderSelectItems(
                      sensors as Array<{id: string; name: string}>,
 diff --git a/src/web/pages/reports/DetailsPage.tsx b/src/web/pages/reports/DetailsPage.tsx
-index eeee507..2095550 100644
+index eeee507..6a82c71 100644
 --- a/src/web/pages/reports/DetailsPage.tsx
 +++ b/src/web/pages/reports/DetailsPage.tsx
+@@ -57,7 +57,7 @@ interface ReportTargetRef {
+ const log = logger.getLogger('web.pages.reports.DetailsPage');
+ 
+ const DEFAULT_FILTER = Filter.fromString(
+-  'levels=chml rows=100 min_qod=70 first=1 sort-reverse=severity result_hosts_only=0',
++  'levels=chmlgf rows=100 min_qod=1 first=1 sort-reverse=severity result_hosts_only=0',
+ );
+ 
+ export const REPORT_RESET_FILTER = RESET_FILTER.copy()
 @@ -179,7 +179,7 @@ const ReportDetailsPage = () => {
        if (!isDefined(reportFormatId)) {
          const noReportFormatError = _(
@@ -12305,6 +12314,33 @@ index eeee507..2095550 100644
              ' This could be due to a missing gvmd data feed. Please update' +
              ' the gvmd data feed, check the "feed import owner" setting, or' +
              ' contact your system administrator.',
+@@ -411,7 +411,10 @@ const ReportDetailsPage = () => {
+ 
+     if (reportFilter.has('min_qod')) {
+       const levelFilter = reportFilter.copy();
+-      levelFilter.set('min_qod', 30);
++      // 1, nao 30: o padrao desta instalacao ja e min_qod=1, e um "diminuir"
++      // que levasse a 30 AUMENTARIA o filtro, escondendo achados — o oposto
++      // do que a acao promete.
++      levelFilter.set('min_qod', 1);
+       handleFilterChange(levelFilter);
+     }
+   }, [reportFilter, handleFilterChange]);
+diff --git a/src/web/pages/results/ListPage.jsx b/src/web/pages/results/ListPage.jsx
+index ee694aa..31110bd 100644
+--- a/src/web/pages/results/ListPage.jsx
++++ b/src/web/pages/results/ListPage.jsx
+@@ -68,7 +68,9 @@ Page.propTypes = {
+   onFilterChanged: PropTypes.func.isRequired,
+ };
+ 
+-const fallbackFilter = Filter.fromString('sort-reverse=severity');
++const fallbackFilter = Filter.fromString(
++  'apply_overrides=0 levels=chmlgf min_qod=1 sort-reverse=severity',
++);
+ 
+ export default withEntitiesContainer('result', {
+   entitiesSelector,
 diff --git a/src/web/utils/Render.tsx b/src/web/utils/Render.tsx
 index 39824b8..3834681 100644
 --- a/src/web/utils/Render.tsx
