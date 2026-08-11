@@ -140,9 +140,13 @@ services:
       # enabled=false → as rotas /v1/scan-jobs, /v1/heartbeat não são montadas
       # (a API admin de tenants segue disponível). Habilitar é P1. tenants.json é
       # gravado em /data (=/var/lib/suricatoos-cp no host) e o ingest o lê read-only.
-      SENSOR_JOBS_ENABLED: "false"
+      # Nasce DARK no repositório; um deploy que já opere o sensor liga no .env.
+      SENSOR_JOBS_ENABLED: "${SENSOR_JOBS_ENABLED:-false}"
       TENANTS_FILE: /data/tenants.json
-      SENSOR_JOBS_FILE: /data/scan-jobs.json
+      # O NOME do arquivo de estado é parametrizável de propósito: trocá-lo num
+      # deploy que já roda equivale a perder os jobs pendentes, porque o serviço
+      # passa a ler um caminho vazio. Quem já tem estado mantém o seu nome no .env.
+      SENSOR_JOBS_FILE: "${SENSOR_JOBS_FILE:-/data/scan-jobs.json}"
       # Mirror de feed p/ os sensores (ADR-0007). Vazio → rota de feed não montada.
       # Aponta p/ um dir read-only com os arquivos de feed que a nuvem já sincroniza.
       SENSOR_FEED_ROOT: ""
@@ -190,9 +194,15 @@ services:
       # → deny-all mesmo se habilitado. Habilitar é P3 (env + up -d --no-deps ingest).
       # SCAN_GVM_PASSWORD (senha do usuário gvmd 'suricatoos-scan', NÃO admin) vem
       # do env_file ingest.env — nunca gravado aqui.
-      SCAN_LAUNCH_ENABLED: "false"
+      # Toggles de deploy: default DESLIGADO/deny-all aqui, porque lançar scans
+      # é ação de impacto e a régua é falhar para o lado seguro. Um deploy que
+      # use o loop automático liga no .env local, junto da allowlist.
+      SCAN_LAUNCH_ENABLED: "${SCAN_LAUNCH_ENABLED:-false}"
       SCAN_GMP_USERNAME: suricatoos-scan
-      SCAN_HOST_ALLOWLIST: "" # vazia = deny-all; adicionar /32 por engagement na P3
+      # Vazia = deny-all. Alvos autorizados entram por /32 no .env do deploy,
+      # nunca aqui: é escopo de engajamento, muda por cliente e não pertence
+      # a um repositório público.
+      SCAN_HOST_ALLOWLIST: "${SCAN_HOST_ALLOWLIST:-}"
       SCAN_MAX_CONCURRENT: "2"
       SCAN_MIN_RESCAN_INTERVAL: 6h
       SCAN_MAX_DURATION: 6h
