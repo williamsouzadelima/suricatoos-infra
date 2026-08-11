@@ -170,6 +170,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
     <s k="sev_medium" en="Medium" pt="Médio" es="Medio"/>
     <s k="sev_low" en="Low" pt="Baixo" es="Bajo"/>
     <s k="sev_log" en="Log" pt="Log" es="Log"/>
+    <s k="sev_falsepos" en="False pos." pt="Falso pos." es="Falso pos."/>
     <!-- Findings summary -->
     <s k="sec_findings_summary" en="Findings Summary" pt="Sumário de Achados" es="Resumen de Hallazgos"/>
     <s k="fs_intro" en="The table below lists every unique vulnerability identified during the assessment, ordered by severity. Each vulnerability is analysed in detail in the following section." pt="A tabela abaixo lista cada vulnerabilidade única identificada durante a avaliação, ordenada por severidade. Cada vulnerabilidade é analisada em detalhe na seção seguinte." es="La tabla siguiente enumera cada vulnerabilidad única identificada durante la evaluación, ordenada por severidad. Cada vulnerabilidad se analiza en detalle en la sección siguiente."/>
@@ -449,6 +450,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
       <xsl:when test="$threat='High'">gvm_hole</xsl:when>
       <xsl:when test="$threat='Medium'">gvm_warning</xsl:when>
       <xsl:when test="$threat='Low'">gvm_note</xsl:when>
+      <xsl:when test="$threat='Falsepos'">gvm_falsepos</xsl:when>
       <xsl:otherwise>gvm_log</xsl:otherwise>
     </xsl:choose>
   </xsl:template>
@@ -464,6 +466,12 @@ SPDX-License-Identifier: GPL-2.0-or-later
       <xsl:when test="number($severity) &gt;= 7.0">High</xsl:when>
       <xsl:when test="number($severity) &gt;= 4.0">Medium</xsl:when>
       <xsl:when test="number($severity) &gt;= 0.1">Low</xsl:when>
+      <!-- O GVM marca falso positivo com severidade NEGATIVA (-1). Sem este
+           ramo ele cairia no `otherwise` e apareceria como "Log", ou seja,
+           indistinguível de uma detecção informativa legítima — o que é grave
+           quando o filtro inclui a classe (levels=...f) justamente para poder
+           revisá-los. -->
+      <xsl:when test="number($severity) &lt; 0">Falsepos</xsl:when>
       <xsl:otherwise>Log</xsl:otherwise>
     </xsl:choose>
   </xsl:template>
@@ -471,7 +479,8 @@ SPDX-License-Identifier: GPL-2.0-or-later
   <!-- Localised severity word for a class token (Critical/High/Medium/Low/Log). -->
   <func:function name="gvm:sev-word">
     <xsl:param name="class"/>
-    <func:result select="gvm:t(concat('sev_', translate($class, 'CHMLO', 'chmlo')))"/>
+    <!-- 'F' entra no translate para a classe Falsepos casar com sev_falsepos. -->
+    <func:result select="gvm:t(concat('sev_', translate($class, 'CHMLOF', 'chmlof')))"/>
   </func:function>
 
   <!-- A small filled severity pill: localised class word + CVSS score, derived
@@ -492,7 +501,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
     <xsl:value-of select="$c"/>
     <xsl:text>}{\color{white}\scriptsize\bfseries~</xsl:text>
     <xsl:value-of select="gvm:sev-word($class)"/>
-    <xsl:if test="$class != 'Log'">
+    <xsl:if test="$class != 'Log' and $class != 'Falsepos'">
       <xsl:text> \textbullet\ CVSS </xsl:text>
       <xsl:value-of select="$severity"/>
     </xsl:if>
@@ -555,6 +564,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
 \definecolor{gvm_warning}{rgb}{0.929,0.667,0.153}
 \definecolor{gvm_note}{rgb}{0.204,0.451,0.792}
 \definecolor{gvm_log}{rgb}{0.400,0.451,0.510}
+\definecolor{gvm_falsepos}{rgb}{0.545,0.404,0.612}
 \definecolor{gvm_report}{rgb}{0.808,0.851,1.0}
 
 % ---- Page geometry (A4, room for branded header / footer) ----
@@ -701,7 +711,11 @@ SPDX-License-Identifier: GPL-2.0-or-later
     <xsl:variable name="high" select="count(gvm:report()/results/result[number(severity) &gt;= 7.0 and number(severity) &lt; 9.0])"/>
     <xsl:variable name="med"  select="count(gvm:report()/results/result[number(severity) &gt;= 4.0 and number(severity) &lt; 7.0])"/>
     <xsl:variable name="low"  select="count(gvm:report()/results/result[number(severity) &gt;= 0.1 and number(severity) &lt; 4.0])"/>
-    <xsl:variable name="logc" select="count(gvm:report()/results/result[not(number(severity) &gt;= 0.1)])"/>
+    <!-- Log = informativo (severidade 0 a 0.1). Falso positivo tem severidade
+         NEGATIVA no GVM e é contado à parte: somá-lo ao Log inflaria o
+         informativo com itens que foram explicitamente descartados. -->
+    <xsl:variable name="logc" select="count(gvm:report()/results/result[number(severity) &gt;= 0 and number(severity) &lt; 0.1])"/>
+    <xsl:variable name="fpc" select="count(gvm:report()/results/result[number(severity) &lt; 0])"/>
     <xsl:variable name="hosts" select="count(gvm:report()/host)"/>
     <!-- Results actually carried by this XML: what the document can describe. -->
     <xsl:variable name="total" select="count(gvm:report()/results/result)"/>
