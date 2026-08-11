@@ -27,6 +27,11 @@ services:
   nginx:
     volumes:
       - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      # Redes de administração do gate do /feed-sync/. Diretório versionado
+      # VAZIO, com os .conf ignorados pelo git, para manter faixas internas fora
+      # do repositório. Fica FORA de /etc/nginx/conf.d, que é o nginx_config_vol
+      # montado read-only — criar mountpoint lá dentro falha e o nginx não sobe.
+      - ./nginx/admin-nets:/etc/nginx/admin-nets:ro
       - /var/log/suricatoos-nginx:/var/log/nginx-sur
       - /etc/letsencrypt:/etc/letsencrypt:ro
       # Enrollment CA — nginx verifies agent client certs (mTLS) for /ingest/.
