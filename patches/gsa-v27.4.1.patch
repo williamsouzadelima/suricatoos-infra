@@ -10717,6 +10717,24 @@ index 4d337bd..60048e5 100644
    },
  } as const;
  
+diff --git a/src/gmp/models/task.ts b/src/gmp/models/task.ts
+index b29d8fd..3338a74 100644
+--- a/src/gmp/models/task.ts
++++ b/src/gmp/models/task.ts
+@@ -257,7 +257,12 @@ export const HOSTS_ORDERING_REVERSE = 'reverse';
+ 
+ export const DEFAULT_MAX_CHECKS = 4;
+ export const DEFAULT_MAX_HOSTS = 20;
+-export const DEFAULT_MIN_QOD = 70;
++// 1, nao 70: o QoD minimo da TAREFA decide quais resultados entram no
++// relatorio dela. Com 70, deteccoes de baixa confianca sao descartadas na
++// origem e nao ha como recupera-las depois — nem mudando o filtro da tela.
++// Com 1, tudo e registrado e a decisao de descartar fica com quem le, que e
++// onde ela pode ser revista. O relatorio ja separa por confianca.
++export const DEFAULT_MIN_QOD = 1;
+ 
+ export const TASK_STATUS = {
+   queued: 'Queued',
 diff --git a/src/web/App.tsx b/src/web/App.tsx
 index ebc06a0..af63477 100644
 --- a/src/web/App.tsx
