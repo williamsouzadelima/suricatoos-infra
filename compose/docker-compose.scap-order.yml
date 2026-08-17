@@ -1,0 +1,90 @@
+# Suricatoos, 17/08/2026 — mata a corrida entre o MARCADOR de versao do feed
+# SCAP e o PAYLOAD. Sem isto, o SCAP do scanner aborta a cada imagem nova de
+# feed e fica parado em silencio: foi assim que ele parou em 28/07 e so' foi
+# notado em 17/08, com 6.287 CVEs faltando no banco de um MSSP.
+#
+# O DEFEITO, no /bin/init.sh do upstream (linha 12):
+#     cp -v -r "${STORAGE_PATH}/meta/"* "${MOUNT_PATH}"   <-- leva o `timestamp`
+#     tar -xvz -f "${STORAGE_PATH}/scap-data.tar.gz" ...   <-- payload, DEPOIS
+# O marcador chega ~0,2 s apos o container subir; o gvmd reage em ~8 s; o
+# payload (1,5 GB de tar -> 9 GB) so' aterrissa ~45 s depois. O gvmd encontra
+# "feed novo" sem dicionario CPE, emite `No JSON CPE dictionary found` e
+# `abort_scap_update` — e, pior, grava `scap.meta.last_update` com a data do
+# feed NOVO. Como ele trunca essa data para o DIA, na checagem seguinte conclui
+# "SCAP database already at current version" e NUNCA MAIS TENTA. Silencioso.
+#
+# A CORRECAO: rodar o MESMO /bin/init.sh do upstream — nao reimplementamos a
+# copia — porem com um STORAGE_PATH encenado cuja pasta meta/ NAO contem o
+# marcador. O tarball entra por SYMLINK, entao o custo de disco e' zero. Quando
+# o init.sh termina, o payload ja esta inteiro no volume; so' entao este wrapper
+# publica o feed.xml e, POR ULTIMO e por rename atomico, o `timestamp`. A janela
+# em que o gvmd pode ver "feed novo" sem payload passa a ser zero.
+#
+# PROVADO antes de subir, em container efemero com payload falso (nenhum volume
+# de producao montado): logo apos o init.sh o MOUNT_PATH tinha COPYING + payload
+# e NAO tinha `timestamp`; o estado final ficou identico ao do upstream (mesmos
+# arquivos, mesmo conteudo de timestamp) e o STATE_FILE do healthcheck voltou.
+#
+# meta/ e' copiado por INTEIRO menos os dois arquivos que publicamos no fim.
+# Copiar so' o COPYING seria fragil: um arquivo novo em meta/, numa imagem
+# futura, sumiria do volume sem ninguem perceber.
+#
+# REVERSAO: tirar este arquivo do COMPOSE_FILE no .env e recriar o scap-data.
+
+services:
+  scap-data:
+    command:
+      - /bin/sh
+      - -c
+      - |
+        set -eu
+        STAGE=/tmp/soos-scap-stage
+        rm -rf "$$STAGE"
+        mkdir -p "$$STAGE/meta"
+
+        # meta/ inteiro, MENOS o marcador e o feed.xml (publicados no fim)
+        cp -r "$${STORAGE_PATH}/meta/." "$$STAGE/meta/"
+        rm -f "$$STAGE/meta/timestamp" "$$STAGE/meta/feed.xml"
+
+        # payload por symlink: nao duplica 1,5 GB de tarball
+        if [ -f "$${STORAGE_PATH}/scap-data.tar.gz" ]; then
+          ln -s "$${STORAGE_PATH}/scap-data.tar.gz" "$$STAGE/scap-data.tar.gz"
+        else
+          for f in "$${STORAGE_PATH}"/*.xml; do
+            ln -s "$$f" "$$STAGE/$$(basename "$$f")"
+          done
+        fi
+
+        # init.sh do upstream, verbatim: limpa o MOUNT_PATH, copia o meta
+        # encenado, extrai o payload, cria o STATE_FILE e ajusta dono/grupo.
+        # KEEP_ALIVE vazio faz ele RETORNAR em vez de dormir.
+        STORAGE_PATH="$$STAGE" KEEP_ALIVE= /bin/init.sh
+        rm -rf "$$STAGE"
+
+        # Falha fechada: sem marcador na origem, nao publicamos nada pela metade.
+        if [ ! -f "$${STORAGE_PATH}/meta/timestamp" ]; then
+          echo "soos: ABORTANDO — a imagem do feed nao tem meta/timestamp" >&2
+          exit 1
+        fi
+
+        # healthcheck volta a falhar ate a publicacao terminar (janela de ms,
+        # bem dentro do start_period de 15 s)
+        rm -f "$${STATE_FILE}"
+
+        # --- publicacao do MARCADOR, agora DEPOIS do payload ---
+        cp "$${STORAGE_PATH}/meta/feed.xml" "$${MOUNT_PATH}/feed.xml"
+        cp "$${STORAGE_PATH}/meta/timestamp" "$${MOUNT_PATH}/.timestamp.tmp"
+        if [ "$$(id -u)" = "0" ]; then
+          [ -n "$${USER_ID:-}" ]  && chown "$${USER_ID}" "$${MOUNT_PATH}/feed.xml" "$${MOUNT_PATH}/.timestamp.tmp" || true
+          [ -n "$${GROUP_ID:-}" ] && chgrp "$${GROUP_ID}" "$${MOUNT_PATH}/feed.xml" "$${MOUNT_PATH}/.timestamp.tmp" || true
+        fi
+        # rename atomico: o gvmd nunca ve um timestamp pela metade
+        mv "$${MOUNT_PATH}/.timestamp.tmp" "$${MOUNT_PATH}/timestamp"
+
+        mkdir -p "$$(dirname "$${STATE_FILE}")"
+        touch "$${STATE_FILE}"
+        echo "soos: SCAP publicado — payload primeiro, marcador por ultimo (versao $$(cat "$${MOUNT_PATH}/timestamp"))"
+
+        if [ -n "$${KEEP_ALIVE:-}" ]; then
+          exec sleep infinity
+        fi
