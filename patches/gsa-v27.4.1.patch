@@ -12017,7 +12017,7 @@ new file mode 100644
 index 0000000..1fe3e18
 --- /dev/null
 +++ b/src/web/pages/extras/FeedUpdateSection.tsx
-@@ -0,0 +1,333 @@
+@@ -0,0 +1,347 @@
 +/* SPDX-FileCopyrightText: 2026 Suricatoos
 + *
 + * SPDX-License-Identifier: AGPL-3.0-or-later
@@ -12025,6 +12025,7 @@ index 0000000..1fe3e18
 +
 +import React, {useCallback, useEffect, useRef, useState} from 'react';
 +import {Button, Group, Loader, Select, Stack, Switch, Text} from '@mantine/core';
++import useGmp from 'web/hooks/useGmp';
 +import useTranslation from 'web/hooks/useTranslation';
 +
 +const API = '/feed-sync';
@@ -12067,18 +12068,29 @@ index 0000000..1fe3e18
 +  }
 +}
 +
-+const pedir = async (p: string, init?: RequestInit) => {
-+  const r = await fetch(API + p, {credentials: 'same-origin', ...init});
++// O `token` da sessao vai junto em toda chamada.
++//
++// Nao e' enfeite: e' o que permite ao nginx VALIDAR a sessao antes de deixar
++// passar, via subrequisicao ao proprio gsad. O gsad exige cookie E token -- o
++// token e' a defesa CSRF dele -- e devolve 401 para sessao ausente ou forjada.
++// Sem o token aqui, a unica defesa possivel na rota era restringir por REDE, o
++// que obrigava VPN para uma tela que o operador ja acessa logado.
++// E' o mesmo token que a interface ja poe na URL de toda chamada ao /gmp.
++const pedir = async (p: string, token: string, init?: RequestInit) => {
++  const sep = p.includes('?') ? '&' : '?';
++  const url = API + p + sep + 'token=' + encodeURIComponent(token);
++  const r = await fetch(url, {credentials: 'same-origin', ...init});
 +  if (!r.ok) {
 +    throw new ErroHttp(r.status);
 +  }
 +  return r.json();
 +};
 +
-+const jget = (p: string): Promise<Status> => pedir(p) as Promise<Status>;
++const jget = (p: string, token: string): Promise<Status> =>
++  pedir(p, token) as Promise<Status>;
 +
-+const jpost = (p: string, body?: unknown): Promise<Schedule> =>
-+  pedir(p, {
++const jpost = (p: string, token: string, body?: unknown): Promise<Schedule> =>
++  pedir(p, token, {
 +    method: 'POST',
 +    headers: {'Content-Type': 'application/json'},
 +    body: body !== undefined ? JSON.stringify(body) : undefined,
@@ -12093,6 +12105,8 @@ index 0000000..1fe3e18
 +
 +const FeedUpdateSection: React.FC = () => {
 +  const [_] = useTranslation();
++  const gmp = useGmp();
++  const token: string = gmp?.session?.token ?? '';
 +  const [status, setStatus] = useState<Status | null>(null);
 +  const [sch, setSch] = useState<Schedule>(DEFAULT_SCHEDULE);
 +  const [busy, setBusy] = useState(false);
@@ -12106,7 +12120,7 @@ index 0000000..1fe3e18
 +
 +  const refresh = useCallback(async () => {
 +    try {
-+      const s = await jget('/status');
++      const s = await jget('/status', token);
 +      setStatus(s);
 +      setErro(null);
 +      if (!schLoadedRef.current && s.schedule) {
@@ -12116,7 +12130,7 @@ index 0000000..1fe3e18
 +    } catch (e) {
 +      setErro(e instanceof ErroHttp ? e.status : ERRO_REDE);
 +    }
-+  }, []);
++  }, [token]);
 +
 +  useEffect(() => {
 +    refresh();
@@ -12143,7 +12157,7 @@ index 0000000..1fe3e18
 +  const syncNow = async () => {
 +    setBusy(true);
 +    try {
-+      await jpost('/sync');
++      await jpost('/sync', token);
 +      setErro(null);
 +      await refresh();
 +    } catch (e) {
@@ -12156,7 +12170,7 @@ index 0000000..1fe3e18
 +  const saveSchedule = async () => {
 +    setBusy(true);
 +    try {
-+      const r = await jpost('/schedule', sch);
++      const r = await jpost('/schedule', token, sch);
 +      if (r && typeof r.enabled === 'boolean') {
 +        setSch({...DEFAULT_SCHEDULE, ...r});
 +      }
