@@ -5352,7 +5352,7 @@ new file mode 100644
 index 0000000..db36c54
 --- /dev/null
 +++ b/public/locales/gsa-es.json
-@@ -0,0 +1,2407 @@
+@@ -0,0 +1,2412 @@
 +{
 +  "\nThis could have the following reasons:\n1. The CPE might not be included in the official NVD CPE dictionary yet, and no additional information is available.\n2. You might have followed an incorrect link and the CPE does not exist.": "\nEsto podría deberse a las siguientes razones:\n1. Es posible que el CPE aún no esté incluido en el diccionario CPE oficial del NVD y no haya información adicional disponible.\n2. Es posible que haya seguido un enlace incorrecto y que el CPE no exista.",
 +  "\nThis could have the following reasons:\n1. The CVE might not be included in the SCAP database yet. For new CVEs it can take a month or more until they become available.\n2. You might have followed an incorrect link and the CVE does not exist.": "\nEsto podría deberse a las siguientes razones:\n1. Es posible que el CVE aún no esté incluido en la base de datos SCAP. Para los CVE nuevos puede pasar un mes o más hasta que estén disponibles.\n2. Es posible que haya seguido un enlace incorrecto y que el CVE no exista.",
@@ -7758,6 +7758,11 @@ index 0000000..db36c54
 +  "{{count}} feed(s) updated": "{{count}} feed(s) actualizado(s)",
 +  "feeds already up to date": "feeds ya estaban actualizados",
 +  "Last update: {{time}} — {{detail}}": "Última actualización: {{time}} — {{detail}}",
++  "No permission from this network. Feed management is restricted to the administration networks — connect to the VPN and reload.": "Sin permiso desde esta red. La gestión de feeds está restringida a las redes de administración — conéctese a la VPN y recargue.",
++  "Session expired. Sign in again to manage the feed.": "Sesión expirada. Inicie sesión de nuevo para gestionar el feed.",
++  "Could not reach the feed service.": "No se pudo contactar con el servicio de feeds.",
++  "The feed service answered with an error ({{status}}).": "El servicio de feeds respondió con un error ({{status}}).",
++  "Status unavailable": "Estado no disponible",
 +  "error": "error"
 +}
 \ No newline at end of file
@@ -7765,7 +7770,7 @@ diff --git a/public/locales/gsa-pt_BR.json b/public/locales/gsa-pt_BR.json
 index 10e592f..a9354c3 100644
 --- a/public/locales/gsa-pt_BR.json
 +++ b/public/locales/gsa-pt_BR.json
-@@ -1,216 +1,2407 @@
+@@ -1,216 +1,2412 @@
  {
 -  "# of OVAL Definitions": "OVAL defini\u00e7\u00e3o",
 -  "# of Operating Systems": "Sistema Operacional",
@@ -10370,6 +10375,11 @@ index 10e592f..a9354c3 100644
 +  "{{count}} feed(s) updated": "{{count}} feed(s) atualizado(s)",
 +  "feeds already up to date": "feeds já estavam atualizados",
 +  "Last update: {{time}} — {{detail}}": "Última atualização: {{time}} — {{detail}}",
++  "No permission from this network. Feed management is restricted to the administration networks — connect to the VPN and reload.": "Sem permissão a partir desta rede. A gestão de feed é restrita às redes de administração — conecte a VPN e recarregue.",
++  "Session expired. Sign in again to manage the feed.": "Sessão expirada. Entre novamente para gerenciar o feed.",
++  "Could not reach the feed service.": "Não foi possível falar com o serviço de feed.",
++  "The feed service answered with an error ({{status}}).": "O serviço de feed respondeu com erro ({{status}}).",
++  "Status unavailable": "Status indisponível",
 +  "error": "erro"
 +}
 \ No newline at end of file
@@ -12007,7 +12017,7 @@ new file mode 100644
 index 0000000..1fe3e18
 --- /dev/null
 +++ b/src/web/pages/extras/FeedUpdateSection.tsx
-@@ -0,0 +1,240 @@
+@@ -0,0 +1,333 @@
 +/* SPDX-FileCopyrightText: 2026 Suricatoos
 + *
 + * SPDX-License-Identifier: AGPL-3.0-or-later
@@ -12034,16 +12044,45 @@ index 0000000..1fe3e18
 +  schedule?: Schedule;
 +}
 +
-+const jget = (p: string): Promise<Status> =>
-+  fetch(API + p, {credentials: 'same-origin'}).then(r => r.json());
++// Erro que carrega o STATUS HTTP.
++//
++// Sem isto, `fetch(...).then(r => r.json())` tratava 403 e 401 como sucesso:
++// o corpo era a pagina de erro do nginx, o JSON.parse estourava, e o catch de
++// cima engolia. Resultado medido em 17/08/2026: a rota /feed-sync/ e' restrita
++// as redes de administracao, um operador fora da VPN levava 403 em todo GET, e
++// a tela mostrava "Ultima atualizacao: nunca" com o formulario em branco --
++// enquanto o agendamento real estava ativo, diario, e rodara com sucesso na
++// vespera. O botao Salvar levava o mesmo 403 e nao dizia absolutamente nada.
++//
++// Um controle de acesso que a interface esconde nao parece um controle: parece
++// um sistema quebrado. E manda o operador procurar defeito onde nao ha.
++const ERRO_REDE = -1;
++
++class ErroHttp extends Error {
++  status: number;
++
++  constructor(status: number) {
++    super('HTTP ' + String(status));
++    this.status = status;
++  }
++}
++
++const pedir = async (p: string, init?: RequestInit) => {
++  const r = await fetch(API + p, {credentials: 'same-origin', ...init});
++  if (!r.ok) {
++    throw new ErroHttp(r.status);
++  }
++  return r.json();
++};
++
++const jget = (p: string): Promise<Status> => pedir(p) as Promise<Status>;
 +
 +const jpost = (p: string, body?: unknown): Promise<Schedule> =>
-+  fetch(API + p, {
++  pedir(p, {
 +    method: 'POST',
-+    credentials: 'same-origin',
 +    headers: {'Content-Type': 'application/json'},
 +    body: body !== undefined ? JSON.stringify(body) : undefined,
-+  }).then(r => r.json());
++  }) as Promise<Schedule>;
 +
 +const DEFAULT_SCHEDULE: Schedule = {
 +  enabled: false,
@@ -12058,37 +12097,57 @@ index 0000000..1fe3e18
 +  const [sch, setSch] = useState<Schedule>(DEFAULT_SCHEDULE);
 +  const [busy, setBusy] = useState(false);
 +  const [saved, setSaved] = useState(false);
++  const [erro, setErro] = useState<number | null>(null);
 +  // o agendamento eh carregado no form UMA vez; o polling depois so atualiza o
 +  // status do sync, sem clobberar o que o usuario esta editando (senao o toggle
 +  // "desabilita sozinho" quando o poll traz o estado antigo do servidor).
 +  const schLoadedRef = useRef(false);
++  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 +
 +  const refresh = useCallback(async () => {
 +    try {
 +      const s = await jget('/status');
 +      setStatus(s);
++      setErro(null);
 +      if (!schLoadedRef.current && s.schedule) {
 +        schLoadedRef.current = true;
 +        setSch({...DEFAULT_SCHEDULE, ...s.schedule});
 +      }
 +    } catch (e) {
-+      // ignora; pagina segue util mesmo se o helper estiver fora
++      setErro(e instanceof ErroHttp ? e.status : ERRO_REDE);
 +    }
 +  }, []);
 +
 +  useEffect(() => {
 +    refresh();
-+    const id = setInterval(refresh, 5000);
-+    return () => clearInterval(id);
++    pollRef.current = setInterval(refresh, 5000);
++    return () => {
++      if (pollRef.current) {
++        clearInterval(pollRef.current);
++      }
++    };
 +  }, [refresh]);
 +
++  // 403 nao se resolve sozinho: sem parar o polling, a tela pedia /status a
++  // cada 5 s indefinidamente e enchia o log do nginx de requisicao negada.
++  useEffect(() => {
++    if (erro === 403 && pollRef.current) {
++      clearInterval(pollRef.current);
++      pollRef.current = null;
++    }
++  }, [erro]);
++
 +  const running = status?.state === 'running';
++  const semPermissao = erro === 403 || erro === 401;
 +
 +  const syncNow = async () => {
 +    setBusy(true);
 +    try {
 +      await jpost('/sync');
++      setErro(null);
 +      await refresh();
++    } catch (e) {
++      setErro(e instanceof ErroHttp ? e.status : ERRO_REDE);
 +    } finally {
 +      setBusy(false);
 +    }
@@ -12101,8 +12160,11 @@ index 0000000..1fe3e18
 +      if (r && typeof r.enabled === 'boolean') {
 +        setSch({...DEFAULT_SCHEDULE, ...r});
 +      }
++      setErro(null);
 +      setSaved(true);
 +      setTimeout(() => setSaved(false), 2500);
++    } catch (e) {
++      setErro(e instanceof ErroHttp ? e.status : ERRO_REDE);
 +    } finally {
 +      setBusy(false);
 +    }
@@ -12118,6 +12180,21 @@ index 0000000..1fe3e18
 +    {value: '7', label: _('Sunday')},
 +  ];
 +
++  let msgErro = '';
++  if (erro === 403) {
++    msgErro = _(
++      'No permission from this network. Feed management is restricted to the administration networks — connect to the VPN and reload.',
++    );
++  } else if (erro === 401) {
++    msgErro = _('Session expired. Sign in again to manage the feed.');
++  } else if (erro === ERRO_REDE) {
++    msgErro = _('Could not reach the feed service.');
++  } else if (erro !== null) {
++    msgErro = _('The feed service answered with an error ({{status}}).', {
++      status: String(erro),
++    });
++  }
++
 +  let detail = '';
 +  if (status?.last_result === 'success') {
 +    const n = status.updated ? status.updated.length : 0;
@@ -12128,14 +12205,19 @@ index 0000000..1fe3e18
 +  } else if (status?.last_result) {
 +    detail = _('error');
 +  }
-+  const lastLine = running
-+    ? _('Updating feeds...')
-+    : status?.last_run
-+      ? _('Last update: {{time}} — {{detail}}', {
-+          time: status.last_run,
-+          detail,
-+        })
-+      : _('Last update: never');
++  // Com erro de leitura, NAO afirmar "nunca": nunca e' um fato sobre o feed, e
++  // aqui o que houve foi nao conseguir perguntar.
++  const lastLine =
++    erro !== null
++      ? _('Status unavailable')
++      : running
++        ? _('Updating feeds...')
++        : status?.last_run
++          ? _('Last update: {{time}} — {{detail}}', {
++              time: status.last_run,
++              detail,
++            })
++          : _('Last update: never');
 +
 +  return (
 +    <div
@@ -12158,6 +12240,22 @@ index 0000000..1fe3e18
 +        {_('Feed update')}
 +      </Text>
 +
++      {msgErro !== '' && (
++        <div
++          role="alert"
++          style={{
++            margin: '0 0 16px',
++            padding: '10px 14px',
++            borderRadius: 10,
++            border: '1px solid var(--sur-danger-border, #f0c2c2)',
++            background: 'var(--sur-danger-bg, #fdf3f3)',
++            color: 'var(--sur-danger-text, #8f2020)',
++          }}
++        >
++          <Text size="sm">{msgErro}</Text>
++        </div>
++      )}
++
 +      <Group align="center" justify="space-between" wrap="nowrap">
 +        <div>
 +          <Text fw={600}>{_('Update feeds now')}</Text>
@@ -12166,7 +12264,7 @@ index 0000000..1fe3e18
 +          </Text>
 +        </div>
 +        <Button
-+          disabled={busy || running}
++          disabled={busy || running || semPermissao}
 +          leftSection={running ? <Loader size="xs" /> : undefined}
 +          onClick={syncNow}
 +        >
@@ -12183,6 +12281,7 @@ index 0000000..1fe3e18
 +      >
 +        <Switch
 +          checked={sch.enabled}
++          disabled={semPermissao}
 +          label={_('Enable automatic update')}
 +          onChange={e => setSch({...sch, enabled: e.currentTarget.checked})}
 +        />
@@ -12193,7 +12292,7 @@ index 0000000..1fe3e18
 +              {value: 'daily', label: _('Daily')},
 +              {value: 'weekly', label: _('Weekly')},
 +            ]}
-+            disabled={!sch.enabled}
++            disabled={!sch.enabled || semPermissao}
 +            label={_('Frequency')}
 +            value={sch.frequency}
 +            w={150}
@@ -12205,7 +12304,7 @@ index 0000000..1fe3e18
 +            <Select
 +              allowDeselect={false}
 +              data={weekdays}
-+              disabled={!sch.enabled}
++              disabled={!sch.enabled || semPermissao}
 +              label={_('Day of week')}
 +              value={String(sch.weekday)}
 +              w={160}
@@ -12217,7 +12316,7 @@ index 0000000..1fe3e18
 +              {_('Time')}
 +            </Text>
 +            <input
-+              disabled={!sch.enabled}
++              disabled={!sch.enabled || semPermissao}
 +              style={{
 +                padding: '7px 10px',
 +                borderRadius: 9,
@@ -12233,7 +12332,11 @@ index 0000000..1fe3e18
 +          </div>
 +        </Group>
 +        <Group align="center" gap="sm" mt="lg">
-+          <Button disabled={busy} variant="filled" onClick={saveSchedule}>
++          <Button
++            disabled={busy || semPermissao}
++            variant="filled"
++            onClick={saveSchedule}
++          >
 +            {_('Save schedule')}
 +          </Button>
 +          {saved && (
