@@ -58,6 +58,24 @@ SPDX-License-Identifier: GPL-2.0-or-later
        evidence of low quality. -->
   <xsl:param name="qod-min" select="70"/>
 
+  <!-- Teto do nome da tarefa na capa e na narrativa executiva. NAO e' um limite de
+       largura (o escape_break ja da' pontos de quebra, entao nome colado nao sai
+       mais da folha): e' um limite de ALTURA, porque o quadro da capa cresce para
+       CIMA a partir da base e um nome de milhares de caracteres passaria por cima
+       do logotipo e do titulo.
+
+       O valor foi MEDIDO na capa renderizada (2 passadas de pdflatex, que o
+       `remember picture,overlay` do TikZ exige), conferindo a folga entre o topo
+       do bloco do nome e o elemento fixo acima dele:
+         246 chars ->  5 linhas, 174pt de folga
+         600 chars -> 11 linhas,  93pt de folga   <- escolhido
+         900 chars -> 16 linhas,  25pt de folga
+        1200 chars -> 22 linhas, ja engole a linha "Elaborado pela Plataforma"
+       O teto anterior era 160, cerca de 4x abaixo do que a pagina comporta, e
+       cortava nome de engajamento legitimo — o tipo de truncagem que este
+       relatorio existe para nao fazer. Um so' ponto de verdade para os dois usos. -->
+  <xsl:param name="task-name-max" select="600"/>
+
   <!-- Group all result elements by their NVT oid (Muenchian grouping). -->
   <xsl:key name="by-nvt" match="result" use="nvt/@oid"/>
   <!-- Composite key to de-duplicate a vulnerability's affected systems: the same
@@ -1349,16 +1367,16 @@ SPDX-License-Identifier: GPL-2.0-or-later
     <!-- escape_break e nao escape_text: quem nomeia a tarefa e' o operador, e um
          nome sem espaco (um caminho, uma URL, um identificador colado) nao tinha
          onde quebrar dentro do m{102mm} e saia da folha na capa.
-         O corte em 160 caracteres e' pela ALTURA, nao pela largura: o quadro da
-         capa cresce para CIMA a partir da base, entao um nome de 8000
-         caracteres (o fixture texto-gigante tem um) viraria ~145 linhas por
-         cima do logotipo e do titulo. Ate' 160 caracteres cabe em duas linhas.
+         O corte (parametro $task-name-max, medido — ver a nota la') e' pela
+         ALTURA, nao pela largura: o quadro da capa cresce para CIMA a partir da
+         base, entao um nome de 8000 caracteres (o fixture texto-gigante tem um)
+         viraria ~145 linhas por cima do logotipo e do titulo.
          O que foi cortado e' declarado; o valor inteiro continua no relatorio
          de origem e nenhum dado de achado e' tocado. -->
     <xsl:variable name="task_escaped">
       <xsl:call-template name="escape_break">
         <xsl:with-param name="string" select="gvm:report()/task/name"/>
-        <xsl:with-param name="max" select="160"/>
+        <xsl:with-param name="max" select="$task-name-max"/>
       </xsl:call-template>
     </xsl:variable>
     <xsl:text>\begin{titlepage}
@@ -1506,7 +1524,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
     <xsl:variable name="taskname">
       <xsl:call-template name="escape_break">
         <xsl:with-param name="string" select="gvm:report()/task/name"/>
-        <xsl:with-param name="max" select="160"/>
+        <xsl:with-param name="max" select="$task-name-max"/>
       </xsl:call-template>
     </xsl:variable>
     <xsl:variable name="hicrit" select="$crit + $high"/>
@@ -3432,7 +3450,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
          scaled to the text width as a whole - a 246 character task name shrank
          a full-page board to 84mm. So they are cut to a length that can never
          drive the panel wider than the legend already does, and what was cut is
-         shown as such. O corte da capa e da narrativa e' outro (160 caracteres,
+         shown as such. O corte da capa e da narrativa e' outro ($task-name-max,
          por altura de pagina); o valor sem corte esta no relatorio de origem. -->
     <xsl:variable name="title-c">
       <xsl:value-of select="substring($title, 1, 60)"/>
