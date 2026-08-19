@@ -5,8 +5,8 @@
      reference and is not read by the build. -->
 <report_format id="c6482c1b-57bb-406b-a501-c97eed86ad05">
   <name>Suricatoos Premium PDF (EN)</name>
-  <summary>Premium branded PDF vulnerability report with the port and IP exposure map (English). Version 20260818a.</summary>
-  <description>A premium, corporate vulnerability assessment report in PDF (English): branded cover, executive risk summary with a severity dashboard, a hexagonal PORT EXPOSURE MAP that shows every (transport, port) in the scope with its severity and the IP addresses mapped to it (plus a per-host appendix), a hosts and open-ports inventory, a findings summary table, and detailed findings grouped by vulnerability (CVSS, CVEs, affected systems, remediation). Version 20260818a.</description>
+  <summary>Premium branded PDF vulnerability report with the port and IP exposure map (English). Version 20260819a.</summary>
+  <description>A premium, corporate vulnerability assessment report in PDF (English): branded cover, executive risk summary with a severity dashboard, a hexagonal PORT EXPOSURE MAP that shows every (transport, port) in the scope with its severity and the IP addresses mapped to it (plus a per-host appendix), a hosts and open-ports inventory, a findings summary table, and detailed findings grouped by vulnerability (CVSS, CVEs, affected systems, remediation). Version 20260819a.</description>
   <extension>pdf</extension>
   <content_type>application/pdf</content_type>
   <report_type>all</report_type>

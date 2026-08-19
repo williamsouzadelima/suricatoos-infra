@@ -286,6 +286,13 @@ SPDX-License-Identifier: GPL-2.0-or-later
     <s k="hx_findings_n" en="finding(s)" pt="achado(s)" es="hallazgo(s)"/>
     <s k="hx_others" en="OTHERS" pt="OUTRAS" es="OTRAS"/>
     <s k="hx_scope" en="unique ports" pt="portas únicas" es="puertos únicos"/>
+    <!-- When family collapsing merges ports, the header must report BOTH numbers:
+         saying only the cell count understates how many ports the scan actually
+         observed, and this document has a history of headline numbers that quietly
+         meant something narrower than the reader assumed. -->
+    <s k="hx_ports_word" en="ports" pt="portas" es="puertos"/>
+    <s k="hx_in_word" en="in" pt="em" es="en"/>
+    <s k="hx_cells_word" en="cells" pt="células" es="celdas"/>
     <s k="hx_hosts_word" en="host(s)" pt="host(s)" es="host(s)"/>
     <s k="hx_omitted" en=" port(s) did not fit the board and were rolled into the final cell. None was dropped: every one of them is listed in the table below." pt=" porta(s) não couberam no tabuleiro e foram somadas na célula final. Nenhuma foi descartada: todas estão listadas na tabela abaixo." es=" puerto(s) no cupieron en el tablero y se sumaron en la celda final. Ninguno fue descartado: todos están listados en la tabla siguiente."/>
     <s k="hx_iana_note" en=" well-known port name taken from the IANA registry: the scan did NOT identify the service running on this port." pt=" nome IANA da porta: o scan NÃO identificou o serviço em execução nesta porta." es=" nombre IANA del puerto: el escaneo NO identificó el servicio en ejecución en este puerto."/>
@@ -2378,6 +2385,15 @@ SPDX-License-Identifier: GPL-2.0-or-later
   <xsl:template name="hx-ordered-cells">
     <xsl:param name="scope" select="'all'"/>
     <xsl:param name="hostip" select="''"/>
+    <!-- Family collapsing is a GLOBAL-board device. On a per-host board it would
+         assert exposure the scan never saw: a host running only 135 and 139 gets
+         the family label "135-139", and the per-host boards carry no table and no
+         "members:" line to walk that back, so the range reads as the whole of
+         135..139 on that host. The global board can afford the label because its
+         table opens the member ports and their addresses one by one. Per host the
+         boards are small anyway, so the collapse buys no room — only the false
+         claim. Rule 1 of the spec ("do not invent data") outranks its label rule. -->
+    <xsl:param name="collapse" select="1"/>
     <xsl:variable name="raw-rtf">
       <xsl:call-template name="hx-raw-cells">
         <xsl:with-param name="scope" select="$scope"/>
@@ -2385,9 +2401,16 @@ SPDX-License-Identifier: GPL-2.0-or-later
       </xsl:call-template>
     </xsl:variable>
     <xsl:variable name="col-rtf">
-      <xsl:call-template name="hx-collapse">
-        <xsl:with-param name="raw" select="exsl:node-set($raw-rtf)"/>
-      </xsl:call-template>
+      <xsl:choose>
+        <xsl:when test="number($collapse) = 1">
+          <xsl:call-template name="hx-collapse">
+            <xsl:with-param name="raw" select="exsl:node-set($raw-rtf)"/>
+          </xsl:call-template>
+        </xsl:when>
+        <xsl:otherwise>
+          <xsl:copy-of select="exsl:node-set($raw-rtf)/c"/>
+        </xsl:otherwise>
+      </xsl:choose>
     </xsl:variable>
     <xsl:for-each select="exsl:node-set($col-rtf)/c">
       <xsl:sort select="number(@srank)" data-type="number"/>
@@ -2986,10 +3009,37 @@ SPDX-License-Identifier: GPL-2.0-or-later
 </xsl:text>
   </xsl:template>
 
+  <!-- How many ports the board stands for, and in how many cells. Family
+       collapsing makes the two numbers differ (135, 137, 138 and 139 ride in one
+       "135-139" cell), and printing only the cell count would understate the
+       scan: the header would read "25 unique ports" for a scope where the
+       scanner actually observed 32. When nothing collapsed, both numbers agree
+       and the shorter phrase is used. -->
+  <xsl:template name="hx-scope-phrase">
+    <xsl:param name="cells"/>
+    <xsl:param name="ports"/>
+    <xsl:choose>
+      <xsl:when test="number($ports) &gt; number($cells)">
+        <xsl:value-of select="$ports"/>
+        <xsl:text> </xsl:text><xsl:value-of select="gvm:t('hx_ports_word')"/>
+        <xsl:text> </xsl:text><xsl:value-of select="gvm:t('hx_in_word')"/>
+        <xsl:text> </xsl:text><xsl:value-of select="$cells"/>
+        <xsl:text> </xsl:text><xsl:value-of select="gvm:t('hx_cells_word')"/>
+      </xsl:when>
+      <xsl:otherwise>
+        <xsl:value-of select="$cells"/>
+        <xsl:text> </xsl:text><xsl:value-of select="gvm:t('hx_scope')"/>
+      </xsl:otherwise>
+    </xsl:choose>
+  </xsl:template>
+
   <!-- Global port exposure map. -->
   <xsl:template name="hexmap-section">
     <xsl:variable name="ord" select="exsl:node-set($hx-ord-rtf)"/>
     <xsl:variable name="n" select="count($ord/c)"/>
+    <!-- Distinct (transport, port) pairs behind the cells: a collapsed cell
+         carries one <m> per member port, an uncollapsed one stands for itself. -->
+    <xsl:variable name="nraw" select="count($ord/c[not(@collapsed = '1')]) + count($ord/c/m)"/>
     <xsl:text>\section{</xsl:text><xsl:value-of select="gvm:t('sec_hexmap')"/><xsl:text>}
 </xsl:text>
     <xsl:value-of select="gvm:t('hx_intro')"/>
@@ -3014,8 +3064,10 @@ SPDX-License-Identifier: GPL-2.0-or-later
           <xsl:value-of select="count(gvm:report()/host)"/>
           <xsl:text> </xsl:text><xsl:value-of select="gvm:t('hx_hosts_word')"/>
           <xsl:text> -- </xsl:text>
-          <xsl:value-of select="$n"/>
-          <xsl:text> </xsl:text><xsl:value-of select="gvm:t('hx_scope')"/>
+          <xsl:call-template name="hx-scope-phrase">
+            <xsl:with-param name="cells" select="$n"/>
+            <xsl:with-param name="ports" select="$nraw"/>
+          </xsl:call-template>
           <xsl:text> -- </xsl:text>
           <xsl:call-template name="emit-date">
             <xsl:with-param name="date" select="gvm:report()/scan_end"/>
@@ -3146,6 +3198,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
             <xsl:call-template name="hx-ordered-cells">
               <xsl:with-param name="scope" select="'host'"/>
               <xsl:with-param name="hostip" select="$ip"/>
+              <xsl:with-param name="collapse" select="0"/>
             </xsl:call-template>
           </xsl:variable>
           <xsl:variable name="hord" select="exsl:node-set($hord-rtf)"/>
@@ -3175,8 +3228,11 @@ SPDX-License-Identifier: GPL-2.0-or-later
                 <xsl:if test="string-length($hostname) &gt; 0">
                   <xsl:value-of select="$hostname"/><xsl:text> -- </xsl:text>
                 </xsl:if>
-                <xsl:value-of select="count($hord/c)"/>
-                <xsl:text> </xsl:text><xsl:value-of select="gvm:t('hx_scope')"/>
+                <xsl:call-template name="hx-scope-phrase">
+                  <xsl:with-param name="cells" select="count($hord/c)"/>
+                  <xsl:with-param name="ports"
+                    select="count($hord/c[not(@collapsed = '1')]) + count($hord/c/m)"/>
+                </xsl:call-template>
               </xsl:variable>
               <xsl:call-template name="hx-board">
                 <xsl:with-param name="cells" select="exsl:node-set($hdraw-rtf)/c"/>
