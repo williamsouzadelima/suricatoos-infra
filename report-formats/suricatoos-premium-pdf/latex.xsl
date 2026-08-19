@@ -508,19 +508,42 @@ SPDX-License-Identifier: GPL-2.0-or-later
       '^', '\textasciicircum{}')"/>
   </xsl:template>
 
-  <!-- Full escape, including backslash. -->
+  <!-- Escape completo, barra invertida inclusive.
+
+       A barra NAO pode ser separada com str:tokenize. str:tokenize DESCARTA
+       token vazio, entao '\ab', 'ab\' e 'a\\b' perdiam uma barra em SILENCIO:
+       'C:\Program Files' saia 'C:Program Files' e um caminho do Windows virava
+       OUTRO caminho sem aviso nenhum. Enquanto escape_text era chamado uma vez
+       por campo isso so' pegava o primeiro/ultimo caractere; com o fatiamento
+       de 8 em 8 do escape_sliced a fronteira passou a existir a cada 8
+       posicoes e a perda virou 1 barra em cada 4.
+
+       Aqui a barra vira '\textbackslash' SEM chaves na PRIMEIRA passada,
+       atravessa escape_special_chars intacta (a palavra nao contem nenhum dos
+       nove caracteres que aquele template procura) e ganha as chaves na
+       ULTIMA. str:replace faz UMA varredura da esquerda para a direita e nao
+       reexamina o que acabou de inserir — medido: 'a\\b' sai com as DUAS
+       barras, e um '\textbackslash' literal do feed sai
+       '\textbackslash{}textbackslash', que imprime exatamente o que o scanner
+       escreveu. Sem tokenize, sem recursao, e a barra sobrevive no inicio, no
+       fim e em sequencia.
+
+       O ramo sem barra continua sendo o caminho curto: escape_text roda uma
+       vez por PEDACO de 8 caracteres, entao pagar duas passadas de str:replace
+       onde nao ha barra nenhuma sairia caro a toa. -->
   <xsl:template name="escape_text">
     <xsl:param name="string"/>
     <xsl:choose>
       <xsl:when test="contains($string, '\')">
-        <xsl:for-each select="str:tokenize($string, '\')">
-          <xsl:if test="position() != 1">
-            <xsl:text>\textbackslash{}</xsl:text>
-          </xsl:if>
+        <xsl:variable name="bs"
+          select="str:replace(string($string), '\', '\textbackslash')"/>
+        <xsl:variable name="esc">
           <xsl:call-template name="escape_special_chars">
-            <xsl:with-param name="string" select="."/>
+            <xsl:with-param name="string" select="$bs"/>
           </xsl:call-template>
-        </xsl:for-each>
+        </xsl:variable>
+        <xsl:value-of
+          select="str:replace(string($esc), '\textbackslash', '\textbackslash{}')"/>
       </xsl:when>
       <xsl:otherwise>
         <xsl:call-template name="escape_special_chars">
@@ -564,6 +587,14 @@ SPDX-License-Identifier: GPL-2.0-or-later
        $vb-cap * 200 = 320.000 caracteres. -->
   <xsl:variable name="vb-chunk" select="8"/>
   <xsl:variable name="vb-cap" select="1600"/>
+
+  <!-- Acima de quantos caracteres uma PALAVRA de prosa passa pelo fatiador.
+       A medida do corpo do texto e' 166mm; a palavra mais larga que cabe nela
+       tem cerca de 47 caracteres em maiuscula e mais de 160 em minuscula
+       estreita. 40 fica abaixo do pior caso e deixa a prosa normal — onde a
+       palavra mais longa raramente passa de 20 — completamente fora do
+       fatiador. -->
+  <xsl:variable name="prose-tok" select="40"/>
 
   <!-- Insere OPORTUNIDADE DE QUEBRA depois de cada caractere que junta um token
        tecnico: / , ; : @ = ? &amp; . - _ + |
@@ -637,6 +668,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
        pagina o corte marcado e' o menos ruim. -->
   <xsl:template name="escape_sliced">
     <xsl:param name="string"/>
+    <xsl:param name="wb" select="'\surwb{}'"/>
     <xsl:variable name="len" select="string-length($string)"/>
     <xsl:choose>
       <xsl:when test="$len &lt;= $vb-chunk * 2">
@@ -647,11 +679,37 @@ SPDX-License-Identifier: GPL-2.0-or-later
       <xsl:otherwise>
         <xsl:for-each select="$ints200/i[number(@v) * $vb-cap &lt; $len]">
           <xsl:variable name="off" select="number(@v) * $vb-cap"/>
-          <xsl:for-each select="$ints200/i[$off + number(@v) * $vb-chunk &lt; $len]">
-            <xsl:if test="$off + number(@v) &gt; 0"><xsl:text>\surwb{}</xsl:text></xsl:if>
+          <!-- O BLOCO sai UMA vez do texto completo e o laco de dentro fatia o
+               BLOCO, nao a string inteira. substring() do XPath conta a partir
+               do INICIO da string, entao fatiar a string inteira custava o
+               quadrado do tamanho. Medido no mesmo Mac, campo de 400 mil
+               caracteres: 21,96s de xsltproc antes, 6,03s agora. O que ainda
+               sobra e' a extracao do bloco, que continua andando desde o
+               inicio; com o teto de $vb-cap*200 ela roda no maximo 200 vezes.
+               Campo real (deteccao cortada em 1500, nome de NVT, host) nao
+               chega perto disso: o custo la' e' de centesimos de segundo. -->
+          <xsl:variable name="blk" select="substring($string, $off + 1, $vb-cap)"/>
+          <xsl:variable name="blen" select="string-length($blk)"/>
+          <xsl:for-each select="$ints200/i[number(@v) * $vb-chunk &lt; $blen]">
+            <xsl:if test="$off + number(@v) &gt; 0">
+              <!-- '%' + quebra de linha DE FONTE: o pdflatex le no maximo
+                   bufsize=200000 caracteres por linha de entrada e aborta o
+                   documento no meio quando passa disso (medido: campo de 174
+                   KB gerava PDF de 24 KB, e o `generate` faz cat do arquivo
+                   sem checar codigo de saida — o cliente baixava o documento
+                   mutilado). O '%' come a quebra, entao ela nao vira espaco.
+                   A quebra vem ANTES do macro e nao depois: o TeX descarta
+                   espaco no INICIO de linha, entao um pedaco que comecasse por
+                   espaco perderia esse espaco — medido, "SSL/TLS: Report" saiu
+                   "SSL/TLS:Report". Abrindo a linha com o macro (que e' uma
+                   sequencia de controle), o espaco do pedaco ja esta no meio da
+                   linha e sobrevive. -->
+              <xsl:text>%&#10;</xsl:text>
+              <xsl:value-of select="$wb"/>
+            </xsl:if>
             <xsl:call-template name="escape_text">
               <xsl:with-param name="string"
-                select="substring($string, $off + number(@v) * $vb-chunk + 1, $vb-chunk)"/>
+                select="substring($blk, number(@v) * $vb-chunk + 1, $vb-chunk)"/>
             </xsl:call-template>
           </xsl:for-each>
         </xsl:for-each>
@@ -673,6 +731,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
   <xsl:template name="escape_break">
     <xsl:param name="string"/>
     <xsl:param name="max" select="0"/>
+    <xsl:param name="wb" select="'\surwb{}'"/>
     <xsl:variable name="cut">
       <xsl:choose>
         <xsl:when test="number($max) &gt; 0 and string-length($string) &gt; number($max)">
@@ -684,6 +743,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
     <xsl:variable name="e">
       <xsl:call-template name="escape_sliced">
         <xsl:with-param name="string" select="string($cut)"/>
+        <xsl:with-param name="wb" select="$wb"/>
       </xsl:call-template>
     </xsl:variable>
     <xsl:value-of select="gvm:brk(string($e))"/>
@@ -694,13 +754,38 @@ SPDX-License-Identifier: GPL-2.0-or-later
     </xsl:if>
   </xsl:template>
 
-  <!-- Quantos espacos/tabs abrem a linha (0..24). Sem recursao: conta quantos
+  <!-- NOME de vulnerabilidade (coluna do Sumario de Achados, titulo do card,
+       tabela do grupo). Mesmo escape_break, so' que a quebra de ultimo recurso
+       dentro da palavra sai VISIVEL, com hifen. Um nome de uma palavra so' que
+       nao cabe na coluna de 92mm partia em silencio —
+       "OracleWebLogicServerCoordinatorPortRemot / eCodeExecutionDetection" — e
+       ler isso e' ler TEXTO TRUNCADO, que e' uma das quatro queixas que
+       abriram este trabalho.
+       O bloco de DETECCAO continua com a quebra MUDA de proposito: hifen
+       fabricado no meio de um hash ou de um base64 corromperia a evidencia que
+       o cliente vai conferir. -->
+  <xsl:template name="escape_name">
+    <xsl:param name="string"/>
+    <xsl:call-template name="escape_break">
+      <xsl:with-param name="string" select="$string"/>
+      <xsl:with-param name="wb" select="'\surwbvis{}'"/>
+    </xsl:call-template>
+  </xsl:template>
+
+  <!-- Quantos espacos abrem a linha (0..63). Sem recursao: conta quantos
        prefixos de tamanho k sao SO' espaco em branco. Nunca e' chamado para
-       linha inteiramente em branco (essa vira quebra de paragrafo antes). -->
+       linha inteiramente em branco (essa vira quebra de paragrafo antes).
+       O TAB ja chegou aqui expandido em 8 colunas pelo escape_prose — contado
+       como UM caractere, ele fazia a linha filha sair MENOS indentada que a
+       linha mae e o bloco de configuracao desenhava a hierarquia errada.
+       O teto de 63 e' declarado: acima disso a indentacao satura (e o resto do
+       branco e' descartado, nao deixado como espaco solto que o LaTeX colapsa
+       em silencio). 24 era pouco — bloco de NVT com 30 e com 40 colunas saia
+       na MESMA coluna. -->
   <func:function name="gvm:lead">
     <xsl:param name="s"/>
     <xsl:variable name="c">
-      <xsl:for-each select="$hx-ints/i[number(@v) &gt; 0]">
+      <xsl:for-each select="$ints200/i[number(@v) &gt; 0 and number(@v) &lt; 64]">
         <xsl:if test="translate(substring($s, 1, number(@v)), ' &#9;', '') = ''">
           <x/>
         </xsl:if>
@@ -709,25 +794,72 @@ SPDX-License-Identifier: GPL-2.0-or-later
     <func:result select="count(exsl:node-set($c)/x)"/>
   </func:function>
 
-  <!-- A linha abre com marcador de lista? '-', '*', 'o ', bullet, digito, ou
-       letra seguida de ')'. Sao os marcadores que o autor do NVT usa; onde eles
-       aparecem a quebra de linha e' INTENCAO e nao acidente de largura de
-       terminal, entao o refluxo a preserva.
-       Letra seguida de '.' NAO entra de proposito: uma linha de prosa que
-       comeca com "e.g." casaria com ela e ganharia uma quebra dura que nao
-       existe no texto. -->
-  <func:function name="gvm:marker">
+  <!-- A linha abre um item NUMERADO? Exige a FORMA inteira: um a tres digitos
+       seguidos de '.' ou ')' E de espaco — "1. ", "2) ", "10. ". Um digito
+       solto NAO basta, e essa era a raiz de um defeito medido: o feed NVT
+       quebra em ~65 colunas, e a linha de continuacao que comeca por numero de
+       versao, ano, porta ou RFC ("2.0 and therefore...", "2019 and no security
+       fixes...") virava "item de lista" e ganhava um \newline duro. No PDF real
+       de cliente 99 de 4.199 linhas (2,4%) comecam por digito.
+       Um a tres digitos cobre lista de 1 a 999 e nao precisa de recursao: sao
+       tres testes de prefixo. -->
+  <func:function name="gvm:num-marker">
+    <xsl:param name="s"/>
+    <xsl:variable name="d1"
+      select="string-length($s) &gt;= 1 and
+              string-length(translate(substring($s, 1, 1), '0123456789', '')) = 0"/>
+    <xsl:variable name="d2"
+      select="string-length($s) &gt;= 2 and
+              string-length(translate(substring($s, 1, 2), '0123456789', '')) = 0"/>
+    <xsl:variable name="d3"
+      select="string-length($s) &gt;= 3 and
+              string-length(translate(substring($s, 1, 3), '0123456789', '')) = 0"/>
+    <func:result select="boolean(
+      ($d1 and not($d2) and (substring($s, 2, 2) = '. ' or substring($s, 2, 2) = ') ')) or
+      ($d2 and not($d3) and (substring($s, 3, 2) = '. ' or substring($s, 3, 2) = ') ')) or
+      ($d3 and (substring($s, 4, 2) = '. ' or substring($s, 4, 2) = ') ')))"/>
+  </func:function>
+
+  <!-- A linha tem FORMA de marcador de lista? '- ', '* ', 'o ', bullet, item
+       numerado, ou letra seguida de ') '. O ESPACO depois do sinal faz parte da
+       regra: sem ele, "*Note:" e "-lo" tambem casavam.
+       Letra seguida de '.' continua fora de proposito: uma linha de prosa que
+       comeca com "e.g." casaria e ganharia uma quebra dura que nao existe no
+       texto.
+       FORMA nao basta para decidir: quem decide e' gvm:marker, abaixo. -->
+  <func:function name="gvm:marker-form">
     <xsl:param name="s"/>
     <func:result select="boolean(
-      starts-with($s, '-') or
-      starts-with($s, '*') or
+      starts-with($s, '- ') or $s = '-' or
+      starts-with($s, '* ') or $s = '*' or
       starts-with($s, 'o ') or
-      starts-with($s, '&#8226;') or
-      (string-length($s) &gt; 0 and
-       string-length(translate(substring($s, 1, 1), '0123456789', '')) = 0) or
-      (substring($s, 2, 1) = ')' and
+      starts-with($s, '&#8226; ') or $s = '&#8226;' or
+      gvm:num-marker($s) or
+      (substring($s, 2, 2) = ') ' and
        string-length(translate(substring($s, 1, 1),
          'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ', '')) = 0))"/>
+  </func:function>
+
+  <!-- A linha abre um item de lista DE VERDADE? Forma + CONTEXTO.
+
+       Item de lista nao aparece sozinho no meio de um paragrafo: ou a linha
+       ANTERIOR fecha o contexto (esta vazia, termina em ':', esta indentada, ou
+       ela mesma e' um marcador) ou a SEGUINTE tambem tem forma de marcador.
+       Sem o contexto, o aposto entre travessoes de uma frase quebrada pelo feed
+       — "...can force the weaker cipher and read" / "- or modify - the
+       traffic..." — continuava sendo lido como item de lista e congelava a
+       quebra de 65 colunas no meio da frase, que e' exatamente o defeito que o
+       refluxo existe para eliminar. -->
+  <func:function name="gvm:marker">
+    <xsl:param name="s"/>
+    <xsl:param name="prev"/>
+    <xsl:param name="next"/>
+    <func:result select="boolean(gvm:marker-form($s) and (
+      normalize-space($prev) = '' or
+      substring($prev, string-length($prev)) = ':' or
+      gvm:lead($prev) &gt;= 2 or
+      gvm:marker-form($prev) or
+      gvm:marker-form($next)))"/>
   </func:function>
 
   <!-- PROSA (summary / impact / insight / affected / solution).
@@ -759,64 +891,92 @@ SPDX-License-Identifier: GPL-2.0-or-later
        depois e' seguro: \newline, \par, \mbox{} e '~' nao contem caractere de
        junta.
 
-       SENTINELA: '\surPB'. Ela nao pode existir no texto de entrada nem no
-       texto ja escapado, e isso e' demonstravel — nao e' aposta. Nesta altura
-       as UNICAS barras invertidas da string sao as que o proprio escape_text
-       emitiu (\$ \_ \% \&amp; \# \{ \} \textasciitilde{} \textasciicircum{}
-       \textbackslash{}); toda barra invertida CRUA do XML ja virou
-       \textbackslash{}. Nenhuma delas e' seguida de "surPB" — uma barra
-       invertida crua seguida de "surPB" no feed vira "\textbackslash{}surPB".
-       Um caractere de controle (U+0001) seria mais curto, mas XML 1.0 nao
-       permite escreve-lo nem no XSLT nem no relatorio de entrada.
+       LINHA EM BRANCO: str:tokenize descarta token VAZIO, entao a linha em
+       branco precisa virar alguma coisa antes de tokenizar. A versao anterior
+       usava a sentinela '\surPB' e por isso tinha de escapar ANTES de refluir.
+       Aqui a marca e' UM ESPACO ('\n\n' -> '\n \n'): linha so' de espaco em
+       branco ja e' tratada como linha em branco logo abaixo, entao a marca nao
+       pode colidir com nada que o feed escreva — e o refluxo passa a trabalhar
+       sobre o texto CRU, que e' o que permite fatiar token gigante (o escape
+       de cada pedaco continua sendo escape_text, no fim de cada ramo).
 
-       Sem recursao: str:replace encadeado + um xsl:for-each sobre
-       str:tokenize. str:tokenize descarta token vazio, e por isso a linha em
-       branco e' protegida pela sentinela ANTES de tokenizar. -->
+       TOKEN GIGANTE: cada palavra acima de $prose-tok caracteres passa pelo
+       escape_sliced, que poe \surwb dentro dela. Sem essa rede o campo de prosa
+       continuava saindo da FOLHA — medido: impressao digital SHA-512 de 128
+       hexadecimais num summary saia a 603,3pt numa folha de 595,3pt, com
+       Overfull de 306pt e o build dando VEREDITO OK. Palavra curta nao e'
+       fatiada: o custo fica proporcional ao token, nao ao campo.
+
+       QUEBRA DE LINHA DE FONTE: as palavras sao emendadas por uma quebra de
+       linha e nao por um espaco. Em LaTeX as duas coisas sao o mesmo espaco,
+       mas a quebra segura o limite de 200.000 caracteres por linha de entrada
+       do pdflatex — que, estourado, aborta o documento no meio.
+
+       Sem recursao: str:replace encadeado + xsl:for-each sobre str:tokenize. -->
   <xsl:template name="escape_prose">
     <xsl:param name="string"/>
-    <xsl:variable name="esc">
-      <xsl:call-template name="escape_text">
-        <xsl:with-param name="string" select="$string"/>
-      </xsl:call-template>
-    </xsl:variable>
     <!-- CR/CRLF -> LF (o parser XML ja normaliza a quebra literal; sobra a
-         escrita explicita &#13;), e linha em branco -> sentinela. -->
+         escrita explicita &#13;); TAB -> 8 colunas (a largura que o autor do
+         NVT enxergou no terminal — contado como 1 caractere, ele invertia a
+         hierarquia do bloco indentado); linha em branco -> linha de um espaco. -->
     <xsl:variable name="norm" select="str:replace(
       str:replace(
-      str:replace(string($esc), '&#13;&#10;', '&#10;'),
+      str:replace(
+      str:replace(string($string), '&#13;&#10;', '&#10;'),
       '&#13;', '&#10;'),
-      '&#10;&#10;', '&#10;\surPB&#10;')"/>
+      '&#9;', '        '),
+      '&#10;&#10;', '&#10; &#10;')"/>
     <xsl:variable name="flow">
       <xsl:for-each select="str:tokenize($norm, '&#10;')">
         <xsl:variable name="tok" select="string(.)"/>
         <xsl:variable name="prev" select="string(preceding-sibling::*[1])"/>
+        <xsl:variable name="next" select="string(following-sibling::*[1])"/>
         <xsl:choose>
-          <!-- Linha em branco: paragrafo. Duas sentinelas seguidas (runs de 4+
-               quebras) viram \par\par, que no LaTeX e' inofensivo: o segundo
-               \par fecha um paragrafo ja fechado. -->
-          <xsl:when test="$tok = '\surPB' or normalize-space($tok) = ''">
-            <xsl:text>\par </xsl:text>
+          <!-- Linha em branco: paragrafo. Runs de 4+ quebras viram \par\par,
+               que no LaTeX e' inofensivo: o segundo \par fecha um paragrafo ja
+               fechado. -->
+          <xsl:when test="normalize-space($tok) = ''">
+            <xsl:text>\par&#10;</xsl:text>
           </xsl:when>
           <xsl:otherwise>
             <xsl:variable name="ind" select="gvm:lead($tok)"/>
-            <xsl:if test="position() &gt; 1 and
-                          not($prev = '\surPB' or normalize-space($prev) = '')">
+            <!-- Indentacao DELIBERADA e' 2 colunas ou mais. UM espaco solto no
+                 comeco de uma linha de continuacao e' detrito da quebra do
+                 feed, e tratado como bloco indentado ele custava DUAS quebras
+                 congeladas (a de entrada e a de saida) mais um recuo falso. -->
+            <xsl:variable name="pind" select="gvm:lead($prev)"/>
+            <xsl:if test="position() &gt; 1 and normalize-space($prev) != ''">
               <xsl:choose>
-                <xsl:when test="$ind &gt; 0 or gvm:marker($tok) or gvm:lead($prev) &gt; 0">
-                  <xsl:text>\newline </xsl:text>
+                <xsl:when test="$ind &gt;= 2 or $pind &gt;= 2 or
+                                gvm:marker($tok, $prev, $next)">
+                  <xsl:text>\newline&#10;</xsl:text>
                 </xsl:when>
-                <xsl:otherwise><xsl:text> </xsl:text></xsl:otherwise>
+                <xsl:otherwise><xsl:text>&#10;</xsl:text></xsl:otherwise>
               </xsl:choose>
             </xsl:if>
             <!-- Indentacao preservada. O \mbox{} e' obrigatorio: sem ele o TeX
                  descarta o espaco no comeco da linha que o \newline abriu. -->
-            <xsl:if test="$ind &gt; 0">
+            <xsl:if test="$ind &gt;= 2">
               <xsl:text>\mbox{}</xsl:text>
-              <xsl:for-each select="$hx-ints/i[number(@v) &lt; $ind]">
+              <xsl:for-each select="$ints200/i[number(@v) &lt; $ind]">
                 <xsl:text>~</xsl:text>
               </xsl:for-each>
             </xsl:if>
-            <xsl:value-of select="substring($tok, $ind + 1)"/>
+            <xsl:for-each select="str:tokenize(substring($tok, $ind + 1), ' ')">
+              <xsl:if test="position() &gt; 1"><xsl:text>&#10;</xsl:text></xsl:if>
+              <xsl:choose>
+                <xsl:when test="string-length(.) &gt; $prose-tok">
+                  <xsl:call-template name="escape_sliced">
+                    <xsl:with-param name="string" select="string(.)"/>
+                  </xsl:call-template>
+                </xsl:when>
+                <xsl:otherwise>
+                  <xsl:call-template name="escape_text">
+                    <xsl:with-param name="string" select="string(.)"/>
+                  </xsl:call-template>
+                </xsl:otherwise>
+              </xsl:choose>
+            </xsl:for-each>
           </xsl:otherwise>
         </xsl:choose>
       </xsl:for-each>
@@ -837,12 +997,25 @@ SPDX-License-Identifier: GPL-2.0-or-later
        quebrou. -->
   <xsl:template name="escape_verbatim">
     <xsl:param name="string"/>
-    <xsl:variable name="sliced">
-      <xsl:call-template name="escape_sliced">
-        <xsl:with-param name="string" select="$string"/>
-      </xsl:call-template>
+    <!-- A linha e' recortada AQUI e emendada com \newline, em vez de fatiar o
+         campo inteiro e trocar '\n' por \newline no fim. A troca no fim nao
+         sabia distinguir a quebra que veio do SCANNER da quebra de linha de
+         FONTE que o escape_sliced insere para nao estourar o buffer do
+         pdflatex — e teria transformado a segunda em quebra de linha visivel. -->
+    <xsl:variable name="norm" select="str:replace(
+      str:replace(
+      str:replace(string($string), '&#13;&#10;', '&#10;'),
+      '&#13;', '&#10;'),
+      '&#10;&#10;', '&#10; &#10;')"/>
+    <xsl:variable name="body">
+      <xsl:for-each select="str:tokenize($norm, '&#10;')">
+        <xsl:if test="position() &gt; 1"><xsl:text>\newline&#10;</xsl:text></xsl:if>
+        <xsl:call-template name="escape_sliced">
+          <xsl:with-param name="string" select="string(.)"/>
+        </xsl:call-template>
+      </xsl:for-each>
     </xsl:variable>
-    <xsl:value-of select="str:replace(gvm:brk(string($sliced)), '&#10;', '\newline ')"/>
+    <xsl:value-of select="gvm:brk(string($body))"/>
     <xsl:text>\mbox{}</xsl:text>
   </xsl:template>
 
@@ -1078,6 +1251,15 @@ SPDX-License-Identifier: GPL-2.0-or-later
 % Nenhum dos dois imprime hifen.
 \newcommand{\surjb}{\penalty100\relax}
 \newcommand{\surwb}{\penalty700\relax}
+% \surwbvis e' o MESMO ultimo recurso do \surwb, mas VISIVEL: quando a quebra
+% dispara sai um hifen, que avisa o leitor de que a palavra continua na linha
+% seguinte. Vale so' para NOME de vulnerabilidade. Um nome de uma palavra so'
+% que nao cabe na coluna partia em silencio, no caractere 40 (a grade do
+% \surwb), e isso se le como TEXTO TRUNCADO.
+% NAO pode ser usado no bloco de DETECCAO: hifen fabricado no meio de um hash
+% ou de um base64 corrompe a evidencia que o cliente vai conferir. Sao dois
+% macros justamente para que o verbatim continue MUDO.
+\newcommand{\surwbvis}{\discretionary{-}{}{}}
 % Nome proprio de produto/vulnerabilidade nao se hifeniza ("...(PFS) Ci-pher
 % Suites" foi lido como truncagem). Nas colunas onde so' entra nome tecnico a
 % hifenizacao e' desligada e a folga vai para o espacamento entre palavras
@@ -1096,7 +1278,17 @@ SPDX-License-Identifier: GPL-2.0-or-later
 %   \arraybackslash - devolve o \\ da tabela, que o \raggedright sequestra.
 % Coluna de tabela nao e' prosa: alinhar a esquerda aqui e' o normal
 % tipografico, e nao tem relacao com a justificacao do corpo do texto.
-\newcommand{\surname}{\hyphenpenalty=10000\exhyphenpenalty=10000\hbadness=10000\raggedright\arraybackslash}
+% \hyphenpenalty precisa ser FINITA, senao ela desliga tambem o \discretionary
+% do \surwbvis e o nome volta a partir sem hifen. Quem impede a hifenizacao
+% AUTOMATICA (o "(PFS) Ci-pher Suites" que abriu esta linha de trabalho) e'
+% \lefthyphenmin=63: o TeX so' hifeniza palavra de ate' 63 letras, entao exigir
+% 63 letras antes do hifen desliga o algoritmo sem tocar em discretionary
+% explicito.
+% \surnametxt e' o regime de HIFENIZACAO do nome tecnico, sem o alinhamento:
+% vale onde o nome aparece fora de coluna de tabela (titulo de card), que ja tem
+% seu proprio \raggedright.
+\newcommand{\surnametxt}{\hyphenpenalty=700\exhyphenpenalty=10000\lefthyphenmin=63}
+\newcommand{\surname}{\surnametxt\hbadness=10000\raggedright\arraybackslash}
 
 % ---- Branded running header / footer ----
 \fancypagestyle{surfancy}{%
@@ -1777,7 +1969,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
         <xsl:if test="position() mod 2 = 0"><xsl:text>\rowcolor{surMist}</xsl:text></xsl:if>
         <xsl:text>{\bfseries </xsl:text><xsl:value-of select="position()"/><xsl:text>} &amp; </xsl:text>
         <xsl:text>\hyperlink{</xsl:text><xsl:value-of select="concat('grp-', translate(concat(substring-before(concat(normalize-space(nvt/name),' '),' '),' ',substring-before(concat(substring-after(normalize-space(nvt/name),' '),' '),' ')), ' ./:,()', '-------'))"/><xsl:text>}{\color{surInk}</xsl:text>
-        <xsl:call-template name="escape_break">
+        <xsl:call-template name="escape_name">
           <xsl:with-param name="string" select="concat(substring-before(concat(normalize-space(nvt/name),' '),' '),' ',substring-before(concat(substring-after(normalize-space(nvt/name),' '),' '),' '))"/>
         </xsl:call-template>
         <xsl:text> --- </xsl:text><xsl:value-of select="gvm:t('grp_title')"/>
@@ -1808,7 +2000,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
       </xsl:if>
       <xsl:text>{\bfseries </xsl:text><xsl:value-of select="position() + number($ngroups)"/><xsl:text>} &amp; </xsl:text>
       <xsl:text>\hyperlink{</xsl:text><xsl:value-of select="$anchor"/><xsl:text>}{\color{surInk}</xsl:text>
-      <xsl:call-template name="escape_break">
+      <xsl:call-template name="escape_name">
         <xsl:with-param name="string" select="nvt/name"/>
       </xsl:call-template>
       <xsl:text>} &amp; </xsl:text>
@@ -1917,7 +2109,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
         </xsl:choose>
       </xsl:variable>
       <xsl:variable name="name_escaped">
-        <xsl:call-template name="escape_break">
+        <xsl:call-template name="escape_name">
           <xsl:with-param name="string" select="nvt/name"/>
         </xsl:call-template>
       </xsl:variable>
@@ -1930,7 +2122,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
   toptitle=1.6mm, bottomtitle=1.6mm, lefttitle=3.5mm,
   colbacktitle=</xsl:text><xsl:value-of select="$tcolor"/><xsl:text>, coltitle=white,
   fonttitle=\bfseries,
-  title={\raggedright \#</xsl:text><xsl:value-of select="position()"/><xsl:text>\hspace{2mm} </xsl:text>
+  title={\raggedright\surnametxt \#</xsl:text><xsl:value-of select="position()"/><xsl:text>\hspace{2mm} </xsl:text>
       <xsl:value-of select="$name_escaped"/>
       <xsl:text>}]
 </xsl:text>
@@ -2001,7 +2193,16 @@ SPDX-License-Identifier: GPL-2.0-or-later
 
       <!-- Affected systems (UNIQUE host:port instances of this NVT, capped) -->
       <xsl:variable name="uniqhosts" select="key('by-nvt', $oid)[generate-id() = generate-id(key('by-nvt-hostport', concat($oid, '|', host/text(), '|', port))[1])]"/>
-      <xsl:text>\fieldlabel{</xsl:text><xsl:value-of select="gvm:t('f_affected_sys')"/><xsl:text>}</xsl:text>
+      <!-- Lista de endereco, nao prosa: composta em \raggedright.
+           Justificada, o unico ponto de quebra elastico entre os itens era o
+           \quad (rigido), entao o TeX preferia pagar a penalidade do \surjb
+           DENTRO do endereco a deixar a linha frouxa — e o IP saia partido em
+           duas linhas ("10.20.10." / "3:22/tcp"). Medido no fixture grande:
+           34 quebras dentro de token; com \raggedright, 1.
+           O \par vai DENTRO do grupo de proposito: o TeX le \rightskip no
+           ponto em que o paragrafo TERMINA, entao um \raggedright que fecha
+           antes do \par nao faz nada. -->
+      <xsl:text>\fieldlabel{</xsl:text><xsl:value-of select="gvm:t('f_affected_sys')"/><xsl:text>}\begingroup\raggedright </xsl:text>
       <xsl:for-each select="$uniqhosts">
         <xsl:sort select="host/text()"/>
         <xsl:if test="position() &lt;= 40">
@@ -2026,7 +2227,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
         <xsl:value-of select="count($uniqhosts) - 40"/>
         <xsl:text> </xsl:text><xsl:value-of select="gvm:t('more_word')"/><xsl:text>)}</xsl:text>
       </xsl:if>
-      <xsl:text>\par
+      <xsl:text>\par\endgroup
 </xsl:text>
 
       <!-- Detection result (representative).
@@ -2053,13 +2254,22 @@ SPDX-License-Identifier: GPL-2.0-or-later
              terminal e' errado, e alem disso a justificacao e' o que impedia o
              TeX de usar os pontos de quebra novos (uma linha quebrada num
              \penalty nao tem glue para esticar e viraria caixa mal composta).
-             Com \raggedright a quebra em junta sai limpa. -->
+             Com \raggedright a quebra em junta sai limpa.
+             O \par que fecha o bloco esta DENTRO do grupo (veja o final deste
+             xsl:if): o TeX le \rightskip e \parfillskip no ponto em que o
+             paragrafo TERMINA, entao um \raggedright cujo grupo fecha antes do
+             \par e' inerte — medido, o PDF saia byte a byte igual ao PDF sem
+             \raggedright nenhum. -->
         <xsl:text>{\ttfamily\footnotesize\color{surInk}\raggedright </xsl:text>
         <xsl:call-template name="escape_verbatim">
           <xsl:with-param name="string" select="substring(description, 1, $dcut)"/>
         </xsl:call-template>
         <xsl:if test="$dlen &gt; 1500">
-          <xsl:text> \newline \textmd{\itshape </xsl:text>
+          <!-- \rmfamily: em monoespacada o travessao triplo das chaves trunc_*
+               nao fecha a ligadura e saia como DOIS hifens separados. O aviso
+               e' meta-texto, nao evidencia: compor em romana italica resolve a
+               ligadura e ainda o distingue da saida do scanner. -->
+          <xsl:text> \newline \textmd{\rmfamily\itshape </xsl:text>
           <xsl:value-of select="gvm:t('trunc_a')"/>
           <xsl:value-of select="gvm:num($dcut)"/>
           <xsl:value-of select="gvm:t('trunc_b')"/>
@@ -2067,7 +2277,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
           <xsl:value-of select="gvm:t('trunc_c')"/>
           <xsl:text>}</xsl:text>
         </xsl:if>
-        <xsl:text>}
+        <xsl:text>\par}
 \end{tcolorbox}
 </xsl:text>
       </xsl:if>
@@ -2121,6 +2331,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
              quebra, em monoespacada. Perde o clique, nao perde o endereco. -->
         <xsl:for-each select="nvt/refs/ref[@type='url']">
           <xsl:variable name="u" select="string(@id)"/>
+          <!-- \par DENTRO do grupo: veja a nota do bloco de deteccao. -->
           <xsl:text>\item {\footnotesize\raggedright </xsl:text>
           <xsl:choose>
             <xsl:when test="not(contains($u, '\')) and
@@ -2138,7 +2349,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
               <xsl:text>}</xsl:text>
             </xsl:otherwise>
           </xsl:choose>
-          <xsl:text>}
+          <xsl:text>\par}
 </xsl:text>
         </xsl:for-each>
         <xsl:text>\end{itemize}
@@ -2185,7 +2396,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
           </xsl:call-template>
         </xsl:variable>
         <xsl:variable name="gname">
-          <xsl:call-template name="escape_break">
+          <xsl:call-template name="escape_name">
             <xsl:with-param name="string" select="$g"/>
           </xsl:call-template>
         </xsl:variable>
@@ -2198,7 +2409,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
   toptitle=1.6mm, bottomtitle=1.6mm, lefttitle=3.5mm,
   colbacktitle=</xsl:text><xsl:value-of select="$tcolor"/><xsl:text>, coltitle=white,
   fonttitle=\bfseries,
-  title={\raggedright </xsl:text><xsl:value-of select="gvm:t('grp_title')"/><xsl:text>:\hspace{2mm} </xsl:text>
+  title={\raggedright\surnametxt </xsl:text><xsl:value-of select="gvm:t('grp_title')"/><xsl:text>:\hspace{2mm} </xsl:text>
         <xsl:value-of select="$gname"/><xsl:text>}]
 </xsl:text>
         <xsl:text>\noindent </xsl:text>
@@ -2246,7 +2457,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
                todos, então o que se perde é enumeração, não decisão. -->
           <xsl:if test="position() &lt;= number($adv-max)">
             <xsl:text>{\footnotesize </xsl:text>
-            <xsl:call-template name="escape_break">
+            <xsl:call-template name="escape_name">
               <xsl:with-param name="string" select="nvt/name"/>
             </xsl:call-template>
             <xsl:text>} &amp; </xsl:text>
