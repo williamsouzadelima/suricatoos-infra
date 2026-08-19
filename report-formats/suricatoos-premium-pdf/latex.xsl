@@ -124,7 +124,12 @@ SPDX-License-Identifier: GPL-2.0-or-later
        The host is the <host> CHILD for a ports/port and the parent result's
        <host> text node for a result/port; the union picks whichever exists. -->
   <xsl:key name="hx-ipkey" match="ports/port | result/port"
-           use="concat(translate(substring-after(normalize-space(text()),'/'),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'/',substring-before(normalize-space(text()),'/'),'#',string(host/text() | ../host/text()))"/>
+           use="concat(translate(substring-after(normalize-space(text()),'/'),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'/',substring-before(normalize-space(text()),'/'),'#',substring-before(concat(normalize-space(string(host/text() | ../host/text())),' '),' '))"/>
+  <!-- Same nodes, keyed by HOST alone. The per-host appendix starts from this
+       key instead of re-scanning every port node in the report once per host,
+       which is what turned the appendix into an O(hosts x ports) sweep. -->
+  <xsl:key name="hx-hostkey" match="ports/port | result/port"
+           use="substring-before(concat(normalize-space(string(host/text() | ../host/text())),' '),' ')"/>
   <!-- Host detail "Services" carries "22/tcp/ssh". Keyed by "proto/number" so a
        cell resolves its service name in one lookup instead of scanning every
        host (a /16 report has tens of thousands of these). A value with fewer
@@ -136,7 +141,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
        panel can say how many hosts carry host-level findings without drawing
        them as ports. -->
   <xsl:key name="hx-genip" match="ports/port[starts-with(normalize-space(text()),'general')] | result/port[starts-with(normalize-space(text()),'general')]"
-           use="string(host/text() | ../host/text())"/>
+           use="substring-before(concat(normalize-space(string(host/text() | ../host/text())),' '),' ')"/>
 
   <!-- ================================================================= -->
   <!-- Internationalised strings                                          -->
@@ -263,7 +268,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
          LaTeX-special character unless a control sequence is intended, because
          gvm:t() output is emitted WITHOUT escaping. -->
     <s k="sec_hexmap" en="Port Exposure Map" pt="Mapa de Exposição de Portas" es="Mapa de Exposición de Puertos"/>
-    <s k="hx_intro" en="Every hexagon is one network port observed in the assessed scope; the cell key is the pair (transport, port number), so a port seen on many hosts is a single hexagon. Colour, outline weight and the marker at the top vertex carry the HIGHEST severity observed on that port across every host that exposes it. The third line inside the hexagon names the exposed host, or counts them when the port is open on more than one. The table below the board lists every port with the complete list of mapped IP addresses." pt="Cada hexágono é uma porta de rede observada no escopo avaliado; a chave da célula é o par (transporte, número da porta), então uma porta vista em vários hosts é um único hexágono. Cor, espessura do traço e o marcador no vértice superior carregam a MAIOR severidade observada naquela porta em todos os hosts que a expõem. A terceira linha dentro do hexágono nomeia o host exposto, ou conta quantos são quando a porta está aberta em mais de um. A tabela abaixo do tabuleiro lista todas as portas com a lista completa de endereços IP mapeados." es="Cada hexágono es un puerto de red observado en el alcance evaluado; la clave de la celda es el par (transporte, número de puerto), así que un puerto visto en varios hosts es un único hexágono. Color, grosor del trazo y el marcador en el vértice superior llevan la MAYOR severidad observada en ese puerto en todos los hosts que lo exponen. La tercera línea dentro del hexágono nombra el host expuesto, o los cuenta cuando el puerto está abierto en más de uno. La tabla debajo del tablero lista todos los puertos con la lista completa de direcciones IP mapeadas."/>
+    <s k="hx_intro" en="Every hexagon is one network port observed in the assessed scope; the cell key is the pair (transport, port number), so a port seen on many hosts is a single hexagon. Colour, outline weight and the marker at the top vertex carry the HIGHEST severity observed on that port across every host that exposes it. The third line inside the hexagon names the exposed host (abbreviated when the address is too long for the cell), or counts them when the port is open on more than one. The table below the board lists every port with its mapped IP addresses, up to 40 per port." pt="Cada hexágono é uma porta de rede observada no escopo avaliado; a chave da célula é o par (transporte, número da porta), então uma porta vista em vários hosts é um único hexágono. Cor, espessura do traço e o marcador no vértice superior carregam a MAIOR severidade observada naquela porta em todos os hosts que a expõem. A terceira linha dentro do hexágono nomeia o host exposto (abreviado quando o endereço não cabe na célula), ou conta quantos são quando a porta está aberta em mais de um. A tabela abaixo do tabuleiro lista todas as portas com os endereços IP mapeados, até 40 por porta." es="Cada hexágono es un puerto de red observado en el alcance evaluado; la clave de la celda es el par (transporte, número de puerto), así que un puerto visto en varios hosts es un único hexágono. Color, grosor del trazo y el marcador en el vértice superior llevan la MAYOR severidad observada en ese puerto en todos los hosts que lo exponen. La tercera línea dentro del hexágono nombra el host expuesto (abreviado cuando la dirección no cabe en la celda), o los cuenta cuando el puerto está abierto en más de uno. La tabla debajo del tablero lista todos los puertos con las direcciones IP mapeadas, hasta 40 por puerto."/>
     <s k="hx_state_critico" en="Critical" pt="Crítico" es="Crítico"/>
     <s k="hx_state_alto" en="High" pt="Alto" es="Alto"/>
     <s k="hx_state_medio" en="Medium" pt="Médio" es="Medio"/>
@@ -297,7 +302,10 @@ SPDX-License-Identifier: GPL-2.0-or-later
     <s k="hx_host_none" en="No assessed host exposed a network port, so there is no per-host board to draw." pt="Nenhum host avaliado expôs uma porta de rede, portanto não há tabuleiro por host a desenhar." es="Ningún host evaluado expuso un puerto de red, por lo tanto no hay tablero por host que dibujar."/>
     <s k="hx_members" en="members: " pt="membros: " es="miembros: "/>
     <s k="hx_ip_more_a" en="and " pt="e mais " es="y "/>
-    <s k="hx_ip_more_b" en=" more not listed here" pt=" não listados aqui" es=" más no listados aquí"/>
+    <s k="hx_ip_more_b" en=" more not listed here; the full set is in the Hosts and Open Ports section" pt=" não listados aqui; o conjunto completo está na seção Hosts e Portas Abertas" es=" más no listados aquí; el conjunto completo está en la sección Hosts y Puertos Abiertos"/>
+    <s k="hx_fam_note" en=" port-family label: the scan did NOT identify a service, so the cell is named after the family of ports it collapses and not after anything observed running on them." pt=" rótulo de família de portas: o scan NÃO identificou serviço, então a célula recebe o nome da família de portas que ela colapsa, e não de algo observado em execução nelas." es=" etiqueta de familia de puertos: el escaneo NO identificó un servicio, así que la celda recibe el nombre de la familia de puertos que colapsa, y no de algo observado en ejecución en ellos."/>
+    <s k="hx_noip_note" en=" port observation(s) in the source report carry no host address. They raise no host count and contribute no address to the table." pt=" observação(ões) de porta no relatório de origem não trazem endereço de host. Elas não entram na contagem de hosts nem na lista de endereços da tabela." es=" observación(es) de puerto en el informe de origen no traen dirección de host. No entran en el conteo de hosts ni en la lista de direcciones de la tabla."/>
+    <s k="hx_host_noip" en=" host record(s) in this report carry no address, so no board could be drawn for them." pt=" registro(s) de host neste relatório não trazem endereço, portanto nenhum tabuleiro pôde ser desenhado para eles." es=" registro(s) de host en este informe no traen dirección, por lo tanto no se pudo dibujar ningún tablero para ellos."/>
   </xsl:variable>
   <xsl:variable name="i18n" select="exsl:node-set($i18n-rtf)/s"/>
 
@@ -1793,18 +1801,30 @@ SPDX-License-Identifier: GPL-2.0-or-later
   </xsl:variable>
   <xsl:variable name="hx-ints" select="exsl:node-set($hx-ints-rtf)"/>
 
+  <!-- Largest board the geometry below can lay out: the k=8 blob, 1+3*8*9 cells.
+       The cut in hx-draw-cells is clamped to it, so a hexmap-max above this
+       rolls the surplus into the "+N" cell and the footnote instead of letting
+       the drawing loop run out of seats in silence (the legend counts the cells
+       it was given, so a silent drop makes the legend lie). -->
+  <xsl:variable name="hx-cap" select="217"/>
+
   <!-- Port families that collapse into ONE cell. This is a FIXED table on
        purpose: a generic "contiguous numbers" rule would happily fuse 8080 with
        8081, which share nothing but a neighbouring number. A family collapses
        only when at least two of its members are present on the SAME transport,
        and the printed label is derived from the members actually present
        (137+138 on udp reads "137-138", not "135-139"), so the label never
-       claims a port the scan did not see. -->
+       claims a port the scan did not see. @n is the name printed in the table
+       and @s the short form the board uses; both name the FAMILY, never a
+       service observed running, and never a registry entry - 135 is the MS RPC
+       endpoint mapper and not NetBIOS, so the family that collapses it cannot
+       be called "netbios". Cells named this way carry their own marker and
+       footnote, apart from the IANA dagger. -->
   <xsl:variable name="hx-fam-rtf">
-    <f id="ftp"  p=" 20 21 "            n="ftp"/>
-    <f id="dhcp" p=" 67 68 "            n="dhcp"/>
-    <f id="nbt"  p=" 135 137 138 139 "  n="netbios"/>
-    <f id="snmp" p=" 161 162 "          n="snmp"/>
+    <f id="ftp"  p=" 20 21 "            n="ftp"            s="ftp"/>
+    <f id="dhcp" p=" 67 68 "            n="dhcp"           s="dhcp"/>
+    <f id="nbt"  p=" 135 137 138 139 "  n="netbios-rpc"    s="nbt-rpc"/>
+    <f id="snmp" p=" 161 162 "          n="snmp"           s="snmp"/>
   </xsl:variable>
   <xsl:variable name="hx-fam" select="exsl:node-set($hx-fam-rtf)/f"/>
 
@@ -1863,10 +1883,15 @@ SPDX-License-Identifier: GPL-2.0-or-later
 
   <!-- The host a port node belongs to: the <host> child for a ports/port, the
        parent result's <host> TEXT for a result/port (result/host also carries a
-       <hostname> child, so its string-value would read "10.0.0.1srv01"). -->
+       <hostname> child, so its string-value would read "10.0.0.1srv01"). Only
+       the first whitespace-delimited token counts, so a malformed element with
+       two addresses in it still yields ONE identifier and the invariant
+       "one token in @ips per counted host" holds. Missing host = empty string,
+       which is not a host: such observations are counted and reported, never
+       folded into a phantom address. -->
   <func:function name="gvm:hx-ip">
     <xsl:param name="n"/>
-    <func:result select="string($n/host/text() | $n/../host/text())"/>
+    <func:result select="substring-before(concat(normalize-space(string($n/host/text() | $n/../host/text())),' '),' ')"/>
   </func:function>
 
   <!-- A port string is drawable only when it is not a host-level pseudo-port and
@@ -1894,12 +1919,40 @@ SPDX-License-Identifier: GPL-2.0-or-later
     </xsl:choose>
   </func:function>
 
+  <!-- Octet of the address a port node belongs to, in ONE call: used as a sort
+       key on every node of every cell, where nesting hx-oct(hx-ip(.)) doubled
+       the number of function instantiations. -->
+  <func:function name="gvm:hx-noct">
+    <xsl:param name="n"/>
+    <xsl:param name="i"/>
+    <func:result select="gvm:hx-oct(substring-before(concat(normalize-space(string($n/host/text() | $n/../host/text())),' '),' '), $i)"/>
+  </func:function>
+
   <xsl:variable name="hx-lc" select="'abcdefghijklmnopqrstuvwxyzáàâãéêíóôõúüçñ'"/>
   <xsl:variable name="hx-uc" select="'ABCDEFGHIJKLMNOPQRSTUVWXYZÁÀÂÃÉÊÍÓÔÕÚÜÇÑ'"/>
 
   <func:function name="gvm:hx-upper">
     <xsl:param name="s"/>
     <func:result select="translate($s, $hx-lc, $hx-uc)"/>
+  </func:function>
+
+  <func:function name="gvm:hx-min2">
+    <xsl:param name="a"/>
+    <xsl:param name="b"/>
+    <xsl:choose>
+      <xsl:when test="number($a) &lt;= number($b)"><func:result select="number($a)"/></xsl:when>
+      <xsl:otherwise><func:result select="number($b)"/></xsl:otherwise>
+    </xsl:choose>
+  </func:function>
+
+  <!-- Character count weighted for the widest upper-case glyphs of the bold
+       sans face: W is 0.944 em and M 0.833 against a 0.69 average, so counting
+       characters alone under-measures a label like MSSQLSVR by a fifth and
+       WWWWWWWW by a third. Each W M G O Q counts as 1.35 characters, which
+       keeps the estimate above the real width for every upper-case label. -->
+  <func:function name="gvm:hx-wlen">
+    <xsl:param name="s"/>
+    <func:result select="string-length($s) + 0.35 * string-length(translate($s, translate($s,'WMGOQ',''), ''))"/>
   </func:function>
 
   <func:function name="gvm:hx-max2">
@@ -2065,26 +2118,40 @@ SPDX-License-Identifier: GPL-2.0-or-later
   <xsl:variable name="hx-genhosts"
     select="count($hx-allports[starts-with(normalize-space(text()),'general')]
                               [generate-id() = generate-id(key('hx-genip', gvm:hx-ip(.))[1])])"/>
+  <!-- Port observations that name no host at all. An empty address is not a
+       host: counting it would inflate the host column and it can never appear
+       in the IP list, so it is excluded from both and reported instead. -->
+  <xsl:variable name="hx-noip"
+    select="count($hx-allports[gvm:hx-valid(text())][string-length(gvm:hx-ip(.)) = 0])"/>
   <xsl:variable name="hx-malformed"
     select="count($hx-allports[generate-id() = generate-id(key('hx-pkey', gvm:hx-pk(text()))[1])]
                               [not(starts-with(normalize-space(text()),'general'))]
                               [not(gvm:hx-valid(text()))])"/>
 
-  <!-- One <c> per distinct (transport, port) in scope. $hostip empty = whole
-       report; otherwise the cells (and the state) of that host alone. -->
+  <!-- One <c> per distinct (transport, port) in scope. $scope says WHICH scope,
+       explicitly: 'all' is the whole report and 'host' is $hostip alone. The
+       scope is a separate parameter and not an empty $hostip, because an empty
+       address is a value the data can legitimately carry (a <host> element with
+       no <ip>), and overloading it as "the whole report" made such a host
+       inherit every port in the scan. -->
   <xsl:template name="hx-raw-cells">
+    <xsl:param name="scope" select="'all'"/>
     <xsl:param name="hostip" select="''"/>
-    <xsl:for-each select="$hx-allports[
-            ($hostip = '' and generate-id() = generate-id(key('hx-pkey', gvm:hx-pk(text()))[1]))
-         or ($hostip != '' and gvm:hx-ip(.) = $hostip
-             and generate-id() = generate-id(key('hx-ipkey', concat(gvm:hx-pk(text()),'#',gvm:hx-ip(.)))[1]))
-       ][gvm:hx-valid(text())]">
+    <!-- A per-host board starts from the host index, so it costs the ports of
+         that host and not a sweep of every port node in the report. -->
+    <xsl:variable name="src"
+      select="$hx-allports[$scope = 'all'] | key('hx-hostkey', $hostip)[$scope = 'host']"/>
+    <xsl:for-each select="$src[gvm:hx-valid(text())][
+            ($scope = 'all' and generate-id() = generate-id(key('hx-pkey', gvm:hx-pk(text()))[1]))
+         or ($scope = 'host' and generate-id() = generate-id(key('hx-ipkey', concat(gvm:hx-pk(text()),'#',gvm:hx-ip(.)))[1]))
+       ]">
       <xsl:variable name="ps" select="normalize-space(text())"/>
       <xsl:variable name="num" select="substring-before($ps,'/')"/>
       <xsl:variable name="proto" select="translate(substring-after($ps,'/'), $hx-uc, $hx-lc)"/>
       <xsl:variable name="k" select="concat($proto,'/',$num)"/>
       <!-- Every node (inventory + result) for this cell, scoped to the host. -->
-      <xsl:variable name="pn" select="key('hx-pkey', $k)[$hostip = '' or gvm:hx-ip(.) = $hostip]"/>
+      <xsl:variable name="pn" select="key('hx-pkey', $k)[$scope = 'all']
+                                    | key('hx-ipkey', concat($k,'#',$hostip))[$scope = 'host']"/>
       <!-- Rated results only: -1 is a false positive, -2 debug, -3 a scan error.
            None of them may raise a cell's state. -->
       <xsl:variable name="rs" select="$pn[parent::result]/parent::result[number(severity) &gt;= 0]"/>
@@ -2111,11 +2178,13 @@ SPDX-License-Identifier: GPL-2.0-or-later
           </xsl:otherwise>
         </xsl:choose>
       </xsl:variable>
-      <!-- Distinct exposing hosts. -->
-      <xsl:variable name="ipn" select="$pn[generate-id() = generate-id(key('hx-ipkey', concat($k,'#',gvm:hx-ip(.)))[1])]"/>
+      <!-- Distinct exposing hosts. An observation that names no host is not
+           one of them: it would count as a host the table can never show. -->
+      <xsl:variable name="ipn" select="$pn[string-length(gvm:hx-ip(.)) &gt; 0]
+                                          [generate-id() = generate-id(key('hx-ipkey', concat($k,'#',gvm:hx-ip(.)))[1])]"/>
       <!-- Service name: what the scan actually identified, else the IANA
            registry name, else the bare transport. -->
-      <xsl:variable name="svcnode" select="key('hx-svc', $k)[$hostip = '' or ../ip = $hostip][1]"/>
+      <xsl:variable name="svcnode" select="key('hx-svc', $k)[$scope = 'all' or normalize-space(../ip) = $hostip][1]"/>
       <xsl:variable name="svcraw" select="substring-after(substring-after($svcnode/value,'/'),'/')"/>
       <xsl:variable name="ianan" select="string($hx-iana[@k = $k]/@n)"/>
       <xsl:variable name="svcsrc">
@@ -2155,7 +2224,8 @@ SPDX-License-Identifier: GPL-2.0-or-later
       </xsl:variable>
       <xsl:variable name="fam" select="$hx-fam[contains(@p, concat(' ', $num, ' '))]"/>
       <c num="{$num}" proto="{$proto}" label="{$num}" members="{$num}"
-         famn="{$fam/@n}" svc="{$svc}" svcsrc="{$svcsrc}"
+         blabel="{concat($num,'/',gvm:hx-upper($proto))}"
+         famn="{$fam/@n}" fams="{$fam/@s}" svc="{$svc}" svcsrc="{$svcsrc}"
          state="{$state}" srank="{gvm:hx-rank(string($state))}"
          cvss="{$cvssmax}" nfind="{count($rs)}" nips="{count($ipn)}">
         <xsl:attribute name="qodlow"><xsl:choose><xsl:when test="$qodlow">1</xsl:when><xsl:otherwise>0</xsl:otherwise></xsl:choose></xsl:attribute>
@@ -2168,10 +2238,10 @@ SPDX-License-Identifier: GPL-2.0-or-later
         <xsl:attribute name="ips">
           <xsl:text> </xsl:text>
           <xsl:for-each select="$ipn">
-            <xsl:sort select="gvm:hx-oct(gvm:hx-ip(.),1)" data-type="number"/>
-            <xsl:sort select="gvm:hx-oct(gvm:hx-ip(.),2)" data-type="number"/>
-            <xsl:sort select="gvm:hx-oct(gvm:hx-ip(.),3)" data-type="number"/>
-            <xsl:sort select="gvm:hx-oct(gvm:hx-ip(.),4)" data-type="number"/>
+            <xsl:sort select="gvm:hx-noct(.,1)" data-type="number"/>
+            <xsl:sort select="gvm:hx-noct(.,2)" data-type="number"/>
+            <xsl:sort select="gvm:hx-noct(.,3)" data-type="number"/>
+            <xsl:sort select="gvm:hx-noct(.,4)" data-type="number"/>
             <xsl:sort select="gvm:hx-ip(.)"/>
             <xsl:value-of select="gvm:hx-ip(.)"/><xsl:text> </xsl:text>
           </xsl:for-each>
@@ -2180,17 +2250,24 @@ SPDX-License-Identifier: GPL-2.0-or-later
     </xsl:for-each>
   </xsl:template>
 
-  <!-- Collapse the fixed port families into one cell each. -->
+  <!-- Collapse the fixed port families into one cell each. Only a cell that
+       belongs to a family can group, so only those are matched against each
+       other: scanning the whole set once per cell is quadratic in the number of
+       distinct ports (a 1500-port report spent 80% of the run in here), while
+       the families never hold more than a dozen cells between them. The output
+       order is irrelevant, hx-ordered-cells ranks everything right after. -->
   <xsl:template name="hx-collapse">
     <xsl:param name="raw"/>
-    <xsl:for-each select="$raw/c">
+    <xsl:variable name="famc" select="$raw/c[string-length(@famn) &gt; 0]"/>
+    <xsl:copy-of select="$raw/c[string-length(@famn) = 0]"/>
+    <xsl:for-each select="$famc">
       <xsl:sort select="number(@num)" data-type="number"/>
       <xsl:variable name="me" select="."/>
-      <xsl:variable name="grp" select="$raw/c[@gk = $me/@gk]"/>
+      <xsl:variable name="grp" select="$famc[@gk = $me/@gk]"/>
       <!-- The lowest-numbered member speaks for the group. -->
       <xsl:if test="count($grp[number(@num) &lt; number($me/@num)]) = 0">
         <xsl:choose>
-          <xsl:when test="count($grp) &gt;= 2 and string-length(@famn) &gt; 0">
+          <xsl:when test="count($grp) &gt;= 2">
             <xsl:variable name="hi">
               <xsl:for-each select="$grp">
                 <xsl:sort select="number(@num)" data-type="number" order="descending"/>
@@ -2227,8 +2304,9 @@ SPDX-License-Identifier: GPL-2.0-or-later
                 </xsl:if>
               </xsl:for-each>
             </xsl:variable>
-            <c num="{@num}" proto="{@proto}" gk="{@gk}" famn="{@famn}"
+            <c num="{@num}" proto="{@proto}" gk="{@gk}" famn="{@famn}" fams="{@fams}"
                label="{concat(@num,'-',$hi)}" collapsed="1"
+               blabel="{concat(@num,'-',$hi,'/',gvm:hx-upper(@proto))}"
                state="{$best}" srank="{gvm:hx-rank(string($best))}" cvss="{$cv}"
                nfind="{sum($grp/@nfind)}"
                nips="{count(str:tokenize(string($merged),' ')[not(string(.) = preceding-sibling::*)])}"
@@ -2241,10 +2319,14 @@ SPDX-License-Identifier: GPL-2.0-or-later
                   <xsl:value-of select="@num"/>
                 </xsl:for-each>
               </xsl:attribute>
+              <!-- A family label ("netbios-rpc" over 135-139) is neither an
+                   observation nor a registry entry for any single member, so it
+                   gets its own source, marker and footnote instead of borrowing
+                   the IANA dagger. @svcs is the short form the board prints. -->
               <xsl:attribute name="svcsrc">
                 <xsl:choose>
                   <xsl:when test="count($scanned) &gt; 0">scan</xsl:when>
-                  <xsl:when test="number($hexmap-iana-names) = 1">iana</xsl:when>
+                  <xsl:when test="number($hexmap-iana-names) = 1">fam</xsl:when>
                   <xsl:otherwise>proto</xsl:otherwise>
                 </xsl:choose>
               </xsl:attribute>
@@ -2260,6 +2342,26 @@ SPDX-License-Identifier: GPL-2.0-or-later
                   <xsl:otherwise><xsl:value-of select="@proto"/></xsl:otherwise>
                 </xsl:choose>
               </xsl:attribute>
+              <xsl:attribute name="svcs">
+                <xsl:choose>
+                  <xsl:when test="count($scanned) &gt; 0">
+                    <xsl:for-each select="$scanned">
+                      <xsl:sort select="number(@num)" data-type="number"/>
+                      <xsl:if test="position() = 1"><xsl:value-of select="@svc"/></xsl:if>
+                    </xsl:for-each>
+                  </xsl:when>
+                  <xsl:when test="number($hexmap-iana-names) = 1"><xsl:value-of select="@fams"/></xsl:when>
+                  <xsl:otherwise><xsl:value-of select="@proto"/></xsl:otherwise>
+                </xsl:choose>
+              </xsl:attribute>
+              <!-- The addresses of each member port, so the table can stop
+                   asserting that every member sits on the union of the family's
+                   hosts (137 was on one host, 139 on two: printing the union
+                   against the member list invents a pair the scan never saw). -->
+              <xsl:for-each select="$grp">
+                <xsl:sort select="number(@num)" data-type="number"/>
+                <m num="{@num}" ips="{@ips}" nips="{@nips}"/>
+              </xsl:for-each>
             </c>
           </xsl:when>
           <xsl:otherwise>
@@ -2274,9 +2376,11 @@ SPDX-License-Identifier: GPL-2.0-or-later
        descending, port ascending on a tie), which is what the board cut uses;
        the DRAW order is port ascending and is applied later. -->
   <xsl:template name="hx-ordered-cells">
+    <xsl:param name="scope" select="'all'"/>
     <xsl:param name="hostip" select="''"/>
     <xsl:variable name="raw-rtf">
       <xsl:call-template name="hx-raw-cells">
+        <xsl:with-param name="scope" select="$scope"/>
         <xsl:with-param name="hostip" select="$hostip"/>
       </xsl:call-template>
     </xsl:variable>
@@ -2289,7 +2393,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
       <xsl:sort select="number(@srank)" data-type="number"/>
       <xsl:sort select="number(@num)" data-type="number"/>
       <xsl:sort select="@proto"/>
-      <c ord="{position()}"><xsl:copy-of select="@*"/></c>
+      <c ord="{position()}"><xsl:copy-of select="@*|node()"/></c>
     </xsl:for-each>
   </xsl:template>
 
@@ -2299,9 +2403,11 @@ SPDX-License-Identifier: GPL-2.0-or-later
     <xsl:param name="ord"/>
     <xsl:param name="max"/>
     <xsl:variable name="n" select="count($ord/c)"/>
+    <!-- The budget can never exceed what the board can actually hold. -->
+    <xsl:variable name="maxeff" select="gvm:hx-max2(1, gvm:hx-min2(number($max), $hx-cap))"/>
     <xsl:variable name="keep">
       <xsl:choose>
-        <xsl:when test="$n &gt; number($max)"><xsl:value-of select="number($max) - 1"/></xsl:when>
+        <xsl:when test="$n &gt; number($maxeff)"><xsl:value-of select="number($maxeff) - 1"/></xsl:when>
         <xsl:otherwise><xsl:value-of select="$n"/></xsl:otherwise>
       </xsl:choose>
     </xsl:variable>
@@ -2312,7 +2418,8 @@ SPDX-License-Identifier: GPL-2.0-or-later
     </xsl:for-each>
     <xsl:if test="$n &gt; number($keep)">
       <c num="0" proto="" label="{concat('+', $n - number($keep))}" members="" famn=""
-         svc="" svcsrc="over" state="neutro" srank="6" cvss="-1" qodlow="0"
+         blabel="{concat('+', $n - number($keep))}"
+         svc="" svcs="" svcsrc="over" state="neutro" srank="6" cvss="-1" qodlow="0"
          nfind="0" nips="0" ips=" " over="1" gk="" ord="0"/>
     </xsl:if>
   </xsl:template>
@@ -2372,20 +2479,32 @@ SPDX-License-Identifier: GPL-2.0-or-later
 </xsl:text>
       </xsl:if>
     </xsl:if>
-    <!-- line 1: service, upper case, at most 8 characters -->
+    <!-- line 1: service, upper case, at most 8 characters. A collapsed family
+         prints its short form (@svcs), the table keeps the integral name. -->
+    <xsl:variable name="svcsrc0">
+      <xsl:choose>
+        <xsl:when test="string-length(@svcs) &gt; 0"><xsl:value-of select="@svcs"/></xsl:when>
+        <xsl:otherwise><xsl:value-of select="@svc"/></xsl:otherwise>
+      </xsl:choose>
+    </xsl:variable>
     <xsl:variable name="svcup">
       <xsl:choose>
         <xsl:when test="@svcsrc = 'over'"><xsl:value-of select="gvm:t('hx_others')"/></xsl:when>
         <xsl:otherwise>
           <xsl:call-template name="hx-abbrev">
-            <xsl:with-param name="s" select="substring(gvm:hx-upper(string(@svc)), 1, 40)"/>
+            <xsl:with-param name="s" select="substring(gvm:hx-upper(string($svcsrc0)), 1, 40)"/>
           </xsl:call-template>
         </xsl:otherwise>
       </xsl:choose>
     </xsl:variable>
+    <!-- 90pt is what the hexagon really offers across the band this baseline
+         and its cap height occupy (the widest span is 98.7pt, at the corners
+         it is down to 94.5pt); the length is weighted so a run of W or M is
+         measured for what it costs. Both were budgets that under-measured
+         before: WWWWWWWW came out 21pt wider than the cell. -->
     <xsl:if test="string-length($svcup) &gt; 0">
       <xsl:text>\node[anchor=base,inner sep=0,text=hexFg,font=\fontsize{</xsl:text>
-      <xsl:value-of select="format-number(gvm:hx-fit(string-length($svcup), 19, 76, 0.62, 7), '0.##')"/>
+      <xsl:value-of select="format-number(gvm:hx-fit(gvm:hx-wlen($svcup), 19, 90, 0.75, 7), '0.##')"/>
       <xsl:text>}{0}\selectfont\bfseries] at (</xsl:text>
       <xsl:value-of select="concat($x,',',format-number($cy + 16, '0.##'))"/>
       <xsl:text>) {</xsl:text>
@@ -2393,13 +2512,16 @@ SPDX-License-Identifier: GPL-2.0-or-later
       <xsl:text>};
 </xsl:text>
     </xsl:if>
-    <!-- line 2: the port (or the collapsed range, or "+N") -->
+    <!-- line 2: the port WITH its transport (or the collapsed range, or "+N").
+         Without the transport the same number on tcp and on udp draws two
+         hexagons whose three lines of text are identical, and the per-host
+         board has no table underneath to tell them apart. -->
     <xsl:text>\node[anchor=base,inner sep=0,text=hexFg,font=\fontsize{</xsl:text>
-    <xsl:value-of select="format-number(gvm:hx-fit(string-length(@label), 28, 84, 0.58, 9), '0.##')"/>
+    <xsl:value-of select="format-number(gvm:hx-fit(string-length(@blabel), 28, 84, 0.58, 9), '0.##')"/>
     <xsl:text>}{0}\selectfont\bfseries] at (</xsl:text>
     <xsl:value-of select="concat($x,',',format-number($cy - 11, '0.##'))"/>
     <xsl:text>) {</xsl:text>
-    <xsl:call-template name="escape_text"><xsl:with-param name="string" select="string(@label)"/></xsl:call-template>
+    <xsl:call-template name="escape_text"><xsl:with-param name="string" select="string(@blabel)"/></xsl:call-template>
     <xsl:text>};
 </xsl:text>
     <!-- line 3: the mapped host (global board) or the finding tally (per host) -->
@@ -2409,7 +2531,21 @@ SPDX-License-Identifier: GPL-2.0-or-later
         <xsl:when test="$third = 'find'">
           <xsl:value-of select="concat(@nfind, ' ', gvm:t('hx_findings_n'))"/>
         </xsl:when>
-        <xsl:when test="number(@nips) = 1"><xsl:value-of select="normalize-space(@ips)"/></xsl:when>
+        <xsl:when test="number(@nips) = 1">
+          <!-- The baseline sits 35pt below the centre, where the hexagon is
+               only 76pt wide, and the type size bottoms out at 5pt: past 26
+               characters no size change can make the address fit, so it is
+               elided head and tail rather than printed across the outline (an
+               IPv6 in long form ran 22pt past it, into the next cell). The
+               integral address is in the Port -> IP table either way. -->
+          <xsl:variable name="ip1" select="normalize-space(@ips)"/>
+          <xsl:choose>
+            <xsl:when test="string-length($ip1) &lt;= 26"><xsl:value-of select="$ip1"/></xsl:when>
+            <xsl:otherwise>
+              <xsl:value-of select="concat(substring($ip1,1,11),'...',substring($ip1,string-length($ip1) - 10))"/>
+            </xsl:otherwise>
+          </xsl:choose>
+        </xsl:when>
         <xsl:when test="number(@nips) &gt; 1">
           <xsl:value-of select="concat(@nips, ' ', gvm:t('hx_ips_n'))"/>
         </xsl:when>
@@ -2417,7 +2553,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
     </xsl:variable>
     <xsl:if test="string-length($l3) &gt; 0">
       <xsl:text>\node[anchor=base,inner sep=0,text=hexMuted,font=\fontsize{</xsl:text>
-      <xsl:value-of select="format-number(gvm:hx-fit(string-length($l3), 12, 62, 0.52, 5), '0.##')"/>
+      <xsl:value-of select="format-number(gvm:hx-fit(string-length($l3), 12, 72, 0.52, 5), '0.##')"/>
       <xsl:text>}{0}\selectfont] at (</xsl:text>
       <xsl:value-of select="concat($x,',',format-number($cy - 35, '0.##'))"/>
       <xsl:text>) {</xsl:text>
@@ -2555,8 +2691,27 @@ SPDX-License-Identifier: GPL-2.0-or-later
     <!-- Header / legend type sizes, shrunk so the chrome never widens the panel
          beyond the board itself (a wider panel means a smaller board once the
          whole picture is scaled to the text width). -->
-    <xsl:variable name="tlen" select="string-length($title)"/>
-    <xsl:variable name="mlen" select="string-length($meta)"/>
+    <!-- Both strings come from the report: the title of a per-host board is the
+         host address and the metadata line carries the task name, neither of
+         which the scanner bounds. They size the panel, the panel sizes the
+         tikzpicture, and TeX refuses any dimension past 16383.99pt: an 8000
+         character task name asked for 33585pt and killed the whole PDF. Long
+         before that they simply crowd out the board, because the picture is
+         scaled to the text width as a whole - a 246 character task name shrank
+         a full-page board to 84mm. So they are cut to a length that can never
+         drive the panel wider than the legend already does, and what was cut is
+         shown as such. The uncut values are on the cover, in the running header
+         and in the host banner. -->
+    <xsl:variable name="title-c">
+      <xsl:value-of select="substring($title, 1, 60)"/>
+      <xsl:if test="string-length($title) &gt; 60"><xsl:text>...</xsl:text></xsl:if>
+    </xsl:variable>
+    <xsl:variable name="meta-c">
+      <xsl:value-of select="substring($meta, 1, 110)"/>
+      <xsl:if test="string-length($meta) &gt; 110"><xsl:text>...</xsl:text></xsl:if>
+    </xsl:variable>
+    <xsl:variable name="tlen" select="string-length($title-c)"/>
+    <xsl:variable name="mlen" select="string-length($meta-c)"/>
     <xsl:variable name="clen" select="string-length(gvm:t('hx_state_critico')) + string-length(gvm:t('hx_state_alto'))
                                     + string-length(gvm:t('hx_state_medio')) + string-length(gvm:t('hx_state_baixo'))
                                     + string-length(gvm:t('hx_state_exposto')) + string-length(gvm:t('hx_state_neutro'))
@@ -2567,7 +2722,10 @@ SPDX-License-Identifier: GPL-2.0-or-later
     <xsl:variable name="TW" select="$tf * 0.56 * $tlen"/>
     <xsl:variable name="MW" select="$mf * 0.52 * $mlen"/>
     <xsl:variable name="LW" select="$lf * (number($clen) * 0.55 + 17.34)"/>
-    <xsl:variable name="PW" select="gvm:hx-max2(gvm:hx-max2($BW, $TW), gvm:hx-max2($MW, $LW))"/>
+    <!-- Hard ceiling as well, so no future input can walk the picture past the
+         dimension TeX will accept. The widest board the geometry can produce is
+         under 1800pt, so this never binds on real data. -->
+    <xsl:variable name="PW" select="gvm:hx-min2(gvm:hx-max2(gvm:hx-max2($BW, $TW), gvm:hx-max2($MW, $LW)), 4000)"/>
     <xsl:variable name="PX" select="$PW div 2"/>
     <xsl:variable name="PY1" select="$BH div 2 + 100"/>
     <xsl:variable name="PY0" select="-($BH div 2) - 78"/>
@@ -2599,14 +2757,14 @@ SPDX-License-Identifier: GPL-2.0-or-later
     <xsl:text>}{0}\selectfont\bfseries] at (</xsl:text>
     <xsl:value-of select="concat(format-number(-$PX,'0.##'),',',format-number($PY1 - 20,'0.##'))"/>
     <xsl:text>) {</xsl:text>
-    <xsl:call-template name="escape_text"><xsl:with-param name="string" select="$title"/></xsl:call-template>
+    <xsl:call-template name="escape_text"><xsl:with-param name="string" select="string($title-c)"/></xsl:call-template>
     <xsl:text>};
 \node[anchor=north west,inner sep=0,text=hexMuted,font=\fontsize{</xsl:text>
     <xsl:value-of select="format-number($mf,'0.##')"/>
     <xsl:text>}{0}\selectfont] at (</xsl:text>
     <xsl:value-of select="concat(format-number(-$PX,'0.##'),',',format-number($PY1 - 26 - $tf * 1.2,'0.##'))"/>
     <xsl:text>) {</xsl:text>
-    <xsl:call-template name="escape_text"><xsl:with-param name="string" select="$meta"/></xsl:call-template>
+    <xsl:call-template name="escape_text"><xsl:with-param name="string" select="string($meta-c)"/></xsl:call-template>
     <xsl:text>};
 </xsl:text>
     <!-- cells, row by row -->
@@ -2681,6 +2839,33 @@ SPDX-License-Identifier: GPL-2.0-or-later
   <!-- Hexmap: Port -> IP table and the two document sections            -->
   <!-- ================================================================= -->
 
+  <!-- Escaped text with a break opportunity every 6 characters, for the two
+       fixed-width columns of the table below. A p{} column does not break a run
+       of letters, so a 16 character service name or an IPv6 in long form simply
+       printed past the column and over its neighbour (35pt to 88pt of overhang,
+       four Overfull boxes on one page). Runs short enough to fit are left whole
+       so an IPv4 address never breaks in half. The hard cut at 96 characters
+       bounds a field that is, after all, scanner-supplied text. -->
+  <xsl:template name="hx-brk">
+    <xsl:param name="s"/>
+    <xsl:param name="min" select="8"/>
+    <xsl:variable name="t" select="substring($s, 1, 96)"/>
+    <xsl:choose>
+      <xsl:when test="string-length($t) &lt;= number($min)">
+        <xsl:call-template name="escape_text"><xsl:with-param name="string" select="$t"/></xsl:call-template>
+      </xsl:when>
+      <xsl:otherwise>
+        <xsl:for-each select="$hx-ints/i[number(@v) * 6 &lt; string-length($t)]">
+          <xsl:if test="number(@v) &gt; 0"><xsl:text>\hspace{0pt}</xsl:text></xsl:if>
+          <xsl:call-template name="escape_text">
+            <xsl:with-param name="string" select="substring($t, number(@v) * 6 + 1, 6)"/>
+          </xsl:call-template>
+        </xsl:for-each>
+      </xsl:otherwise>
+    </xsl:choose>
+    <xsl:if test="string-length($s) &gt; 96"><xsl:text>...</xsl:text></xsl:if>
+  </xsl:template>
+
   <!-- State badge for the light-themed table. Same hues as the board, darkened
        so white text keeps its contrast on paper. -->
   <xsl:template name="hx-state-pill">
@@ -2725,8 +2910,9 @@ SPDX-License-Identifier: GPL-2.0-or-later
       <xsl:text> &amp; {\ttfamily </xsl:text>
       <xsl:call-template name="escape_text"><xsl:with-param name="string" select="string(@proto)"/></xsl:call-template>
       <xsl:text>} &amp; {\footnotesize </xsl:text>
-      <xsl:call-template name="escape_text"><xsl:with-param name="string" select="string(@svc)"/></xsl:call-template>
+      <xsl:call-template name="hx-brk"><xsl:with-param name="s" select="string(@svc)"/></xsl:call-template>
       <xsl:if test="@svcsrc = 'iana'"><xsl:text>\textsuperscript{\dag}</xsl:text></xsl:if>
+      <xsl:if test="@svcsrc = 'fam'"><xsl:text>\textsuperscript{*}</xsl:text></xsl:if>
       <xsl:text>} &amp; </xsl:text>
       <xsl:call-template name="hx-state-pill"><xsl:with-param name="st" select="string(@state)"/></xsl:call-template>
       <xsl:text> &amp; </xsl:text>
@@ -2741,24 +2927,51 @@ SPDX-License-Identifier: GPL-2.0-or-later
       <xsl:text> &amp; {\footnotesize </xsl:text>
       <xsl:value-of select="@nips"/>
       <xsl:text>} &amp; {\tiny\ttfamily </xsl:text>
-      <xsl:for-each select="str:tokenize(string(@ips), ' ')">
-        <xsl:if test="position() &lt;= 40">
-          <xsl:call-template name="escape_text"><xsl:with-param name="string" select="string(.)"/></xsl:call-template>
-          <xsl:text> </xsl:text>
-        </xsl:if>
-      </xsl:for-each>
-      <xsl:if test="number(@nips) &gt; 40">
-        <xsl:text>{\rmfamily\itshape\color{surMuted}</xsl:text>
-        <xsl:value-of select="gvm:t('hx_ip_more_a')"/>
-        <xsl:value-of select="number(@nips) - 40"/>
-        <xsl:value-of select="gvm:t('hx_ip_more_b')"/>
-        <xsl:text>}</xsl:text>
-      </xsl:if>
+      <!-- A collapsed family is ONE cell on the board but it is not one port
+           here: printing the union of the family's hosts next to the member
+           list asserts pairs the scan never saw (137 was on a single host while
+           the family spanned two). When the members do not share the same
+           addresses, each member gets its own line. -->
+      <xsl:variable name="cips" select="normalize-space(@ips)"/>
+      <xsl:choose>
+        <xsl:when test="@collapsed = '1' and count(m[normalize-space(@ips) != $cips]) &gt; 0">
+          <xsl:for-each select="m">
+            <xsl:if test="position() != 1"><xsl:text>\newline </xsl:text></xsl:if>
+            <xsl:text>{\bfseries </xsl:text>
+            <xsl:call-template name="escape_text"><xsl:with-param name="string" select="string(@num)"/></xsl:call-template>
+            <xsl:text>:} </xsl:text>
+            <xsl:call-template name="hx-ip-list"/>
+          </xsl:for-each>
+        </xsl:when>
+        <xsl:otherwise>
+          <xsl:call-template name="hx-ip-list"/>
+        </xsl:otherwise>
+      </xsl:choose>
       <xsl:text>} \\[0.3mm]
 </xsl:text>
     </xsl:for-each>
     <xsl:text>\end{longtable}
 </xsl:text>
+  </xsl:template>
+
+  <!-- The addresses of the context node's @ips, capped and breakable. -->
+  <xsl:template name="hx-ip-list">
+    <xsl:for-each select="str:tokenize(string(@ips), ' ')">
+      <xsl:if test="position() &lt;= 40">
+        <xsl:call-template name="hx-brk">
+          <xsl:with-param name="s" select="string(.)"/>
+          <xsl:with-param name="min" select="34"/>
+        </xsl:call-template>
+        <xsl:text> </xsl:text>
+      </xsl:if>
+    </xsl:for-each>
+    <xsl:if test="number(@nips) &gt; 40">
+      <xsl:text>{\rmfamily\itshape\color{surMuted}</xsl:text>
+      <xsl:value-of select="gvm:t('hx_ip_more_a')"/>
+      <xsl:value-of select="number(@nips) - 40"/>
+      <xsl:value-of select="gvm:t('hx_ip_more_b')"/>
+      <xsl:text>}</xsl:text>
+    </xsl:if>
   </xsl:template>
 
   <xsl:template name="hx-table-head">
@@ -2820,6 +3033,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
         <xsl:call-template name="hx-notes">
           <xsl:with-param name="omitted" select="$n - count(exsl:node-set($draw-rtf)/c[not(@over)])"/>
           <xsl:with-param name="iana" select="count($ord/c[@svcsrc='iana'])"/>
+          <xsl:with-param name="fam" select="count($ord/c[@svcsrc='fam'])"/>
           <xsl:with-param name="qodlow" select="count($ord/c[@qodlow='1'])"/>
         </xsl:call-template>
         <xsl:text>\vspace{2mm}
@@ -2834,13 +3048,14 @@ SPDX-License-Identifier: GPL-2.0-or-later
   <xsl:template name="hx-notes">
     <xsl:param name="omitted"/>
     <xsl:param name="iana"/>
+    <xsl:param name="fam" select="0"/>
     <xsl:param name="qodlow"/>
     <xsl:variable name="total" select="count(gvm:report()/results/result)"/>
     <xsl:variable name="rc-full" select="normalize-space(gvm:report()/result_count/text())"/>
     <xsl:variable name="partial"
       select="string-length($rc-full) &gt; 0 and floor(number($rc-full)) = number($rc-full) and number($rc-full) &gt; $total"/>
     <xsl:if test="$omitted &gt; 0 or number($hx-genhosts) &gt; 0 or number($hx-malformed) &gt; 0
-                  or $iana &gt; 0 or $qodlow &gt; 0 or $partial">
+                  or number($hx-noip) &gt; 0 or $iana &gt; 0 or $fam &gt; 0 or $qodlow &gt; 0 or $partial">
       <xsl:text>\vspace{-2mm}
 {\footnotesize\color{surMuted}
 </xsl:text>
@@ -2856,8 +3071,16 @@ SPDX-License-Identifier: GPL-2.0-or-later
         <xsl:value-of select="$hx-malformed"/><xsl:value-of select="gvm:t('hx_malformed_note')"/><xsl:text>\par
 </xsl:text>
       </xsl:if>
+      <xsl:if test="number($hx-noip) &gt; 0">
+        <xsl:value-of select="$hx-noip"/><xsl:value-of select="gvm:t('hx_noip_note')"/><xsl:text>\par
+</xsl:text>
+      </xsl:if>
       <xsl:if test="$partial">
         <xsl:value-of select="gvm:t('hx_partial')"/><xsl:text>\par
+</xsl:text>
+      </xsl:if>
+      <xsl:if test="$fam &gt; 0">
+        <xsl:text>\textsuperscript{*}</xsl:text><xsl:value-of select="gvm:t('hx_fam_note')"/><xsl:text>\par
 </xsl:text>
       </xsl:if>
       <xsl:if test="$iana &gt; 0">
@@ -2877,6 +3100,11 @@ SPDX-License-Identifier: GPL-2.0-or-later
        to be readable. When it is skipped the reader is told so, and why. -->
   <xsl:template name="hexmap-hosts-section">
     <xsl:variable name="nhosts" select="count(gvm:report()/host)"/>
+    <!-- A host record with no address cannot have a board: it has no identity
+         to put in the title and nothing to match its ports by. It is left out
+         and counted, never given the whole scope's ports by default. -->
+    <xsl:variable name="hosts" select="gvm:report()/host[string-length(normalize-space(ip)) &gt; 0]"/>
+    <xsl:variable name="noiph" select="$nhosts - count($hosts)"/>
     <xsl:variable name="nglobal" select="count(exsl:node-set($hx-ord-rtf)/c)"/>
     <xsl:text>\section{</xsl:text><xsl:value-of select="gvm:t('sec_hexmap_host')"/><xsl:text>}
 </xsl:text>
@@ -2890,21 +3118,23 @@ SPDX-License-Identifier: GPL-2.0-or-later
         <xsl:text>\par
 </xsl:text>
       </xsl:when>
-      <xsl:when test="$nhosts = 0 or $nglobal = 0">
+      <xsl:when test="count($hosts) = 0 or $nglobal = 0">
         <xsl:text>{\color{surMuted}</xsl:text><xsl:value-of select="gvm:t('hx_host_none')"/><xsl:text>}\par
 </xsl:text>
+        <xsl:call-template name="hx-noip-hosts-note"><xsl:with-param name="n" select="$noiph"/></xsl:call-template>
       </xsl:when>
       <xsl:otherwise>
         <xsl:value-of select="gvm:t('hx_host_intro')"/>
         <xsl:text>\par
 </xsl:text>
-        <xsl:for-each select="gvm:report()/host">
+        <xsl:call-template name="hx-noip-hosts-note"><xsl:with-param name="n" select="$noiph"/></xsl:call-template>
+        <xsl:for-each select="$hosts">
           <xsl:sort select="gvm:hx-oct(string(ip),1)" data-type="number"/>
           <xsl:sort select="gvm:hx-oct(string(ip),2)" data-type="number"/>
           <xsl:sort select="gvm:hx-oct(string(ip),3)" data-type="number"/>
           <xsl:sort select="gvm:hx-oct(string(ip),4)" data-type="number"/>
           <xsl:sort select="string(ip)"/>
-          <xsl:variable name="ip" select="string(ip)"/>
+          <xsl:variable name="ip" select="substring-before(concat(normalize-space(ip),' '),' ')"/>
           <xsl:variable name="hostname" select="string(detail[name='hostname']/value)"/>
           <xsl:variable name="os">
             <xsl:choose>
@@ -2914,6 +3144,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
           </xsl:variable>
           <xsl:variable name="hord-rtf">
             <xsl:call-template name="hx-ordered-cells">
+              <xsl:with-param name="scope" select="'host'"/>
               <xsl:with-param name="hostip" select="$ip"/>
             </xsl:call-template>
           </xsl:variable>
@@ -2960,11 +3191,21 @@ SPDX-License-Identifier: GPL-2.0-or-later
     </xsl:choose>
   </xsl:template>
 
+  <xsl:template name="hx-noip-hosts-note">
+    <xsl:param name="n"/>
+    <xsl:if test="number($n) &gt; 0">
+      <xsl:text>{\footnotesize\color{surMuted}</xsl:text>
+      <xsl:value-of select="$n"/><xsl:value-of select="gvm:t('hx_host_noip')"/>
+      <xsl:text>}\par
+</xsl:text>
+    </xsl:if>
+  </xsl:template>
+
   <!-- The global scope's cells, aggregated once and shared by the board and the
        Port -> IP table. -->
   <xsl:variable name="hx-ord-rtf">
     <xsl:call-template name="hx-ordered-cells">
-      <xsl:with-param name="hostip" select="''"/>
+      <xsl:with-param name="scope" select="'all'"/>
     </xsl:call-template>
   </xsl:variable>
 
