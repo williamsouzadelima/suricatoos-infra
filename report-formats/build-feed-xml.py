@@ -27,7 +27,7 @@ import os
 HERE = os.path.dirname(os.path.abspath(__file__))
 BUNDLE = os.path.join(HERE, "suricatoos-premium-pdf")
 
-VERSION = "20260811c"
+VERSION = "20260819a"
 
 # (lang code passed to xsltproc, report_format UUID, dropdown name).
 # EN keeps the original UUID so the already-deployed object is updated in place
@@ -39,31 +39,42 @@ LANGS = [
 ]
 
 SUMMARY = {
-    "en":    "Premium branded PDF vulnerability report (English). Version " + VERSION + ".",
-    "pt_BR": "Relatório PDF premium de vulnerabilidades (Português-BR). Versão " + VERSION + ".",
-    "es":    "Informe PDF premium de vulnerabilidades (Español). Versión " + VERSION + ".",
+    "en":    ("Premium branded PDF vulnerability report with the port and IP exposure map "
+              "(English). Version " + VERSION + "."),
+    "pt_BR": ("Relatório PDF premium de vulnerabilidades com o mapa de exposição de portas "
+              "e IPs (Português-BR). Versão " + VERSION + "."),
+    "es":    ("Informe PDF premium de vulnerabilidades con el mapa de exposición de puertos "
+              "e IPs (Español). Versión " + VERSION + "."),
 }
 DESCRIPTION = {
     "en": (
         "A premium, corporate vulnerability assessment report in PDF (English): "
-        "branded cover, executive risk summary with a severity dashboard, a hosts "
-        "and open-ports inventory, a findings summary table, and detailed findings "
-        "grouped by vulnerability (CVSS, CVEs, affected systems, remediation). "
-        "Version " + VERSION + "."
+        "branded cover, executive risk summary with a severity dashboard, a "
+        "hexagonal PORT EXPOSURE MAP that shows every (transport, port) in the "
+        "scope with its severity and the IP addresses mapped to it (plus a "
+        "per-host appendix), a hosts and open-ports inventory, a findings summary "
+        "table, and detailed findings grouped by vulnerability (CVSS, CVEs, "
+        "affected systems, remediation). Version " + VERSION + "."
     ),
     "pt_BR": (
         "Relatório corporativo premium de avaliação de vulnerabilidades em PDF "
         "(Português-BR): capa com a marca, resumo executivo de risco com painel de "
-        "severidade, inventário de hosts e portas abertas, tabela-resumo de achados "
-        "e achados detalhados agrupados por vulnerabilidade (CVSS, CVEs, sistemas "
-        "afetados, remediação). Versão " + VERSION + "."
+        "severidade, MAPA DE EXPOSIÇÃO DE PORTAS em favo de mel mostrando cada par "
+        "(transporte, porta) do escopo com sua severidade e os endereços IP "
+        "mapeados (mais um apêndice por host), inventário de hosts e portas "
+        "abertas, tabela-resumo de achados e achados detalhados agrupados por "
+        "vulnerabilidade (CVSS, CVEs, sistemas afetados, remediação). "
+        "Versão " + VERSION + "."
     ),
     "es": (
         "Informe corporativo premium de evaluación de vulnerabilidades en PDF "
         "(Español): portada con la marca, resumen ejecutivo de riesgo con panel de "
-        "severidad, inventario de hosts y puertos abiertos, tabla-resumen de "
-        "hallazgos y hallazgos detallados agrupados por vulnerabilidad (CVSS, CVEs, "
-        "sistemas afectados, remediación). Versión " + VERSION + "."
+        "severidad, MAPA DE EXPOSICIÓN DE PUERTOS en panal que muestra cada par "
+        "(transporte, puerto) del alcance con su severidad y las direcciones IP "
+        "mapeadas (más un apéndice por host), inventario de hosts y puertos "
+        "abiertos, tabla-resumen de hallazgos y hallazgos detallados agrupados por "
+        "vulnerabilidad (CVSS, CVEs, sistemas afectados, remediación). "
+        "Versión " + VERSION + "."
     ),
 }
 
