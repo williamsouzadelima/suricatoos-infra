@@ -1,0 +1,375 @@
+% suricatoos-hex.sty — the hexagonal port-exposure map.
+%
+% Draws section "Mapa de Exposição de Portas" (page 3 of the visual model): a
+% white card that frames a honeycomb board where every cell is one observed
+% network port, coloured by the highest severity seen on that port.
+%
+% Everything visual lives here; the .tex produced by the XSLT only passes data
+% (service name, port/proto, host, severity KEY).  No colour and no measurement
+% is ever spelled out at the call site.
+%
+% Engine: pdflatex ONLY (no fontspec).  Sizes are quoted in CSS px and converted
+% through \suripx/\suriFS from suricatoos-tokens.
+%
+% Copyright (C) 2026 Suricatoos.  SPDX-License-Identifier: GPL-2.0-or-later
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{suricatoos-hex}[2026/08/22 Suricatoos port exposure hex map]
+
+\RequirePackage{suricatoos-tokens}
+\RequirePackage{tikz}
+\usetikzlibrary{shapes.geometric}
+\RequirePackage{adjustbox}
+
+% ===========================================================================
+% 1. Geometry of the board (all in CSS px, all overridable with \renewcommand).
+% ===========================================================================
+% Footprint of one cell, vertex to vertex, STROKE INCLUDED — 88px is the number
+% the design quotes and the number the model measures on the outside of the
+% outline.  The polygon itself is therefore drawn \hexcellrule narrower, and its
+% flat-to-flat height follows as (w-rule)*sqrt(3)/2 + rule = 76.6px.
+\newcommand{\hexcellwidth}{88}
+% Centre-to-centre distance inside a row (width + the gap between neighbours).
+\newcommand{\hexcellpitch}{94}
+% Centre-to-centre distance between rows.  Smaller than the cell height on
+% purpose: consecutive rows interlock, later rows paint over earlier ones.
+\newcommand{\hexrowpitch}{61}
+% How far the board may spill into the card padding.  The model lets the widest
+% row bleed ~6px past the text block on each side so that one more cell fits.
+\newcommand{\hexboardbleed}{8}
+% Stroke of the cell outline.  The written spec says 2.5px, but the visual model
+% measures 2px: an alpha-weighted profile across the flat top edge of the cells
+% gives 2.104 device px at 100dpi on the model, which 2px reproduces exactly
+% (2.5px comes out at 2.571).  2.5px also closes the gaps between interlocked
+% neighbours and makes the whole board read heavy, so the model wins over the
+% prose.  \hexcellwidth already subtracts the rule from `minimum size', so the
+% 88px cell footprint is unchanged.
+\newcommand{\hexcellrule}{2}
+% Half of the cell footprint measured top to bottom, stroke included.
+\newcommand{\hex@halfheight}{(\hexcellwidth-\hexcellrule)*0.4330127+\hexcellrule/2}
+
+% ===========================================================================
+% 2. Icon library.
+%
+% Every icon is a 9x9px TikZ drawing, stroke 1.1px, drawn in \hexiconcolor
+% (default `muted').  The box sits 0.5px below the surrounding text baseline so
+% the icon optically centres on a line of 10px caps sitting next to it.
+% Each icon takes an optional colour: \icoglobe[alto].
+% ===========================================================================
+\newcommand{\hexiconcolor}{muted}
+
+% \suri@ico{colour}{path commands} — internal canvas, 9x9px, origin bottom-left.
+\newcommand{\suri@ico}[2]{%
+  \begin{tikzpicture}[x=\suripx{1},y=\suripx{1},baseline={\suripx{0.5}},%
+      line width=\suripx{1.1},line cap=round,line join=round,draw=#1]%
+    \useasboundingbox (0,0) rectangle (9,9);%
+    #2%
+  \end{tikzpicture}%
+}
+
+% \icofolder — folder with a raised left tab.  Service: FTP.
+\newcommand{\icofolder}[1][\hexiconcolor]{\suri@ico{#1}{%
+  \draw (0.7,1.0) -- (0.7,7.5) -- (3.3,7.5) -- (4.3,6.3)
+     -- (8.3,6.3) -- (8.3,1.0) -- cycle;}}
+
+% \icoterm — framed terminal prompt ">_".  Service: SSH/2222; also the
+% Linux/Unix operating-system badge used elsewhere in the report.
+\newcommand{\icoterm}[1][\hexiconcolor]{\suri@ico{#1}{%
+  \draw (0.7,0.8) rectangle (8.3,8.2);
+  \draw (2.5,6.4) -- (4.2,5.2) -- (2.5,4.0);
+  \draw (5.0,3.3) -- (6.7,3.3);}}
+
+% \icodns — three linked nodes (one parent, two children).  Service: DOMAIN/DNS.
+\newcommand{\icodns}[1][\hexiconcolor]{\suri@ico{#1}{%
+  \draw (4.5,7.4) circle (1.15);
+  \draw (1.5,1.6) circle (1.15);
+  \draw (7.5,1.6) circle (1.15);
+  \draw (4.5,6.25) -- (4.5,4.9);
+  \draw (4.5,4.9) -- (2.2,2.6);
+  \draw (4.5,4.9) -- (6.8,2.6);}}
+
+% \icoglobe — meridian globe.  Service: HTTP.
+\newcommand{\icoglobe}[1][\hexiconcolor]{\suri@ico{#1}{%
+  \draw (4.5,4.3) circle (3.85);
+  \draw (0.65,4.3) -- (8.35,4.3);
+  \draw (4.5,0.45) -- (4.5,8.15);
+  \draw (4.5,4.3) ellipse (2.0 and 3.85);}}
+
+% \icomail — envelope with a V flap.  Services: POP3, IMAP, SMTP.
+\newcommand{\icomail}[1][\hexiconcolor]{\suri@ico{#1}{%
+  \draw (0.7,1.3) rectangle (8.3,7.2);
+  \draw (0.7,7.2) -- (4.5,4.3) -- (8.3,7.2);}}
+
+% \icolock — padlock.  Services: HTTPS, IMAPS, POP3S — anything TLS-wrapped.
+\newcommand{\icolock}[1][\hexiconcolor]{\suri@ico{#1}{%
+  \draw (1.4,0.7) rectangle (7.6,5.1);
+  \draw (2.9,5.1) -- (2.9,6.3) arc (180:0:1.6) -- (6.1,5.1);}}
+
+% \icochip — square die with four pins.  Generic TCP port with no known service.
+\newcommand{\icochip}[1][\hexiconcolor]{\suri@ico{#1}{%
+  \draw (2.4,2.4) rectangle (6.6,6.6);
+  \draw (4.5,6.6) -- (4.5,8.4);
+  \draw (4.5,2.4) -- (4.5,0.6);
+  \draw (2.4,4.5) -- (0.6,4.5);
+  \draw (6.6,4.5) -- (8.4,4.5);}}
+
+% \icodb — cylinder.  Service: MySQL and any other database port.
+\newcommand{\icodb}[1][\hexiconcolor]{\suri@ico{#1}{%
+  \draw (4.5,7.0) ellipse (3.3 and 1.5);
+  \draw (1.2,7.0) -- (1.2,2.5);
+  \draw (7.8,7.0) -- (7.8,2.5);
+  \draw (1.2,4.75) arc (180:360:3.3 and 1.5);
+  \draw (1.2,2.5) arc (180:360:3.3 and 1.5);}}
+
+% --- service name -> icon -------------------------------------------------
+% Keys are lower case; \icofor lowercases whatever the data hands it.  Anything
+% unknown falls back to the generic chip, which is what the model uses for the
+% "just a TCP port" cells.
+\newcommand{\suri@icomap}[2]{\expandafter\def\csname suri@ico@#1\endcsname{#2}}
+\suri@icomap{ftp}{\icofolder}
+\suri@icomap{ftps}{\icolock}
+\suri@icomap{ssh}{\icoterm}
+\suri@icomap{2222}{\icoterm}
+\suri@icomap{linux}{\icoterm}
+\suri@icomap{unix}{\icoterm}
+\suri@icomap{telnet}{\icoterm}
+\suri@icomap{domain}{\icodns}
+\suri@icomap{dns}{\icodns}
+\suri@icomap{http}{\icoglobe}
+\suri@icomap{www}{\icoglobe}
+\suri@icomap{http-alt}{\icoglobe}
+\suri@icomap{https}{\icolock}
+\suri@icomap{imaps}{\icolock}
+\suri@icomap{pop3s}{\icolock}
+\suri@icomap{smtps}{\icolock}
+\suri@icomap{ssl}{\icolock}
+\suri@icomap{pop3}{\icomail}
+\suri@icomap{imap}{\icomail}
+\suri@icomap{smtp}{\icomail}
+\suri@icomap{submission}{\icomail}
+\suri@icomap{mysql}{\icodb}
+\suri@icomap{postgresql}{\icodb}
+\suri@icomap{mongodb}{\icodb}
+\suri@icomap{tcp}{\icochip}
+
+% \suri@lc\macro{text} — \macro := lower-cased text (\lowercase touches only
+% character tokens, so the \def and the macro name survive intact).
+\newcommand{\suri@lc}[2]{\lowercase{\def#1{#2}}}
+
+% \icofor[colour]{service} — the icon that belongs to this service name.
+\newcommand{\icofor}[2][\hexiconcolor]{%
+  \begingroup
+    \suri@lc\suri@ickey{#2}%
+    \ifcsname suri@ico@\suri@ickey\endcsname
+      \csname suri@ico@\suri@ickey\endcsname[#1]%
+    \else
+      \icochip[#1]%
+    \fi
+  \endgroup}
+
+% ===========================================================================
+% 3. Severity -> paint.
+% ===========================================================================
+% \hexfill{key} — the cell fill.  \sevbg for everything, except `alto': next to
+% a hairline-thin stroke the pale altobg reads as white, so the model uses the
+% deeper peach of the same pair.  Both are tokens from suricatoos-tokens.
+\newcommand{\hexfill}[1]{%
+  \ifcsname hex@fill@#1\endcsname\csname hex@fill@#1\endcsname\else\sevbg{#1}\fi}
+\expandafter\def\csname hex@fill@alto\endcsname{altobgdeep}
+
+% Severities loud enough to tint their own icon and service name instead of
+% leaving them ink/muted (the model does this on ALTO; CRÍTICO follows).
+\expandafter\def\csname hex@accent@alto\endcsname{1}
+\expandafter\def\csname hex@accent@critico\endcsname{1}
+
+% ===========================================================================
+% 4. One cell.
+% ===========================================================================
+% Baselines of the three text lines, in px above (+) / below (-) the centre of
+% the hexagon, and the widest each line may get before it is scaled down to fit
+% between the slanted sides.
+\newcommand{\hex@baseone}{6.9}
+\newcommand{\hex@basetwo}{-4.6}
+\newcommand{\hex@basethree}{-13.2}
+\newcommand{\hex@maxone}{62}
+\newcommand{\hex@maxtwo}{72}
+\newcommand{\hex@maxthree}{63}
+
+% \hex@cell{x}{y}{service}{port/proto}{host}{severity key}
+% Draws one hexagon centred on (x,y) inside an open tikzpicture whose unit is
+% 1px.  Nothing here escapes the cell: each line is clamped with \adjustbox, so
+% an over-long service name or hostname shrinks instead of bleeding out.
+\newcommand{\hex@cell}[6]{%
+  \edef\hex@stroke{\sevcolor{#6}}%
+  \edef\hex@bg{\hexfill{#6}}%
+  \ifcsname hex@accent@#6\endcsname
+    \edef\hex@txt{\hex@stroke}\edef\hex@ico{\hex@stroke}%
+  \else
+    \def\hex@txt{ink}\def\hex@ico{muted}%
+  \fi
+  % pgf draws a 6-sided `regular polygon' with its vertices already at LEFT and
+  % RIGHT (flat top and bottom) — measured in the lab, not assumed — so no
+  % `shape border rotate' is wanted here: adding one turns the cell pointy-top
+  % and breaks the interlock.  `minimum size' is the vertex-to-vertex size of
+  % the PATH, so the stroke is taken off it to keep the 88px footprint.
+  \node[regular polygon,regular polygon sides=6,
+        minimum size=\dimexpr\suripx{\hexcellwidth}-\suripx{\hexcellrule}\relax,
+        inner sep=0pt,outer sep=0pt,
+        draw=\hex@stroke,fill=\hex@bg,line width=\suripx{\hexcellrule}]
+       at (#1,#2) {};
+  \node[anchor=base,inner sep=0pt] at ({#1},{#2+\hex@baseone}) {%
+    \adjustbox{max width=\suripx{\hex@maxone}}{%
+      \renewcommand{\hexiconcolor}{\hex@ico}%
+      \icofor{#3}\hspace{\suripx{3.5}}%
+      {\color{\hex@txt}\suriSans\bfseries\suriFS{10}{10}\MakeUppercase{#3}}}};
+  \node[anchor=base,inner sep=0pt] at ({#1},{#2+\hex@basetwo}) {%
+    \adjustbox{max width=\suripx{\hex@maxtwo}}{%
+      {\color{ink}\suriMono\bfseries\suriFS{9}{9}#4}}};
+  \node[anchor=base,inner sep=0pt] at ({#1},{#2+\hex@basethree}) {%
+    \adjustbox{max width=\suripx{\hex@maxthree}}{%
+      {\color{muted}\suriMono\suriFS{7}{7}#5}}};
+}
+
+% ===========================================================================
+% 5. The board.
+% ===========================================================================
+\newcounter{hex@count}
+\newif\ifhex@inboard
+\newcount\hex@i \newcount\hex@r \newcount\hex@c
+\newlength{\hex@avail}
+
+% \hexport{SERVIÇO}{80/TCP}{162.241.63.40}{alto} — one hexagonal cell.
+% Inside a `hexboard' it is queued and laid out by the board; used on its own it
+% draws a single free-standing cell.
+\newcommand{\hexport}[4]{%
+  \ifhex@inboard
+    \stepcounter{hex@count}%
+    \expandafter\gdef\csname hex@svc@\number\value{hex@count}\endcsname{#1}%
+    \expandafter\gdef\csname hex@prt@\number\value{hex@count}\endcsname{#2}%
+    \expandafter\gdef\csname hex@hst@\number\value{hex@count}\endcsname{#3}%
+    \expandafter\gdef\csname hex@sev@\number\value{hex@count}\endcsname{#4}%
+  \else
+    \pgfmathsetmacro{\hex@halfh}{\hex@halfheight}%
+    \begin{tikzpicture}[x=\suripx{1},y=\suripx{1},%
+        baseline={\suripx{-\hex@halfh}}]%
+      \useasboundingbox (-\hexcellwidth/2,-\hex@halfh)
+                 rectangle (\hexcellwidth/2,\hex@halfh);%
+      \hex@cell{0}{0}{#1}{#2}{#3}{#4}%
+    \end{tikzpicture}%
+  \fi}
+
+% \begin{hexboard} \hexport... \end{hexboard} — honeycomb of N cells.
+%
+% Layout: as many cells per row as the usable width takes (the card width plus
+% \hexboardbleed on each side), then the N cells are spread as EVENLY as
+% possible over the resulting number of rows and every row is centred.  That is
+% what produces the model's 7 / 6 / 6 for 19 ports, and it is why rows of
+% different length come out offset by half a cell — the honeycomb interlock is a
+% consequence of centring, not a special case, so any N stays coherent.
+% The body is read in vertical mode, where TeX drops the whitespace between the
+% \hexport calls, so the board never picks up stray spacing.
+\newenvironment{hexboard}{%
+  \par\setcounter{hex@count}{0}\hex@inboardtrue}{%
+  \hex@inboardfalse\hex@render}
+
+\newcommand{\hex@render}{%
+  \ifnum\value{hex@count}>0
+  % --- how many fit in a row -------------------------------------------
+  \setlength{\hex@avail}{\dimexpr\linewidth+\suripx{\hexboardbleed}*2
+                                -\suripx{\hexcellwidth}\relax}%
+  \ifdim\hex@avail<0pt \setlength{\hex@avail}{0pt}\fi
+  % floor(avail/pitch)+1 — \numexpr rounds, so shift by half a divisor.
+  \edef\hex@perrow{\the\numexpr(2*\number\hex@avail-\number\suripx{\hexcellpitch})
+                               /(2*\number\suripx{\hexcellpitch})+1\relax}%
+  \ifnum\hex@perrow<1 \def\hex@perrow{1}\fi
+  % --- rows, and an even split of the cells over them -------------------
+  \edef\hex@rows{\the\numexpr(2*(\value{hex@count}+\hex@perrow-1)-\hex@perrow)
+                             /(2*\hex@perrow)\relax}%
+  \ifnum\hex@rows<1 \def\hex@rows{1}\fi
+  \edef\hex@base{\the\numexpr(2*\value{hex@count}-\hex@rows)/(2*\hex@rows)\relax}%
+  \edef\hex@extra{\the\numexpr\value{hex@count}-\hex@base*\hex@rows\relax}%
+  \pgfmathsetmacro{\hex@halfh}{\hex@halfheight}%
+  \pgfmathsetmacro{\hex@bottom}{-((\hex@rows-1)*\hexrowpitch+\hex@halfh)}%
+  \pgfmathsetmacro{\hex@wide}{(\hex@base+(\hex@extra>0?1:0)-1)*\hexcellpitch
+                              +\hexcellwidth}%
+  % \nointerlineskip everywhere: the board and the legend are positioned by the
+  % px measurements below, never by \baselineskip.
+  \par\nointerlineskip\noindent\makebox[\linewidth][c]{%
+    \begin{tikzpicture}[x=\suripx{1},y=\suripx{1},%
+        baseline={\suripx{\hex@bottom}}]%
+      \useasboundingbox (-\hex@wide/2,\hex@bottom)
+                 rectangle (\hex@wide/2,\hex@halfh);%
+      \setcounter{hex@count}{0}%
+      \hex@r=0
+      \@whilenum\hex@r<\hex@rows\do{%
+        \hex@c=\hex@base
+        \ifnum\hex@r<\hex@extra \advance\hex@c by 1\fi
+        \hex@i=0
+        \@whilenum\hex@i<\hex@c\do{%
+          \stepcounter{hex@count}%
+          \pgfmathsetmacro{\hex@x}{(\the\hex@i-(\the\hex@c-1)/2)*\hexcellpitch}%
+          \pgfmathsetmacro{\hex@y}{-\the\hex@r*\hexrowpitch}%
+          \edef\hex@args{{\hex@x}{\hex@y}%
+            {\csname hex@svc@\number\value{hex@count}\endcsname}%
+            {\csname hex@prt@\number\value{hex@count}\endcsname}%
+            {\csname hex@hst@\number\value{hex@count}\endcsname}%
+            {\csname hex@sev@\number\value{hex@count}\endcsname}}%
+          \expandafter\hex@cell\hex@args
+          \advance\hex@i by 1}%
+        \advance\hex@r by 1}%
+    \end{tikzpicture}}%
+  \par
+  \fi}
+
+% ===========================================================================
+% 6. Legend.
+% ===========================================================================
+% \hexlegenditem{severity key}{label}{count} — swatch + "LABEL (n)" in Mono.
+\newcommand{\hexlegenditem}[3]{%
+  \textcolor{\sevcolor{#1}}{\rule{\suripx{8}}{\suripx{8}}}\hspace{\suripx{6.5}}%
+  {\color{muted}\suriMono\suriFS{8.5}{8.5}\MakeUppercase{#2} (#3)}}
+
+% \hexlegend{crít}{alto}{médio}{baixo}{exposto}{neutro} — the six counts, on one
+% centred line under a hairline that closes the board.
+\newcommand{\hexlegend}[6]{%
+  \par\nointerlineskip\vspace{\suripx{22}}%
+  \noindent\textcolor{hairlinetwo}{\rule{\linewidth}{\suripx{1}}}%
+  \par\nointerlineskip\vspace{\suripx{15}}%
+  % \adjustbox so a narrow column shrinks the row instead of spilling it out of
+  % the card; at full report width the six items fit at their natural size.
+  \noindent\makebox[\linewidth][c]{\adjustbox{max width=\linewidth}{%
+    \hexlegenditem{critico}{crítico}{#1}\hspace{\suripx{18}}%
+    \hexlegenditem{alto}{alto}{#2}\hspace{\suripx{18}}%
+    \hexlegenditem{medio}{médio}{#3}\hspace{\suripx{18}}%
+    \hexlegenditem{baixo}{baixo}{#4}\hspace{\suripx{18}}%
+    \hexlegenditem{exposto}{exposto}{#5}\hspace{\suripx{18}}%
+    \hexlegenditem{neutro}{neutro}{#6}}}%
+  \par}
+
+% ===========================================================================
+% 7. Card.
+% ===========================================================================
+% \hexcard{loga.com.br}{1 host · 19 portas únicas · qua, 1 jul 2026}{board}
+% White card with a hairline border: domain in Mono bold on the left, the scope
+% line in Mono grey on the right, then whatever the third argument draws
+% (normally a hexboard followed by a \hexlegend).
+% The domain is tracked at 145/1000em, not at the \suritrack of the upper-case
+% labels: it is lower case and it is the only tracked run in the design that is
+% not a label.  145 is measured, not guessed — "loga.com.br" sets 83px wide on
+% the model, and 143..147 is the whole range that rasterises to 83px.
+\newcommand{\hexcard}[3]{%
+  \par\begingroup
+    \setlength{\fboxrule}{\suripx{1}}%
+    \setlength{\fboxsep}{\suripx{21}}%
+    \noindent\fcolorbox{hairline}{card}{%
+      \begin{minipage}{\dimexpr\linewidth-\fboxsep*2-\fboxrule*2\relax}%
+        \parindent=0pt\relax
+        \vspace*{\suripx{5}}%
+        {\color{ink}\suriMono\bfseries\suriFS{10}{10}\textls[145]{#1}}%
+        \hfill
+        {\color{muted}\suriMono\suriFS{9}{9}#2}%
+        \par\nointerlineskip\vspace{\suripx{22}}%
+        #3%
+      \end{minipage}}%
+  \endgroup\par}
+
+\endinput

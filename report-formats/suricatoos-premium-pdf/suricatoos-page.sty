@@ -1,0 +1,478 @@
+% suricatoos-page.sty — page furniture for the Suricatoos vulnerability report.
+%
+% This module owns everything that repeats on (or replaces) a page: the paper
+% geometry, the running header and footer, the section opener, the navy cover
+% and the navy back cover.  It draws; it does not name colours or sizes — those
+% come from suricatoos-tokens.sty, which is the contract.
+%
+% Every measurement below is quoted in the design's CSS pixels and converted
+% through \suripx / \suri@u, exactly like the rest of the system.  The reference
+% is the visual model: pg-01 (cover), pg-02..09 (header, footer, section title),
+% pg-10 (back cover).
+%
+% Engine: pdflatex ONLY (no fontspec / luaotfload in the production container).
+% No rounded corners, no shadows, no gradients: flat rules and hairlines.
+%
+% Copyright (C) 2026 Suricatoos.  SPDX-License-Identifier: GPL-2.0-or-later
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{suricatoos-page}[2026/08/22 Suricatoos report page furniture]
+
+\RequirePackage{suricatoos-tokens}
+\RequirePackage{geometry}
+\RequirePackage{fancyhdr}
+\RequirePackage{lastpage}
+\RequirePackage{graphicx}
+\RequirePackage{eso-pic}
+\RequirePackage{tikz}
+\RequirePackage{xkeyval}
+
+% ---------------------------------------------------------------------------
+% Internals: px as a *literal* dimension.
+%
+% \suripx expands to an unevaluated \dimexpr, which every length-taking macro in
+% here swallows happily.  A few places want a finished dimension instead -- the
+% geometry keys, which are re-read, and TikZ line widths -- so \suri@u{11.5}
+% expands all the way to "8.625pt" for those.
+% ---------------------------------------------------------------------------
+\newcommand{\suri@u}[1]{\the\dimexpr#1pt*3/4\relax}
+% y of a point #1 px above the bottom edge, in the cover's coordinate system
+% (origin at the top-left corner, y growing downwards).  Blocks that hang off
+% the foot of the page are measured from the foot, so their margin is exactly
+% the one at the top and the left.
+\newcommand{\suri@fb}[1]{\dimexpr\suripx{#1}-\paperheight\relax}
+
+% ---------------------------------------------------------------------------
+% Colours that only ever appear on a navy ground.
+%
+% The token palette has no entry for "grey text on navy": `muted' and `body' are
+% tuned for paper and go muddy over #101B29.  These two are the cover/back-cover
+% greys measured off the model, and they are deliberately local to this module.
+% ---------------------------------------------------------------------------
+\definecolor{navylabel}{HTML}{67809F}  % labels/lockups over navy (pg-01, pg-10)
+\definecolor{navytext}{HTML}{8FA0B5}   % running text over navy (subtitle, note)
+% The warm off-white the model fills the cover title and the cover's metadata
+% values with.  `paper' (#FBFAF7) is the colour of a light PAGE; over navy the
+% model goes two shades warmer, and side by side the difference is measurable.
+\definecolor{papernavy}{HTML}{F4F2EE}  % display type over navy (pg-01)
+
+% ---------------------------------------------------------------------------
+% Tracking, locally.
+%
+% \suritrack in the contract is a single number (220/1000 em), but the model
+% tracks by size and by role: ~245 on the cover kicker at 11.5px, ~165 on the
+% cover's 9.5px metadata labels, ~145 on the header runner.  Rather than fork
+% the label helpers, these two rebind \suritrack inside their own group, so the
+% contract's \lbl keeps doing the drawing.
+%
+% \suri@lbl{tracking}{colour}{px}{text}  -- tracked upper-case Mono label
+% \suri@lblb{...same...}                 -- ditto in Mono BOLD (plxMono-Bold)
+%
+% The value is frozen with \edef before \suritrack is re-let to it, so passing
+% \suritrack itself ("keep the contract's tracking, just make it bold") cannot
+% turn the token into a definition of itself -- which loops forever the first
+% time \textls tries to read it as a number.
+% ---------------------------------------------------------------------------
+\newcommand{\suri@track}[1]{\edef\suri@track@{#1}\let\suritrack\suri@track@}
+\newcommand{\suri@lbl}[4]{{\suri@track{#1}\lblcs{#2}{#3}{#4}}}
+\newcommand{\suri@lblb}[4]{{\suri@track{#1}\bfseries\lblcs{#2}{#3}{#4}}}
+% Display type is tracked the other way: the cover title is set tight, -25/1000
+% em, which is what brings its two lines back to the model's 534 and 480 px.
+\newcommand{\suricovertrack}{-25}
+
+% ---------------------------------------------------------------------------
+% Paper.
+%
+% A4.  Side margins are 56px (=42pt): the model's text block runs 58..767 in the
+% 100dpi raster, i.e. 682 design px wide, and the 64px margins this module used
+% to carry made every rule, card and table 16px too narrow.
+%
+% The body starts 109px from the top edge and the header block lives above it:
+% 36px tall (one more than the 35px \suri@headstrut declares, so fancyhdr never
+% has to complain) with 31px of air below it.  That pins the header baseline at
+% y=60.5px and, with the 16.5px drop inside \suri@header, the 2px ink rule at
+% y=75..77px, which is where the model draws it; the first ink of a section
+% title lands at y=128px.  The footer baseline sits 42px below the body, i.e.
+% 63px off the bottom edge.
+% ---------------------------------------------------------------------------
+\geometry{
+  a4paper,
+  left=\suri@u{56}, right=\suri@u{56},
+  top=\suri@u{109}, bottom=\suri@u{105},
+  headheight=\suri@u{36}, headsep=\suri@u{31},
+  footskip=\suri@u{42}
+}
+
+% ---------------------------------------------------------------------------
+% Brand assets.
+%
+% The logo PDFs travel with the report format bundle and are resolved relative
+% to the generator's working directory.  The dark wordmark is the newest of the
+% four, so both wordmark helpers degrade to set type rather than aborting the
+% run if the file has not been installed yet.
+%
+% \suriWordmarkDark{px} / \suriWordmarkLight{px}: the horizontal logotype, drawn
+%   to the given height in design px, for light and navy grounds respectively.
+% \suriMarkLight{px}: the square meerkat mark alone, for the navy back cover.
+%   Its art board is NOT centred on its ink -- rasterised on its own the drawing
+%   sits at x 53..500 of a 605px canvas, 51px more air on the right than on the
+%   left -- so a node that centres the BOX puts the mark 5px left of the page
+%   axis.  Trimming that surplus off the right edge (9.35bp of the 108.75bp
+%   board) makes box and ink concentric without touching the height the caller
+%   asked for.
+% ---------------------------------------------------------------------------
+% Degradation path when a logo PDF is missing: the wordmark set as type, at
+% 1.1x the requested height so its cap sits about where the logotype's would.
+\newcommand{\suri@logofallback}[2]{% #1 = height in px, #2 = colour
+  {\suriSB\fontsize{\dimexpr#1pt*33/40\relax}{\dimexpr#1pt*33/40\relax}\selectfont
+   \color{#2}Suricatoos}}
+
+\newcommand{\suriWordmarkDark}[1]{%
+  \IfFileExists{suricatoos-wordmark-navy.pdf}
+    {\includegraphics[height=\suripx{#1}]{suricatoos-wordmark-navy}}
+    {\suri@logofallback{#1}{ink}}}
+
+\newcommand{\suriWordmarkLight}[1]{%
+  \IfFileExists{suricatoos-wordmark-white.pdf}
+    {\includegraphics[height=\suripx{#1}]{suricatoos-wordmark-white}}
+    {\suri@logofallback{#1}{paper}}}
+
+\newcommand{\suriMarkLight}[1]{%
+  \IfFileExists{suricatoos-mark-white.pdf}
+    {\includegraphics[height=\suripx{#1},trim=0 0 9.35bp 0,clip]%
+       {suricatoos-mark-white}}
+    {\suri@logofallback{#1}{paper}}}
+
+% ---------------------------------------------------------------------------
+% Fixed strings of the furniture.
+%
+% They are macros, not literals, so the XSLT can translate the report without
+% touching the drawing code (\renewcommand in the preamble it emits).
+% ---------------------------------------------------------------------------
+\newcommand{\suriDocKind}{Relat\'orio de Avalia\c{c}\~ao de Vulnerabilidades}
+\newcommand{\suriConfidential}{CONFIDENCIAL}
+\newcommand{\suriPlatform}{SURICATOOS SECURITY PLATFORM}
+\newcommand{\suriPageWord}{P\'AGINA}
+\newcommand{\suriLockup}{SECURITY PLATFORM}
+
+% Cover metadata labels (fixed by the design, translatable by the caller).
+\newcommand{\suriLblProject}{PROJETO}
+\newcommand{\suriLblHosts}{HOSTS AVALIADOS}
+\newcommand{\suriLblScanStart}{IN\'ICIO DO SCAN}
+\newcommand{\suriLblScanEnd}{FIM DO SCAN}
+\newcommand{\suriLblReportDate}{DATA DO RELAT\'ORIO}
+\newcommand{\suriLblClass}{CLASSIFICA\c{C}\~AO}
+
+% ---------------------------------------------------------------------------
+% Section runner (the right-hand label of the header).
+%
+% \setsectionrunner{1}{RESUMO EXECUTIVO}  ->  "S1 . RESUMO EXECUTIVO" in Mono.
+% It is global and takes effect on the page where it is called, so the XSLT must
+% call it right after the \clearpage that opens the section.  \suriSection sets
+% it too, so the explicit call is only needed when the runner text differs from
+% the printed section title.
+% ---------------------------------------------------------------------------
+\newcommand{\suri@runner}{}
+% #1 = section number, #2 = section label (upper-cased on output)
+\newcommand{\setsectionrunner}[2]{%
+  \gdef\suri@runner{\S#1 \textperiodcentered\ #2}}
+
+% ---------------------------------------------------------------------------
+% Running header.
+%
+% Dark wordmark 13.9px tall, dropped 2.4px so its foot lands where the model's
+% does (the logotype's own art board leaves air under the ink); a 12px hairline
+% pipe; the document kind in muted 10.75px Sans (the spec rounds that to 10, but
+% the model's run measures 212px from the pipe to its last glyph and only 10.75
+% gets there); the section runner in Mono tracked at 138, far tighter than the
+% 220 of \suritrack, which is what the model's runner measures at this size.
+%
+% All of it sits on the 2px ink rule that closes the block.  The rule hangs 17px
+% below the baseline, which lands it on y=75..77px of the design grid -- where
+% the model draws it, and 2px lower than a naive reading of the spec puts it.
+%
+% Where the header lands, exactly.  LaTeX hangs the header box from the BOTTOM
+% of the header area -- which is at top-headsep = 78px from the top edge of the
+% paper -- and fancyhdr wraps whatever \fancyhead is given in a \parbox.  So the
+% baseline of that parbox sits at 78px minus the depth of its single line, and
+% the depth of a line nobody controls is the strut of the ambient font size.
+% \suri@headstrut nails that depth down to 18px, which puts the baseline at 60px
+% and makes the whole block immune to the document's font size.  Remove it and
+% the header creeps.  Everything else is drawn from that baseline inside
+% \rlap'd zero-height boxes, so it adds no height fancyhdr could complain about.
+% ---------------------------------------------------------------------------
+\newcommand{\suri@headstrut}{\rule[-\suripx{18}]{0pt}{\suripx{18}}}
+\newcommand{\suri@headseparator}{%
+  \textcolor{hairline}{\rule[-\suripx{1}]{\suripx{1}}{\suripx{12}}}}
+
+\newcommand{\suri@header}{%
+  \rlap{\hbox to \headwidth{%
+    \raisebox{-\suripx{2.4}}{\suriWordmarkDark{13.9}}%
+    \hspace{\suripx{12}}\suri@headseparator\hspace{\suripx{12}}%
+    {\suriSans\suriFS{10.75}{10.75}\color{muted}\suriDocKind}%
+    \hfill
+    \suri@lbl{138}{muted}{9.5}{\suri@runner}%
+  }}%
+  \rlap{\raisebox{-\suripx{17}}[0pt][0pt]{%
+    \textcolor{ink}{\rule{\headwidth}{\suripx{2}}}}}%
+  \suri@headstrut
+}
+
+% ---------------------------------------------------------------------------
+% Running footer.
+%
+% A 1px hairline 14px above the baseline (drawn in a zero-height box so it does
+% not move the text), then CONFIDENCIAL in carmine at the left, the platform
+% name centred and the page count at the right, all Mono 8.5px tracked.  The
+% outer items are zero-width boxes so the centre item is centred on the page,
+% not on whatever is left over.
+% ---------------------------------------------------------------------------
+% Tracked Mono at #1 px, with NO \MakeUppercase around it: the page counter and
+% the project name have to keep their own case, and \MakeUppercase would also
+% mangle \pageref's label into LASTPAGE.
+\newcommand{\suri@trk}[2]{{\suriMono\suriFS{#1}{#1}\textls[\suritrack]{#2}}}
+\newcommand{\suri@lastpage}{\pageref{LastPage}}
+
+\newcommand{\suri@footer}{%
+  \hbox to \headwidth{%
+    \rlap{\raisebox{\suripx{14}}[0pt][0pt]{%
+      \textcolor{hairline}{\rule{\headwidth}{\suripx{1}}}}}%
+    \makebox[0pt][l]{\lblcs{critico}{8.5}{\suriConfidential}}%
+    \hfill
+    \lblcs{muted}{8.5}{\suriPlatform}%
+    \hfill
+    \makebox[0pt][r]{\color{muted}%
+      \suri@trk{8.5}{\MakeUppercase{\suriPageWord}\ \thepage\ / \suri@lastpage}}%
+  }%
+}
+
+% Page style of every inner page: header + footer as above.
+\fancypagestyle{suricatoos}{%
+  \fancyhf{}%
+  \renewcommand{\headrulewidth}{0pt}%
+  \renewcommand{\footrulewidth}{0pt}%
+  \fancyhead[L]{\suri@header}%
+  \fancyfoot[L]{\suri@footer}%
+}
+% Cover and back cover: no furniture at all.
+\fancypagestyle{suribare}{%
+  \fancyhf{}%
+  \renewcommand{\headrulewidth}{0pt}%
+  \renewcommand{\footrulewidth}{0pt}%
+}
+
+% ---------------------------------------------------------------------------
+% \suriSection{1}{Resumo Executivo}
+%
+% The section opener: the number in carmine Mono BOLD 22px (the model's numeral
+% carries 1.5x the ink of the regular face inside an identical bounding box) and
+% the title in Sans semibold 25.5px, sharing one baseline, with the model's air
+% below.  It also sets the header runner to the upper-cased title.  Meant to be the first thing on a
+% page (the space above is discarded there, as at any page top).
+% ---------------------------------------------------------------------------
+\newcommand{\suriSection}[2]{%
+  \par\addvspace{\suripx{30}}%
+  \setsectionrunner{#1}{\MakeUppercase{#2}}%
+  \noindent
+  {\suriMono\bfseries\suriFS{22}{22}\color{critico}#1}%
+  \hspace{\suripx{13.5}}%
+  {\suriSB\suriFS{25.5}{25.5}\color{ink}%
+   % The model sets the title's word spaces ~1.5px tighter than Plex's own; at
+   % this size that is the whole of the residual width difference.
+   \spaceskip=\dimexpr\fontdimen2\font-\suripx{1.45}\relax
+     plus\fontdimen3\font minus\fontdimen4\font
+   #2}%
+  \par\nobreak\vspace{\suripx{17}}%
+  \color{body}%
+  \@afterindentfalse\@afterheading
+}
+
+% ---------------------------------------------------------------------------
+% Cover (pg-01).
+%
+% Keys, all optional, all data — no visual choices leak into the .tex:
+%   kicker=   tracked carmine line above the title
+%   title=    52px title; break the lines yourself with \\
+%   subtitle= grey line under the carmine bar
+%   projeto= hosts= inicio= fim= data= classificacao=
+%             the six values of the metadata grid at the foot
+% Labels of that grid come from \suriLbl... above.
+% ---------------------------------------------------------------------------
+\define@key{suri@cv}{kicker}{\gdef\suri@cv@kicker{#1}}
+\define@key{suri@cv}{title}{\gdef\suri@cv@title{#1}}
+\define@key{suri@cv}{subtitle}{\gdef\suri@cv@subtitle{#1}}
+\define@key{suri@cv}{projeto}{\gdef\suri@cv@projeto{#1}}
+\define@key{suri@cv}{hosts}{\gdef\suri@cv@hosts{#1}}
+\define@key{suri@cv}{inicio}{\gdef\suri@cv@inicio{#1}}
+\define@key{suri@cv}{fim}{\gdef\suri@cv@fim{#1}}
+\define@key{suri@cv}{data}{\gdef\suri@cv@data{#1}}
+\define@key{suri@cv}{classificacao}{\gdef\suri@cv@class{#1}}
+\gdef\suri@cv@kicker{}\gdef\suri@cv@title{}\gdef\suri@cv@subtitle{}
+\gdef\suri@cv@projeto{}\gdef\suri@cv@hosts{}\gdef\suri@cv@inicio{}
+\gdef\suri@cv@fim{}\gdef\suri@cv@data{}\gdef\suri@cv@class{}
+
+% One outline hexagon: #1,#2 = centre in px from the page's top-left corner,
+% #3 = width in px.  Flat top and bottom, vertices left and right; the vertical
+% half-diagonal of a regular hexagon is 0.4330127 of its width.
+% #4 = colour.  Coordinates are worked out in \dimexpr so no calc library is
+% needed and nothing is rounded twice.
+\newcommand{\suri@hex}[4]{%
+  \draw[#4, line width=\suri@u{1.2}, line join=miter]
+       (\the\dimexpr#1pt*3/4+#3pt*3/8\relax,
+       -\the\dimexpr#2pt*3/4\relax)
+    -- (\the\dimexpr#1pt*3/4+#3pt*3/16\relax,
+       -\the\dimexpr#2pt*3/4+#3pt*3248/10000\relax)
+    -- (\the\dimexpr#1pt*3/4-#3pt*3/16\relax,
+       -\the\dimexpr#2pt*3/4+#3pt*3248/10000\relax)
+    -- (\the\dimexpr#1pt*3/4-#3pt*3/8\relax,
+       -\the\dimexpr#2pt*3/4\relax)
+    -- (\the\dimexpr#1pt*3/4-#3pt*3/16\relax,
+       -\the\dimexpr#2pt*3/4-#3pt*3248/10000\relax)
+    -- (\the\dimexpr#1pt*3/4+#3pt*3/16\relax,
+       -\the\dimexpr#2pt*3/4-#3pt*3248/10000\relax)
+    -- cycle;}
+
+% Geometry of the cover's metadata grid, worked out from the real paper so the
+% right-hand column ends exactly on the right margin.
+%
+% Off the paper, deliberately, not off \textwidth: the cover keeps its own 64px
+% margin whatever the body's is, so a column derived from the text block would
+% drift every time the body margin moved.  64+64 of margin and 42 of gutter come
+% off the sheet, and what is left splits in two.
+\newlength{\suri@cvcolw}   % width of one metadata column
+\newlength{\suri@cvright}  % x of the right margin
+\AtBeginDocument{%
+  \setlength{\suri@cvcolw}{%
+    \dimexpr(\paperwidth-\suripx{64}-\suripx{64}-\suripx{42})/2\relax}%
+  \setlength{\suri@cvright}{\dimexpr\paperwidth-\suripx{64}\relax}}
+
+% One metadata cell: label at the left edge, value flush to the right edge.
+% #1 = left edge, #2 = right edge (both dimensions), #3 = baseline in px above
+% the bottom edge, #4 = label, #5 = value, #6 = colour of the value.
+\newcommand{\suri@cvcell}[6]{%
+  \node[anchor=base west, inner sep=0pt]
+    at (#1,\suri@fb{#3}) {\suri@lbl{165}{navylabel}{9.5}{#4}};
+  \node[anchor=base east, inner sep=0pt, text=#6]
+    at (#2,\suri@fb{#3}) {\suriFS{11}{11}\dat{#5}};}
+
+% One row of the grid: #1 = baseline in px above the bottom edge, then
+% label/value for the left and the right column, and the colour of the
+% right-hand value (gold for the classification, papernavy for the rest).
+\newcommand{\suri@cvrow}[6]{%
+  \suri@cvcell{\suripx{64}}{\dimexpr\suripx{64}+\suri@cvcolw\relax}{#1}{#2}{#3}{papernavy}%
+  \suri@cvcell{\dimexpr\suri@cvright-\suri@cvcolw\relax}{\suri@cvright}{#1}{#4}{#5}{#6}}
+
+\newcommand{\suri@coverart}{%
+  \put(0,\LenToUnit{\paperheight}){%
+    \begin{tikzpicture}[overlay]
+      % two thin outline hexagons, the big one running off the right edge
+      \suri@hex{718}{243}{306}{navyline}
+      \suri@hex{658}{395}{149}{critico}
+      % masthead: white wordmark + tracked lockup
+      \node[anchor=north west, inner sep=0pt] at (\suripx{64},-\suripx{64})
+        {\suriWordmarkLight{26.2}};
+      \node[anchor=base west, inner sep=0pt, text=navylabel]
+        at (\suripx{227},-\suripx{82.5})
+        {\suriSans\suriFS{11}{11}\textls[130]{\suriLockup}};
+      % kicker / title / carmine bar / subtitle
+      \node[anchor=base west, inner sep=0pt]
+        at (\suripx{64},-\suripx{253})
+        {\suri@lblb{245}{critico}{11.5}{\suri@cv@kicker}};
+      % \fontseries{b}, not \bfseries: plex-sans is loaded with [semibold], so
+      % \bfseries resolves to the sb series and plxSans-Bold never reaches the
+      % PDF.  The model's title is the real Bold -- same cap height, 10% more ink
+      % -- and it is set tighter than the default, hence \suricovertrack.
+      \node[anchor=north west, inner sep=0pt, text=papernavy]
+        at (\suripx{64},-\suripx{279})
+        {\parbox{\suripx{560}}{\fontseries{b}\suriFS{52}{57}\raggedright
+          \textls[\suricovertrack]{\suri@cv@title}}};
+      \fill[critico] (\suripx{64},-\suripx{418})
+        rectangle ++(\suripx{72},\suripx{5});
+      \node[anchor=base west, inner sep=0pt, text=navytext]
+        at (\suripx{64},-\suripx{454})
+        {\suriSans\suriFS{13.6}{13.6}\suri@cv@subtitle};
+      % metadata grid, 2 columns x 3 rows, over a hairline
+      \fill[navyline] (\suripx{64},\suri@fb{196.5})
+        rectangle ++(\dimexpr\suri@cvright-\suripx{64}\relax,\suripx{1});
+      \suri@cvrow{160}{\suriLblProject}{\suri@cv@projeto}
+                      {\suriLblHosts}{\suri@cv@hosts}{papernavy}
+      \suri@cvrow{134}{\suriLblScanStart}{\suri@cv@inicio}
+                      {\suriLblScanEnd}{\suri@cv@fim}{papernavy}
+      \suri@cvrow{108}{\suriLblReportDate}{\suri@cv@data}
+                     {\suriLblClass}{\suri@cv@class}{gold}
+      % closing line, on the bottom margin
+      \node[anchor=base west, inner sep=0pt, text=critico]
+        at (\suripx{64},\suri@fb{64}) {\lbls{8.5}{\suriConfidential}};
+      \node[anchor=base east, inner sep=0pt, text=navylabel]
+        at (\suri@cvright,\suri@fb{64}) {\lbls{8.5}{\suriPlatform}};
+    \end{tikzpicture}}}
+
+% \suriCover{key=value, ...} — the whole of page 1, full-bleed navy.
+\newcommand{\suriCover}[1]{%
+  \setkeys{suri@cv}{#1}%
+  \pagecolor{navy}%
+  \thispagestyle{suribare}%
+  \AddToShipoutPictureBG*{\suri@coverart}%
+  \null
+  \clearpage
+  \pagecolor{paper}%
+}
+
+% ---------------------------------------------------------------------------
+% Back cover (pg-10).
+%
+% Keys: projeto=, data= feed the closing line; texto= and aviso= override the
+% institutional paragraph and the confidentiality notice.
+% ---------------------------------------------------------------------------
+\define@key{suri@bc}{projeto}{\gdef\suri@bc@projeto{#1}}
+\define@key{suri@bc}{data}{\gdef\suri@bc@data{#1}}
+\define@key{suri@bc}{texto}{\gdef\suri@bc@texto{#1}}
+\define@key{suri@bc}{aviso}{\gdef\suri@bc@aviso{#1}}
+\gdef\suri@bc@projeto{}\gdef\suri@bc@data{}
+\gdef\suri@bc@texto{Este relat\'orio foi gerado automaticamente pela
+  plataforma de gest\~ao de vulnerabilidades Suricatoos.}
+\gdef\suri@bc@aviso{CONFIDENCIAL --- DISTRIBUA APENAS PARA QUEM TEM
+  NECESSIDADE DE CONHECER.}
+
+\newcommand{\suri@backart}{%
+  \put(0,\LenToUnit{\paperheight}){%
+    \begin{tikzpicture}[overlay]
+      \node[anchor=north, inner sep=0pt] at (0.5\paperwidth,-\suripx{492})
+        {\suriMarkLight{128}};
+      \node[anchor=north, inner sep=0pt] at (0.5\paperwidth,-\suripx{637})
+        {\suriWordmarkLight{30}};
+      % a \parbox, not TikZ's align=/text width=: inside a node those two
+      % throw the font's leading away and fall back to the document's
+      % \normalbaselines, which at 11.5px reads far too tight.
+      \node[anchor=north, inner sep=0pt, text=navytext]
+        at (0.5\paperwidth,-\suripx{692})
+        {\parbox{\suripx{420}}{\centering\suriSans\suriFS{11.5}{20}%
+          \suri@bc@texto}};
+      \node[anchor=base, inner sep=0pt]
+        at (0.5\paperwidth,-\suripx{754})
+        {\suri@lblb{\suritrack}{critico}{9}{\suri@bc@aviso}};
+      \node[anchor=base, inner sep=0pt, text=navylabel]
+        at (0.5\paperwidth,\suri@fb{64})
+        {\suri@trk{8.5}{\MakeUppercase{\suriLblProject}\ \suri@bc@projeto\
+          \textperiodcentered\ \suri@bc@data\ \textperiodcentered\
+          \MakeUppercase{\suriPageWord}\ \thepage\ / \suri@lastpage}};
+    \end{tikzpicture}}}
+
+% \suriBackCover{key=value, ...} — the closing navy page.
+\newcommand{\suriBackCover}[1]{%
+  \clearpage
+  \setkeys{suri@bc}{#1}%
+  \pagecolor{navy}%
+  \thispagestyle{suribare}%
+  \AddToShipoutPictureBG*{\suri@backart}%
+  \null
+  \clearpage
+  \pagecolor{paper}%
+}
+
+% ---------------------------------------------------------------------------
+% Defaults for the document.
+% ---------------------------------------------------------------------------
+\pagestyle{suricatoos}
+\AtBeginDocument{\pagecolor{paper}\color{body}}
+
+\endinput

@@ -23,16 +23,36 @@
 # This report generator initially creates a LaTeX file using a XML
 # transformation with the tool xsltproc. In a second step the LaTeX file is
 # processed with the tool pdflatex which results in the final PDF file. The
-# branded logo PDFs that ship in this report format bundle are referenced by
-# the stylesheet via \includegraphics and are resolved relative to this
-# directory, which is the working directory while the generator runs.
+# branded logo PDFs, the design-system .sty modules and the IBM Plex Type1
+# font tree that ship in this report format bundle are referenced by the
+# stylesheet and are resolved relative to this directory, which is the working
+# directory while the generator runs.
 # The intermediate files are stored under a temporary directory.
 
 TMP=`mktemp -d` || exit 1
 
-# Make the bundled logo assets available next to the intermediate .tex file so
-# that pdflatex (which runs with -output-directory ${TMP}) can find them.
+# Make every bundled asset available next to the intermediate .tex file. pdflatex
+# runs with -output-directory ${TMP} and also SEARCHES that directory for inputs,
+# so the logos (\includegraphics) and the suricatoos-*.sty design modules
+# (\usepackage) are found there. TEXINPUTS states the same thing explicitly; the
+# trailing ':' keeps the compiled-in default path.
 cp ./suricatoos-*.pdf "${TMP}/" 2>/dev/null
+cp ./*.sty "${TMP}/" 2>/dev/null
+TEXINPUTS="${TMP}:"; export TEXINPUTS
+
+# IBM Plex ships with the bundle as a TDS subtree, not with the container: the
+# gvmd image has no Plex, and pdflatex silently falls back to Latin Modern when
+# it cannot find the faces. Unpack it and point TEXMFHOME at it.
+#
+# HOME and TEXMFVAR matter as much as TEXMFHOME here: the gvmd user runs with
+# HOME=/nonexistent, so kpathsea has nowhere to put its font cache and mktexpk
+# (used whenever a glyph falls back to a Computer Modern bitmap) dies, taking the
+# whole run with it. Both must point inside the per-run temp dir.
+mkdir -p "${TMP}/texmf" "${TMP}/tv"
+tar xzf ./plex-min.tar.gz -C "${TMP}/texmf" 2>/dev/null
+TEXMFHOME="${TMP}/texmf"; export TEXMFHOME
+TEXMFVAR="${TMP}/tv";     export TEXMFVAR
+HOME="${TMP}";            export HOME
 
 # NB: xsltproc stderr goes to the PER-RUN temp dir, NOT a shared /tmp/err.out.
 # The stock template hardcodes /tmp/err.out, which gvmd (running as the non-root
