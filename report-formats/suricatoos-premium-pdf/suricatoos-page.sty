@@ -24,6 +24,10 @@
 \RequirePackage{graphicx}
 \RequirePackage{eso-pic}
 \RequirePackage{tikz}
+% adjustbox: usado por \suri@cvcell para impedir que um valor longo da grade de
+% metadados da capa atropele o proprio rotulo. blocks.sty tambem o carrega; pedir
+% aqui deixa este modulo de pe sozinho.
+\RequirePackage{adjustbox}
 \RequirePackage{xkeyval}
 
 % ---------------------------------------------------------------------------
@@ -348,11 +352,32 @@
 % One metadata cell: label at the left edge, value flush to the right edge.
 % #1 = left edge, #2 = right edge (both dimensions), #3 = baseline in px above
 % the bottom edge, #4 = label, #5 = value, #6 = colour of the value.
+%
+% The value is bounded, and that is not decoration.  A TikZ node has no width:
+% anchored base east, a long value simply grows leftwards until it runs THROUGH
+% its own label — which is what a long engagement name did on the sample cover
+% ("ENGAGEMENT" and "Quarterly External Assess…" printed on top of each other).
+% The XSLT truncates the name to a character budget, but a character budget
+% cannot know the rendered width, and the labels differ per language
+% ("PROJETO" / "ENGAGEMENT" / "PROYECTO").
+%
+% So the room left for the value is measured HERE, from the label actually set,
+% and the value is shrunk to fit it.  A rare long name comes out a touch smaller;
+% it never collides.  Belt and braces with the XSLT's budget: whichever is
+% tighter wins, and neither can fail silently.
+% \settowidth, not a \savebox reused by both nodes: the cover art is built inside
+% an \AddToShipoutPicture, so a box register handed to a TikZ node is read later
+% than it is filled and the label comes out EMPTY.  Measuring into a length and
+% setting the label again costs one extra pass over five short words.
+\newlength{\suri@cvlblw}
 \newcommand{\suri@cvcell}[6]{%
+  \settowidth{\suri@cvlblw}{\suri@lbl{165}{navylabel}{9.5}{#4}}%
   \node[anchor=base west, inner sep=0pt]
     at (#1,\suri@fb{#3}) {\suri@lbl{165}{navylabel}{9.5}{#4}};
   \node[anchor=base east, inner sep=0pt, text=#6]
-    at (#2,\suri@fb{#3}) {\suriFS{11}{11}\dat{#5}};}
+    at (#2,\suri@fb{#3}) {\suriFS{11}{11}%
+      \adjustbox{max width=\dimexpr#2-#1-\suri@cvlblw-\suripx{14}\relax}%
+        {\dat{#5}}};}
 
 % One row of the grid: #1 = baseline in px above the bottom edge, then
 % label/value for the left and the right column, and the colour of the

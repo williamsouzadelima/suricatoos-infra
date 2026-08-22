@@ -328,8 +328,13 @@
   \textcolor{\sevcolor{#1}}{\rule{\suripx{8}}{\suripx{8}}}\hspace{\suripx{6.5}}%
   {\color{muted}\suriMono\suriFS{8.5}{8.5}\MakeUppercase{#2} (#3)}}
 
-% \hexlegend{crít}{alto}{médio}{baixo}{exposto}{neutro} — the six counts, on one
-% centred line under a hairline that closes the board.
+% \hexlegend{n crít}{n alto}{n médio}{n baixo}{n exposto}{n neutro} — the six
+% COUNTS, on one centred line under a hairline that closes the board.
+% The six WORDS are not arguments and are not written here either: they come
+% from \sevword, the same vocabulary the badges and the bars use, so the
+% preamble's \setsevword translates the legend along with everything else.
+% They used to be literal Portuguese in this macro, which is how an English
+% report printed "CRITICO ALTO MEDIO BAIXO" under an otherwise English page.
 \newcommand{\hexlegend}[6]{%
   \par\nointerlineskip\vspace{\suripx{22}}%
   \noindent\textcolor{hairlinetwo}{\rule{\linewidth}{\suripx{1}}}%
@@ -337,12 +342,12 @@
   % \adjustbox so a narrow column shrinks the row instead of spilling it out of
   % the card; at full report width the six items fit at their natural size.
   \noindent\makebox[\linewidth][c]{\adjustbox{max width=\linewidth}{%
-    \hexlegenditem{critico}{crítico}{#1}\hspace{\suripx{18}}%
-    \hexlegenditem{alto}{alto}{#2}\hspace{\suripx{18}}%
-    \hexlegenditem{medio}{médio}{#3}\hspace{\suripx{18}}%
-    \hexlegenditem{baixo}{baixo}{#4}\hspace{\suripx{18}}%
-    \hexlegenditem{exposto}{exposto}{#5}\hspace{\suripx{18}}%
-    \hexlegenditem{neutro}{neutro}{#6}}}%
+    \hexlegenditem{critico}{\sevword{critico}}{#1}\hspace{\suripx{18}}%
+    \hexlegenditem{alto}{\sevword{alto}}{#2}\hspace{\suripx{18}}%
+    \hexlegenditem{medio}{\sevword{medio}}{#3}\hspace{\suripx{18}}%
+    \hexlegenditem{baixo}{\sevword{baixo}}{#4}\hspace{\suripx{18}}%
+    \hexlegenditem{exposto}{\sevword{exposto}}{#5}\hspace{\suripx{18}}%
+    \hexlegenditem{neutro}{\sevword{neutro}}{#6}}}%
   \par}
 
 % ===========================================================================

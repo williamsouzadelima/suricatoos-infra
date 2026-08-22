@@ -137,9 +137,17 @@
 % characters a line, well past comfortable.  Keep the measure named so it can be
 % re-tuned in one place.
 \newcommand{\suriparameasure}{0.93}
+% [t] is not cosmetic.  Without it the minipage is centred on the current
+% baseline, so its reference point sits half its height below the top; the
+% interline glue TeX then computes (\baselineskip - \prevdepth - height) goes
+% negative for a tall paragraph and collapses to \lineskip, pulling the copy
+% ~4px up and gluing it to the label above.  Measured: the SAME label sat at
+% 7.7pt from its paragraph in the short cases and ~12pt in the tall ones.  With
+% [t] the box's first baseline is the paragraph's first baseline and the gap is
+% one number for every field in the report.
 \newcommand{\suriPara}[1]{%
   \par\noindent
-  \begin{minipage}{\suriparameasure\linewidth}%
+  \begin{minipage}[t]{\suriparameasure\linewidth}%
     \parindent=0pt\raggedright\suriFS{11.5}{19}\color{body}#1%
   \end{minipage}\par
   \addvspace{\suripx{10}}}
@@ -201,6 +209,21 @@
 % The model has one compact ellipsis flush with the margin, so compose this one
 % glyph in the Sans and let the rest of the line stay in Mono.
 \providecommand{\suriEllip}{{\suriSans\textellipsis}}
+
+% \suriTruncMark{n} — the honest tail of a value that did not fit: "…(+12)".
+%
+% It exists as a macro because the XSLT used to write "{\rmfamily\itshape(+n)}"
+% inline, and \rmfamily is a trap in this document: the bundle ships Plex Sans
+% and Plex Mono only — plex-serif is deliberately NOT in the font subset — so
+% \rmfamily resolves to Computer Modern, which has no Type1 on the container's
+% search path either.  pdftex then quietly renders the mark as a **Type 3
+% bitmap**: fuzzy on screen, unselectable, and the only non-Plex glyph in an
+% otherwise all-Plex PDF.  It surfaced on the sample cover, where a long
+% engagement name is truncated; a real scan with a long task name would have
+% shipped it to a client.
+%
+% Italic sans, `muted', and the ellipsis is the text one — never math.
+\newcommand{\suriTruncMark}[1]{{\suriSans\itshape\color{muted}\textellipsis(+#1)}}
 
 % ===========================================================================
 % 3b. Strings that the two glue blocks below print.

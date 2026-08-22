@@ -31,6 +31,10 @@
 
 \RequirePackage{suricatoos-tokens}
 \RequirePackage{tcolorbox}
+% adjustbox: usado pelo \suri@kpibox para impedir que um valor longo estoure a
+% tile. suricatoos-hex.sty tambem o carrega; pedir aqui deixa este modulo de pe
+% sozinho, e um \RequirePackage repetido nao custa nada.
+\RequirePackage{adjustbox}
 \tcbuselibrary{skins,breakable}
 \RequirePackage{longtable}
 \RequirePackage{array}
@@ -299,12 +303,18 @@
     \hspace{\suripx{7}}}}}
 
 % \fieldlabel{texto} — the small carmine Mono label over a block (pg-09).
+% \nopagebreak: a label is the heading of the block under it, and a page that
+% ends with the label alone sends the reader to the next page to find out what
+% it was labelling.  The penalty forbids the break at the 3px gap, so the label
+% travels with the first line of its own copy.
 \newcommand{\fieldlabel}[1]{\par\nointerlineskip
-  {\parindent=0pt\suri@lblx{\suri@trkfield}{critico}{8.5}{#1}\par}\vskip\suripx{3}}
+  {\parindent=0pt\suri@lblx{\suri@trkfield}{critico}{8.5}{#1}\par}%
+  \nopagebreak\vskip\suripx{3}\nopagebreak}
 
 % \blocklabel{texto} — the same label in muted grey, for chart and table titles.
 \newcommand{\blocklabel}[1]{\par\nointerlineskip
-  {\parindent=0pt\suri@lblx{\suri@trkslab}{muted}{9}{#1}\par}\vskip\suripx{9}}
+  {\parindent=0pt\suri@lblx{\suri@trkslab}{muted}{9}{#1}\par}%
+  \nopagebreak\vskip\suripx{9}\nopagebreak}
 
 % Table column headers, left and right aligned.  Zero-width boxes: a long label
 % such as "CVSS MAX" then hangs over its neighbour instead of breaking in two,
@@ -323,6 +333,23 @@
 \newlength{\suri@kpiB}   % each white box
 \newlength{\suri@kpiG}   % gutter
 
+% \suri@fitvalue{value} — the value as it is, unless it does not fit.
+% The VALUE of the navy tile is a word, and a word is language: "CRÍTICO" fits
+% the 0.3042 measure at 34px, but "INFORMATIVO" — the risk word of a CLEAN scan
+% in pt and in es — runs 53.6pt past the tile and the ink is clipped by the
+% border.  Nothing happens while the value fits, which is every number and
+% every short word; only the rare long one is scaled to the measure.
+% The declared height and depth stay those of the UNSCALED box, so the shrunken
+% word still sits on the same baseline as the three numbers beside it — which is
+% the whole point of the fixed 112px tile.
+\newsavebox{\suri@valbox}
+\newcommand{\suri@fitvalue}[1]{%
+  \sbox\suri@valbox{#1}%
+  \ifdim\wd\suri@valbox>\linewidth
+    \raisebox{\z@}[\ht\suri@valbox][\dp\suri@valbox]{%
+      \resizebox{\linewidth}{!}{\usebox\suri@valbox}}%
+  \else \usebox\suri@valbox \fi}
+
 % \suri@kpibox{ground}{labelcolour}{valuecolour}{frame}{width}{label}{value}
 % Fixed 112px tall: the label hangs from the top, the value sits on the bottom,
 % so a one-line and a two-line label still share the same value baseline.
@@ -338,7 +365,7 @@
       {\parindent=0pt\raggedright\suriFS{8.5}{11}%
         \suri@lblx{\suri@trkslab}{#2}{8.5}{#6}\par}%
       \vfill
-      {\parindent=0pt\color{#3}\suriFS{34}{34}\bfseries#7\par}%
+      {\parindent=0pt\color{#3}\suriFS{34}{34}\bfseries\suri@fitvalue{#7}\par}%
       \vskip\suripx{28}}%
   \end{tcolorbox}}
 
@@ -780,11 +807,23 @@
 % Mono, the title in Sans semibold, then the chip line.  The labelled blocks
 % (\fieldlabel, \cvssvector, \termbox, ...) sit on the page BELOW the card, not
 % inside it — that is how the model is built.
+% NOT breakable: the card is three lines at most, and when it was allowed to
+% split, a page ended with the title bar alone and the next one opened with an
+% anonymous chip row (SEVERIDADE · CVSS · QoD) with no vulnerability name over
+% it — the reader could not tell which finding those chips belonged to.  An
+% unbreakable box simply moves whole to the next page.
 \newcommand{\findingcard}[4]{%
-  \begin{tcolorbox}[breakable,enhanced,sharp corners,arc=0pt,outer arc=0pt,
+  \begin{tcolorbox}[enhanced,sharp corners,arc=0pt,outer arc=0pt,
       colback=card,colframe=hairline,boxrule=\suri@hair,
       borderline west={\suripx{3}}{0pt}{\sevcolor{#1}},
-      left=\suripx{22},right=\suripx{20},top=\suripx{18},bottom=\suripx{13},boxsep=0pt]%
+      left=\suripx{22},right=\suripx{20},top=\suripx{18},bottom=\suripx{13},boxsep=0pt,
+      % ...and the card is a heading: it travels with the first block under it,
+      % so a page never ends on a finding header whose body is overleaf.  The
+      % penalty has to replace tcolorbox's own after-skip (`after'), not follow
+      % it: a \nopagebreak written after \end{tcolorbox} arrives too late,
+      % because the page then simply breaks at that glue instead.  The gap under
+      % the card is unaffected — every block below carries its own leading air.
+      after={\par\nopagebreak}]%
     \parindent=0pt
     % the number carries the finding's severity, exactly like the spine beside it
     \noindent{\dat{\suriFS{13}{17}\bfseries\color{\sevcolor{#1}}#2}}\hspace{\suripx{10}}%
@@ -834,7 +873,12 @@
       colback=solbg,colframe=solborder,coltext=ink,boxrule=\suri@hair,
       left=\suripx{17},right=\suripx{17},top=\suripx{12},bottom=\suripx{10},boxsep=0pt]%
     \parindent=0pt
-    \suri@lblx{\suri@trkfield}{critico}{8.5}{\suriLblSolution}\par\vskip\suripx{3}%
+    % The box is breakable because a vendor fix can run long; the penalties keep
+    % the split honest — never the label alone at the foot of a page, never a
+    % single leftover line at the top of the next one with no label over it.
+    \clubpenalty=10000 \widowpenalty=10000
+    \suri@lblx{\suri@trkfield}{critico}{8.5}{\suriLblSolution}\par
+    \nopagebreak\vskip\suripx{3}\nopagebreak
     {\raggedright\suriFS{11}{16}#1\par}%
   \end{tcolorbox}}
 
