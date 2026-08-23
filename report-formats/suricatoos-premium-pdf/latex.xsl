@@ -275,6 +275,20 @@ SPDX-License-Identifier: GPL-2.0-or-later
     <s k="exec_warrant" en=" and warrant prompt remediation" pt=" e exigem remediação imediata" es=" y requieren remediación inmediata"/>
     <s k="exec_all_lowconf" en=" --- but every one of them was reported with a low detection quality and must be validated manually before any remediation effort; treat the severity shown as an upper bound." pt=" --- mas todos foram reportados com baixa qualidade de detecção e precisam ser validados manualmente antes de qualquer esforço de remediação; trate a severidade exibida como um teto." es=" --- pero todos fueron reportados con baja calidad de detección y deben validarse manualmente antes de cualquier esfuerzo de remediación; trate la severidad mostrada como un techo."/>
     <!-- Risk words (uppercase, used in the risk badge and narrative) -->
+    <!-- "The measurement did not happen."
+         A scan whose alive detection reaches no host still ends as Done, with an
+         empty report. Printing the normal summary over that reads as a clean bill
+         of health, which is the worst thing this document can say. These three
+         strings exist so it says the opposite, loudly. -->
+    <s k="risk_notmeasured" en="NOT MEASURED" pt="NÃO MEDIDO" es="NO MEDIDO"/>
+    <s k="nohost_title" en="This scan measured nothing" pt="Este scan não mediu nada" es="Este escaneo no midió nada"/>
+    <!-- Split in three because these are attribute VALUES, and an attribute in a
+         literal result element is an attribute value template: a brace is markup
+         there, so "\textbf{...}" cannot live in the string. The emphasis is
+         applied by the stylesheet around part B instead. -->
+    <s k="nohost_body_a" en="No host answered the alive test, so no port was scanned and no check was run. " pt="Nenhum host respondeu à detecção de host vivo, então nenhuma porta foi varrida e nenhum teste foi executado. " es="Ningún host respondió a la detección de host vivo, así que no se escaneó ningún puerto ni se ejecutó ninguna comprobación. "/>
+    <s k="nohost_body_b" en="The absence of findings in this report is not evidence of the absence of vulnerabilities" pt="A ausência de achados neste relatório não é evidência de ausência de vulnerabilidades" es="La ausencia de hallazgos en este informe no es evidencia de ausencia de vulnerabilidades"/>
+    <s k="nohost_body_c" en=" --- it is the absence of a measurement. The usual cause is the target answering none of the probes selected in its Alive Test (a firewall dropping ICMP, for instance). Fix that setting and scan again before treating this result as a clean scan." pt=" --- é ausência de medição. A causa usual é o alvo não responder a nenhuma das sondas escolhidas no Alive Test dele (um firewall descartando ICMP, por exemplo). Corrija essa configuração e refaça o scan antes de tratar este resultado como um scan limpo." es=" --- es ausencia de medición. La causa habitual es que el objetivo no responda a ninguna de las sondas elegidas en su Alive Test (un firewall descartando ICMP, por ejemplo). Corrija esa configuración y repita el escaneo antes de tratar este resultado como un escaneo limpio."/>
     <s k="risk_critical" en="CRITICAL" pt="CRÍTICO" es="CRÍTICO"/>
     <s k="risk_high" en="HIGH" pt="ALTO" es="ALTO"/>
     <s k="risk_medium" en="MEDIUM" pt="MÉDIO" es="MEDIO"/>
@@ -1724,6 +1738,10 @@ SPDX-License-Identifier: GPL-2.0-or-later
     <!-- Overall risk rating derivation -->
     <xsl:variable name="riskWord">
       <xsl:choose>
+        <!-- Zero hosts reached: the rating is not "informational", it is absent.
+             Saying anything on the severity ramp here would be a measurement
+             this scan never made. -->
+        <xsl:when test="$hosts = 0"><xsl:value-of select="gvm:t('risk_notmeasured')"/></xsl:when>
         <xsl:when test="$crit &gt; 0"><xsl:value-of select="gvm:t('risk_critical')"/></xsl:when>
         <xsl:when test="$high &gt; 0"><xsl:value-of select="gvm:t('risk_high')"/></xsl:when>
         <xsl:when test="$med &gt; 0"><xsl:value-of select="gvm:t('risk_medium')"/></xsl:when>
@@ -1755,6 +1773,22 @@ SPDX-License-Identifier: GPL-2.0-or-later
          The overall-risk sentence that used to close it is gone — the rating is
          the navy tile of \kpirow now, and printing it twice on one page reads
          as two different statements of the same thing. -->
+    <!-- The narrative only makes sense if something was measured.  With zero
+         hosts reached it would read "assessed 0 host(s) and produced 0
+         result(s)... 0 findings are of High or Critical severity" — an absurd
+         sentence that a reader still parses as good news.  Say what actually
+         happened instead. -->
+    <xsl:choose>
+      <xsl:when test="$hosts = 0">
+        <xsl:text>\alertbox{</xsl:text><xsl:value-of select="gvm:t('nohost_title')"/>
+        <xsl:text>}{</xsl:text>
+        <xsl:value-of select="gvm:t('nohost_body_a')"/>
+        <xsl:text>\textbf{</xsl:text><xsl:value-of select="gvm:t('nohost_body_b')"/><xsl:text>}</xsl:text>
+        <xsl:value-of select="gvm:t('nohost_body_c')"/>
+        <xsl:text>}
+</xsl:text>
+      </xsl:when>
+      <xsl:otherwise>
     <xsl:text>\suriPara{</xsl:text>
     <xsl:choose>
       <xsl:when test="$L='pt'">
@@ -1798,6 +1832,8 @@ SPDX-License-Identifier: GPL-2.0-or-later
     </xsl:choose>
     <xsl:text>}
 </xsl:text>
+      </xsl:otherwise>
+    </xsl:choose>
 
     <!-- KPI strip: the navy risk tile plus the three counted tiles. The tile
          label of the first one is design furniture (\suriLblRisk); the other

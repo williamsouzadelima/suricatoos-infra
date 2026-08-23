@@ -20,6 +20,7 @@
 %   pg-04      porttable env, \portrow, \portnotes, \portnote
 %   pg-05      \hostcard, \hostcols, \hostcolsingle, \hostrow
 %   pg-06/07   findingsummary env, \findingrow, \findingtrunc, \warnbox
+%   alerta     \alertbox — a medicao nao aconteceu (0 hosts vivos)
 %   pg-08      \consolidatedcard, \advisoryrow, \advisorytrunc
 %   pg-09      \findingcard, \fieldcols, \cvssvector, \affectedchips,
 %              termbox env, \solbox, \reflist, \refurl
@@ -692,6 +693,25 @@
       colback=warnbg,colframe=warnborder,coltext=warntext,boxrule=\suri@hair,
       left=\suripx{17},right=\suripx{17},top=\suripx{16},bottom=\suripx{16},boxsep=0pt]%
     {\parindent=0pt\raggedright\suriFS{11}{16}#1\par}%
+  \end{tcolorbox}}
+
+% \alertbox{titulo}{texto} — the loudest block in the system.
+%
+% \warnbox qualifies a finding ("treat this severity as a ceiling").  This one
+% says something else entirely: THE MEASUREMENT DID NOT HAPPEN.  It exists
+% because a vulnerability scan that reached no host still ends as "Done", and a
+% report that then prints an empty summary reads as a clean bill of health —
+% the most dangerous thing this document can do.  So it gets the critical
+% colour, a 4px spine, and a title, and it is deliberately not subtle.
+\newcommand{\alertbox}[2]{%
+  \begin{tcolorbox}[breakable,enhanced,sharp corners,arc=0pt,outer arc=0pt,
+      colback=criticobg,colframe=critico,coltext=ink,boxrule=\suri@hair,
+      borderline west={\suripx{4}}{0pt}{critico},
+      left=\suripx{17},right=\suripx{17},top=\suripx{15},bottom=\suripx{16},
+      boxsep=0pt]%
+    {\parindent=0pt\raggedright
+     \suri@lblx{\suri@trkslab}{critico}{10}{#1}\par\vskip\suripx{7}%
+     \suriFS{11}{16}#2\par}%
   \end{tcolorbox}}
 
 % ===========================================================================
