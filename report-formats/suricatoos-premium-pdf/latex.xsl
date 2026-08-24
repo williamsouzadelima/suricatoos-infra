@@ -3241,9 +3241,18 @@ SPDX-License-Identifier: GPL-2.0-or-later
           '&#13;&#10;', '&#10;'), '&#13;', '&#10;'),
           '&#10;      - ', '&#10;- '), '&#10;     - ', '&#10;- '), '&#10;    - ', '&#10;- '),
           '&#10;   - ', '&#10;- '), '&#10;  - ', '&#10;- '), '&#10; - ', '&#10;- '))"/>
+        <!-- PARAGRAFO tambem desqualifica o \textbf, nao so' LISTA.  O
+             solution-body emite \par na linha em branco, e \textbf e' comando
+             curto: \textbf{...\par...} da "Paragraph ended before
+             \text@command was complete" + "Extra }", e a recuperacao do LaTeX
+             embaralha o texto no PDF: a ultima frase aparecia ANTES da
+             primeira, e repetida.  Acontecia em ingles tambem (bug de render,
+             nao de traducao). Basta solucao curta com duas frases separadas por
+             linha em branco, que e' a forma de meio NVT de SSL/TLS. -->
         <xsl:variable name="solshort"
           select="string-length(normalize-space($solution)) &lt;= 200
-                  and not(contains($sol-mk, '&#10;- '))"/>
+                  and not(contains($sol-mk, '&#10;- '))
+                  and not(contains($sol-mk, '&#10;&#10;'))"/>
         <xsl:text>\solbox{</xsl:text>
         <xsl:if test="string-length(nvt/solution/@type) &gt; 0">
           <xsl:if test="not($solshort)"><xsl:text>{\bfseries </xsl:text></xsl:if>

@@ -27,7 +27,7 @@ import os
 HERE = os.path.dirname(os.path.abspath(__file__))
 BUNDLE = os.path.join(HERE, "suricatoos-premium-pdf")
 
-VERSION = "20260824a"
+VERSION = "20260824b"
 
 # (lang code passed to xsltproc, report_format UUID, dropdown name).
 # EN keeps the original UUID so the already-deployed object is updated in place
