@@ -113,6 +113,17 @@ SPDX-License-Identifier: GPL-2.0-or-later
        do mesmo produto, resolvida pela mesma ação. -->
   <xsl:param name="adv-max" select="10"/>
 
+  <!-- Teto de LINHAS de cada tabela do sumario de achados (secao 4).
+       O sumario existe para ser lido de uma olhada; um scan real produz dezenas
+       de deteccoes informativas (Log) que enchem paginas sem orientar decisao
+       nenhuma. A truncagem e' seletiva, nao um corte cego pelo fim da lista:
+       NENHUM achado com severidade >= 0.1 e' escondido — se so' os acionaveis ja
+       passarem deste teto, a tabela cresce e nada e' cortado. O que sobra do
+       teto e' preenchido com os informativos, e a linha \findingtrunc declara
+       QUANTOS ficaram de fora e onde le-los (a secao de achados detalhados
+       continua listando todos). -->
+  <xsl:param name="summary-max" select="20"/>
+
   <!-- ================================================================= -->
   <!-- Hexmap: port exposure panel                                       -->
   <!-- ================================================================= -->
@@ -211,11 +222,35 @@ SPDX-License-Identifier: GPL-2.0-or-later
     <!-- Detection confidence (QoD). Anything below the threshold is reported as
          an indicator to validate, never as a confirmed finding. -->
     <s k="lbl_lowconf" en="LOW CONFIDENCE" pt="BAIXA CONFIANÇA" es="BAJA CONFIANZA"/>
+    <!-- Palavras que o DESIGN SYSTEM imprime e que ainda nao tinham chave aqui.
+         Cada uma corresponde a um \suriLbl... de um .sty (veja a tabela
+         macro -> chave no template `header`); sem elas o relatorio existiria em
+         uma lingua so'. -->
+    <s k="th_ach" en="Find." pt="Ach." es="Hall."/>
+    <!-- th_sev_ceiling (o outro cabecalho desta linha) vive junto do bloco de
+         achados confirmados/indicadores, mais abaixo: dois agentes a
+         acrescentaram em paralelo e a entrada duplicada saiu daqui. -->
+    <s k="lbl_cvss" en="CVSS" pt="CVSS" es="CVSS"/>
+    <s k="hx_ports_mapped" en="Observed ports \textperiodcentered\ Mapped addresses" pt="Portas observadas \textperiodcentered\ Endereços mapeados" es="Puertos observados \textperiodcentered\ Direcciones mapeadas"/>
+    <!-- Substantivo sozinho: o numero e a relacao (>= / &lt;) sao compostos no
+         preambulo a partir do parametro $qod-min, nunca escritos na traducao. -->
+    <s k="qod_quality" en="detection quality" pt="qualidade de detecção" es="calidad de detección"/>
     <!-- Consolidated update card -->
     <s k="grp_title" en="Outstanding update" pt="Atualização pendente" es="Actualización pendiente"/>
     <s k="grp_badge" en="CONSOLIDATED" pt="CONSOLIDADO" es="CONSOLIDADO"/>
     <s k="grp_intro_a" en="The scanner reported " pt="O scanner reportou " es="El escáner reportó "/>
-    <s k="grp_intro_b" en=" separate advisories for this product. They accumulate one per vendor release and are resolved by a SINGLE action: updating the product to a supported version. They are listed together below instead of as one finding each." pt=" advisories separados para este produto. Eles se acumulam um por versão do fornecedor e são resolvidos por uma ÚNICA ação: atualizar o produto para uma versão suportada. São listados juntos abaixo em vez de um achado para cada." es=" advisories separados para este producto. Se acumulan uno por versión del proveedor y se resuelven con una ÚNICA acción: actualizar el producto a una versión soportada. Se listan juntos abajo en lugar de un hallazgo para cada uno."/>
+    <!-- O paragrafo do card consolidado vem em tres pedacos porque o miolo sai
+         em NEGRITO: a versao anterior gritava "UNICA acao" em caixa alta por
+         nao ter onde por o realce. -->
+    <s k="grp_intro_b" en=" separate advisories for this product. They accumulate one per vendor release and are resolved by a " pt=" advisories separados para este produto. Eles se acumulam um por versão do fornecedor e são resolvidos por uma " es=" advisories separados para este producto. Se acumulan uno por versión del proveedor y se resuelven con una "/>
+    <s k="grp_intro_c" en="single action" pt="única ação" es="única acción"/>
+    <s k="grp_intro_d" en=": updating the product to a supported version." pt=": atualizar o produto para uma versão suportada." es=": actualizar el producto a una versión soportada."/>
+    <!-- Palavras de CHIP: entram em caixa alta dentro do chip, como no modelo.
+         Iguais nas tres linguas, mas declaradas assim mesmo para que traduzir o
+         relatorio continue sendo mexer NESTA tabela e em lugar nenhum. -->
+    <s k="grp_adv_caps" en="ADVISORIES" pt="ADVISORIES" es="ADVISORIES"/>
+    <s k="chip_host" en="HOST" pt="HOST" es="HOST"/>
+    <s k="chip_hosts" en="HOSTS" pt="HOSTS" es="HOSTS"/>
     <s k="grp_th_adv" en="Advisory" pt="Advisory" es="Advisory"/>
     <s k="grp_more_a" en=" more advisories for this product, up to " pt=" advisories a mais deste produto, até " es=" advisories más de este producto, hasta "/>
     <s k="grp_more_b" en=" — all resolved by the same update." pt=" — todos resolvidos pela mesma atualização." es=" — todos resueltos por la misma actualización."/>
@@ -229,8 +264,31 @@ SPDX-License-Identifier: GPL-2.0-or-later
     <s k="none_confirmed" en="No confirmed findings above informational severity were recorded." pt="Nenhum achado confirmado acima da severidade informativa foi registrado." es="No se registraron hallazgos confirmados por encima de la severidad informativa."/>
     <!-- Appended after a bare count, so it must read correctly for 1 and for N:
          no conjugated verb agreeing with the number. -->
-    <s k="of_which_lowconf" en=" of low confidence (manual validation required)" pt=" de baixa confiança (validação manual necessária)" es=" de baja confianza (validación manual necesaria)"/>
+    <s k="of_which_lowconf" en=" of them low-confidence (manual validation required)" pt=" de baixa confiança (validação manual necessária)" es=" de baja confianza (validación manual necesaria)"/>
+    <!-- The remediation clause of the narrative, in three forms.  Which one runs
+         is decided by how many of the High/Critical findings carry a QoD below
+         the minimum, and it matters: telling the reader to remediate at once
+         and, in the same breath, that every one of those findings still needs
+         manual validation is advice that contradicts itself.  That is the exact
+         failure the QoD segregation of this report exists to prevent, so the
+         summary must not reintroduce it one page earlier. -->
+    <s k="exec_warrant" en=" and warrant prompt remediation" pt=" e exigem remediação imediata" es=" y requieren remediación inmediata"/>
+    <s k="exec_all_lowconf" en=" --- but every one of them was reported with a low detection quality and must be validated manually before any remediation effort; treat the severity shown as an upper bound." pt=" --- mas todos foram reportados com baixa qualidade de detecção e precisam ser validados manualmente antes de qualquer esforço de remediação; trate a severidade exibida como um teto." es=" --- pero todos fueron reportados con baja calidad de detección y deben validarse manualmente antes de cualquier esfuerzo de remediación; trate la severidad mostrada como un techo."/>
     <!-- Risk words (uppercase, used in the risk badge and narrative) -->
+    <!-- "The measurement did not happen."
+         A scan whose alive detection reaches no host still ends as Done, with an
+         empty report. Printing the normal summary over that reads as a clean bill
+         of health, which is the worst thing this document can say. These three
+         strings exist so it says the opposite, loudly. -->
+    <s k="risk_notmeasured" en="NOT MEASURED" pt="NÃO MEDIDO" es="NO MEDIDO"/>
+    <s k="nohost_title" en="This scan measured nothing" pt="Este scan não mediu nada" es="Este escaneo no midió nada"/>
+    <!-- Split in three because these are attribute VALUES, and an attribute in a
+         literal result element is an attribute value template: a brace is markup
+         there, so "\textbf{...}" cannot live in the string. The emphasis is
+         applied by the stylesheet around part B instead. -->
+    <s k="nohost_body_a" en="No host answered the alive test, so no port was scanned and no check was run. " pt="Nenhum host respondeu à detecção de host vivo, então nenhuma porta foi varrida e nenhum teste foi executado. " es="Ningún host respondió a la detección de host vivo, así que no se escaneó ningún puerto ni se ejecutó ninguna comprobación. "/>
+    <s k="nohost_body_b" en="The absence of findings in this report is not evidence of the absence of vulnerabilities" pt="A ausência de achados neste relatório não é evidência de ausência de vulnerabilidades" es="La ausencia de hallazgos en este informe no es evidencia de ausencia de vulnerabilidades"/>
+    <s k="nohost_body_c" en=" --- it is the absence of a measurement. The usual cause is the target answering none of the probes selected in its Alive Test (a firewall dropping ICMP, for instance). Fix that setting and scan again before treating this result as a clean scan." pt=" --- é ausência de medição. A causa usual é o alvo não responder a nenhuma das sondas escolhidas no Alive Test dele (um firewall descartando ICMP, por exemplo). Corrija essa configuração e refaça o scan antes de tratar este resultado como um scan limpo." es=" --- es ausencia de medición. La causa habitual es que el objetivo no responda a ninguna de las sondas elegidas en su Alive Test (un firewall descartando ICMP, por ejemplo). Corrija esa configuración y repita el escaneo antes de tratar este resultado como un escaneo limpio."/>
     <s k="risk_critical" en="CRITICAL" pt="CRÍTICO" es="CRÍTICO"/>
     <s k="risk_high" en="HIGH" pt="ALTO" es="ALTO"/>
     <s k="risk_medium" en="MEDIUM" pt="MÉDIO" es="MEDIO"/>
@@ -250,9 +308,19 @@ SPDX-License-Identifier: GPL-2.0-or-later
     <s k="th_vuln" en="Vulnerability" pt="Vulnerabilidade" es="Vulnerabilidad"/>
     <s k="th_inst" en="Inst." pt="Inst." es="Inst."/>
     <s k="th_severity" en="Severity" pt="Severidade" es="Severidad"/>
+    <!-- Cabecalho da coluna de severidade na tabela de INDICADORES: ali a
+         severidade e' um TETO (a deteccao e' de baixa qualidade), nao um fato.
+         Alimenta \suriLblSevCeiling do design system. -->
+    <s k="th_sev_ceiling" en="Severity (ceiling)" pt="Severidade (teto)" es="Severidad (techo)"/>
+    <!-- Cauda truncada do sumario: so' entram achados informativos, e eles
+         continuam inteiros na secao de achados detalhados — a frase diz onde. -->
+    <s k="fs_trunc" en=" informational (Log) findings — detailed in the section that follows." pt=" achados informativos (Log) — detalhados na seção seguinte." es=" hallazgos informativos (Log) — detallados en la sección siguiente."/>
     <!-- Hosts &amp; ports -->
     <s k="sec_hosts_ports" en="Hosts and Open Ports" pt="Hosts e Portas Abertas" es="Hosts y Puertos Abiertos"/>
-    <s k="hp_intro" en="The table below summarises the network services discovered on each assessed host, together with the number of findings and the highest severity observed on each port." pt="A tabela abaixo resume os serviços de rede descobertos em cada host avaliado, junto com o número de achados e a maior severidade observada em cada porta." es="La tabla siguiente resume los servicios de red descubiertos en cada host evaluado, junto con el número de hallazgos y la mayor severidad observada en cada puerto."/>
+    <!-- Runner of the running header: shorter than the printed section title,
+         which is why it is a key of its own. Upper case, no accent needed. -->
+    <s k="sec_hosts_ports_run" en="HOSTS AND PORTS" pt="HOSTS E PORTAS" es="HOSTS Y PUERTOS"/>
+    <s k="hp_intro" en="Network services discovered on each assessed host, with the number of findings and the highest severity observed on each port." pt="Serviços de rede descobertos em cada host avaliado, com o número de achados e a maior severidade observada em cada porta." es="Servicios de red descubiertos en cada host evaluado, con el número de hallazgos y la mayor severidad observada en cada puerto."/>
     <s k="th_port" en="Port" pt="Porta" es="Puerto"/>
     <s k="th_proto" en="Proto" pt="Proto" es="Proto"/>
     <s k="th_findings" en="Findings" pt="Achados" es="Hallazgos"/>
@@ -262,13 +330,26 @@ SPDX-License-Identifier: GPL-2.0-or-later
     <s k="hp_no_ports" en="No network services with findings were recorded on this host." pt="Nenhum serviço de rede com achados foi registrado neste host." es="No se registraron servicios de red con hallazgos en este host."/>
     <s k="hp_os_unknown" en="Operating system not identified" pt="Sistema operacional não identificado" es="Sistema operativo no identificado"/>
     <s k="hp_open_ports" en="open port(s) with findings" pt="porta(s) com achados" es="puerto(s) con hallazgos"/>
+    <!-- Short form of hp_os_unknown: it goes inside the OS badge of the host
+         card's title band, which is a chip and not a sentence. -->
+    <s k="hp_os_unknown_chip" en="OS not identified" pt="SO não identificado" es="SO no identificado"/>
+    <!-- Note under a host card. Every general/* pseudo-port of the host collapses
+         into ONE `geral' row, so the note is where the composition of that row is
+         spelled out: how many findings, of which severity, and the highest CVSS.
+         Without it the row would be a number nobody could take apart. -->
+    <s k="hp_gen_note_a" en="Host-level findings (general/*) are not network ports --- " pt="Achados de nível de host (general/*) não são portas de rede --- " es="Los hallazgos de nivel de host (general/*) no son puertos de red --- "/>
+    <s k="hp_gen_note_b" en=" aggregated into the row " pt=" agregados na linha " es=" agregados en la fila "/>
     <!-- Detailed findings -->
     <s k="sec_detailed" en="Detailed Findings" pt="Achados Detalhados" es="Hallazgos Detallados"/>
     <s k="lbl_instances" en="instance(s)" pt="instância(s)" es="instancia(s)"/>
     <s k="lbl_cvss_vector" en="CVSS Vector" pt="Vetor CVSS" es="Vector CVSS"/>
     <s k="f_summary" en="Summary" pt="Resumo" es="Resumen"/>
     <s k="f_impact" en="Impact" pt="Impacto" es="Impacto"/>
-    <s k="f_insight" en="Insight" pt="Detalhes Técnicos" es="Detalles Técnicos"/>
+    <!-- O EN dizia "Insight", que e' o nome do CAMPO no feed Greenbone, nao o
+         nome do bloco no design — e as outras duas linguas ja' diziam "Detalhes
+         Técnicos". A chave tem um consumidor so' (\suriLblFldTech), entao o
+         mesmo rotulo passa a dizer a mesma coisa nas tres. -->
+    <s k="f_insight" en="Technical Details" pt="Detalhes Técnicos" es="Detalles Técnicos"/>
     <s k="f_affected_sw" en="Affected Software / OS" pt="Software / SO Afetado" es="Software / SO Afectado"/>
     <s k="f_affected_sys" en="Affected Systems" pt="Sistemas Afetados" es="Sistemas Afectados"/>
     <s k="f_detection" en="Detection Result" pt="Resultado da Detecção" es="Resultado de la Detección"/>
@@ -295,7 +376,9 @@ SPDX-License-Identifier: GPL-2.0-or-later
          LaTeX-special character unless a control sequence is intended, because
          gvm:t() output is emitted WITHOUT escaping. -->
     <s k="sec_hexmap" en="Port Exposure Map" pt="Mapa de Exposição de Portas" es="Mapa de Exposición de Puertos"/>
-    <s k="hx_intro" en="Every hexagon is one network port observed in the assessed scope; the cell key is the pair (transport, port number), so a port seen on many hosts is a single hexagon. Colour, outline weight and the marker at the top vertex carry the HIGHEST severity observed on that port across every host that exposes it. The third line inside the hexagon names the exposed host (abbreviated when the address is too long for the cell), or counts them when the port is open on more than one. The table below the board lists every port with its mapped IP addresses, up to 40 per port." pt="Cada hexágono é uma porta de rede observada no escopo avaliado; a chave da célula é o par (transporte, número da porta), então uma porta vista em vários hosts é um único hexágono. Cor, espessura do traço e o marcador no vértice superior carregam a MAIOR severidade observada naquela porta em todos os hosts que a expõem. A terceira linha dentro do hexágono nomeia o host exposto (abreviado quando o endereço não cabe na célula), ou conta quantos são quando a porta está aberta em mais de um. A tabela abaixo do tabuleiro lista todas as portas com os endereços IP mapeados, até 40 por porta." es="Cada hexágono es un puerto de red observado en el alcance evaluado; la clave de la celda es el par (transporte, número de puerto), así que un puerto visto en varios hosts es un único hexágono. Color, grosor del trazo y el marcador en el vértice superior llevan la MAYOR severidad observada en ese puerto en todos los hosts que lo exponen. La tercera línea dentro del hexágono nombra el host expuesto (abreviado cuando la dirección no cabe en la celda), o los cuenta cuando el puerto está abierto en más de uno. La tabla debajo del tablero lista todos los puertos con las direcciones IP mapeadas, hasta 40 por puerto."/>
+    <!-- Retexto para o desenho novo: o tabuleiro nao tem mais espessura de traco
+         nem marcador no vertice, e a tabela nao fica mais logo abaixo dele. -->
+    <s k="hx_intro" en="Every hexagon is one network port observed in the assessed scope; the cell key is the pair (transport, port number), so a port seen on many hosts is a single hexagon. Colour and fill carry the HIGHEST severity observed on that port across every host that exposes it. The third line inside the cell names the exposed host, or counts them when the port is open on more than one. The table on the next page lists every port with its mapped IP addresses, up to 40 per port." pt="Cada hexágono é uma porta de rede observada no escopo avaliado; a chave da célula é o par (transporte, porta), então uma porta vista em vários hosts é um único hexágono. Cor e preenchimento carregam a MAIOR severidade observada naquela porta em todos os hosts que a expõem. A terceira linha da célula nomeia o host exposto, ou conta quantos são quando a porta está aberta em mais de um. A tabela da página seguinte lista todas as portas com os endereços IP mapeados, até 40 por porta." es="Cada hexágono es un puerto de red observado en el alcance evaluado; la clave de la celda es el par (transporte, puerto), así que un puerto visto en varios hosts es un único hexágono. Color y relleno llevan la MAYOR severidad observada en ese puerto en todos los hosts que lo exponen. La tercera línea de la celda nombra el host expuesto, o los cuenta cuando el puerto está abierto en más de uno. La tabla de la página siguiente lista todos los puertos con las direcciones IP mapeadas, hasta 40 por puerto."/>
     <s k="hx_state_critico" en="Critical" pt="Crítico" es="Crítico"/>
     <s k="hx_state_alto" en="High" pt="Alto" es="Alto"/>
     <s k="hx_state_medio" en="Medium" pt="Médio" es="Medio"/>
@@ -313,6 +396,10 @@ SPDX-License-Identifier: GPL-2.0-or-later
     <s k="hx_findings_n" en="finding(s)" pt="achado(s)" es="hallazgo(s)"/>
     <s k="hx_others" en="OTHERS" pt="OUTRAS" es="OTRAS"/>
     <s k="hx_scope" en="unique ports" pt="portas únicas" es="puertos únicos"/>
+    <!-- Runner of the running header: shorter than the section title, and
+         already upper case, because \setsectionrunner prints what it is given. -->
+    <s k="hx_runner" en="PORT EXPOSURE" pt="MAPA DE EXPOSIÇÃO" es="MAPA DE EXPOSICIÓN"/>
+    <s k="hx_host_runner" en="EXPOSURE BY HOST" pt="EXPOSIÇÃO POR HOST" es="EXPOSICIÓN POR HOST"/>
     <!-- When family collapsing merges ports, the header must report BOTH numbers:
          saying only the cell count understates how many ports the scan actually
          observed, and this document has a history of headline numbers that quietly
@@ -321,7 +408,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
     <s k="hx_in_word" en="in" pt="em" es="en"/>
     <s k="hx_cells_word" en="cells" pt="células" es="celdas"/>
     <s k="hx_hosts_word" en="host(s)" pt="host(s)" es="host(s)"/>
-    <s k="hx_omitted" en=" port(s) did not fit the board and were rolled into the final cell. None was dropped: every one of them is listed in the table below." pt=" porta(s) não couberam no tabuleiro e foram somadas na célula final. Nenhuma foi descartada: todas estão listadas na tabela abaixo." es=" puerto(s) no cupieron en el tablero y se sumaron en la celda final. Ninguno fue descartado: todos están listados en la tabla siguiente."/>
+    <s k="hx_omitted" en=" port(s) did not fit the board and were rolled into the final cell. None was dropped: every one of them is listed in the table on the next page." pt=" porta(s) não couberam no tabuleiro e foram somadas na célula final. Nenhuma foi descartada: todas estão listadas na tabela da página seguinte." es=" puerto(s) no cupieron en el tablero y se sumaron en la celda final. Ninguno fue descartado: todos están listados en la tabla de la página siguiente."/>
     <s k="hx_iana_note" en=" well-known port name taken from the IANA registry: the scan did NOT identify the service running on this port." pt=" nome IANA da porta: o scan NÃO identificou o serviço em execução nesta porta." es=" nombre IANA del puerto: el escaneo NO identificó el servicio en ejecución en este puerto."/>
     <s k="hx_low_qod" en=" the highest-severity finding on this port was reported with LOW detection quality, so the state shown was downgraded one level and must be validated by hand." pt=" o achado de maior severidade nesta porta foi reportado com BAIXA qualidade de detecção, então o estado exibido foi rebaixado um nível e precisa ser validado manualmente." es=" el hallazgo de mayor severidad en este puerto fue reportado con BAJA calidad de detección, así que el estado mostrado fue rebajado un nivel y debe validarse manualmente."/>
     <s k="hx_hostlevel_note" en=" host(s) also carry host-level findings (general/*). Those are not network ports and are deliberately absent from the board; they appear in the Hosts and Open Ports section." pt=" host(s) também têm achados de nível de host (general/*). Esses não são portas de rede e estão deliberadamente fora do tabuleiro; aparecem na seção Hosts e Portas Abertas." es=" host(s) también tienen hallazgos de nivel de host (general/*). Esos no son puertos de red y están deliberadamente fuera del tablero; aparecen en la sección Hosts y Puertos Abiertos."/>
@@ -445,6 +532,37 @@ SPDX-License-Identifier: GPL-2.0-or-later
       <xsl:otherwise>
         <func:result select="/report"/>
       </xsl:otherwise>
+    </xsl:choose>
+  </func:function>
+
+  <!-- NOME DO PROJETO.
+       O relatorio nomeia o projeto em quatro lugares (capa, narrativa do resumo
+       executivo, titulo do card do mapa de portas e contracapa) e todos os
+       quatro liam gvm:report()/task/name direto. Numa exportacao "Anonymous
+       XML" o <task> vem SEM <name> — e ai' a capa imprimia o rotulo PROJETO com
+       o valor em branco, a narrativa dizia "O projeto ``''" com um par de aspas
+       vazias e a contracapa saia com "PROJETO  <ponto> data".
+
+       A identidade do projeto nao se perde nesse export: ela continua no alvo
+       da tarefa e no comentario dela. Entao o nome cai, nessa ordem, para
+       task/target/name e task/comment. A cadeia so' e' consultada quando o
+       nome REAL esta vazio, entao um relatorio normal nunca muda; e nenhum dos
+       dois substitutos e' inventado aqui — ambos vem do mesmo <task> do XML.
+       Vazio ate' o fim continua vazio: quem chama e' que decide o que fazer
+       (o card do hexmap, por exemplo, cai para o titulo da secao). -->
+  <func:function name="gvm:project">
+    <xsl:variable name="t" select="gvm:report()/task"/>
+    <xsl:choose>
+      <xsl:when test="string-length(normalize-space($t/name)) &gt; 0">
+        <func:result select="string($t/name)"/>
+      </xsl:when>
+      <xsl:when test="string-length(normalize-space($t/target/name)) &gt; 0">
+        <func:result select="string($t/target/name)"/>
+      </xsl:when>
+      <xsl:when test="string-length(normalize-space($t/comment)) &gt; 0">
+        <func:result select="string($t/comment)"/>
+      </xsl:when>
+      <xsl:otherwise><func:result select="''"/></xsl:otherwise>
     </xsl:choose>
   </func:function>
 
@@ -732,9 +850,9 @@ SPDX-License-Identifier: GPL-2.0-or-later
           </xsl:for-each>
         </xsl:for-each>
         <xsl:if test="$len &gt; $vb-cap * 200">
-          <xsl:text>...{\rmfamily\itshape(+</xsl:text>
+          <xsl:text>\suriTruncMark{</xsl:text>
           <xsl:value-of select="$len - $vb-cap * 200"/>
-          <xsl:text>)}</xsl:text>
+          <xsl:text>}</xsl:text>
         </xsl:if>
       </xsl:otherwise>
     </xsl:choose>
@@ -766,9 +884,9 @@ SPDX-License-Identifier: GPL-2.0-or-later
     </xsl:variable>
     <xsl:value-of select="gvm:brk(string($e))"/>
     <xsl:if test="number($max) &gt; 0 and string-length($string) &gt; number($max)">
-      <xsl:text>...{\rmfamily\itshape(+</xsl:text>
+      <xsl:text>\suriTruncMark{</xsl:text>
       <xsl:value-of select="string-length($string) - number($max)"/>
-      <xsl:text>)}</xsl:text>
+      <xsl:text>}</xsl:text>
     </xsl:if>
   </xsl:template>
 
@@ -944,8 +1062,52 @@ SPDX-License-Identifier: GPL-2.0-or-later
       '&#13;', '&#10;'),
       '&#9;', '        '),
       '&#10;&#10;', '&#10; &#10;')"/>
+    <!-- RECUO PENDURADO DO FEED.  O bloco <tags> do Greenbone escreve
+         "chave=primeira linha" e indenta em DUAS colunas TODA linha de
+         continuacao: e' convencao do formato do arquivo, nao intencao do autor
+         do NVT.  Medido neste relatorio (797 achados, 1.473 campos de prosa com
+         mais de uma linha): 1.606 primeiras linhas, TODAS na coluna 0; 5.144
+         linhas de continuacao, das quais 5.142 na coluna 2 e 2 na coluna 4.
+
+         Sem descontar essa base, a regra "$ind >= 2 e' indentacao deliberada"
+         logo abaixo casa em 99,96% das linhas de continuacao e o refluxo — a
+         razao de existir deste template — nunca acontece: cada paragrafo do PDF
+         sai congelado na quebra de ~65 colunas do terminal de quem escreveu o
+         NVT, com um recuo falso de 2 colunas por baixo.
+
+         Entao: quando TODA linha de continuacao nao vazia comeca com dois
+         brancos, esses dois sao a base do bloco e saem.  A indentacao RELATIVA
+         sobrevive intacta (a linha da coluna 4 vai para a 2 e continua sendo
+         bloco indentado), marcador de lista continua quebrando por gvm:marker,
+         e um bloco recuado de proposito em 4+ colunas nao e' tocado — nesse
+         caso a base nao e' 2 e nada e' descontado.
+
+         A PRIMEIRA linha entra na conta de um jeito diferente das outras: no
+         campo inteiro ela vem colada no "chave=" e por isso nunca tem recuo,
+         mas quem chama aqui e' o prose-block, que ja partiu o campo nas linhas
+         em branco — e no segundo pedaco em diante a primeira linha do pedaco e'
+         uma linha de continuacao como qualquer outra, com os 2 brancos.  Entao
+         ela nao decide se ha recuo pendurado (senao um paragrafo de uma linha
+         so' nunca seria reconhecido), mas e' descontada junto quando ha. -->
+    <xsl:variable name="rest"
+      select="str:tokenize($norm, '&#10;')[position() &gt; 1]
+                                          [normalize-space(.) != '']"/>
+    <xsl:variable name="body">
+      <xsl:choose>
+        <xsl:when test="not($rest[substring(string(.), 1, 2) != '  '])">
+          <xsl:variable name="ded" select="str:replace($norm, '&#10;  ', '&#10;')"/>
+          <xsl:choose>
+            <xsl:when test="substring($ded, 1, 2) = '  '">
+              <xsl:value-of select="substring($ded, 3)"/>
+            </xsl:when>
+            <xsl:otherwise><xsl:value-of select="$ded"/></xsl:otherwise>
+          </xsl:choose>
+        </xsl:when>
+        <xsl:otherwise><xsl:value-of select="$norm"/></xsl:otherwise>
+      </xsl:choose>
+    </xsl:variable>
     <xsl:variable name="flow">
-      <xsl:for-each select="str:tokenize($norm, '&#10;')">
+      <xsl:for-each select="str:tokenize(string($body), '&#10;')">
         <xsl:variable name="tok" select="string(.)"/>
         <xsl:variable name="prev" select="string(preceding-sibling::*[1])"/>
         <xsl:variable name="next" select="string(following-sibling::*[1])"/>
@@ -1072,18 +1234,13 @@ SPDX-License-Identifier: GPL-2.0-or-later
   <!-- Severity helpers                                                  -->
   <!-- ================================================================= -->
 
-  <!-- Map a threat level to a brand colour name. -->
-  <xsl:template name="threat-color">
-    <xsl:param name="threat"/>
-    <xsl:choose>
-      <xsl:when test="$threat='Critical'">gvm_critical</xsl:when>
-      <xsl:when test="$threat='High'">gvm_hole</xsl:when>
-      <xsl:when test="$threat='Medium'">gvm_warning</xsl:when>
-      <xsl:when test="$threat='Low'">gvm_note</xsl:when>
-      <xsl:when test="$threat='Falsepos'">gvm_falsepos</xsl:when>
-      <xsl:otherwise>gvm_log</xsl:otherwise>
-    </xsl:choose>
-  </xsl:template>
+  <!-- `threat-color' (classe -> gvm_critical/gvm_hole/gvm_warning/...) saiu
+       daqui junto com `severity-pill', seu unico chamador. Aquelas cores eram
+       da paleta indigo/navy anterior e nao existem mais em lugar nenhum: quem
+       pinta severidade agora e' \sevcolor/\sevbg do suricatoos-tokens, e a
+       CHAVE (critico|alto|medio|baixo|logsev|falsepos) vem de `sevkey-detail'.
+       O template ficava como armadilha — a primeira chamada nova quebraria o
+       pdflatex num "undefined color", que e' erro de tempo de compilacao. -->
 
   <!-- Map a numeric severity (CVSS 0–10) to a class token. GVM's <threat> never
        emits "Critical" (it maxes at "High"/"Alarm"), so all severity classing is
@@ -1134,111 +1291,142 @@ SPDX-License-Identifier: GPL-2.0-or-later
     <func:result select="gvm:t(concat('sev_', translate($class, 'CHMLOF', 'chmlof')))"/>
   </func:function>
 
-  <!-- A small filled severity pill: localised class word + CVSS score, derived
-       from the numeric severity. -->
-  <xsl:template name="severity-pill">
-    <xsl:param name="severity"/>
-    <xsl:variable name="class">
-      <xsl:call-template name="sev-class">
-        <xsl:with-param name="severity" select="$severity"/>
-      </xsl:call-template>
-    </xsl:variable>
-    <xsl:variable name="c">
-      <xsl:call-template name="threat-color">
-        <xsl:with-param name="threat" select="$class"/>
-      </xsl:call-template>
-    </xsl:variable>
-    <xsl:text>{\setlength{\fboxsep}{2.2pt}\colorbox{</xsl:text>
-    <xsl:value-of select="$c"/>
-    <xsl:text>}{\color{white}\scriptsize\bfseries~</xsl:text>
-    <xsl:value-of select="gvm:sev-word($class)"/>
-    <xsl:if test="$class != 'Log' and $class != 'Falsepos'">
-      <xsl:text> \textbullet\ CVSS </xsl:text>
-      <xsl:value-of select="$severity"/>
-    </xsl:if>
-    <xsl:text>~}}</xsl:text>
-  </xsl:template>
+  <!-- `severity-pill' saiu daqui: desenhava a pilha antiga com \colorbox e
+       \setlength{\fboxsep} sobre a paleta gvm_*, e ficou sem um unico chamador
+       quando as tabelas e os cards passaram a mandar a CHAVE de severidade para
+       o design system (\sevbadge, \chipsev, \sevstate desenham a pilha agora).
+       gvm:sev-word() continua vivo — quem o usa e' a nota da linha `geral' da
+       secao 3. -->
 
   <!-- ================================================================= -->
   <!-- LaTeX preamble                                                    -->
   <!-- ================================================================= -->
 
   <xsl:template name="header">
-    <xsl:text>\documentclass[11pt]{article}
+    <!-- Tabela macro -> chave de i18n do DESIGN SYSTEM.
+         Cada palavra fixa que os modulos .sty imprimem e' um \suriLbl... (ou uma
+         string de mobilia de pagina); a traducao continua vindo da tabela
+         gvm:t() deste XSLT. Este par de listas e' o que faz UM design system
+         existir em tres linguas: o .sty desenha, o XSLT nomeia.
+         O que NAO entra aqui, de proposito: \suriPlatform e \suriLockup, que
+         sao MARCA ("SURICATOOS SECURITY PLATFORM", "SECURITY PLATFORM") e nao
+         se traduzem em lingua nenhuma. -->
+    <xsl:variable name="ds-labels-rtf">
+      <!-- mobilia de pagina + capa (suricatoos-page.sty) -->
+      <m c="suriDocKind"         k="running_header"/>
+      <m c="suriConfidential"    k="confidential_caps"/>
+      <m c="suriPageWord"        k="page_word"/>
+      <m c="suriLblProject"      k="lbl_engagement"/>
+      <m c="suriLblHosts"        k="lbl_hosts_assessed"/>
+      <m c="suriLblScanStart"    k="lbl_scan_started"/>
+      <m c="suriLblScanEnd"      k="lbl_scan_completed"/>
+      <m c="suriLblReportDate"   k="lbl_report_date"/>
+      <m c="suriLblClass"        k="lbl_classification"/>
+      <!-- blocos de conteudo (suricatoos-blocks.sty) -->
+      <m c="suriLblRisk"         k="overall_risk"/>
+      <m c="suriLblSeverityChart" k="findings_by_sev"/>
+      <m c="suriLblTimeline"     k="timeline"/>
+      <m c="suriLblPort"         k="hx_th_port"/>
+      <m c="suriLblProto"        k="hx_th_proto"/>
+      <m c="suriLblService"      k="hx_th_service"/>
+      <m c="suriLblState"        k="hx_th_state"/>
+      <m c="suriLblCvssMax"      k="hx_th_cvss"/>
+      <m c="suriLblHostsCol"     k="hx_th_hosts"/>
+      <m c="suriLblIps"          k="hx_th_ips"/>
+      <m c="suriLblAch"          k="th_ach"/>
+      <m c="suriLblMaxSev"       k="th_max_sev"/>
+      <m c="suriLblVuln"         k="th_vuln"/>
+      <m c="suriLblInst"         k="th_inst"/>
+      <m c="suriLblSev"          k="th_severity"/>
+      <m c="suriLblSevCeiling"   k="th_sev_ceiling"/>
+      <m c="suriLblAdvisory"     k="grp_th_adv"/>
+      <m c="suriLblSingleFix"    k="grp_action"/>
+      <m c="suriLblSolution"     k="f_solution"/>
+      <m c="suriLblCvssText"     k="lbl_cvss"/>
+      <m c="suriLblPortsWith"    k="hp_open_ports"/>
+      <!-- cola do pacote guarda-chuva (suricatoos-report.sty) -->
+      <m c="suriLblConfirmed"    k="sub_confirmed"/>
+      <m c="suriLblIndicators"   k="sub_indicators"/>
+      <m c="suriLblPortsMapped"  k="hx_ports_mapped"/>
+      <m c="suriLblFldVector"    k="lbl_cvss_vector"/>
+      <m c="suriLblFldAffected"  k="f_affected_sys"/>
+      <m c="suriLblFldSummary"   k="f_summary"/>
+      <m c="suriLblFldTech"      k="f_insight"/>
+      <m c="suriLblFldDetection" k="f_detection"/>
+      <m c="suriLblFldRefs"      k="f_references"/>
+    </xsl:variable>
+    <!-- Vocabulario de severidade. A CHAVE (critico|alto|...) e' DADO e nunca
+         muda; a palavra impressa e' lingua, e \setsevword e' o gancho que os
+         .sty deixam para trocar a lista inteira sem tocar no desenho. -->
+    <xsl:variable name="ds-sevwords-rtf">
+      <m c="critico" k="sev_critical"/>
+      <m c="alto"    k="sev_high"/>
+      <m c="medio"   k="sev_medium"/>
+      <m c="baixo"   k="sev_low"/>
+      <m c="logsev"  k="sev_log"/>
+      <m c="exposto" k="hx_state_exposto"/>
+      <m c="neutro"  k="hx_state_neutro"/>
+      <!-- `falsepos' e' a unica chave de severidade que o .sty NAO traz: o
+           \sevword dele cai para imprimir a propria chave, e um achado marcado
+           como falso positivo saia com o chip escrito "FALSEPOS". O fixture
+           anonimo nao tem severidade negativa, entao isso nunca aparecia no
+           teste — mas sev-class produz a classe Falsepos e finding-cards emite
+           a chave. A palavra ja' existia na tabela de i18n (sev_falsepos) e so'
+           faltava o gancho. -->
+      <m c="falsepos" k="sev_falsepos"/>
+    </xsl:variable>
+    <xsl:text>\documentclass[10pt,a4paper]{article}
 
-\usepackage[utf8x]{inputenc}
-\usepackage[T1]{fontenc}
-\usepackage{textcomp}
-\usepackage{helvet}
-\renewcommand{\familydefault}{\sfdefault}
+% O design system inteiro, em uma linha: tokens (paleta, tipos, escala px->pt),
+% mobilia de pagina (geometria, cabecalho, capa), hexmap e blocos de conteudo.
+% Nenhuma cor, nenhum comprimento e nenhum \vspace sai deste XSLT: daqui para
+% baixo o documento e' so' DADO dentro de macro semantica.
+\usepackage{suricatoos-report}
 
-\usepackage{geometry}
-\usepackage{calc}
-\usepackage{array}
-\usepackage{tabularx}
-\usepackage{longtable}
-\usepackage{colortbl}
-\usepackage{booktabs}
-\usepackage{enumitem}
-\usepackage{titlesec}
-\usepackage{url}
-\usepackage{graphicx}
-\usepackage{xcolor}
-\usepackage{tikz}
-\usepackage{pgfplots}
-\pgfplotsset{compat=1.16}
-\usepackage[most,breakable]{tcolorbox}
-\usepackage{fancyhdr}
-\usepackage{lastpage}
+% ---- i18n do design system ------------------------------------------------
+% Os .sty desenham; as palavras vem daqui. Cada \renewcommand abaixo troca UMA
+% palavra fixa de um modulo pela traducao da tabela gvm:t(), e nenhuma decisao
+% visual atravessa junto.
+</xsl:text>
+    <xsl:for-each select="exsl:node-set($ds-labels-rtf)/m">
+      <xsl:text>\renewcommand{\</xsl:text>
+      <xsl:value-of select="@c"/>
+      <xsl:text>}{</xsl:text>
+      <xsl:value-of select="gvm:t(string(@k))"/>
+      <xsl:text>}
+</xsl:text>
+    </xsl:for-each>
+    <xsl:for-each select="exsl:node-set($ds-sevwords-rtf)/m">
+      <xsl:text>\setsevword{</xsl:text>
+      <xsl:value-of select="@c"/>
+      <xsl:text>}{</xsl:text>
+      <xsl:value-of select="gvm:t(string(@k))"/>
+      <xsl:text>}
+</xsl:text>
+    </xsl:for-each>
+    <!-- A legenda das duas tabelas de sumario declara a BANDA de qualidade de
+         deteccao. O numero nao pode estar escrito na traducao: ele e' o
+         parametro $qod-min, o MESMO que segrega achado confirmado de indicador
+         no corpo do relatorio. Se o operador mudar o parametro e a legenda
+         continuar dizendo 70, o documento passa a mentir sobre o proprio
+         criterio. Por isso a frase e' composta aqui: palavra da tabela de
+         i18n + relacao (\suriGeq, o ">=" desenhado na propria Plex) + numero
+         do parametro. -->
+    <xsl:text>\renewcommand{\suriLblQodConfirmed}{</xsl:text>
+    <xsl:value-of select="gvm:t('qod_quality')"/>
+    <xsl:text> \suriGeq\ </xsl:text>
+    <xsl:value-of select="$qod-min"/>
+    <xsl:text>\%}
+\renewcommand{\suriLblQodIndicators}{</xsl:text>
+    <xsl:value-of select="gvm:t('qod_quality')"/>
+    <xsl:text> &lt; </xsl:text>
+    <xsl:value-of select="$qod-min"/>
+    <xsl:text>\%}
 
-\DeclareUnicodeCharacter{135}{{\textascii ?}}
-\DeclareUnicodeCharacter{129}{{\textascii ?}}
-\DeclareUnicodeCharacter{128}{{\textascii ?}}
-
-% ---- Suricatoos brand palette ----
-\definecolor{surNavy}{rgb}{0.031,0.055,0.090}
-\definecolor{surNavyTwo}{rgb}{0.047,0.086,0.133}
-\definecolor{surSurface}{rgb}{0.075,0.125,0.180}
-\definecolor{surIndigo}{rgb}{0.357,0.486,0.980}
-\definecolor{surIndigoLt}{rgb}{0.490,0.592,1.0}
-\definecolor{surBorder}{rgb}{0.133,0.204,0.290}
-\definecolor{surBorderLt}{rgb}{0.780,0.820,0.870}
-\definecolor{surInk}{rgb}{0.059,0.094,0.145}
-\definecolor{surMuted}{rgb}{0.361,0.420,0.478}
-\definecolor{surCloud}{rgb}{0.937,0.953,0.965}
-\definecolor{surMist}{rgb}{0.960,0.972,0.985}
-
-% ---- Severity colours ----
-\definecolor{linkblue}{rgb}{0.357,0.486,0.980}
-\definecolor{gvm_critical}{rgb}{0.647,0.043,0.098}
-\definecolor{gvm_hole}{rgb}{0.847,0.325,0.098}
-\definecolor{gvm_warning}{rgb}{0.929,0.667,0.153}
-\definecolor{gvm_note}{rgb}{0.204,0.451,0.792}
-\definecolor{gvm_log}{rgb}{0.400,0.451,0.510}
-\definecolor{gvm_falsepos}{rgb}{0.545,0.404,0.612}
-\definecolor{gvm_report}{rgb}{0.808,0.851,1.0}
-
-% ---- Hexmap panel palette (dark board) and its table-safe darkened twins ----
-\definecolor{hexBg}{HTML}{0B1426}
-\definecolor{hexFg}{HTML}{FFFFFF}
-\definecolor{hexMuted}{HTML}{A8B6C8}
-\definecolor{hexCrit}{HTML}{E63946}
-\definecolor{hexHigh}{HTML}{FF7678}
-\definecolor{hexMed}{HTML}{F0A202}
-\definecolor{hexLow}{HTML}{4FB477}
-\definecolor{hexExp}{HTML}{00D4FF}
-\definecolor{hexNeu}{HTML}{E8EDF5}
-\definecolor{hexCritT}{HTML}{B0111C}
-\definecolor{hexHighT}{HTML}{C4453F}
-\definecolor{hexMedT}{HTML}{9A6600}
-\definecolor{hexLowT}{HTML}{2C7A52}
-\definecolor{hexExpT}{HTML}{00688F}
-\definecolor{hexNeuT}{HTML}{5F6B7A}
-
-% ---- Page geometry (A4, room for branded header / footer) ----
-\geometry{a4paper,top=30mm,bottom=24mm,left=22mm,right=22mm,headheight=13mm,headsep=6mm,footskip=13mm}
-\setlength{\parskip}{\smallskipamount}
-\setlength{\parindent}{0pt}
+% ---- Fluxo de texto de um relatorio real ----------------------------------
+% Nada disso e' decisao de design: sao as travas que um documento de dezenas de
+% paginas de dado de scanner precisa para nao jogar linha fora da margem nem
+% deixar linha orfa no pe' da pagina.
 % Absorb the occasional overfull line in justified narrative paragraphs
 % (long unbreakable tokens like CVE ids / package names) instead of letting
 % them poke into the margin.
@@ -1308,44 +1496,24 @@ SPDX-License-Identifier: GPL-2.0-or-later
 \newcommand{\surnametxt}{\hyphenpenalty=700\exhyphenpenalty=10000\lefthyphenmin=63}
 \newcommand{\surname}{\surnametxt\hbadness=10000\raggedright\arraybackslash}
 
-% ---- Branded running header / footer ----
-\fancypagestyle{surfancy}{%
-  \fancyhf{}%
-  \renewcommand{\headrulewidth}{0.7pt}%
-  \renewcommand{\footrulewidth}{0.4pt}%
-  \renewcommand{\headrule}{{\color{surIndigo}\hrule height \headrulewidth}}%
-  \renewcommand{\footrule}{{\color{surBorder}\hrule height \footrulewidth}}%
-  \fancyhead[L]{\raisebox{-1.8mm}{\includegraphics[height=5mm]{suricatoos-mark-navy}}\hspace{2mm}{\bfseries\color{surInk}Suricatoos}}%
-  \fancyhead[R]{{\footnotesize\color{surMuted}</xsl:text>
-    <xsl:value-of select="gvm:t('running_header')"/>
-    <xsl:text>}}%
-  \fancyfoot[L]{{\footnotesize\color{surMuted}\bfseries </xsl:text>
-    <xsl:value-of select="gvm:t('confidential_caps')"/>
-    <xsl:text>}}%
-  \fancyfoot[C]{{\footnotesize\color{surMuted}Suricatoos Security Platform}}%
-  \fancyfoot[R]{{\footnotesize\color{surMuted}</xsl:text>
-    <xsl:value-of select="gvm:t('page_word')"/>
-    <xsl:text> \thepage\ </xsl:text>
-    <xsl:value-of select="gvm:t('of_word')"/>
-    <xsl:text> \pageref{LastPage}}}%
-}
-
-% ---- Brand-coloured section headings ----
-\titleformat{\section}{\Large\bfseries\color{surInk}}{\thesection}{0.7em}{}[{\color{surIndigo}\titlerule[1.1pt]}]
-\titleformat{\subsection}{\large\bfseries\color{surIndigo}}{\thesubsection}{0.6em}{}
-\titleformat{\subsubsection}{\normalsize\bfseries\color{surInk}}{\thesubsubsection}{0.5em}{}
-\titlespacing*{\section}{0pt}{3.4ex plus 1ex minus .2ex}{1.8ex plus .2ex}
-\titlespacing*{\subsection}{0pt}{2.6ex plus .8ex}{1.2ex}
-
-% ---- Finding-card field label ----
-\newcommand{\fieldlabel}[1]{\smallskip\par{\color{surIndigo}\footnotesize\bfseries\MakeUppercase{#1}}\par\nopagebreak\vspace{0.4mm}}
-
-% must come last
-\usepackage{hyperref}
-\hypersetup{unicode=true,colorlinks=true,linkcolor=surIndigo,urlcolor=surIndigo,citecolor=surIndigo,bookmarks=true,bookmarksopen=true,pdftitle={</xsl:text>
+% ---- hyperref, por ultimo, so' pelos metadados do documento ---------------
+% O design system NAO desenha link: quem pinta a URL de referencia e' \refurl,
+% em carmim, e suricatoos-blocks.sty carrega hyperref sozinho [hidelinks] se o
+% documento nao tiver carregado. Carregamos aqui, com as MESMAS opcoes, por um
+% motivo so': o titulo e o autor do PDF (o que o leitor ve na aba do visualizador
+% e no `pdfinfo`) sao dado do relatorio e tem de sair traduzidos.
+% Sem `hidelinks` o hyperref desenharia um quadro colorido em volta de cada
+% \href, que e' exatamente a moldura que o modelo nao tem.
+\usepackage[unicode=true,hidelinks]{hyperref}
+% Só metadado aqui. `bookmarks'/`bookmarksopen' NAO cabem em \hypersetup: o
+% hyperref so' honra as duas como opcao de CARGA do pacote, e passa-las depois
+% rendia o unico warning do log ("Option `bookmarks' has already been used")
+% sem produzir arvore nenhuma --- o documento nao usa \section, entao nao ha
+% o que indexar. Uma arvore de navegacao de verdade e' \pdfbookmark emitido
+% por secao, que e' feature, nao opcao de preambulo.
+\hypersetup{pdftitle={</xsl:text>
     <xsl:value-of select="gvm:t('pdftitle')"/>
     <xsl:text>},pdfauthor={Suricatoos Security Platform}}
-\usepackage[all]{hypcap}
 % A URL de referencia sai do feed com 120+ caracteres. Em \ttfamily (o padrao
 % do hyperref) ela ocupa ~40%% mais medida e estourava 138pt para fora da
 % margem mesmo dentro de \url. \urlstyle{same} a compoe na fonte do texto, e a
@@ -1364,74 +1532,75 @@ SPDX-License-Identifier: GPL-2.0-or-later
   <!-- ================================================================= -->
 
   <xsl:template name="cover-page">
-    <!-- escape_break e nao escape_text: quem nomeia a tarefa e' o operador, e um
-         nome sem espaco (um caminho, uma URL, um identificador colado) nao tinha
-         onde quebrar dentro do m{102mm} e saia da folha na capa.
-         O corte (parametro $task-name-max, medido — ver a nota la') e' pela
-         ALTURA, nao pela largura: o quadro da capa cresce para CIMA a partir da
-         base, entao um nome de 8000 caracteres (o fixture texto-gigante tem um)
-         viraria ~145 linhas por cima do logotipo e do titulo.
-         O que foi cortado e' declarado; o valor inteiro continua no relatorio
-         de origem e nenhum dado de achado e' tocado. -->
+    <!-- O corte do nome da tarefa na CAPA e' outro desde o design system, e a
+         razao mudou de eixo. No quadro antigo o nome caia num m{102mm} que
+         REFLUIA e crescia para CIMA, entao o teto era de ALTURA e $task-name-max
+         (600, medido la') era o numero certo. A grade de metadados de
+         \suriCover nao reflui: cada valor e' um no de TikZ ancorado pela base
+         direita, sem `text width`, portanto uma LINHA so'. Um nome de 600
+         caracteres nao empurra o logotipo — ele sai andando para a esquerda por
+         cima do rotulo vizinho e para fora da folha.
+         Medido na propria geometria do modulo: a coluna da grade e'
+         (paperwidth-64-64-42)/2 = ~313px. O orcamento tem que valer para o
+         rotulo MAIS LARGO das tres linguas, que e' o ingles ENGAGEMENT (~73px em
+         Mono 9.5 com tracking 165), nao para o PROJETO do portugues (~51px): foi
+         essa conta pelo rotulo curto que fez o nome do sample atravessar o
+         proprio rotulo na capa em ingles. Sobram ~226px; a Mono 11 gasta ~6.6px
+         por caractere e a marca de corte ("...(+N)") mais ~30px, o que fecha em
+         28 caracteres. Isto e a primeira linha de defesa; a segunda esta em
+         suricatoos-page.sty, onde \suri@cvcell mede o rotulo de verdade e
+         encolhe o valor para o vao que sobrou: assim um orcamento errado
+         degrada para um valor um pouco menor, nunca para uma colisao. $task-name-max continua valendo onde o texto REFLUI (a
+         narrativa do resumo executivo); aqui o limite e' a linha.
+         escape_break e nao escape_text porque quem nomeia a tarefa e' o
+         operador: o nome traz _ & % # $ e til do jeito que ele escreveu. O que
+         foi cortado e' DECLARADO na propria capa; o valor inteiro continua no
+         relatorio de origem e nenhum dado de achado e' tocado. -->
+    <xsl:variable name="cover-name-max" select="28"/>
     <xsl:variable name="task_escaped">
       <xsl:call-template name="escape_break">
-        <xsl:with-param name="string" select="gvm:report()/task/name"/>
-        <xsl:with-param name="max" select="$task-name-max"/>
+        <xsl:with-param name="string" select="gvm:project()"/>
+        <xsl:with-param name="max" select="$cover-name-max"/>
       </xsl:call-template>
     </xsl:variable>
-    <xsl:text>\begin{titlepage}
-\thispagestyle{empty}
-\begin{tikzpicture}[remember picture,overlay]
-  \fill[surNavy] (current page.south west) rectangle (current page.north east);
-  \begin{scope}
-    \clip (current page.south west) rectangle (current page.north east);
-    \draw[surIndigo,line width=1pt,draw opacity=0.10]   ([xshift=8mm,yshift=20mm]current page.south east) circle (42mm);
-    \draw[surIndigoLt,line width=1pt,draw opacity=0.13] ([xshift=8mm,yshift=20mm]current page.south east) circle (60mm);
-    \draw[surIndigo,line width=1pt,draw opacity=0.08]   ([xshift=8mm,yshift=20mm]current page.south east) circle (84mm);
-  \end{scope}
-  \fill[surIndigo] (current page.north west) rectangle ([yshift=-3mm]current page.north east);
-  \node[anchor=north west,xshift=22mm,yshift=-32mm] at (current page.north west)
-    {\includegraphics[width=70mm]{suricatoos-wordmark-white}};
-  \node[anchor=north west,xshift=22mm,yshift=-78mm,text=surIndigoLt] at (current page.north west)
-    {\sffamily\bfseries\large </xsl:text>
+    <!-- \suriCover desenha a pagina 1 inteira (fundo navy, hexagonos, masthead,
+         titulo, grade de metadados, linha de rodape) e fecha com \clearpage.
+         Aqui so' entram DADOS.
+         TODO valor vai entre chaves de proposito: as chaves de xkeyval sao
+         separadas por virgula e o par e' cortado no primeiro "=", e tres destes
+         valores carregam virgula ou "=" com frequencia — a data localizada em
+         pt/es sai "ter, 30 jun 2026 00:00 UTC" e o nome de tarefa e' texto livre
+         que o operador escreve como quiser. Sem as chaves, "ter" viraria uma
+         chave desconhecida de keyval e o run morreria com "undefined key". -->
+    <xsl:text>\suriCover{
+  kicker={</xsl:text>
     <xsl:value-of select="gvm:t('cover_kicker')"/>
-    <xsl:text>};
-  \node[anchor=north west,xshift=22mm,yshift=-83mm] at (current page.north west)
-    {\color{surIndigo}\rule{40mm}{1.3pt}};
-  \node[anchor=north west,xshift=21mm,yshift=-89mm,text=white,text width=172mm] at (current page.north west)
-    {\sffamily\bfseries\fontsize{31}{36}\selectfont </xsl:text>
+    <xsl:text>},
+  title={</xsl:text>
     <xsl:value-of select="gvm:t('cover_title')"/>
-    <xsl:text>};
-  \node[anchor=north west,xshift=22mm,yshift=-124mm,text=surCloud,text width=164mm] at (current page.north west)
-    {\sffamily\large </xsl:text>
+    <xsl:text>},
+  subtitle={</xsl:text>
     <xsl:value-of select="gvm:t('cover_prepared')"/>
-    <xsl:text>};
-  \node[anchor=south west,xshift=22mm,yshift=40mm,fill=surSurface,rounded corners=2mm,
-        inner sep=5mm,draw=surBorder,line width=0.5pt] at (current page.south west)
-    {\sffamily\renewcommand{\arraystretch}{1.55}%
-     \begin{tabular}{@{}m{34mm}@{\hspace{4mm}}m{102mm}@{}}
-     \textcolor{surIndigoLt}{\scriptsize\bfseries </xsl:text><xsl:value-of select="gvm:t('lbl_engagement')"/><xsl:text>}&amp;{\color{white}</xsl:text>
-       <xsl:value-of select="$task_escaped"/>
-       <xsl:text>}\\
-     \textcolor{surIndigoLt}{\scriptsize\bfseries </xsl:text><xsl:value-of select="gvm:t('lbl_hosts_assessed')"/><xsl:text>}&amp;{\color{white}</xsl:text>
-       <xsl:value-of select="count(gvm:report()/host)"/>
-       <xsl:text>}\\
-     \textcolor{surIndigoLt}{\scriptsize\bfseries </xsl:text><xsl:value-of select="gvm:t('lbl_scan_started')"/><xsl:text>}&amp;{\color{white}</xsl:text>
-       <xsl:call-template name="emit-date"><xsl:with-param name="date" select="gvm:report()/scan_start"/></xsl:call-template>
-       <xsl:text>}\\
-     \textcolor{surIndigoLt}{\scriptsize\bfseries </xsl:text><xsl:value-of select="gvm:t('lbl_scan_completed')"/><xsl:text>}&amp;{\color{white}</xsl:text>
-       <xsl:call-template name="emit-date"><xsl:with-param name="date" select="gvm:report()/scan_end"/></xsl:call-template>
-       <xsl:text>}\\
-     \textcolor{surIndigoLt}{\scriptsize\bfseries </xsl:text><xsl:value-of select="gvm:t('lbl_report_date')"/><xsl:text>}&amp;{\color{white}</xsl:text><xsl:call-template name="emit-today"/><xsl:text>}\\
-     \textcolor{surIndigoLt}{\scriptsize\bfseries </xsl:text><xsl:value-of select="gvm:t('lbl_classification')"/><xsl:text>}&amp;{\color{white}</xsl:text><xsl:value-of select="gvm:t('val_confidential')"/><xsl:text>}\\
-     \end{tabular}};
-  \fill[surIndigo] (current page.south west) rectangle ([yshift=14mm]current page.south east);
-  \node[anchor=west,xshift=22mm,text=white] at ([yshift=7mm]current page.south west)
-    {\sffamily\footnotesize\bfseries </xsl:text><xsl:value-of select="gvm:t('confidential_caps')"/><xsl:text>};
-  \node[anchor=east,xshift=-22mm,text=white] at ([yshift=7mm]current page.south east)
-    {\sffamily\footnotesize Suricatoos Security Platform};
-\end{tikzpicture}
-\end{titlepage}
+    <xsl:text>},
+  projeto={</xsl:text>
+    <xsl:value-of select="$task_escaped"/>
+    <xsl:text>},
+  hosts={</xsl:text>
+    <xsl:value-of select="count(gvm:report()/host)"/>
+    <xsl:text>},
+  inicio={</xsl:text>
+    <xsl:call-template name="emit-date"><xsl:with-param name="date" select="gvm:report()/scan_start"/></xsl:call-template>
+    <xsl:text>},
+  fim={</xsl:text>
+    <xsl:call-template name="emit-date"><xsl:with-param name="date" select="gvm:report()/scan_end"/></xsl:call-template>
+    <xsl:text>},
+  data={</xsl:text>
+    <xsl:call-template name="emit-today"/>
+    <xsl:text>},
+  classificacao={</xsl:text>
+    <xsl:value-of select="gvm:t('confidential_caps')"/>
+    <xsl:text>}
+}
 </xsl:text>
   </xsl:template>
 
@@ -1439,22 +1608,93 @@ SPDX-License-Identifier: GPL-2.0-or-later
   <!-- Executive summary                                                 -->
   <!-- ================================================================= -->
 
-  <!-- A single metric tile inside the metrics tikzpicture. -->
-  <xsl:template name="metric-tile">
-    <xsl:param name="xl"/>
-    <xsl:param name="xr"/>
-    <xsl:param name="value"/>
-    <xsl:param name="label"/>
-    <xsl:variable name="xc" select="format-number(($xl + $xr) div 2, '0.###')"/>
-    <xsl:text>\begin{scope}
-\clip[rounded corners=1.8mm] (</xsl:text><xsl:value-of select="$xl"/><xsl:text>,0) rectangle (</xsl:text><xsl:value-of select="$xr"/><xsl:text>,26);
-\fill[surMist] (</xsl:text><xsl:value-of select="$xl"/><xsl:text>,0) rectangle (</xsl:text><xsl:value-of select="$xr"/><xsl:text>,26);
-\fill[surIndigo] (</xsl:text><xsl:value-of select="$xl"/><xsl:text>,0) rectangle (</xsl:text><xsl:value-of select="format-number($xl + 1.4, '0.###')"/><xsl:text>,26);
-\end{scope}
-\node[anchor=center,text=surInk] at (</xsl:text><xsl:value-of select="$xc"/><xsl:text>,16.5) {\fontsize{21}{21}\selectfont\bfseries </xsl:text><xsl:value-of select="$value"/><xsl:text>};
-\node[anchor=center,text=surMuted,text width=</xsl:text><xsl:value-of select="format-number($xr - $xl - 3, '0.###')"/><xsl:text>mm,align=center] at (</xsl:text><xsl:value-of select="$xc"/><xsl:text>,6.5) {\scriptsize\bfseries </xsl:text><xsl:value-of select="$label"/><xsl:text>};
-\draw[surBorderLt,rounded corners=1.8mm,line width=0.3pt] (</xsl:text><xsl:value-of select="$xl"/><xsl:text>,0) rectangle (</xsl:text><xsl:value-of select="$xr"/><xsl:text>,26);
-</xsl:text>
+  <!-- The KPI strip and the severity bars are \kpirow / \sevbars now: the tiles
+       are a design-system block, not a tikzpicture this stylesheet draws.  What
+       is left here that the design system cannot supply is the SHAPE of the two
+       timeline values, because \timelinestrip takes them as data.
+
+       emit-date-stacked / emit-today-stacked — the same timestamps emit-date and
+       emit-today produce, split over the two lines the model's timeline cell
+       shows: the calendar date on the first, the clock (or the year) on the
+       second.  The cell is 60px tall and top-aligned, so an unbroken date would
+       hang alone at its top instead of filling it.  The break is explicit and
+       not left to the minipage: at 11px Mono the whole string still fits one
+       line of the 222px column, so it would never wrap on its own. -->
+  <xsl:template name="emit-date-stacked">
+    <xsl:param name="date"/>
+    <xsl:choose>
+      <xsl:when test="string-length($date)">
+        <xsl:variable name="mon" select="gvm:month-abbrev(date:month-in-year($date))"/>
+        <xsl:variable name="dow" select="gvm:dow-abbrev(date:day-in-week($date))"/>
+        <xsl:variable name="day" select="date:day-in-month($date)"/>
+        <xsl:variable name="yr" select="date:year($date)"/>
+        <xsl:variable name="hh" select="format-number(date:hour-in-day($date), '00')"/>
+        <xsl:variable name="mm" select="format-number(date:minute-in-hour($date), '00')"/>
+        <xsl:variable name="tz" select="gvm:timezone-abbrev()"/>
+        <xsl:choose>
+          <xsl:when test="$L='en'">
+            <xsl:value-of select="concat($dow, ' ', $mon, ' ', $day, ', ', $yr)"/>
+          </xsl:when>
+          <xsl:otherwise>
+            <xsl:value-of select="concat($dow, ', ', $day, ' ', $mon, ' ', $yr)"/>
+          </xsl:otherwise>
+        </xsl:choose>
+        <xsl:text>\\</xsl:text>
+        <xsl:value-of select="normalize-space(concat($hh, ':', $mm, ' ', $tz))"/>
+      </xsl:when>
+      <!-- A task that never started has no scan_start. The cell still has to
+           print something, or the reader reads an empty column as a bug. -->
+      <xsl:otherwise><xsl:text>---</xsl:text></xsl:otherwise>
+    </xsl:choose>
+  </xsl:template>
+
+  <xsl:template name="emit-today-stacked">
+    <xsl:variable name="now" select="date:date-time()"/>
+    <xsl:variable name="mn" select="gvm:month-name(date:month-in-year($now))"/>
+    <xsl:variable name="d" select="date:day-in-month($now)"/>
+    <xsl:variable name="y" select="date:year($now)"/>
+    <xsl:choose>
+      <!-- A quebra vai ANTES do dia, nao depois da virgula: "August 22," /
+           "2026" pendurava a virgula no fim da primeira linha e deixava o ano
+           sozinho na segunda. "August" / "22, 2026" mantem a data junta e casa
+           com o desenho de pt/es ("22 de agosto" / "de 2026"). -->
+      <xsl:when test="$L='en'"><xsl:value-of select="concat($mn, '\\', $d, ', ', $y)"/></xsl:when>
+      <xsl:otherwise><xsl:value-of select="concat($d, ' de ', $mn, '\\de ', $y)"/></xsl:otherwise>
+    </xsl:choose>
+  </xsl:template>
+
+  <!-- How the narrative closes the High/Critical count.
+       Three cases, because the honest sentence is not the same in all of them:
+
+         lowconf = 0        the findings are confirmed; say remediate.
+         0 < lowconf < N    remediate, and say how many still need validating.
+         lowconf = N        do NOT say "remediate at once".  Every one of those
+                            findings came in below the QoD minimum, so the only
+                            correct instruction is to validate first — and the
+                            severity shown is a ceiling, not a fact.
+
+       The last case is not hypothetical: on the scan this design was drawn from,
+       all 62 High/Critical findings carry QoD 30.  The old wording told the
+       reader to remediate immediately AND that all 62 needed manual validation,
+       in the same sentence.  Section 4 already segregates these two populations;
+       the summary must not undo that work one page earlier. -->
+  <xsl:template name="exec-remediation-clause">
+    <xsl:param name="hicrit"/>
+    <xsl:param name="lowconf"/>
+    <xsl:choose>
+      <xsl:when test="$hicrit &gt; 0 and $lowconf &gt;= $hicrit">
+        <xsl:value-of select="gvm:t('exec_all_lowconf')"/>
+      </xsl:when>
+      <xsl:when test="$lowconf &gt; 0">
+        <xsl:value-of select="gvm:t('exec_warrant')"/>
+        <xsl:text> --- </xsl:text><xsl:value-of select="$lowconf"/>
+        <xsl:value-of select="gvm:t('of_which_lowconf')"/>
+        <xsl:text>.</xsl:text>
+      </xsl:when>
+      <xsl:otherwise>
+        <xsl:value-of select="gvm:t('exec_warrant')"/><xsl:text>.</xsl:text>
+      </xsl:otherwise>
+    </xsl:choose>
   </xsl:template>
 
   <xsl:template name="executive-summary">
@@ -1498,6 +1738,10 @@ SPDX-License-Identifier: GPL-2.0-or-later
     <!-- Overall risk rating derivation -->
     <xsl:variable name="riskWord">
       <xsl:choose>
+        <!-- Zero hosts reached: the rating is not "informational", it is absent.
+             Saying anything on the severity ramp here would be a measurement
+             this scan never made. -->
+        <xsl:when test="$hosts = 0"><xsl:value-of select="gvm:t('risk_notmeasured')"/></xsl:when>
         <xsl:when test="$crit &gt; 0"><xsl:value-of select="gvm:t('risk_critical')"/></xsl:when>
         <xsl:when test="$high &gt; 0"><xsl:value-of select="gvm:t('risk_high')"/></xsl:when>
         <xsl:when test="$med &gt; 0"><xsl:value-of select="gvm:t('risk_medium')"/></xsl:when>
@@ -1505,17 +1749,13 @@ SPDX-License-Identifier: GPL-2.0-or-later
         <xsl:otherwise><xsl:value-of select="gvm:t('risk_info')"/></xsl:otherwise>
       </xsl:choose>
     </xsl:variable>
-    <xsl:variable name="riskColor">
-      <xsl:choose>
-        <xsl:when test="$crit &gt; 0">gvm_critical</xsl:when>
-        <xsl:when test="$high &gt; 0">gvm_hole</xsl:when>
-        <xsl:when test="$med &gt; 0">gvm_warning</xsl:when>
-        <xsl:when test="$low &gt; 0">gvm_note</xsl:when>
-        <xsl:otherwise>gvm_log</xsl:otherwise>
-      </xsl:choose>
-    </xsl:variable>
+    <!-- No $riskColor any more: the classification tile is navy with the word in
+         the `riskvalue' token whatever the rating is (model pg-02), so the rating
+         no longer picks a colour. The DERIVATION above stays exactly as it was —
+         highest severity present wins — because it is the rating itself. -->
 
-    <xsl:text>\section{</xsl:text><xsl:value-of select="gvm:t('sec_exec')"/><xsl:text>}
+    <xsl:text>\suriSection{1}{</xsl:text><xsl:value-of select="gvm:t('sec_exec')"/><xsl:text>}
+
 </xsl:text>
 
     <!-- Narrative (per-language, with counts interpolated) -->
@@ -1523,169 +1763,140 @@ SPDX-License-Identifier: GPL-2.0-or-later
          de milhares de caracteres empurraria o paragrafo executivo inteiro. -->
     <xsl:variable name="taskname">
       <xsl:call-template name="escape_break">
-        <xsl:with-param name="string" select="gvm:report()/task/name"/>
+        <xsl:with-param name="string" select="gvm:project()"/>
         <xsl:with-param name="max" select="$task-name-max"/>
       </xsl:call-template>
     </xsl:variable>
     <xsl:variable name="hicrit" select="$crit + $high"/>
+    <!-- One \suriPara: the narrative is a single paragraph of running copy and
+         the design system owns its measure, its leading and the air under it.
+         The overall-risk sentence that used to close it is gone — the rating is
+         the navy tile of \kpirow now, and printing it twice on one page reads
+         as two different statements of the same thing. -->
+    <!-- The narrative only makes sense if something was measured.  With zero
+         hosts reached it would read "assessed 0 host(s) and produced 0
+         result(s)... 0 findings are of High or Critical severity" — an absurd
+         sentence that a reader still parses as good news.  Say what actually
+         happened instead. -->
     <xsl:choose>
-      <xsl:when test="$L='pt'">
-        <xsl:text>Este relatório apresenta os resultados de uma avaliação de vulnerabilidades realizada pela Plataforma de Segurança Suricatoos. O projeto ``</xsl:text>
-        <xsl:value-of select="$taskname"/>
-        <xsl:text>'' avaliou </xsl:text><xsl:value-of select="$hosts"/><xsl:text> host(s) e produziu </xsl:text>
-        <xsl:value-of select="$total-full"/><xsl:text> resultado(s). Este relatório descreve </xsl:text>
-        <xsl:value-of select="$uniq"/><xsl:text> vulnerabilidade(s) única(s). Destas, \textbf{</xsl:text>
-        <xsl:value-of select="$hicrit"/><xsl:text>} achado(s) são de severidade Alta ou Crítica e exigem remediação imediata</xsl:text>
-        <xsl:if test="$lowconf-hi &gt; 0">
-          <xsl:text> --- </xsl:text><xsl:value-of select="$lowconf-hi"/><xsl:value-of select="gvm:t('of_which_lowconf')"/>
-        </xsl:if>
-        <xsl:text>. A exposição geral ao risco do ambiente avaliado é classificada como \textbf{</xsl:text>
-        <xsl:value-of select="$riskWord"/><xsl:text>}.\par
-</xsl:text>
-      </xsl:when>
-      <xsl:when test="$L='es'">
-        <xsl:text>Este informe presenta los resultados de una evaluación de vulnerabilidades realizada por la Plataforma de Seguridad Suricatoos. El proyecto ``</xsl:text>
-        <xsl:value-of select="$taskname"/>
-        <xsl:text>'' evaluó </xsl:text><xsl:value-of select="$hosts"/><xsl:text> host(s) y produjo </xsl:text>
-        <xsl:value-of select="$total-full"/><xsl:text> resultado(s). Este informe describe </xsl:text>
-        <xsl:value-of select="$uniq"/><xsl:text> vulnerabilidad(es) única(s). De estas, \textbf{</xsl:text>
-        <xsl:value-of select="$hicrit"/><xsl:text>} hallazgo(s) son de severidad Alta o Crítica y requieren remediación inmediata</xsl:text>
-        <xsl:if test="$lowconf-hi &gt; 0">
-          <xsl:text> --- </xsl:text><xsl:value-of select="$lowconf-hi"/><xsl:value-of select="gvm:t('of_which_lowconf')"/>
-        </xsl:if>
-        <xsl:text>. La exposición general al riesgo del entorno evaluado se clasifica como \textbf{</xsl:text>
-        <xsl:value-of select="$riskWord"/><xsl:text>}.\par
+      <xsl:when test="$hosts = 0">
+        <xsl:text>\alertbox{</xsl:text><xsl:value-of select="gvm:t('nohost_title')"/>
+        <xsl:text>}{</xsl:text>
+        <xsl:value-of select="gvm:t('nohost_body_a')"/>
+        <xsl:text>\textbf{</xsl:text><xsl:value-of select="gvm:t('nohost_body_b')"/><xsl:text>}</xsl:text>
+        <xsl:value-of select="gvm:t('nohost_body_c')"/>
+        <xsl:text>}
 </xsl:text>
       </xsl:when>
       <xsl:otherwise>
-        <xsl:text>This report presents the findings of a vulnerability assessment performed by the Suricatoos Security Platform. The engagement ``</xsl:text>
+    <xsl:text>\suriPara{</xsl:text>
+    <xsl:choose>
+      <xsl:when test="$L='pt'">
+        <xsl:text>Este relatório apresenta os resultados de uma avaliação de vulnerabilidades realizada pela Plataforma de Segurança Suricatoos. O projeto \textbf{``</xsl:text>
         <xsl:value-of select="$taskname"/>
-        <xsl:text>'' assessed </xsl:text><xsl:value-of select="$hosts"/><xsl:text> host(s) and produced </xsl:text>
-        <xsl:value-of select="$total-full"/><xsl:text> result(s). This report describes </xsl:text>
+        <xsl:text>''} avaliou </xsl:text><xsl:value-of select="$hosts"/><xsl:text> host(s) e produziu </xsl:text>
+        <xsl:value-of select="$total-full"/><xsl:text> resultado(s), descrevendo </xsl:text>
+        <xsl:value-of select="$uniq"/><xsl:text> vulnerabilidade(s) única(s). Destas, \textbf{</xsl:text>
+        <xsl:value-of select="$hicrit"/><xsl:text> achado(s) são de severidade Alta ou Crítica}</xsl:text>
+        <xsl:call-template name="exec-remediation-clause">
+          <xsl:with-param name="hicrit" select="$hicrit"/>
+          <xsl:with-param name="lowconf" select="$lowconf-hi"/>
+        </xsl:call-template>
+      </xsl:when>
+      <xsl:when test="$L='es'">
+        <xsl:text>Este informe presenta los resultados de una evaluación de vulnerabilidades realizada por la Plataforma de Seguridad Suricatoos. El proyecto \textbf{``</xsl:text>
+        <xsl:value-of select="$taskname"/>
+        <xsl:text>''} evaluó </xsl:text><xsl:value-of select="$hosts"/><xsl:text> host(s) y produjo </xsl:text>
+        <xsl:value-of select="$total-full"/><xsl:text> resultado(s), describiendo </xsl:text>
+        <xsl:value-of select="$uniq"/><xsl:text> vulnerabilidad(es) única(s). De estas, \textbf{</xsl:text>
+        <xsl:value-of select="$hicrit"/><xsl:text> hallazgo(s) son de severidad Alta o Crítica}</xsl:text>
+        <xsl:call-template name="exec-remediation-clause">
+          <xsl:with-param name="hicrit" select="$hicrit"/>
+          <xsl:with-param name="lowconf" select="$lowconf-hi"/>
+        </xsl:call-template>
+      </xsl:when>
+      <xsl:otherwise>
+        <xsl:text>This report presents the findings of a vulnerability assessment performed by the Suricatoos Security Platform. The engagement \textbf{``</xsl:text>
+        <xsl:value-of select="$taskname"/>
+        <xsl:text>''} assessed </xsl:text><xsl:value-of select="$hosts"/><xsl:text> host(s) and produced </xsl:text>
+        <xsl:value-of select="$total-full"/><xsl:text> result(s), describing </xsl:text>
         <xsl:value-of select="$uniq"/><xsl:text> unique vulnerabilit</xsl:text>
         <xsl:choose><xsl:when test="$uniq = 1">y</xsl:when><xsl:otherwise>ies</xsl:otherwise></xsl:choose>
         <xsl:text>. Of these, \textbf{</xsl:text><xsl:value-of select="$hicrit"/>
-        <xsl:text>} finding(s) are of High or Critical severity and warrant prompt remediation</xsl:text>
-        <xsl:if test="$lowconf-hi &gt; 0">
-          <xsl:text> --- </xsl:text><xsl:value-of select="$lowconf-hi"/><xsl:value-of select="gvm:t('of_which_lowconf')"/>
-        </xsl:if>
-        <xsl:text>. The overall risk exposure of the assessed environment is rated \textbf{</xsl:text>
-        <xsl:value-of select="$riskWord"/><xsl:text>}.\par
+        <xsl:text> finding(s) are of High or Critical severity}</xsl:text>
+        <xsl:call-template name="exec-remediation-clause">
+          <xsl:with-param name="hicrit" select="$hicrit"/>
+          <xsl:with-param name="lowconf" select="$lowconf-hi"/>
+        </xsl:call-template>
+      </xsl:otherwise>
+    </xsl:choose>
+    <xsl:text>}
 </xsl:text>
       </xsl:otherwise>
     </xsl:choose>
-    <xsl:text>\vspace{4mm}
-</xsl:text>
 
-    <!-- Risk badge + key metrics row -->
-    <xsl:text>\begin{center}
-\begin{tikzpicture}[x=1mm,y=1mm]
-\begin{scope}
-\clip[rounded corners=2mm] (0,0) rectangle (66,26);
-\fill[</xsl:text><xsl:value-of select="$riskColor"/><xsl:text>] (0,0) rectangle (66,26);
-\end{scope}
-\node[anchor=north west,text=white] at (5,22.5) {\scriptsize\bfseries </xsl:text><xsl:value-of select="gvm:t('overall_risk')"/><xsl:text>};
-\node[anchor=west,text=white] at (5,10) {\fontsize{20}{20}\selectfont\bfseries </xsl:text><xsl:value-of select="$riskWord"/><xsl:text>};
+    <!-- KPI strip: the navy risk tile plus the three counted tiles. The tile
+         label of the first one is design furniture (\suriLblRisk); the other
+         three carry a DATA label, so they keep coming from gvm:t(). -->
+    <xsl:text>\kpirow{\suriLblRisk}{</xsl:text><xsl:value-of select="$riskWord"/><xsl:text>}%
+       {</xsl:text><xsl:value-of select="gvm:t('m_hosts')"/><xsl:text>}{</xsl:text><xsl:value-of select="$hosts"/><xsl:text>}%
 </xsl:text>
-    <xsl:call-template name="metric-tile">
-      <xsl:with-param name="xl" select="69"/>
-      <xsl:with-param name="xr" select="99"/>
-      <xsl:with-param name="value" select="$hosts"/>
-      <xsl:with-param name="label" select="gvm:t('m_hosts')"/>
-    </xsl:call-template>
     <!-- Total the SCAN produced, not the number of rows this export carries. -->
-    <xsl:call-template name="metric-tile">
-      <xsl:with-param name="xl" select="102"/>
-      <xsl:with-param name="xr" select="132"/>
-      <xsl:with-param name="value" select="$total-full"/>
-      <xsl:with-param name="label" select="gvm:t('m_total')"/>
-    </xsl:call-template>
-    <xsl:call-template name="metric-tile">
-      <xsl:with-param name="xl" select="135"/>
-      <xsl:with-param name="xr" select="165"/>
-      <xsl:with-param name="value" select="$uniq"/>
-      <xsl:with-param name="label" select="gvm:t('m_uniq')"/>
-    </xsl:call-template>
-    <xsl:text>\end{tikzpicture}
-\end{center}
-\vspace{5mm}
+    <xsl:text>       {</xsl:text><xsl:value-of select="gvm:t('m_total')"/><xsl:text>}{</xsl:text><xsl:value-of select="$total-full"/><xsl:text>}%
+       {</xsl:text><xsl:value-of select="gvm:t('m_uniq')"/><xsl:text>}{</xsl:text><xsl:value-of select="$uniq"/><xsl:text>}
+
 </xsl:text>
 
     <!-- Sampling disclosure. Only rendered when the export really is partial,
          so a complete report carries no needless caveat. -->
     <xsl:if test="$truncated">
-      <xsl:text>\begin{tcolorbox}[colback=surMist,colframe=gvm_warning,boxrule=0.9pt,arc=1.4mm,left=3mm,right=3mm,top=2mm,bottom=2mm]
-{\bfseries\color{surInk}</xsl:text><xsl:value-of select="gvm:t('sample_hdr')"/><xsl:text>}\par\vspace{1mm}
-{\small\color{surInk}</xsl:text>
+      <xsl:text>\warnbox{\textbf{</xsl:text><xsl:value-of select="gvm:t('sample_hdr')"/><xsl:text>} --- </xsl:text>
       <xsl:value-of select="gvm:t('sample_a')"/>
       <xsl:text>\textbf{</xsl:text><xsl:value-of select="$total"/><xsl:text>}</xsl:text>
       <xsl:value-of select="gvm:t('sample_b')"/>
       <xsl:text>\textbf{</xsl:text><xsl:value-of select="$total-full"/><xsl:text>}</xsl:text>
       <xsl:value-of select="gvm:t('sample_c')"/>
       <xsl:text>}
-\end{tcolorbox}
-\vspace{4mm}
+
 </xsl:text>
     </xsl:if>
 
-    <!-- Severity breakdown chart (pgfplots). The symbolic y coords stay as the
-         language-neutral class tokens; the DISPLAYED tick labels are localised
-         via yticklabels (same order as ytick, bottom-to-top). -->
-    <xsl:text>{\color{surInk}\bfseries </xsl:text><xsl:value-of select="gvm:t('findings_by_sev')"/><xsl:text>}\par\vspace{2mm}
+    <!-- Severity breakdown. \sevbars reads its argument twice — once to find the
+         largest count, once to draw — so the four \sevbar rows are all this has
+         to emit: no scale, no axis, no colours. The keys are the design system's
+         language-neutral severity tokens and the printed word comes from
+         \sevword, which the preamble localises with \setsevword. -->
+    <xsl:text>\blocklabel{\suriLblSeverityChart}
 </xsl:text>
     <xsl:choose>
       <xsl:when test="$crit + $high + $med + $low = 0">
-        <xsl:text>{\color{surMuted}</xsl:text><xsl:value-of select="gvm:t('no_findings')"/><xsl:text>}\par
+        <xsl:text>\blocknote{</xsl:text><xsl:value-of select="gvm:t('no_findings')"/><xsl:text>}
+
 </xsl:text>
       </xsl:when>
       <xsl:otherwise>
-        <xsl:text>\begin{center}
-\begin{tikzpicture}
-\begin{axis}[
-    xbar,
-    width=0.82\textwidth, height=54mm,
-    bar width=5mm,
-    xmin=0,
-    enlarge x limits={upper,value=0.18},
-    enlarge y limits={abs=10mm},
-    axis lines=left,
-    x axis line style={draw=surBorderLt},
-    y axis line style={draw=none},
-    tick style={draw=none},
-    xmajorgrids, grid style={surCloud, line width=0.4pt},
-    symbolic y coords={Low,Medium,High,Critical},
-    ytick={Low,Medium,High,Critical},
-    yticklabels={</xsl:text><xsl:value-of select="gvm:t('sev_low')"/><xsl:text>,</xsl:text><xsl:value-of select="gvm:t('sev_medium')"/><xsl:text>,</xsl:text><xsl:value-of select="gvm:t('sev_high')"/><xsl:text>,</xsl:text><xsl:value-of select="gvm:t('sev_critical')"/><xsl:text>},
-    yticklabel style={font=\small\bfseries, color=surInk},
-    xticklabel style={font=\footnotesize, color=surMuted},
-    nodes near coords, nodes near coords style={font=\small\bfseries, color=surInk},
-    every axis plot/.append style={bar shift=0pt, draw=none},
-]
-\addplot[fill=gvm_critical] coordinates {(</xsl:text><xsl:value-of select="$crit"/><xsl:text>,Critical)};
-\addplot[fill=gvm_hole] coordinates {(</xsl:text><xsl:value-of select="$high"/><xsl:text>,High)};
-\addplot[fill=gvm_warning] coordinates {(</xsl:text><xsl:value-of select="$med"/><xsl:text>,Medium)};
-\addplot[fill=gvm_note] coordinates {(</xsl:text><xsl:value-of select="$low"/><xsl:text>,Low)};
-\end{axis}
-\end{tikzpicture}
-\end{center}
-\vspace{2mm}
+        <xsl:text>\sevbars{\sevbar{critico}{</xsl:text><xsl:value-of select="$crit"/>
+        <xsl:text>}\sevbar{alto}{</xsl:text><xsl:value-of select="$high"/>
+        <xsl:text>}\sevbar{medio}{</xsl:text><xsl:value-of select="$med"/>
+        <xsl:text>}\sevbar{baixo}{</xsl:text><xsl:value-of select="$low"/>
+        <xsl:text>}}
+
 </xsl:text>
       </xsl:otherwise>
     </xsl:choose>
 
-    <!-- Scan timeline -->
-    <xsl:text>\vspace{2mm}
-{\color{surInk}\bfseries </xsl:text><xsl:value-of select="gvm:t('timeline')"/><xsl:text>}\par\vspace{1.5mm}
-\renewcommand{\arraystretch}{1.4}
-\begin{tabular}{@{}l@{\hspace{8mm}}l@{}}
-{\color{surMuted}\footnotesize\bfseries </xsl:text><xsl:value-of select="gvm:t('lbl_scan_started')"/><xsl:text>} &amp; {\color{surInk}</xsl:text>
-    <xsl:call-template name="emit-date"><xsl:with-param name="date" select="gvm:report()/scan_start"/></xsl:call-template>
-    <xsl:text>} \\
-{\color{surMuted}\footnotesize\bfseries </xsl:text><xsl:value-of select="gvm:t('lbl_scan_completed')"/><xsl:text>} &amp; {\color{surInk}</xsl:text>
-    <xsl:call-template name="emit-date"><xsl:with-param name="date" select="gvm:report()/scan_end"/></xsl:call-template>
-    <xsl:text>} \\
-{\color{surMuted}\footnotesize\bfseries </xsl:text><xsl:value-of select="gvm:t('t_generated')"/><xsl:text>} &amp; {\color{surInk}</xsl:text><xsl:call-template name="emit-today"/><xsl:text>} \\
-\end{tabular}\par
+    <!-- Scan timeline: three columns under the ink rule. The column labels are
+         data (they name a scan event), so they stay on gvm:t(); the heading over
+         the strip is furniture and comes from the design system. -->
+    <xsl:text>\blocklabel{\suriLblTimeline}
+\timelinestrip{</xsl:text><xsl:value-of select="gvm:t('lbl_scan_started')"/><xsl:text>}{</xsl:text>
+    <xsl:call-template name="emit-date-stacked"><xsl:with-param name="date" select="gvm:report()/scan_start"/></xsl:call-template>
+    <xsl:text>}%
+              {</xsl:text><xsl:value-of select="gvm:t('lbl_scan_completed')"/><xsl:text>}{</xsl:text>
+    <xsl:call-template name="emit-date-stacked"><xsl:with-param name="date" select="gvm:report()/scan_end"/></xsl:call-template>
+    <xsl:text>}%
+              {</xsl:text><xsl:value-of select="gvm:t('t_generated')"/><xsl:text>}{</xsl:text>
+    <xsl:call-template name="emit-today-stacked"/><xsl:text>}
 </xsl:text>
   </xsl:template>
 
@@ -1693,135 +1904,166 @@ SPDX-License-Identifier: GPL-2.0-or-later
   <!-- Hosts and open ports (per-target service inventory)               -->
   <!-- ================================================================= -->
 
-  <!-- Highest-severity pill among the results on a given host:port, or an em
-       dash when the port has no rated finding. -->
+  <!-- Highest numeric severity among a set of results, or the EMPTY string when
+       the set is empty.  It returns DATA (the CVSS number), not a rendered pill:
+       in the design system the badge is drawn by \sevbadges from two separate
+       arguments, the severity KEY and the score, so the two travel apart from
+       here on and the caller decides which of them to print.
+       The caller passes the node-set because the two kinds of row this section
+       draws select their results differently: one port for a normal row, every
+       general/* pseudo-port at once for the aggregated host-level row. -->
   <xsl:template name="port-max-sev">
-    <xsl:param name="ip"/>
-    <xsl:param name="pstr"/>
-    <xsl:variable name="rs" select="gvm:report()/results/result[host/text()=$ip][port=$pstr]"/>
+    <xsl:param name="rs"/>
+    <xsl:for-each select="$rs">
+      <xsl:sort select="severity" data-type="number" order="descending"/>
+      <xsl:if test="position() = 1"><xsl:value-of select="severity"/></xsl:if>
+    </xsl:for-each>
+  </xsl:template>
+
+  <!-- Numeric severity -> the severity KEY of the design system, the vocabulary
+       the .sty files colour and word (critico|alto|medio|baixo|logsev, plus
+       neutro for a port that carries no result at all).  The cut points are the
+       ones `sev-class' already uses — that template stays the source of truth
+       for the localised class WORD; this one only names the key the LaTeX macros
+       take, and the two must not drift apart.
+       A port whose highest result is a FALSE POSITIVE (-1, a GVM code and not a
+       score) reads as `neutro', never as `logsev': folding it into Log would
+       make a result the scanner itself disowned indistinguishable from a
+       legitimate informational detection, which is the confusion `sev-class'
+       was written to avoid.  The range is closed around -1 for the same reason
+       it is there: -2 (debug) and -3 (scan error) are other codes entirely. -->
+  <xsl:template name="hp-sev-key">
+    <xsl:param name="severity"/>
     <xsl:choose>
-      <xsl:when test="count($rs) = 0">{\color{surMuted}\scriptsize ---}</xsl:when>
-      <xsl:otherwise>
-        <xsl:for-each select="$rs">
-          <xsl:sort select="severity" data-type="number" order="descending"/>
-          <xsl:if test="position() = 1">
-            <xsl:call-template name="severity-pill">
-              <xsl:with-param name="severity" select="severity"/>
-            </xsl:call-template>
-          </xsl:if>
-        </xsl:for-each>
-      </xsl:otherwise>
+      <xsl:when test="string-length($severity) = 0">neutro</xsl:when>
+      <xsl:when test="number($severity) &gt;= 9.0">critico</xsl:when>
+      <xsl:when test="number($severity) &gt;= 7.0">alto</xsl:when>
+      <xsl:when test="number($severity) &gt;= 4.0">medio</xsl:when>
+      <xsl:when test="number($severity) &gt;= 0.1">baixo</xsl:when>
+      <xsl:when test="number($severity) &lt; 0 and number($severity) &gt; -1.5">neutro</xsl:when>
+      <xsl:otherwise>logsev</xsl:otherwise>
     </xsl:choose>
   </xsl:template>
 
-  <!-- One port row: PORT | PROTO | FINDINGS | HIGHEST SEVERITY. -->
+  <!-- One line of a host card: \hostrow{porta}{achados}{sev}{cvss}.
+       The port and the transport ride together in the first argument, exactly as
+       the scan reports the pair ("21/tcp"), so nothing is split and re-joined:
+       PROTO was a column of its own in the old table and is not one here.
+
+       general=1 switches the row to the aggregated HOST-LEVEL line.  Every
+       general/* pseudo-port of the host collapses into a single `geral' row —
+       one row, the sum of the findings, the highest severity among them — which
+       is what the model draws and what the \blocknote under the card takes
+       apart.  The old table printed one italic "Geral / nivel de host" line per
+       pseudo-port instead, and two of them next to each other read as two ports.
+
+       Scores: a row with no result at all is `neutro' and prints the word alone
+       (it replaces the em dash of the old table); a row whose top severity is 0
+       is `logsev' and also prints the word alone, because a CVSS of 0.0 beside
+       the word LOG is noise, not information. -->
   <xsl:template name="port-row">
     <xsl:param name="ip"/>
     <xsl:param name="pstr"/>
-    <xsl:param name="zebra"/>
-    <xsl:variable name="isgeneral" select="starts-with($pstr, 'general')"/>
-    <xsl:variable name="portnum" select="substring-before($pstr, '/')"/>
-    <xsl:variable name="proto" select="substring-after($pstr, '/')"/>
-    <xsl:variable name="fcount" select="count(gvm:report()/results/result[host/text()=$ip][port=$pstr])"/>
-    <xsl:if test="$zebra">
-      <xsl:text>\rowcolor{surMist}</xsl:text>
+    <xsl:param name="general" select="0"/>
+    <xsl:variable name="rs" select="gvm:report()/results/result[host/text()=$ip]
+                                    [(number($general) = 1 and starts-with(port, 'general'))
+                                     or (number($general) = 0 and port = $pstr)]"/>
+    <xsl:variable name="maxsev">
+      <xsl:call-template name="port-max-sev">
+        <xsl:with-param name="rs" select="$rs"/>
+      </xsl:call-template>
+    </xsl:variable>
+    <xsl:variable name="key">
+      <xsl:call-template name="hp-sev-key">
+        <xsl:with-param name="severity" select="string($maxsev)"/>
+      </xsl:call-template>
+    </xsl:variable>
+    <xsl:text>\hostrow{</xsl:text>
+    <xsl:choose>
+      <!-- The label of the aggregated row is set in lower case: it sits in a
+           Mono column of port numbers and reads as one of them, not as a title. -->
+      <xsl:when test="number($general) = 1">
+        <xsl:value-of select="translate(gvm:t('hp_general'),
+          'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz')"/>
+      </xsl:when>
+      <xsl:otherwise>
+        <xsl:call-template name="escape_break"><xsl:with-param name="string" select="$pstr"/></xsl:call-template>
+      </xsl:otherwise>
+    </xsl:choose>
+    <xsl:text>}{</xsl:text>
+    <xsl:value-of select="count($rs)"/>
+    <xsl:text>}{</xsl:text>
+    <xsl:value-of select="$key"/>
+    <xsl:text>}{</xsl:text>
+    <xsl:if test="$key != 'logsev' and $key != 'neutro'">
+      <xsl:value-of select="$maxsev"/>
     </xsl:if>
-    <!-- Port column -->
-    <xsl:choose>
-      <xsl:when test="$isgeneral">
-        <xsl:text>{\itshape\color{surMuted}</xsl:text><xsl:value-of select="gvm:t('hp_general')"/><xsl:text>}</xsl:text>
-      </xsl:when>
-      <xsl:otherwise>
-        <xsl:text>{\ttfamily </xsl:text>
-        <xsl:call-template name="escape_break"><xsl:with-param name="string" select="$portnum"/></xsl:call-template>
-        <xsl:text>}</xsl:text>
-      </xsl:otherwise>
-    </xsl:choose>
-    <xsl:text> &amp; </xsl:text>
-    <!-- Proto column -->
-    <xsl:choose>
-      <xsl:when test="$isgeneral">
-        <xsl:text>{\itshape\color{surMuted}</xsl:text><xsl:value-of select="gvm:t('hp_hostlevel')"/><xsl:text>}</xsl:text>
-      </xsl:when>
-      <xsl:otherwise>
-        <xsl:text>{\ttfamily </xsl:text>
-        <xsl:call-template name="escape_break"><xsl:with-param name="string" select="$proto"/></xsl:call-template>
-        <xsl:text>}</xsl:text>
-      </xsl:otherwise>
-    </xsl:choose>
-    <xsl:text> &amp; </xsl:text>
-    <xsl:value-of select="$fcount"/>
-    <xsl:text> &amp; </xsl:text>
-    <xsl:call-template name="port-max-sev">
-      <xsl:with-param name="ip" select="$ip"/>
-      <xsl:with-param name="pstr" select="$pstr"/>
-    </xsl:call-template>
-    <xsl:text> \\[0.4mm]
+    <xsl:text>}
 </xsl:text>
   </xsl:template>
 
-  <!-- Full-width host banner: IP (white mono) + hostname (cloud) + OS (indigo
-       italic, right-aligned). A real \colorbox spanning \linewidth, so the fill
-       always covers the whole strip regardless of content length — unlike a
-       \rowcolor'd \multicolumn, whose panel width tracked only the first column
-       and left the hostname/OS floating on white.
+  <!-- The HEAD of a host card: emits \hostcard{ip}{hostname}{so}{portas}{ and
+       leaves the body argument OPEN.  In the design system the navy title band
+       is not a thing of its own — it is the first half of \hostcard, which also
+       owns the two mini-tables under it — so there is no free-standing banner to
+       draw any more.  Whoever calls this writes the body and closes the braces
+       (see hp-host-card); calling it and stopping there leaves a runaway
+       argument, which is why nothing outside this section may call it.
 
-       O \makebox de largura FIXA que ficava aqui nao quebrava, nao encolhia e
-       nao cortava: IP + hostname + \hfill + SO + contagem de portas iam todos
-       numa linha unica e o excesso vazava para FORA da folha (medido: 12 a 13
-       palavras fora da margem, ate' +67.9pt, em duas paginas do mesmo
-       relatorio, porque o banner e' desenhado na secao de Hosts e de novo no
-       apendice por host). Um SO longo sozinho ja bastava.
+       That also retires the overflow this template used to fight: the strip was
+       a hand-built \colorbox with an \hfill in it, and a long OS string walked
+       off the page (measured: up to +67.9pt outside the margin) until it was
+       wrapped in a minipage.  The band, the OS badge and the port tally are laid
+       out by \hostcard now, from data alone.
 
-       Agora e' um minipage de largura cheia com o MESMO \hfill de antes. A
-       diferenca e' que minipage e' modo PARAGRAFO: quando tudo cabe, o \hfill
-       absorve a folga e a tira sai identica a de antes, numa linha so' — que e'
-       o caso normal; quando nao cabe, o TeX quebra e a tira cresce em ALTURA em
-       vez de sair da folha. Duas colunas de largura fixa tambem resolveriam o
-       transbordo, mas custariam uma segunda linha em TODO host (+70 linhas e
-       duas paginas no fixture de 60 hosts), inclusive nos que cabiam.
-       \hbadness=10000 e' local: o \hfill e' um recurso de LAYOUT e a linha
-       "frouxa" que ele cria de proposito nao e' defeito de composicao. Overfull
-       (que e' o que sai da margem) continua sendo reportado. -->
+       The OS still comes from the host details (best_os_txt, then best_os_cpe,
+       resolved by the caller) and still falls back to a fixed label when the
+       scan identified none — but to a SHORT one: the badge is a chip, not a
+       sentence, so a 40-character OS is cut here rather than pushing the port
+       tally off the band.  The cut is done in XSLT and not with \escape_break's
+       breakpoints on purpose: the badge text goes through \MakeUppercase inside
+       the .sty, and the fewer macros travel into that argument the better. -->
   <xsl:template name="host-banner">
     <xsl:param name="ip"/>
     <xsl:param name="hostname"/>
     <xsl:param name="os"/>
     <xsl:param name="portcount"/>
-    <xsl:text>\noindent\colorbox{surSurface}{\begin{minipage}{\dimexpr\linewidth-2\fboxsep\relax}%
-\hbadness=10000\strut\color{white}\bfseries\ttfamily </xsl:text>
+    <xsl:variable name="osshown">
+      <xsl:choose>
+        <xsl:when test="string-length($os) = 0"><xsl:value-of select="gvm:t('hp_os_unknown_chip')"/></xsl:when>
+        <xsl:when test="string-length($os) &gt; 40"><xsl:value-of select="concat(substring($os, 1, 37), '...')"/></xsl:when>
+        <xsl:otherwise><xsl:value-of select="$os"/></xsl:otherwise>
+      </xsl:choose>
+    </xsl:variable>
+    <xsl:text>\hostcard{</xsl:text>
     <xsl:call-template name="escape_break"><xsl:with-param name="string" select="$ip"/></xsl:call-template>
-    <xsl:text>\normalfont</xsl:text>
+    <xsl:text>}{</xsl:text>
     <xsl:if test="string-length($hostname) &gt; 0">
-      <xsl:text>\hspace{4mm}{\color{surCloud}</xsl:text>
       <xsl:call-template name="escape_break"><xsl:with-param name="string" select="$hostname"/></xsl:call-template>
-      <xsl:text>}</xsl:text>
     </xsl:if>
-    <!-- 3mm de piso no lugar de um \hfill puro: quando a tira enche, o \hfill
-         encolhe a zero e o endereco encostava no nome do sistema. -->
-    <xsl:text>\hspace{3mm plus 1fill}{\color{surIndigoLt}\footnotesize\itshape </xsl:text>
-    <xsl:choose>
-      <xsl:when test="string-length($os) &gt; 0">
-        <xsl:call-template name="escape_break"><xsl:with-param name="string" select="$os"/></xsl:call-template>
-      </xsl:when>
-      <xsl:otherwise><xsl:value-of select="gvm:t('hp_os_unknown')"/></xsl:otherwise>
-    </xsl:choose>
-    <xsl:text>}</xsl:text>
-    <xsl:if test="$portcount &gt; 0">
-      <xsl:text>{\color{surIndigoLt}\footnotesize\hspace{4mm}</xsl:text>
-      <xsl:value-of select="$portcount"/><xsl:text> </xsl:text><xsl:value-of select="gvm:t('hp_open_ports')"/>
-      <xsl:text>}</xsl:text>
-    </xsl:if>
-    <xsl:text>\strut\end{minipage}}\par\nopagebreak\vspace{0.6mm}
+    <xsl:text>}{</xsl:text>
+    <xsl:call-template name="escape_text"><xsl:with-param name="string" select="string($osshown)"/></xsl:call-template>
+    <xsl:text>}{</xsl:text>
+    <xsl:value-of select="$portcount"/>
+    <xsl:text>}{%
 </xsl:text>
   </xsl:template>
 
+  <!-- One card per host.  The rows are BUILT FIRST, into a node-set, and only
+       then drawn: the design system's \hostcols takes the two columns as two
+       separate arguments, so the split point cannot be known while the rows are
+       still being emitted one by one.  Each <r> carries the finished \hostrow
+       line as text; hp-host-card slices that list.
+
+       Row order and row sources are the ones the old table used: the report's
+       <ports> inventory when it has one for this host, the distinct host:port
+       pairs of the results when it does not, numeric ascending by port number —
+       plus, last, the single aggregated general/* row. -->
   <xsl:template name="hosts-ports">
-    <xsl:text>\section{</xsl:text><xsl:value-of select="gvm:t('sec_hosts_ports')"/><xsl:text>}
-</xsl:text>
-    <xsl:value-of select="gvm:t('hp_intro')"/>
-    <xsl:text>\par
-\vspace{3mm}
+    <xsl:text>\suriSection{3}{</xsl:text><xsl:value-of select="gvm:t('sec_hosts_ports')"/><xsl:text>}
+\setsectionrunner{3}{</xsl:text><xsl:value-of select="gvm:t('sec_hosts_ports_run')"/><xsl:text>}
+
+\suriPara{</xsl:text><xsl:value-of select="gvm:t('hp_intro')"/><xsl:text>}
 </xsl:text>
     <xsl:for-each select="gvm:report()/host">
       <xsl:sort select="ip"/>
@@ -1835,77 +2077,261 @@ SPDX-License-Identifier: GPL-2.0-or-later
         </xsl:choose>
       </xsl:variable>
       <xsl:variable name="fromports" select="gvm:report()/ports/port[host=$ip]"/>
-      <!-- Count of real (non host-level) ports, for the banner tally. -->
+      <!-- Count of real (non host-level) ports, for the band tally. -->
       <xsl:variable name="realportcount">
         <xsl:choose>
           <xsl:when test="count($fromports) &gt; 0"><xsl:value-of select="count($fromports[not(starts-with(text(), 'general'))])"/></xsl:when>
           <xsl:otherwise><xsl:value-of select="count(gvm:report()/results/result[host/text()=$ip][not(starts-with(port, 'general'))][generate-id() = generate-id(key('by-host-port', concat(host/text(), '|', port))[1])])"/></xsl:otherwise>
         </xsl:choose>
       </xsl:variable>
+      <!-- Host-level findings: they get ONE aggregated row, and the note under
+           the card takes it apart.  The row is drawn when the host has such
+           findings OR when the inventory lists a general/* pseudo-port with no
+           finding on it (then the row reads `neutro', like any empty port). -->
+      <xsl:variable name="genres" select="gvm:report()/results/result[host/text()=$ip][starts-with(port, 'general')]"/>
+      <xsl:variable name="hasgen"
+        select="count($genres) &gt; 0 or count($fromports[starts-with(text(), 'general')]) &gt; 0"/>
 
-      <xsl:text>\vspace{2mm}
+      <xsl:variable name="rows-rtf">
+        <xsl:choose>
+          <!-- Primary source: the report's <ports> inventory for this host. -->
+          <xsl:when test="count($fromports) &gt; 0">
+            <xsl:for-each select="$fromports[not(starts-with(text(), 'general'))]">
+              <xsl:sort select="number(substring-before(text(), '/'))" data-type="number" order="ascending"/>
+              <r>
+                <xsl:call-template name="port-row">
+                  <xsl:with-param name="ip" select="$ip"/>
+                  <xsl:with-param name="pstr" select="text()"/>
+                </xsl:call-template>
+              </r>
+            </xsl:for-each>
+          </xsl:when>
+          <!-- Fallback: derive distinct ports from this host's results. -->
+          <xsl:when test="count(gvm:report()/results/result[host/text()=$ip]) &gt; 0">
+            <xsl:for-each select="gvm:report()/results/result[host/text()=$ip][not(starts-with(port, 'general'))][generate-id() = generate-id(key('by-host-port', concat(host/text(), '|', port))[1])]">
+              <xsl:sort select="number(substring-before(port, '/'))" data-type="number" order="ascending"/>
+              <r>
+                <xsl:call-template name="port-row">
+                  <xsl:with-param name="ip" select="$ip"/>
+                  <xsl:with-param name="pstr" select="port"/>
+                </xsl:call-template>
+              </r>
+            </xsl:for-each>
+          </xsl:when>
+        </xsl:choose>
+        <xsl:if test="$hasgen">
+          <r>
+            <xsl:call-template name="port-row">
+              <xsl:with-param name="ip" select="$ip"/>
+              <xsl:with-param name="general" select="1"/>
+            </xsl:call-template>
+          </r>
+        </xsl:if>
+      </xsl:variable>
+      <xsl:variable name="rows" select="exsl:node-set($rows-rtf)/r"/>
+
+      <xsl:choose>
+        <!-- No ports and no results: clean host.  The card is still drawn — the
+             reader has to see that the host was assessed — with the note in
+             place of the mini-tables. -->
+        <xsl:when test="count($rows) = 0">
+          <xsl:call-template name="host-banner">
+            <xsl:with-param name="ip" select="$ip"/>
+            <xsl:with-param name="hostname" select="$hostname"/>
+            <xsl:with-param name="os" select="$os"/>
+            <xsl:with-param name="portcount" select="$realportcount"/>
+          </xsl:call-template>
+          <xsl:text>\blocknote{</xsl:text><xsl:value-of select="gvm:t('hp_no_ports')"/><xsl:text>}}
 </xsl:text>
-      <xsl:call-template name="host-banner">
+        </xsl:when>
+        <xsl:otherwise>
+          <xsl:call-template name="hp-host-card">
+            <xsl:with-param name="ip" select="$ip"/>
+            <xsl:with-param name="hostname" select="$hostname"/>
+            <xsl:with-param name="os" select="$os"/>
+            <xsl:with-param name="portcount" select="$realportcount"/>
+            <xsl:with-param name="rows" select="$rows"/>
+            <!-- The first card of the section flows under the opener even when
+                 it is a tall one: a \clearpage there would leave the section
+                 title alone on a page. -->
+            <xsl:with-param name="first" select="position() = 1"/>
+          </xsl:call-template>
+        </xsl:otherwise>
+      </xsl:choose>
+
+      <xsl:if test="count($genres) &gt; 0">
+        <xsl:call-template name="hp-general-note">
+          <xsl:with-param name="genres" select="$genres"/>
+        </xsl:call-template>
+      </xsl:if>
+    </xsl:for-each>
+  </xsl:template>
+
+  <!-- One \hostcard, filled with rows $start..$start+2*$percol-1 of $rows, and
+       then itself again for whatever is left over.
+
+       The chunking is not decoration.  \hostcols builds its two columns as
+       minipages, and a minipage cannot break across a page: a host with 200
+       ports drawn as ONE card would be a box taller than the paper, and TeX
+       would let it run off the sheet.  So a card carries at most $percol rows
+       per column (the limit suricatoos-blocks.sty documents for A4) and a host
+       with more ports becomes several cards, each repeating the title band so
+       the reader always knows whose ports these are.
+
+       Few rows go into a single full-width column instead: two columns of one
+       row each would print two headers for two lines, which reads as a mistake
+       rather than as a layout. -->
+  <xsl:template name="hp-host-card">
+    <xsl:param name="ip"/>
+    <xsl:param name="hostname"/>
+    <xsl:param name="os"/>
+    <xsl:param name="portcount"/>
+    <xsl:param name="rows"/>
+    <xsl:param name="start" select="1"/>
+    <xsl:param name="first" select="1"/>
+    <!-- 25 rows a column, not the 30 the .sty quotes as the A4 ceiling: 30 fills
+         the text block edge to edge and leaves nothing for the section opener
+         above the first card, so the first card of the section was split with
+         its navy band orphaned on the page before (measured).  25 rows land the
+         tallest card at ~729px against the 816px the opener leaves. -->
+    <xsl:param name="percol" select="25"/>
+    <xsl:variable name="total" select="count($rows)"/>
+    <xsl:variable name="rest" select="$total - $start + 1"/>
+    <xsl:variable name="take">
+      <xsl:choose>
+        <xsl:when test="$rest &gt; 2 * $percol"><xsl:value-of select="2 * $percol"/></xsl:when>
+        <xsl:otherwise><xsl:value-of select="$rest"/></xsl:otherwise>
+      </xsl:choose>
+    </xsl:variable>
+    <!-- The first column fills first, as in the model: it takes the ceiling. -->
+    <xsl:variable name="half" select="ceiling(number($take) div 2)"/>
+    <xsl:variable name="end" select="$start + number($take)"/>
+    <!-- A card that cannot fit in what is left of the page does not fail
+         gracefully: tcolorbox breaks it at the only legal point it has, which is
+         between the navy band and the body, and the band ends up alone at the
+         foot of the page before.  So a card that is taller than about half the
+         text block opens a page of its own, and so does every continuation chunk
+         of a host too big for one card.  Small cards keep flowing — a report
+         with sixty two-port hosts must not become sixty pages. -->
+    <xsl:if test="$start &gt; 1 or (number($take) &gt; $percol and number($first) != 1)">
+      <xsl:text>\clearpage
+</xsl:text>
+    </xsl:if>
+    <xsl:call-template name="host-banner">
+      <xsl:with-param name="ip" select="$ip"/>
+      <xsl:with-param name="hostname" select="$hostname"/>
+      <xsl:with-param name="os" select="$os"/>
+      <xsl:with-param name="portcount" select="$portcount"/>
+    </xsl:call-template>
+    <xsl:choose>
+      <xsl:when test="number($take) &lt;= 3">
+        <xsl:text>\hostcolsingle{%
+</xsl:text>
+        <xsl:for-each select="$rows">
+          <xsl:if test="position() &gt;= $start and position() &lt; $end"><xsl:value-of select="."/></xsl:if>
+        </xsl:for-each>
+        <xsl:text>}}
+</xsl:text>
+      </xsl:when>
+      <xsl:otherwise>
+        <xsl:text>\hostcols{%
+</xsl:text>
+        <xsl:for-each select="$rows">
+          <xsl:if test="position() &gt;= $start and position() &lt; $start + $half"><xsl:value-of select="."/></xsl:if>
+        </xsl:for-each>
+        <xsl:text>}{%
+</xsl:text>
+        <xsl:for-each select="$rows">
+          <xsl:if test="position() &gt;= $start + $half and position() &lt; $end"><xsl:value-of select="."/></xsl:if>
+        </xsl:for-each>
+        <xsl:text>}}
+</xsl:text>
+      </xsl:otherwise>
+    </xsl:choose>
+    <xsl:if test="$end &lt;= $total">
+      <xsl:call-template name="hp-host-card">
         <xsl:with-param name="ip" select="$ip"/>
         <xsl:with-param name="hostname" select="$hostname"/>
         <xsl:with-param name="os" select="$os"/>
-        <xsl:with-param name="portcount" select="$realportcount"/>
+        <xsl:with-param name="portcount" select="$portcount"/>
+        <xsl:with-param name="rows" select="$rows"/>
+        <xsl:with-param name="start" select="$end"/>
+        <xsl:with-param name="first" select="0"/>
+        <xsl:with-param name="percol" select="$percol"/>
       </xsl:call-template>
+    </xsl:if>
+  </xsl:template>
 
-      <!-- Per-host port table (own repeating header so it survives page breaks). -->
-      <!-- m{} columns vertically centre each cell so the plain port/proto text
-           shares a baseline with the taller severity pill (a \colorbox). -->
-      <xsl:text>\renewcommand{\arraystretch}{1.2}
-\begin{longtable}{@{}m{22mm} m{22mm} m{22mm} m{40mm}@{}}
-\rowcolor{surInk}
-\textcolor{white}{\footnotesize\bfseries </xsl:text><xsl:value-of select="gvm:t('th_port')"/><xsl:text>} &amp; \textcolor{white}{\footnotesize\bfseries </xsl:text><xsl:value-of select="gvm:t('th_proto')"/><xsl:text>} &amp; \textcolor{white}{\footnotesize\bfseries </xsl:text><xsl:value-of select="gvm:t('th_findings')"/><xsl:text>} &amp; \textcolor{white}{\footnotesize\bfseries </xsl:text><xsl:value-of select="gvm:t('th_max_sev')"/><xsl:text>} \\
-\endhead
+  <!-- The note under a host card that carries host-level findings.  The card
+       shows those findings as ONE `geral' row, so this is where the row is taken
+       apart: how many findings, how they split by severity class, and the
+       highest CVSS among them.  Without it the aggregate would be a number the
+       reader cannot check, which is the failure mode this report has a history
+       of.  A class with no finding is not mentioned at all. -->
+  <xsl:template name="hp-general-note">
+    <xsl:param name="genres"/>
+    <xsl:variable name="n" select="count($genres)"/>
+    <xsl:variable name="ncrit" select="count($genres[number(severity) &gt;= 9.0])"/>
+    <xsl:variable name="nhigh" select="count($genres[number(severity) &gt;= 7.0 and number(severity) &lt; 9.0])"/>
+    <xsl:variable name="nmed" select="count($genres[number(severity) &gt;= 4.0 and number(severity) &lt; 7.0])"/>
+    <xsl:variable name="nlow" select="count($genres[number(severity) &gt;= 0.1 and number(severity) &lt; 4.0])"/>
+    <!-- A false positive is counted apart and named apart: it is a CODE the
+         scanner uses to disown a result, not a score, and calling it Log would
+         hide that. Whatever is left is informational. -->
+    <xsl:variable name="nfp" select="count($genres[number(severity) &lt; 0 and number(severity) &gt; -1.5])"/>
+    <xsl:variable name="nlog" select="$n - $ncrit - $nhigh - $nmed - $nlow - $nfp"/>
+    <xsl:variable name="maxsev">
+      <xsl:call-template name="port-max-sev">
+        <xsl:with-param name="rs" select="$genres"/>
+      </xsl:call-template>
+    </xsl:variable>
+    <!-- The tail is built into a variable so the closing full stop can look at
+         what came before it: a class word may itself end in a period
+         ("Falso pos.", "False pos.") and "1 Falso pos.." is a typo the reader
+         would rightly blame on the machine. -->
+    <xsl:variable name="tail">
+    <xsl:if test="$ncrit &gt; 0">
+      <xsl:value-of select="$ncrit"/><xsl:text> </xsl:text><xsl:value-of select="gvm:sev-word('Critical')"/>
+    </xsl:if>
+    <xsl:if test="$nhigh &gt; 0">
+      <xsl:if test="$ncrit &gt; 0"><xsl:text>, </xsl:text></xsl:if>
+      <xsl:value-of select="$nhigh"/><xsl:text> </xsl:text><xsl:value-of select="gvm:sev-word('High')"/>
+    </xsl:if>
+    <xsl:if test="$nmed &gt; 0">
+      <xsl:if test="$ncrit + $nhigh &gt; 0"><xsl:text>, </xsl:text></xsl:if>
+      <xsl:value-of select="$nmed"/><xsl:text> </xsl:text><xsl:value-of select="gvm:sev-word('Medium')"/>
+    </xsl:if>
+    <xsl:if test="$nlow &gt; 0">
+      <xsl:if test="$ncrit + $nhigh + $nmed &gt; 0"><xsl:text>, </xsl:text></xsl:if>
+      <xsl:value-of select="$nlow"/><xsl:text> </xsl:text><xsl:value-of select="gvm:sev-word('Low')"/>
+    </xsl:if>
+    <xsl:if test="$nlog &gt; 0">
+      <xsl:if test="$ncrit + $nhigh + $nmed + $nlow &gt; 0"><xsl:text>, </xsl:text></xsl:if>
+      <xsl:value-of select="$nlog"/><xsl:text> </xsl:text><xsl:value-of select="gvm:sev-word('Log')"/>
+    </xsl:if>
+    <xsl:if test="$nfp &gt; 0">
+      <xsl:if test="$ncrit + $nhigh + $nmed + $nlow + $nlog &gt; 0"><xsl:text>, </xsl:text></xsl:if>
+      <xsl:value-of select="$nfp"/><xsl:text> </xsl:text><xsl:value-of select="gvm:sev-word('Falsepos')"/>
+    </xsl:if>
+    <xsl:if test="number($maxsev) &gt;= 0.1">
+      <xsl:text> \textperiodcentered\ </xsl:text>
+      <xsl:value-of select="gvm:t('hx_th_cvss')"/><xsl:text> </xsl:text>
+      <xsl:value-of select="$maxsev"/>
+    </xsl:if>
+    </xsl:variable>
+    <xsl:text>\blocknote{</xsl:text>
+    <xsl:value-of select="gvm:t('hp_gen_note_a')"/>
+    <xsl:value-of select="$n"/><xsl:text> </xsl:text>
+    <xsl:value-of select="gvm:t('hx_findings_n')"/>
+    <xsl:value-of select="gvm:t('hp_gen_note_b')"/>
+    <xsl:text>\dat{</xsl:text>
+    <xsl:value-of select="translate(gvm:t('hp_general'),
+      'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz')"/>
+    <xsl:text>}: </xsl:text>
+    <xsl:value-of select="$tail"/>
+    <xsl:if test="substring($tail, string-length($tail), 1) != '.'"><xsl:text>.</xsl:text></xsl:if>
+    <xsl:text>}
 </xsl:text>
-      <xsl:choose>
-        <!-- Primary source: the report's <ports> inventory for this host. -->
-        <xsl:when test="count($fromports) &gt; 0">
-          <!-- Real ports first, numeric ascending... -->
-          <xsl:for-each select="$fromports[not(starts-with(text(), 'general'))]">
-            <xsl:sort select="number(substring-before(text(), '/'))" data-type="number" order="ascending"/>
-            <xsl:call-template name="port-row">
-              <xsl:with-param name="ip" select="$ip"/>
-              <xsl:with-param name="pstr" select="text()"/>
-              <xsl:with-param name="zebra" select="position() mod 2 = 0"/>
-            </xsl:call-template>
-          </xsl:for-each>
-          <!-- ...then host-level (general/*) pseudo-ports. -->
-          <xsl:for-each select="$fromports[starts-with(text(), 'general')]">
-            <xsl:sort select="text()"/>
-            <xsl:call-template name="port-row">
-              <xsl:with-param name="ip" select="$ip"/>
-              <xsl:with-param name="pstr" select="text()"/>
-              <xsl:with-param name="zebra" select="false()"/>
-            </xsl:call-template>
-          </xsl:for-each>
-        </xsl:when>
-        <!-- Fallback: derive distinct ports from this host's results. -->
-        <xsl:when test="count(gvm:report()/results/result[host/text()=$ip]) &gt; 0">
-          <xsl:for-each select="gvm:report()/results/result[host/text()=$ip][generate-id() = generate-id(key('by-host-port', concat(host/text(), '|', port))[1])]">
-            <xsl:sort select="starts-with(port, 'general')"/>
-            <xsl:sort select="number(substring-before(port, '/'))" data-type="number" order="ascending"/>
-            <xsl:call-template name="port-row">
-              <xsl:with-param name="ip" select="$ip"/>
-              <xsl:with-param name="pstr" select="port"/>
-              <xsl:with-param name="zebra" select="position() mod 2 = 0"/>
-            </xsl:call-template>
-          </xsl:for-each>
-        </xsl:when>
-        <!-- No ports and no results: clean host. -->
-        <xsl:otherwise>
-          <xsl:text>\multicolumn{4}{@{}l@{}}{\color{surMuted}\footnotesize </xsl:text>
-          <xsl:value-of select="gvm:t('hp_no_ports')"/>
-          <xsl:text>} \\[0.2mm]
-</xsl:text>
-        </xsl:otherwise>
-      </xsl:choose>
-      <xsl:text>\end{longtable}
-</xsl:text>
-    </xsl:for-each>
   </xsl:template>
 
   <!-- ================================================================= -->
@@ -1915,24 +2341,18 @@ SPDX-License-Identifier: GPL-2.0-or-later
   <xsl:template name="findings-summary">
     <xsl:variable name="n-low" select="count(gvm:report()/results/result[generate-id() = generate-id(key('by-nvt', nvt/@oid)[1])][qod/value][number(qod/value) &lt; number($qod-min)])"/>
     <xsl:variable name="n-ok" select="count(gvm:report()/results/result[generate-id() = generate-id(key('by-nvt', nvt/@oid)[1])][not(qod/value) or number(qod/value) &gt;= number($qod-min)])"/>
-    <xsl:text>\section{</xsl:text><xsl:value-of select="gvm:t('sec_findings_summary')"/><xsl:text>}
-</xsl:text>
-    <xsl:value-of select="gvm:t('fs_intro')"/>
-    <xsl:text>\par
-\vspace{3mm}
+    <xsl:text>\suriSection{4}{</xsl:text><xsl:value-of select="gvm:t('sec_findings_summary')"/><xsl:text>}
 </xsl:text>
 
-    <!-- Confirmed findings. Sub-headed only when low-confidence items exist, so
-         a clean report keeps the original single-table layout. -->
-    <xsl:if test="$n-low &gt; 0">
-      <xsl:text>\subsection*{</xsl:text><xsl:value-of select="gvm:t('sub_confirmed')"/><xsl:text>}
-{\color{surMuted}\small </xsl:text><xsl:value-of select="gvm:t('conf_intro')"/>
-      <xsl:value-of select="$qod-min"/><xsl:text>\%.}\par\vspace{2mm}
+    <!-- Confirmed findings.  The slab is unconditional now: in the design system
+         \suriSummaryHead IS the table's title, and it states the detection-quality
+         band the table covers, which is true whether or not a second band exists.
+         The old \subsection* + grey intro line is what it replaces. -->
+    <xsl:text>\suriSummaryHead{confirmados}
 </xsl:text>
-    </xsl:if>
     <xsl:choose>
       <xsl:when test="$n-ok = 0">
-        <xsl:text>{\color{surMuted}</xsl:text><xsl:value-of select="gvm:t('none_confirmed')"/><xsl:text>}\par\vspace{3mm}
+        <xsl:text>\suriPara{</xsl:text><xsl:value-of select="gvm:t('none_confirmed')"/><xsl:text>}
 </xsl:text>
       </xsl:when>
       <xsl:otherwise>
@@ -1942,13 +2362,16 @@ SPDX-License-Identifier: GPL-2.0-or-later
       </xsl:otherwise>
     </xsl:choose>
 
-    <!-- Indicators to validate: what the scanner is not confident about. -->
+    <!-- Indicators to validate: what the scanner is not confident about.  The
+         caveat is a \warnbox now instead of a grey paragraph, and it still says
+         the threshold out loud, because $qod-min is a parameter and the caption
+         macros of the design system carry only the default. -->
     <xsl:if test="$n-low &gt; 0">
-      <xsl:text>\vspace{4mm}
-\subsection*{</xsl:text><xsl:value-of select="gvm:t('sub_indicators')"/><xsl:text>}
-{\color{surMuted}\small </xsl:text><xsl:value-of select="gvm:t('ind_intro')"/>
+      <xsl:text>\clearpage
+\suriSummaryHead{indicadores}
+\warnbox{</xsl:text><xsl:value-of select="gvm:t('ind_intro')"/>
       <xsl:value-of select="$qod-min"/><xsl:text>\%</xsl:text><xsl:value-of select="gvm:t('ind_intro2')"/>
-      <xsl:text>}\par\vspace{2mm}
+      <xsl:text>}
 </xsl:text>
       <xsl:call-template name="findings-summary-table">
         <xsl:with-param name="low" select="1"/>
@@ -1962,15 +2385,12 @@ SPDX-License-Identifier: GPL-2.0-or-later
        from 1 independently. -->
   <xsl:template name="findings-summary-table">
     <xsl:param name="low" select="0"/>
-    <xsl:text>\renewcommand{\arraystretch}{1.35}
-\begin{longtable}{@{}p{9mm} >{\surname}p{92mm} p{15mm} p{35mm}@{}}
-\rowcolor{surInk}
-\textcolor{white}{\bfseries </xsl:text><xsl:value-of select="gvm:t('th_num')"/><xsl:text>} &amp; \textcolor{white}{\bfseries </xsl:text><xsl:value-of select="gvm:t('th_vuln')"/><xsl:text>} &amp; \textcolor{white}{\bfseries </xsl:text><xsl:value-of select="gvm:t('th_inst')"/><xsl:text>} &amp; \textcolor{white}{\bfseries </xsl:text><xsl:value-of select="gvm:t('th_severity')"/><xsl:text>} \\
-\endfirsthead
-\rowcolor{surInk}
-\textcolor{white}{\bfseries </xsl:text><xsl:value-of select="gvm:t('th_num')"/><xsl:text>} &amp; \textcolor{white}{\bfseries </xsl:text><xsl:value-of select="gvm:t('th_vuln')"/><xsl:text>} &amp; \textcolor{white}{\bfseries </xsl:text><xsl:value-of select="gvm:t('th_inst')"/><xsl:text>} &amp; \textcolor{white}{\bfseries </xsl:text><xsl:value-of select="gvm:t('th_severity')"/><xsl:text>} \\
-\endhead
-</xsl:text>
+    <!-- The column headers, the repeated head on a page break and the closing
+         rule all belong to the findingsummary environment now; the mode key it
+         takes is what turns SEVERIDADE into SEVERIDADE (TETO) and highlights a
+         critical row on the low-confidence table.  Nothing is emitted before
+         the variables below are settled, because the truncation budget has to
+         be known before the first row is written. -->
     <xsl:variable name="rows" select="gvm:report()/results/result[generate-id() = generate-id(key('by-nvt', nvt/@oid)[1])]"/>
     <!-- Consolidated groups get one row each, at the top of the confirmed
          table, so the summary and the detail section describe the same set. -->
@@ -1981,78 +2401,342 @@ SPDX-License-Identifier: GPL-2.0-or-later
         <xsl:otherwise>0</xsl:otherwise>
       </xsl:choose>
     </xsl:variable>
+
+    <!-- The rows this table is entitled to, bound once so the truncation budget
+         can be counted off exactly the set the loop below walks.  The expression
+         is the one the for-each carried before, unchanged: bucket by detection
+         quality, then drop whatever a consolidated advisory card already tells. -->
+    <xsl:variable name="sel" select="$rows[($low = 1 and qod/value and number(qod/value) &lt; number($qod-min)) or ($low = 0 and (not(qod/value) or number(qod/value) &gt;= number($qod-min)))][not((nvt/solution/@type='VendorFix' and count(key('by-updgrp',concat(substring-before(concat(normalize-space(nvt/name),' '),' '),' ',substring-before(concat(substring-after(normalize-space(nvt/name),' '),' '),' ')))[generate-id() = generate-id(key('by-updgrp-nvt',concat(concat(substring-before(concat(normalize-space(nvt/name),' '),' '),' ',substring-before(concat(substring-after(normalize-space(nvt/name),' '),' '),' ')),'||',nvt/@oid))[1])]) &gt;= $group-min))]"/>
+    <!-- Truncation budget.  `keep' is how many rows of $sel are printed; it is
+         never less than the number of ACIONAVEIS (severity >= 0.1), so what the
+         cut can reach is only the informational tail — the rows sort by severity
+         descending, so that tail is at the bottom by construction. -->
+    <xsl:variable name="n-hard" select="count($sel[number(severity) &gt;= 0.1])"/>
+    <xsl:variable name="cap" select="number($summary-max) - number($ngroups)"/>
+    <xsl:variable name="keep">
+      <xsl:choose>
+        <xsl:when test="$cap &gt; $n-hard"><xsl:value-of select="$cap"/></xsl:when>
+        <xsl:otherwise><xsl:value-of select="$n-hard"/></xsl:otherwise>
+      </xsl:choose>
+    </xsl:variable>
+    <xsl:variable name="dropped" select="count($sel) - number($keep)"/>
+
+    <xsl:text>\begin{findingsummary}{</xsl:text>
+    <xsl:choose>
+      <xsl:when test="$low = 1"><xsl:text>indicadores</xsl:text></xsl:when>
+      <xsl:otherwise><xsl:text>confirmados</xsl:text></xsl:otherwise>
+    </xsl:choose>
+    <xsl:text>}
+</xsl:text>
+
     <xsl:if test="$low = 0">
       <xsl:for-each select="$groups">
         <xsl:sort select="severity" data-type="number" order="descending"/>
-        <xsl:if test="position() mod 2 = 0"><xsl:text>\rowcolor{surMist}</xsl:text></xsl:if>
-        <xsl:text>{\bfseries </xsl:text><xsl:value-of select="position()"/><xsl:text>} &amp; </xsl:text>
-        <xsl:text>\hyperlink{</xsl:text><xsl:value-of select="concat('grp-', translate(concat(substring-before(concat(normalize-space(nvt/name),' '),' '),' ',substring-before(concat(substring-after(normalize-space(nvt/name),' '),' '),' ')), ' ./:,()', '-------'))"/><xsl:text>}{\color{surInk}</xsl:text>
+        <xsl:variable name="gname" select="concat(substring-before(concat(normalize-space(nvt/name),' '),' '),' ',substring-before(concat(substring-after(normalize-space(nvt/name),' '),' '),' '))"/>
+        <!-- Severity KEY of the design system.  Same ladder as `sev-class', in
+             the vocabulary suricatoos-blocks.sty speaks; kept inline (twice)
+             rather than hoisted into a named template, because this file is
+             being ported by several hands at once and a new global name is the
+             one edit that can collide. -->
+        <xsl:variable name="gsev">
+          <xsl:choose>
+            <xsl:when test="number(severity) &gt;= 9.0">critico</xsl:when>
+            <xsl:when test="number(severity) &gt;= 7.0">alto</xsl:when>
+            <xsl:when test="number(severity) &gt;= 4.0">medio</xsl:when>
+            <xsl:when test="number(severity) &gt;= 0.1">baixo</xsl:when>
+            <!-- -1 e' FALSO POSITIVO, nao pontuacao: `neutro' e' a chave sem
+                 rampa de severidade do design (a palavra vem de \setsevword). -->
+            <xsl:when test="number(severity) &lt; 0 and number(severity) &gt; -1.5">neutro</xsl:when>
+            <xsl:otherwise>logsev</xsl:otherwise>
+          </xsl:choose>
+        </xsl:variable>
+        <xsl:text>\findingrow{</xsl:text><xsl:value-of select="position()"/><xsl:text>}{</xsl:text>
+        <xsl:text>\hyperlink{</xsl:text><xsl:value-of select="concat('grp-', translate($gname, ' ./:,()', '-------'))"/><xsl:text>}{</xsl:text>
         <xsl:call-template name="escape_name">
-          <xsl:with-param name="string" select="concat(substring-before(concat(normalize-space(nvt/name),' '),' '),' ',substring-before(concat(substring-after(normalize-space(nvt/name),' '),' '),' '))"/>
+          <xsl:with-param name="string" select="$gname"/>
         </xsl:call-template>
         <xsl:text> --- </xsl:text><xsl:value-of select="gvm:t('grp_title')"/>
-        <xsl:text>} &amp; </xsl:text>
+        <xsl:text>}}{</xsl:text>
         <xsl:value-of select="count(key('by-updgrp',concat(substring-before(concat(normalize-space(nvt/name),' '),' '),' ',substring-before(concat(substring-after(normalize-space(nvt/name),' '),' '),' ')))[generate-id() = generate-id(key('by-updgrp-nvt',concat(concat(substring-before(concat(normalize-space(nvt/name),' '),' '),' ',substring-before(concat(substring-after(normalize-space(nvt/name),' '),' '),' ')),'||',nvt/@oid))[1])])"/>
-        <xsl:text> &amp; </xsl:text>
-        <xsl:call-template name="severity-pill">
-          <xsl:with-param name="severity" select="severity"/>
-        </xsl:call-template>
-        <xsl:text> \\[0.6mm]
+        <xsl:text>}{</xsl:text><xsl:value-of select="$gsev"/><xsl:text>}{</xsl:text>
+        <xsl:if test="$gsev != 'logsev' and $gsev != 'neutro'"><xsl:value-of select="severity"/></xsl:if>
+        <xsl:text>}
 </xsl:text>
       </xsl:for-each>
     </xsl:if>
-    <xsl:for-each select="$rows[($low = 1 and qod/value and number(qod/value) &lt; number($qod-min)) or ($low = 0 and (not(qod/value) or number(qod/value) &gt;= number($qod-min)))][not((nvt/solution/@type='VendorFix' and count(key('by-updgrp',concat(substring-before(concat(normalize-space(nvt/name),' '),' '),' ',substring-before(concat(substring-after(normalize-space(nvt/name),' '),' '),' ')))[generate-id() = generate-id(key('by-updgrp-nvt',concat(concat(substring-before(concat(normalize-space(nvt/name),' '),' '),' ',substring-before(concat(substring-after(normalize-space(nvt/name),' '),' '),' ')),'||',nvt/@oid))[1])]) &gt;= $group-min))]">
+    <xsl:for-each select="$sel">
       <xsl:sort select="severity" data-type="number" order="descending"/>
-      <xsl:variable name="oid" select="nvt/@oid"/>
-      <xsl:variable name="anchor" select="concat('fnd-', translate($oid, '.', '-'))"/>
-      <xsl:variable name="instances" select="count(key('by-nvt', $oid))"/>
-      <xsl:variable name="cvss">
-        <xsl:choose>
-          <xsl:when test="string-length(nvt/cvss_base) &gt; 0"><xsl:value-of select="nvt/cvss_base"/></xsl:when>
-          <xsl:otherwise><xsl:value-of select="severity"/></xsl:otherwise>
-        </xsl:choose>
-      </xsl:variable>
-      <!-- alternate zebra shading -->
-      <xsl:if test="position() mod 2 = 0">
-        <xsl:text>\rowcolor{surMist}</xsl:text>
+      <xsl:if test="position() &lt;= number($keep)">
+        <xsl:variable name="oid" select="nvt/@oid"/>
+        <xsl:variable name="anchor" select="concat('fnd-', translate($oid, '.', '-'))"/>
+        <xsl:variable name="instances" select="count(key('by-nvt', $oid))"/>
+        <!-- see the note on $gsev above: same ladder, deliberately inline -->
+        <xsl:variable name="sevk">
+          <xsl:choose>
+            <xsl:when test="number(severity) &gt;= 9.0">critico</xsl:when>
+            <xsl:when test="number(severity) &gt;= 7.0">alto</xsl:when>
+            <xsl:when test="number(severity) &gt;= 4.0">medio</xsl:when>
+            <xsl:when test="number(severity) &gt;= 0.1">baixo</xsl:when>
+            <xsl:when test="number(severity) &lt; 0 and number(severity) &gt; -1.5">neutro</xsl:when>
+            <xsl:otherwise>logsev</xsl:otherwise>
+          </xsl:choose>
+        </xsl:variable>
+        <xsl:text>\findingrow{</xsl:text><xsl:value-of select="position() + number($ngroups)"/><xsl:text>}{</xsl:text>
+        <xsl:text>\hyperlink{</xsl:text><xsl:value-of select="$anchor"/><xsl:text>}{</xsl:text>
+        <xsl:call-template name="escape_name">
+          <xsl:with-param name="string" select="nvt/name"/>
+        </xsl:call-template>
+        <xsl:text>}}{</xsl:text><xsl:value-of select="$instances"/><xsl:text>}{</xsl:text>
+        <xsl:value-of select="$sevk"/><xsl:text>}{</xsl:text>
+        <xsl:if test="$sevk != 'logsev' and $sevk != 'neutro'"><xsl:value-of select="severity"/></xsl:if>
+        <xsl:text>}
+</xsl:text>
       </xsl:if>
-      <xsl:text>{\bfseries </xsl:text><xsl:value-of select="position() + number($ngroups)"/><xsl:text>} &amp; </xsl:text>
-      <xsl:text>\hyperlink{</xsl:text><xsl:value-of select="$anchor"/><xsl:text>}{\color{surInk}</xsl:text>
-      <xsl:call-template name="escape_name">
-        <xsl:with-param name="string" select="nvt/name"/>
-      </xsl:call-template>
-      <xsl:text>} &amp; </xsl:text>
-      <xsl:value-of select="$instances"/>
-      <xsl:text> &amp; </xsl:text>
-      <xsl:call-template name="severity-pill">
-        <xsl:with-param name="severity" select="severity"/>
-      </xsl:call-template>
-      <xsl:text> \\[0.6mm]
-</xsl:text>
     </xsl:for-each>
-    <xsl:text>\end{longtable}
+    <xsl:text>\end{findingsummary}
 </xsl:text>
+    <!-- What the budget cut off, counted and named.  Never a bare ellipsis: the
+         reader has to be able to tell how much of the list is not on the page,
+         and that it is still told in full further on. -->
+    <xsl:if test="$dropped &gt; 0">
+      <xsl:text>\findingtrunc{\suriEllip\ + </xsl:text>
+      <xsl:value-of select="gvm:num($dropped)"/>
+      <xsl:value-of select="gvm:t('fs_trunc')"/>
+      <xsl:text>}
+</xsl:text>
+    </xsl:if>
   </xsl:template>
 
   <!-- ================================================================= -->
   <!-- Detailed findings (grouped by NVT)                                -->
   <!-- ================================================================= -->
 
-  <!-- A labelled body field with escaped multi-line text; skipped if empty.
-       Campo de PROSA: o texto do feed reflui e volta a justificar (escape_prose),
-       em vez de carregar para a pagina a quebra de 65 colunas do terminal de
-       quem escreveu o NVT. -->
+  <!-- Classe de severidade -> CHAVE de severidade do design system.
+       O .sty conhece critico/alto/medio/baixo/logsev; `falsepos' nao tem cor
+       propria e cai no cinza neutro do \sevcolor, que e' a leitura certa para
+       um resultado que o proprio scanner desautorizou. NAO e' dobrado em
+       logsev de proposito: essa e' exatamente a confusao que o sev-class foi
+       escrito para evitar ("indistinguivel de uma deteccao informativa
+       legitima"). O preambulo precisa registrar a palavra de cada chave com
+       \setsevword — inclusive a de `falsepos', que o .sty nao traz. -->
+  <xsl:template name="sevkey-detail">
+    <xsl:param name="severity"/>
+    <xsl:variable name="class">
+      <xsl:call-template name="sev-class">
+        <xsl:with-param name="severity" select="$severity"/>
+      </xsl:call-template>
+    </xsl:variable>
+    <xsl:choose>
+      <xsl:when test="$class = 'Critical'">critico</xsl:when>
+      <xsl:when test="$class = 'High'">alto</xsl:when>
+      <xsl:when test="$class = 'Medium'">medio</xsl:when>
+      <xsl:when test="$class = 'Low'">baixo</xsl:when>
+      <xsl:when test="$class = 'Falsepos'">falsepos</xsl:when>
+      <xsl:otherwise>logsev</xsl:otherwise>
+    </xsl:choose>
+  </xsl:template>
+
+  <!-- Um campo de PROSA, em paragrafos do design system.
+       O texto passa pelo escape_prose (que reflui a quebra de terminal do autor
+       do NVT) e sai dentro de \suriPara, que e' a medida de leitura do modelo.
+       UM \suriPara POR PARAGRAFO, e nao um so' com o campo inteiro dentro: o
+       \suriPara compoe numa minipage para encurtar a medida, e minipage NAO
+       quebra entre paginas — medido no container, um campo de 12.000 caracteres
+       num unico \suriPara estoura a pagina em 587pt e o texto sai POR BAIXO do
+       rodape, perdido. Cortado nas linhas em branco que o proprio feed escreve,
+       o que precisa caber numa pagina passa a ser o maior PARAGRAFO, nao o
+       campo. Um paragrafo unico gigante (acima de ~4.800 caracteres sem uma
+       linha em branco) continua sendo um risco: e' limitacao do \suriPara, esta'
+       relatada, e a correcao e' no .sty (trocar a minipage por \rightskip). -->
+  <xsl:template name="prose-block">
+    <xsl:param name="value"/>
+    <xsl:variable name="norm" select="str:replace(
+      str:replace(string($value), '&#13;&#10;', '&#10;'), '&#13;', '&#10;')"/>
+    <xsl:for-each select="str:split($norm, '&#10;&#10;')">
+      <xsl:if test="string-length(normalize-space(.)) &gt; 0">
+        <xsl:text>\suriPara{</xsl:text>
+        <xsl:call-template name="escape_prose">
+          <xsl:with-param name="string" select="string(.)"/>
+        </xsl:call-template>
+        <xsl:text>}
+</xsl:text>
+      </xsl:if>
+    </xsl:for-each>
+  </xsl:template>
+
+  <!-- UM CAMPO DE CORPO ROTULADO (RESUMO, IMPACTO, DETALHES TECNICOS,
+       SOFTWARE/SO AFETADO). Pulado quando vazio.
+       O rotulo entra como esta': quem chama passa ou um macro \suriLbl... do
+       design system (traduzido no preambulo) ou uma string do gvm:t().
+
+       O campo do feed vem em duas formas: prosa corrida (que sai em \suriPara)
+       e lista de marcadores, uma linha "- CVE-xxxx: ..." por item — que e' o
+       que a pg-09 do modelo desenha com `suribullets'.
+
+       A lista NAO e' privilegio do `insight'. Este template era dois: um
+       generico, sem deteccao de lista, para resumo/impacto/afetado, e um so'
+       para DETALHES TECNICOS, com ela. O resultado e' que a MESMA lista saia
+       com marcador de verdade sob DETALHES TECNICOS e como paragrafos soltos
+       comecando por hifen sob RESUMO — duas tipografias para a mesma coisa na
+       mesma pagina. Contado no relatorio de teste: 152 `insight', mas tambem 67
+       `summary', 33 `affected' e 2 `impact' trazem lista. Agora o rotulo e'
+       parametro e a deteccao vale para os quatro.
+
+       A deteccao e' conservadora e nao inventa item nenhum: a indentacao do
+       marcador e' normalizada (o feed escreve "  - "), o texto ANTES do
+       primeiro marcador continua saindo como paragrafo, e cada item passa
+       inteiro pelo escape_prose — nada e' descartado.
+       O realce do prefixo ("CVE-2025-61984:") so' dispara quando o que vem
+       antes dos dois-pontos e' UMA palavra curta, que e' a forma do
+       identificador; frase que por acaso tenha ':' no meio nao vira titulo. -->
   <xsl:template name="finding-field">
     <xsl:param name="label"/>
     <xsl:param name="value"/>
     <xsl:if test="string-length(normalize-space($value)) &gt; 0">
-      <xsl:text>\fieldlabel{</xsl:text><xsl:value-of select="$label"/><xsl:text>}</xsl:text>
-      <xsl:call-template name="escape_prose">
-        <xsl:with-param name="string" select="$value"/>
-      </xsl:call-template>
-      <xsl:text>\par
+      <xsl:variable name="mk" select="concat('&#10;', str:replace(str:replace(str:replace(
+        str:replace(str:replace(str:replace(str:replace(str:replace(string($value),
+        '&#13;&#10;', '&#10;'), '&#13;', '&#10;'),
+        '&#10;      - ', '&#10;- '), '&#10;     - ', '&#10;- '), '&#10;    - ', '&#10;- '),
+        '&#10;   - ', '&#10;- '), '&#10;  - ', '&#10;- '), '&#10; - ', '&#10;- '))"/>
+      <xsl:text>\fieldlabel{</xsl:text><xsl:value-of select="$label"/><xsl:text>}
 </xsl:text>
+      <xsl:choose>
+        <xsl:when test="contains($mk, '&#10;- ')">
+          <xsl:variable name="intro" select="substring-before($mk, '&#10;- ')"/>
+          <xsl:call-template name="prose-block">
+            <xsl:with-param name="value" select="$intro"/>
+          </xsl:call-template>
+          <xsl:text>\begin{suribullets}
+</xsl:text>
+          <xsl:for-each select="str:split(substring-after($mk, '&#10;- '), '&#10;- ')">
+            <xsl:variable name="it" select="string(.)"/>
+            <xsl:variable name="lead" select="substring-before($it, ':')"/>
+            <xsl:text>\item </xsl:text>
+            <xsl:choose>
+              <xsl:when test="string-length($lead) &gt; 0 and string-length($lead) &lt;= 30
+                              and not(contains($lead, ' ')) and not(contains($lead, '&#10;'))">
+                <xsl:text>\textbf{</xsl:text>
+                <xsl:call-template name="escape_text">
+                  <xsl:with-param name="string" select="concat($lead, ':')"/>
+                </xsl:call-template>
+                <!-- O espaco tem de sair DAQUI: o escape_prose come o branco
+                     que abre a linha (ele o le como recuo), entao sem este
+                     espaco o texto colava no identificador em negrito. -->
+                <xsl:text>} </xsl:text>
+                <xsl:call-template name="escape_prose">
+                  <xsl:with-param name="string" select="substring-after($it, ':')"/>
+                </xsl:call-template>
+              </xsl:when>
+              <xsl:otherwise>
+                <xsl:call-template name="escape_prose">
+                  <xsl:with-param name="string" select="$it"/>
+                </xsl:call-template>
+              </xsl:otherwise>
+            </xsl:choose>
+            <xsl:text>
+</xsl:text>
+          </xsl:for-each>
+          <xsl:text>\end{suribullets}
+</xsl:text>
+        </xsl:when>
+        <xsl:otherwise>
+          <xsl:call-template name="prose-block">
+            <xsl:with-param name="value" select="$value"/>
+          </xsl:call-template>
+        </xsl:otherwise>
+      </xsl:choose>
     </xsl:if>
+  </xsl:template>
+
+  <!-- MIOLO DO \solbox: prosa corrida OU lista de marcadores.
+       O campo `solution' do feed vem nas MESMAS duas formas dos campos de
+       corpo, mas ate' agora so' os campos de corpo sabiam disso: uma mitigacao
+       em lista saia da caixa de remediacao com o hifen cru colado no rotulo
+       ("Mitigação: - DHE key exchange should be disabled..."), na mesma pagina
+       em que DETALHES TECNICOS e IMPACTO desenhavam marcador de verdade. Duas
+       tipografias para a mesma coisa, a dois centimetros uma da outra.
+       A deteccao e' a de finding-field (indentacao do marcador normalizada, o
+       texto antes do primeiro marcador preservado como prosa), SEM o realce de
+       prefixo em negrito: item de solucao e' frase, nao identificador, e o
+       \solbox ja' gasta o negrito no que o leitor tem de executar — dois
+       negritos na mesma caixa disputariam a mesma enfase.
+       A prosa aqui nao passa por prose-block: dentro do \solbox o \suriPara
+       traria a propria medida, a propria cor e o proprio ar, e a caixa tem os
+       seus. -->
+  <xsl:template name="solution-body">
+    <xsl:param name="value"/>
+    <xsl:variable name="mk" select="concat('&#10;', str:replace(str:replace(str:replace(
+      str:replace(str:replace(str:replace(str:replace(str:replace(string($value),
+      '&#13;&#10;', '&#10;'), '&#13;', '&#10;'),
+      '&#10;      - ', '&#10;- '), '&#10;     - ', '&#10;- '), '&#10;    - ', '&#10;- '),
+      '&#10;   - ', '&#10;- '), '&#10;  - ', '&#10;- '), '&#10; - ', '&#10;- '))"/>
+    <xsl:choose>
+      <xsl:when test="contains($mk, '&#10;- ')">
+        <xsl:variable name="intro" select="substring-before($mk, '&#10;- ')"/>
+        <xsl:if test="string-length(normalize-space($intro)) &gt; 0">
+          <xsl:call-template name="escape_prose">
+            <xsl:with-param name="string" select="$intro"/>
+          </xsl:call-template>
+        </xsl:if>
+        <xsl:text>\begin{suribullets}
+</xsl:text>
+        <xsl:for-each select="str:split(substring-after($mk, '&#10;- '), '&#10;- ')">
+          <xsl:text>\item </xsl:text>
+          <xsl:call-template name="escape_prose">
+            <xsl:with-param name="string" select="string(.)"/>
+          </xsl:call-template>
+          <xsl:text>
+</xsl:text>
+        </xsl:for-each>
+        <xsl:text>\end{suribullets}
+</xsl:text>
+      </xsl:when>
+      <xsl:otherwise>
+        <xsl:call-template name="escape_prose">
+          <xsl:with-param name="string" select="$value"/>
+        </xsl:call-template>
+      </xsl:otherwise>
+    </xsl:choose>
+  </xsl:template>
+
+  <!-- Uma referencia da lista de REFERENCIAS.
+       \refurl{u} monta o link com \href{u}{u}, e o argumento de um macro comum
+       ja' chega TOKENIZADO: uma URL crua com '_' ou '%' quebraria o pdflatex
+       antes de o \href ver a string. Entao a URL entra SEMPRE escapada.
+       Medido no container: '\_' e '\#' voltam corretos dentro do /URI do PDF,
+       mas qualquer ponto de quebra (\surjb) sai literal no destino — o link
+       apontaria para outro lugar SEM AVISO, que e' o defeito que esta lista ja'
+       teve uma vez. Por isso a regra e' explicita:
+         cabe na linha e so' tem escape que sobrevive  -> link clicavel;
+         longa demais ou com escape que nao sobrevive  -> endereco correto e
+                                                          quebravel, SEM link.
+       Perde o clique, nao perde o endereco.
+       126 caracteres e' a medida real de uma linha do \refurl (Mono 9px na
+       largura do bloco de texto), conferida no container. -->
+  <xsl:template name="reference-line">
+    <xsl:param name="u"/>
+    <xsl:choose>
+      <xsl:when test="string-length($u) &lt;= 126 and
+                      not(contains($u, '\')) and not(contains($u, '{')) and
+                      not(contains($u, '}')) and not(contains($u, '%')) and
+                      not(contains($u, '~')) and not(contains($u, '^')) and
+                      not(contains($u, '&amp;')) and not(contains($u, '$'))">
+        <xsl:text>  \refurl{</xsl:text>
+        <xsl:call-template name="escape_text">
+          <xsl:with-param name="string" select="$u"/>
+        </xsl:call-template>
+        <xsl:text>}
+</xsl:text>
+      </xsl:when>
+      <xsl:otherwise>
+        <xsl:text>  {\def\href#1#2{#2}\refurl{</xsl:text>
+        <xsl:call-template name="escape_break">
+          <xsl:with-param name="string" select="$u"/>
+        </xsl:call-template>
+        <xsl:text>}}
+</xsl:text>
+      </xsl:otherwise>
+    </xsl:choose>
   </xsl:template>
 
   <!-- Localised label for a feed solution/@type value; unknown types pass
@@ -2072,12 +2756,19 @@ SPDX-License-Identifier: GPL-2.0-or-later
 
   <xsl:template name="detailed-findings">
     <xsl:variable name="n-low" select="count(gvm:report()/results/result[generate-id() = generate-id(key('by-nvt', nvt/@oid)[1])][qod/value][number(qod/value) &lt; number($qod-min)])"/>
-    <xsl:text>\section{</xsl:text><xsl:value-of select="gvm:t('sec_detailed')"/><xsl:text>}
+    <!-- Secao 5 do documento: a ordem das secoes esta' fixada na montagem
+         (real-report), entao o numero e' constante e nao um contador do LaTeX
+         — \suriSection carrega o numero como DADO, e ele tambem alimenta o
+         "S5 . ACHADOS DETALHADOS" do cabecalho corrido. -->
+    <xsl:text>\suriSection{5}{</xsl:text><xsl:value-of select="gvm:t('sec_detailed')"/><xsl:text>}
 </xsl:text>
     <!-- Confirmed first; the low-confidence block is only introduced when there
-         is something in it, so a clean report reads exactly as before. -->
+         is something in it, so a clean report reads exactly as before.
+         A mesma tarja da secao 4 titula os dois blocos: quem le a pagina 6 ja'
+         aprendeu o que "ACHADOS CONFIRMADOS" e "INDICADORES A VALIDAR"
+         significam, e a faixa de QoD vem escrita na propria tarja. -->
     <xsl:if test="$n-low &gt; 0">
-      <xsl:text>\subsection*{</xsl:text><xsl:value-of select="gvm:t('sub_confirmed')"/><xsl:text>}
+      <xsl:text>\suriSummaryHead{confirmados}
 </xsl:text>
     </xsl:if>
     <xsl:call-template name="consolidated-update-cards"/>
@@ -2085,10 +2776,11 @@ SPDX-License-Identifier: GPL-2.0-or-later
       <xsl:with-param name="low" select="0"/>
     </xsl:call-template>
     <xsl:if test="$n-low &gt; 0">
-      <xsl:text>\subsection*{</xsl:text><xsl:value-of select="gvm:t('sub_indicators')"/><xsl:text>}
-{\color{surMuted}\small </xsl:text><xsl:value-of select="gvm:t('ind_intro')"/>
+      <xsl:text>\clearpage
+\suriSummaryHead{indicadores}
+\warnbox{</xsl:text><xsl:value-of select="gvm:t('ind_intro')"/>
       <xsl:value-of select="$qod-min"/><xsl:text>\%</xsl:text><xsl:value-of select="gvm:t('ind_intro2')"/>
-      <xsl:text>}\par\vspace{3mm}
+      <xsl:text>}
 </xsl:text>
       <xsl:call-template name="finding-cards">
         <xsl:with-param name="low" select="1"/>
@@ -2110,21 +2802,18 @@ SPDX-License-Identifier: GPL-2.0-or-later
       <xsl:variable name="oid" select="nvt/@oid"/>
       <xsl:variable name="anchor" select="concat('fnd-', translate($oid, '.', '-'))"/>
       <xsl:variable name="instances" select="count(key('by-nvt', $oid))"/>
-      <xsl:variable name="sevclass">
-        <xsl:call-template name="sev-class">
+      <xsl:variable name="sevkey">
+        <xsl:call-template name="sevkey-detail">
           <xsl:with-param name="severity" select="severity"/>
         </xsl:call-template>
       </xsl:variable>
-      <xsl:variable name="tcolor">
-        <xsl:call-template name="threat-color">
-          <xsl:with-param name="threat" select="$sevclass"/>
-        </xsl:call-template>
-      </xsl:variable>
-      <xsl:variable name="cvss">
-        <xsl:choose>
-          <xsl:when test="string-length(nvt/cvss_base) &gt; 0"><xsl:value-of select="nvt/cvss_base"/></xsl:when>
-          <xsl:otherwise><xsl:value-of select="severity"/></xsl:otherwise>
-        </xsl:choose>
+      <!-- Log e falso positivo nao carregam pontuacao: o \chipsev com segundo
+           argumento vazio imprime so' a palavra, que e' como o modelo mostra a
+           linha Log. Passar "0.0" ali seria afirmar uma nota que nao existe. -->
+      <xsl:variable name="score">
+        <xsl:if test="$sevkey != 'logsev' and $sevkey != 'falsepos'">
+          <xsl:value-of select="severity"/>
+        </xsl:if>
       </xsl:variable>
       <xsl:variable name="name_escaped">
         <xsl:call-template name="escape_name">
@@ -2132,68 +2821,137 @@ SPDX-License-Identifier: GPL-2.0-or-later
         </xsl:call-template>
       </xsl:variable>
 
-      <!-- Card -->
-      <xsl:text>\hypertarget{</xsl:text><xsl:value-of select="$anchor"/><xsl:text>}{}%
-\begin{tcolorbox}[breakable, enhanced, sharp corners=uphill, arc=1.2mm,
-  colback=white, colframe=surBorderLt, boxrule=0.5pt,
-  left=3.5mm, right=3.5mm, top=3mm, bottom=3mm,
-  toptitle=1.6mm, bottomtitle=1.6mm, lefttitle=3.5mm,
-  colbacktitle=</xsl:text><xsl:value-of select="$tcolor"/><xsl:text>, coltitle=white,
-  fonttitle=\bfseries,
-  title={\raggedright\surnametxt \#</xsl:text><xsl:value-of select="position()"/><xsl:text>\hspace{2mm} </xsl:text>
+      <!-- Card: o cabecalho do achado (pg-09 do modelo).
+           O \hypertarget entra DENTRO do argumento do numero e nao solto na
+           pagina: fora do card ele abre um paragrafo vazio antes de cada
+           achado, e o \findingcard ja' traz o proprio ar. Ancorado no numero,
+           o link do Sumario de Achados cai no card e nao no branco acima. -->
+      <xsl:text>\findingcard{</xsl:text><xsl:value-of select="$sevkey"/>
+      <xsl:text>}{\hypertarget{</xsl:text><xsl:value-of select="$anchor"/><xsl:text>}{}\#</xsl:text>
+      <xsl:value-of select="position()"/><xsl:text>}{</xsl:text>
       <xsl:value-of select="$name_escaped"/>
-      <xsl:text>}]
+      <xsl:text>}{%
+  \chipsev{</xsl:text><xsl:value-of select="$sevkey"/><xsl:text>}{</xsl:text>
+      <xsl:value-of select="$score"/><xsl:text>}%
 </xsl:text>
-
-      <!-- Severity + QoD + CVSS vector line -->
-      <xsl:text>\noindent </xsl:text>
-      <xsl:call-template name="severity-pill">
-        <xsl:with-param name="severity" select="severity"/>
-      </xsl:call-template>
-      <xsl:text>\hspace{2mm}</xsl:text>
-      <xsl:if test="string-length(qod/value) &gt; 0">
-        <xsl:text>{\setlength{\fboxsep}{2.2pt}\colorbox{surCloud}{\color{surInk}\scriptsize\bfseries~QoD </xsl:text>
-        <xsl:value-of select="qod/value"/>
-        <xsl:text>\%~}}\hspace{2mm}</xsl:text>
-      </xsl:if>
       <!-- Loud badge so a low-quality detection is never read as a fact, no
-           matter how high its CVSS looks next to it. -->
-      <xsl:if test="qod/value and number(qod/value) &lt; number($qod-min)">
-        <xsl:text>{\setlength{\fboxsep}{2.2pt}\colorbox{gvm_warning}{\color{white}\scriptsize\bfseries~</xsl:text>
-        <xsl:value-of select="gvm:t('lbl_lowconf')"/>
-        <xsl:text>~}}\hspace{2mm}</xsl:text>
-      </xsl:if>
-      <xsl:text>{\setlength{\fboxsep}{2.2pt}\colorbox{surCloud}{\color{surInk}\scriptsize\bfseries~</xsl:text>
-      <xsl:value-of select="$instances"/>
-      <xsl:text> </xsl:text><xsl:value-of select="gvm:t('lbl_instances')"/><xsl:text>~}}</xsl:text>
-
-      <!-- CVE badges -->
-      <xsl:if test="count(nvt/refs/ref[@type='cve']) &gt; 0">
-        <xsl:for-each select="nvt/refs/ref[@type='cve']">
-          <xsl:text>\hspace{2mm}{\setlength{\fboxsep}{2.2pt}\colorbox{gvm_report}{\color{surInk}\scriptsize\bfseries~</xsl:text>
-          <xsl:call-template name="escape_break">
-            <xsl:with-param name="string" select="@id"/>
-          </xsl:call-template>
-          <xsl:text>~}}</xsl:text>
-        </xsl:for-each>
-      </xsl:if>
-      <xsl:text>\par
+           matter how high its CVSS looks next to it: abaixo do limiar o chip e'
+           o ambar de alerta e carrega a palavra; acima dele a QoD continua
+           visivel, em chip normal, porque e' dado do achado. -->
+      <xsl:choose>
+        <xsl:when test="qod/value and number(qod/value) &lt; number($qod-min)">
+          <xsl:text>  \chipwarn{QoD </xsl:text><xsl:value-of select="qod/value"/>
+          <xsl:text>\% \textperiodcentered\ </xsl:text><xsl:value-of select="gvm:t('lbl_lowconf')"/>
+          <xsl:text>}%
 </xsl:text>
-
-      <!-- CVSS vector (from tags) -->
-      <xsl:variable name="vector" select="gvm:get-nvt-tag('cvss_base_vector')"/>
-      <xsl:if test="string-length($vector) &gt; 0">
-        <xsl:text>\fieldlabel{</xsl:text><xsl:value-of select="gvm:t('lbl_cvss_vector')"/><xsl:text>}{\ttfamily\footnotesize </xsl:text>
+        </xsl:when>
+        <xsl:when test="string-length(qod/value) &gt; 0">
+          <xsl:text>  \chip{QoD </xsl:text><xsl:value-of select="qod/value"/><xsl:text>\%}%
+</xsl:text>
+        </xsl:when>
+      </xsl:choose>
+      <xsl:text>  \chip{</xsl:text><xsl:value-of select="$instances"/><xsl:text> </xsl:text>
+      <xsl:value-of select="gvm:hx-upper(gvm:t('lbl_instances'))"/><xsl:text>}%
+</xsl:text>
+      <!-- CVE chips. Sem teto: a lista reflui sozinha na linha de chips, e
+           cortar CVE de um achado seria esconder exatamente o identificador que
+           o leitor vai procurar. -->
+      <xsl:for-each select="nvt/refs/ref[@type='cve']">
+        <xsl:text>  \chip{</xsl:text>
         <xsl:call-template name="escape_break">
-          <xsl:with-param name="string" select="$vector"/>
+          <xsl:with-param name="string" select="@id"/>
         </xsl:call-template>
-        <xsl:text>}\par
+        <xsl:text>}%
 </xsl:text>
-      </xsl:if>
+      </xsl:for-each>
+      <xsl:text>}
+</xsl:text>
 
-      <!-- Summary / Impact / Insight -->
+      <!-- VETOR CVSS ao lado de SISTEMAS AFETADOS (a linha de dois campos da
+           pg-09). Sem vetor no feed, os sistemas afetados ocupam a medida
+           inteira em vez de deixar meia pagina vazia. -->
+      <xsl:variable name="vector" select="gvm:get-nvt-tag('cvss_base_vector')"/>
+      <!-- Affected systems (UNIQUE host:port instances of this NVT, capped) -->
+      <xsl:variable name="uniqhosts" select="key('by-nvt', $oid)[generate-id() = generate-id(key('by-nvt-hostport', concat($oid, '|', host/text(), '|', port))[1])]"/>
+      <!-- Cada endereco e' um chip: o chip nao quebra por dentro, entao o
+           "10.20.10.3:22/tcp" nao pode mais sair partido em duas linhas como
+           saia na lista corrida. O teto de 40 continua sendo o mesmo de antes,
+           e o resto e' DECLARADO num chip final em vez de sumir. -->
+      <xsl:variable name="affected">
+        <xsl:for-each select="$uniqhosts">
+          <xsl:sort select="host/text()"/>
+          <xsl:if test="position() &lt;= 40">
+            <xsl:text>  \chip{</xsl:text>
+            <xsl:call-template name="escape_break">
+              <xsl:with-param name="string" select="host/text()"/>
+            </xsl:call-template>
+            <xsl:if test="string-length(port) &gt; 0">
+              <xsl:text>:</xsl:text>
+              <xsl:call-template name="escape_break">
+                <xsl:with-param name="string" select="port"/>
+              </xsl:call-template>
+            </xsl:if>
+            <xsl:text>}%
+</xsl:text>
+          </xsl:if>
+        </xsl:for-each>
+        <xsl:if test="count($uniqhosts) &gt; 40">
+          <xsl:text>  \chip{+</xsl:text>
+          <xsl:value-of select="count($uniqhosts) - 40"/>
+          <xsl:text> </xsl:text><xsl:value-of select="gvm:hx-upper(gvm:t('more_word'))"/>
+          <xsl:text>}%
+</xsl:text>
+        </xsl:if>
+      </xsl:variable>
+      <!-- Meia medida cabe DOIS chips de "host:porta" por linha. Ate' meia duzia
+           de instancias a coluna da direita fica com a altura do vetor e a
+           linha de dois campos do modelo se sustenta; acima disso ela vira uma
+           torre de vinte linhas com metade da pagina vazia ao lado, entao os
+           sistemas afetados descem para a medida inteira e refluem em quatro
+           por linha. -->
+      <xsl:choose>
+        <xsl:when test="string-length($vector) &gt; 0 and count($uniqhosts) &lt;= 6">
+          <xsl:text>\fieldcols{%
+  \fieldlabel{\suriLblFldVector}%
+  \cvssvector{</xsl:text>
+          <xsl:call-template name="escape_break">
+            <xsl:with-param name="string" select="$vector"/>
+          </xsl:call-template>
+          <xsl:text>}}{%
+  \fieldlabel{\suriLblFldAffected}%
+  \affectedchips{%
+</xsl:text>
+          <xsl:value-of select="$affected"/>
+          <xsl:text>}}
+</xsl:text>
+        </xsl:when>
+        <xsl:otherwise>
+          <xsl:if test="string-length($vector) &gt; 0">
+            <xsl:text>\fieldcols{%
+  \fieldlabel{\suriLblFldVector}%
+  \cvssvector{</xsl:text>
+            <xsl:call-template name="escape_break">
+              <xsl:with-param name="string" select="$vector"/>
+            </xsl:call-template>
+            <xsl:text>}}{}
+</xsl:text>
+          </xsl:if>
+          <xsl:text>\fieldlabel{\suriLblFldAffected}%
+\affectedchips{%
+</xsl:text>
+          <xsl:value-of select="$affected"/>
+          <xsl:text>}
+</xsl:text>
+        </xsl:otherwise>
+      </xsl:choose>
+
+      <!-- Summary / Impact / Insight.
+           RESUMO, DETALHES TECNICOS e REFERENCIAS tem macro de rotulo no design
+           system (\suriLblFld...), traduzido no preambulo; IMPACTO e
+           SOFTWARE/SO AFETADO nao tem, e por isso continuam vindo do gvm:t()
+           direto. -->
       <xsl:call-template name="finding-field">
-        <xsl:with-param name="label" select="gvm:t('f_summary')"/>
+        <xsl:with-param name="label" select="'\suriLblFldSummary'"/>
         <xsl:with-param name="value" select="gvm:get-nvt-tag('summary')"/>
       </xsl:call-template>
       <xsl:call-template name="finding-field">
@@ -2201,52 +2959,13 @@ SPDX-License-Identifier: GPL-2.0-or-later
         <xsl:with-param name="value" select="gvm:get-nvt-tag('impact')"/>
       </xsl:call-template>
       <xsl:call-template name="finding-field">
-        <xsl:with-param name="label" select="gvm:t('f_insight')"/>
+        <xsl:with-param name="label" select="'\suriLblFldTech'"/>
         <xsl:with-param name="value" select="gvm:get-nvt-tag('insight')"/>
       </xsl:call-template>
       <xsl:call-template name="finding-field">
         <xsl:with-param name="label" select="gvm:t('f_affected_sw')"/>
         <xsl:with-param name="value" select="gvm:get-nvt-tag('affected')"/>
       </xsl:call-template>
-
-      <!-- Affected systems (UNIQUE host:port instances of this NVT, capped) -->
-      <xsl:variable name="uniqhosts" select="key('by-nvt', $oid)[generate-id() = generate-id(key('by-nvt-hostport', concat($oid, '|', host/text(), '|', port))[1])]"/>
-      <!-- Lista de endereco, nao prosa: composta em \raggedright.
-           Justificada, o unico ponto de quebra elastico entre os itens era o
-           \quad (rigido), entao o TeX preferia pagar a penalidade do \surjb
-           DENTRO do endereco a deixar a linha frouxa — e o IP saia partido em
-           duas linhas ("10.20.10." / "3:22/tcp"). Medido no fixture grande:
-           34 quebras dentro de token; com \raggedright, 1.
-           O \par vai DENTRO do grupo de proposito: o TeX le \rightskip no
-           ponto em que o paragrafo TERMINA, entao um \raggedright que fecha
-           antes do \par nao faz nada. -->
-      <xsl:text>\fieldlabel{</xsl:text><xsl:value-of select="gvm:t('f_affected_sys')"/><xsl:text>}\begingroup\raggedright </xsl:text>
-      <xsl:for-each select="$uniqhosts">
-        <xsl:sort select="host/text()"/>
-        <xsl:if test="position() &lt;= 40">
-          <xsl:text>{\ttfamily\footnotesize </xsl:text>
-          <xsl:call-template name="escape_break">
-            <xsl:with-param name="string" select="host/text()"/>
-          </xsl:call-template>
-          <xsl:if test="string-length(port) &gt; 0">
-            <xsl:text>:</xsl:text>
-            <xsl:call-template name="escape_break">
-              <xsl:with-param name="string" select="port"/>
-            </xsl:call-template>
-          </xsl:if>
-          <xsl:text>}</xsl:text>
-          <xsl:if test="position() != last() and position() &lt; 40">
-            <xsl:text>,\quad </xsl:text>
-          </xsl:if>
-        </xsl:if>
-      </xsl:for-each>
-      <xsl:if test="count($uniqhosts) &gt; 40">
-        <xsl:text>{\itshape\footnotesize\quad (+</xsl:text>
-        <xsl:value-of select="count($uniqhosts) - 40"/>
-        <xsl:text> </xsl:text><xsl:value-of select="gvm:t('more_word')"/><xsl:text>)}</xsl:text>
-      </xsl:if>
-      <xsl:text>\par\endgroup
-</xsl:text>
 
       <!-- Detection result (representative).
            O corte agora cai no LIMITE DE PALAVRA: recua ate' 150 caracteres
@@ -2264,40 +2983,43 @@ SPDX-License-Identifier: GPL-2.0-or-later
             <xsl:otherwise><xsl:value-of select="$dlen"/></xsl:otherwise>
           </xsl:choose>
         </xsl:variable>
-        <xsl:text>\fieldlabel{</xsl:text><xsl:value-of select="gvm:t('f_detection')"/><xsl:text>}%
-\begin{tcolorbox}[enhanced, colback=surMist, colframe=surBorderLt, boxrule=0.4pt,
-  arc=0.8mm, left=2.5mm, right=2.5mm, top=1.6mm, bottom=1.6mm, before skip=1mm, after skip=1mm]
+        <!-- O termbox e' um ambiente \obeylines: cada linha de FONTE vira uma
+             linha da caixa. O escape_verbatim ja' emenda as linhas do scanner
+             com \newline, e emite uma quebra de linha de fonte logo depois
+             dela para nao estourar o buffer de 200.000 caracteres por linha do
+             pdflatex. Sob \obeylines essa quebra vira um \par e o bloco saia
+             com o DOBRO do entrelinhas (medido no container). O '%' come a
+             quebra sem tirar o limite de buffer: a linha longa continua
+             cortada na fonte, e a caixa continua com o entrelinhas do modelo.
+             O \newline e' do escape_verbatim, nunca de dado do feed — o
+             escape_text transforma a barra do XML em \textbackslash. -->
+        <xsl:variable name="det">
+          <xsl:call-template name="escape_verbatim">
+            <xsl:with-param name="string" select="substring(description, 1, $dcut)"/>
+          </xsl:call-template>
+        </xsl:variable>
+        <xsl:text>\fieldlabel{\suriLblFldDetection}
+\begin{termbox}
 </xsl:text>
-        <!-- Saida de terminal e' ragged por natureza: justificar linha de
-             terminal e' errado, e alem disso a justificacao e' o que impedia o
-             TeX de usar os pontos de quebra novos (uma linha quebrada num
-             \penalty nao tem glue para esticar e viraria caixa mal composta).
-             Com \raggedright a quebra em junta sai limpa.
-             O \par que fecha o bloco esta DENTRO do grupo (veja o final deste
-             xsl:if): o TeX le \rightskip e \parfillskip no ponto em que o
-             paragrafo TERMINA, entao um \raggedright cujo grupo fecha antes do
-             \par e' inerte — medido, o PDF saia byte a byte igual ao PDF sem
-             \raggedright nenhum. -->
-        <xsl:text>{\ttfamily\footnotesize\color{surInk}\raggedright </xsl:text>
-        <xsl:call-template name="escape_verbatim">
-          <xsl:with-param name="string" select="substring(description, 1, $dcut)"/>
-        </xsl:call-template>
+        <xsl:value-of select="str:replace(string($det), '\newline&#10;', '\newline%&#10;')"/>
+        <xsl:text>
+\end{termbox}
+</xsl:text>
         <xsl:if test="$dlen &gt; 1500">
-          <!-- \rmfamily: em monoespacada o travessao triplo das chaves trunc_*
-               nao fecha a ligadura e saia como DOIS hifens separados. O aviso
-               e' meta-texto, nao evidencia: compor em romana italica resolve a
-               ligadura e ainda o distingue da saida do scanner. -->
-          <xsl:text> \newline \textmd{\rmfamily\itshape </xsl:text>
+          <!-- O aviso e' META-TEXTO, nao evidencia: sai FORA da caixa, como
+               nota do bloco (\blocknote), em vez de disfarcado de saida do
+               scanner dentro do terminal verde. De quebra o travessao triplo
+               das chaves trunc_* volta a fechar a ligadura, que em
+               monoespacada saia como dois hifens soltos. -->
+          <xsl:text>\blocknote{</xsl:text>
           <xsl:value-of select="gvm:t('trunc_a')"/>
           <xsl:value-of select="gvm:num($dcut)"/>
           <xsl:value-of select="gvm:t('trunc_b')"/>
           <xsl:value-of select="gvm:num($dlen)"/>
           <xsl:value-of select="gvm:t('trunc_c')"/>
-          <xsl:text>}</xsl:text>
-        </xsl:if>
-        <xsl:text>\par}
-\end{tcolorbox}
+          <xsl:text>}
 </xsl:text>
+        </xsl:if>
       </xsl:if>
 
       <!-- Solution / Remediation -->
@@ -2312,71 +3034,63 @@ SPDX-License-Identifier: GPL-2.0-or-later
         </xsl:choose>
       </xsl:variable>
       <xsl:if test="string-length(normalize-space($solution)) &gt; 0">
-        <xsl:text>\fieldlabel{</xsl:text><xsl:value-of select="gvm:t('f_solution')"/><xsl:text>}%
-\begin{tcolorbox}[enhanced, colback=gvm_note!8!white, colframe=gvm_note!55!white, boxrule=0.5pt,
-  arc=0.8mm, left=2.5mm, right=2.5mm, top=1.6mm, bottom=1.6mm, before skip=1mm, after skip=1mm]
-{\color{surInk}</xsl:text>
+        <!-- O \solbox imprime o proprio rotulo SOLUCAO / REMEDIACAO, entao aqui
+             nao vai \fieldlabel nenhum.
+             O NEGRITO marca o que o leitor tem de executar. Numa correcao curta
+             ("Update to version 10.1 or later.") isso e' a frase inteira, que e'
+             o que a pg-09 do modelo mostra; numa mitigacao de dez linhas o
+             negrito vira parede, entao ali ele volta para o rotulo do tipo e o
+             texto sai limpo. O criterio e' o tamanho do texto, nao o gosto. -->
+        <xsl:variable name="solshort"
+          select="string-length(normalize-space($solution)) &lt;= 200
+                  and not(contains($solution, '&#10;'))"/>
+        <xsl:text>\solbox{</xsl:text>
         <xsl:if test="string-length(nvt/solution/@type) &gt; 0">
-          <xsl:text>{\bfseries </xsl:text>
+          <xsl:if test="not($solshort)"><xsl:text>{\bfseries </xsl:text></xsl:if>
           <xsl:call-template name="escape_text">
             <xsl:with-param name="string" select="gvm:solution-type-label(nvt/solution/@type)"/>
           </xsl:call-template>
-          <xsl:text>:\ }</xsl:text>
+          <xsl:text>:\ </xsl:text>
+          <xsl:if test="not($solshort)"><xsl:text>}</xsl:text></xsl:if>
         </xsl:if>
-        <xsl:call-template name="escape_prose">
-          <xsl:with-param name="string" select="$solution"/>
+        <xsl:if test="$solshort"><xsl:text>\textbf{</xsl:text></xsl:if>
+        <!-- solution-body, nao escape_prose direto: a mitigacao tambem vem em
+             lista de marcadores. O caminho de lista so' dispara com quebra de
+             linha no texto, e $solshort exige texto SEM quebra de linha, entao
+             o \textbf acima nunca abraca uma lista. -->
+        <xsl:call-template name="solution-body">
+          <xsl:with-param name="value" select="$solution"/>
         </xsl:call-template>
+        <xsl:if test="$solshort"><xsl:text>}</xsl:text></xsl:if>
         <xsl:text>}
-\end{tcolorbox}
 </xsl:text>
       </xsl:if>
 
-      <!-- References (url refs) -->
+      <!-- References (url refs).
+           Este era o UNICO ponto do arquivo em que texto do XML virava LaTeX
+           sem passar por escape. Uma URL de referencia com '}' ou '\' fechava
+           o argumento do \url e o pdflatex acusava "Missing $ inserted" /
+           "Extra }". E o pior nao era a falha: o `generate` faz `cat` do PDF
+           sem checar erro, entao o cliente recebia um documento que parecia
+           inteiro com a REFERENCIA CORROMPIDA — apontando para outro lugar,
+           sem aviso nenhum. A regra de quem clica e quem nao clica esta' no
+           template reference-line, que e' onde essa decisao mora agora. -->
       <xsl:if test="count(nvt/refs/ref[@type='url']) &gt; 0">
-        <xsl:text>\fieldlabel{</xsl:text><xsl:value-of select="gvm:t('f_references')"/><xsl:text>}%
-\begin{itemize}[leftmargin=5mm, itemsep=0.2mm, topsep=0.4mm]
+        <xsl:text>\fieldlabel{\suriLblFldRefs}
+\reflist{%
 </xsl:text>
-        <!-- Este era o UNICO ponto do arquivo em que texto do XML virava LaTeX
-             sem passar por escape. Uma URL de referencia com '}' ou '\' fechava
-             o argumento do \url e o pdflatex acusava "Missing $ inserted" /
-             "Extra }". E o pior nao era a falha: o `generate` faz `cat` do PDF
-             sem checar erro, entao o cliente recebia um documento que parecia
-             inteiro com a REFERENCIA CORROMPIDA — apontando para outro lugar,
-             sem aviso nenhum.
-             O \url continua sendo usado no caso normal (ele sabe quebrar URL e
-             mantem o link clicavel); quando a URL traz um caractere que o \url
-             nao consegue ler literalmente, ela sai escapada e com pontos de
-             quebra, em monoespacada. Perde o clique, nao perde o endereco. -->
         <xsl:for-each select="nvt/refs/ref[@type='url']">
-          <xsl:variable name="u" select="string(@id)"/>
-          <!-- \par DENTRO do grupo: veja a nota do bloco de deteccao. -->
-          <xsl:text>\item {\footnotesize\raggedright </xsl:text>
-          <xsl:choose>
-            <xsl:when test="not(contains($u, '\')) and
-                            not(contains($u, '{')) and
-                            not(contains($u, '}'))">
-              <xsl:text>\url{</xsl:text>
-              <xsl:value-of select="$u"/>
-              <xsl:text>}</xsl:text>
-            </xsl:when>
-            <xsl:otherwise>
-              <xsl:text>{\ttfamily </xsl:text>
-              <xsl:call-template name="escape_break">
-                <xsl:with-param name="string" select="$u"/>
-              </xsl:call-template>
-              <xsl:text>}</xsl:text>
-            </xsl:otherwise>
-          </xsl:choose>
-          <xsl:text>\par}
-</xsl:text>
+          <xsl:call-template name="reference-line">
+            <xsl:with-param name="u" select="string(@id)"/>
+          </xsl:call-template>
         </xsl:for-each>
-        <xsl:text>\end{itemize}
+        <xsl:text>}
 </xsl:text>
       </xsl:if>
-
-      <xsl:text>\end{tcolorbox}
-\vspace{3mm}
-
+      <!-- Nenhum \vspace fecha o achado: o ar acima de cada bloco pertence ao
+           bloco que COMECA (o \suri@air do suricatoos-report), e o proximo
+           \findingcard ja' o carrega. -->
+      <xsl:text>
 </xsl:text>
     </xsl:for-each>
   </xsl:template>
@@ -2403,14 +3117,9 @@ SPDX-License-Identifier: GPL-2.0-or-later
             <xsl:if test="position() = 1"><xsl:value-of select="severity"/></xsl:if>
           </xsl:for-each>
         </xsl:variable>
-        <xsl:variable name="sevclass">
-          <xsl:call-template name="sev-class">
+        <xsl:variable name="sevkey">
+          <xsl:call-template name="sevkey-detail">
             <xsl:with-param name="severity" select="$maxsev"/>
-          </xsl:call-template>
-        </xsl:variable>
-        <xsl:variable name="tcolor">
-          <xsl:call-template name="threat-color">
-            <xsl:with-param name="threat" select="$sevclass"/>
           </xsl:call-template>
         </xsl:variable>
         <xsl:variable name="gname">
@@ -2418,54 +3127,84 @@ SPDX-License-Identifier: GPL-2.0-or-later
             <xsl:with-param name="string" select="$g"/>
           </xsl:call-template>
         </xsl:variable>
+        <!-- Affected hosts (each host once, however many advisories hit it).
+             O mesmo teste de "ja' apareceu antes?" de sempre, so' que agora o
+             resultado e' MATERIALIZADO num node-set: o card precisa saber
+             QUANTOS hosts sao (o chip diz o numero) e nao so' cuspir a lista.
+             De quebra some um defeito da versao em prosa: o separador olhava a
+             posicao dentro de $members, entao quando o primeiro host unico nao
+             era o primeiro membro do grupo a lista abria com uma virgula solta. -->
+        <xsl:variable name="ghosts-rtf">
+          <xsl:for-each select="$members">
+            <xsl:sort select="host/text()"/>
+            <xsl:variable name="h" select="host/text()"/>
+            <xsl:if test="not(preceding::result[nvt/solution/@type='VendorFix'][host/text() = $h][concat(substring-before(concat(normalize-space(nvt/name),' '),' '),' ',substring-before(concat(substring-after(normalize-space(nvt/name),' '),' '),' ')) = $g])">
+              <h v="{$h}"/>
+            </xsl:if>
+          </xsl:for-each>
+        </xsl:variable>
+        <xsl:variable name="ghosts" select="exsl:node-set($ghosts-rtf)/h"/>
 
-        <xsl:text>\hypertarget{</xsl:text><xsl:value-of select="concat('grp-', translate(concat(substring-before(concat(normalize-space(nvt/name),' '),' '),' ',substring-before(concat(substring-after(normalize-space(nvt/name),' '),' '),' ')), ' ./:,()', '-------'))"/><xsl:text>}{}%
+        <!-- Card consolidado (pg-08 do modelo). O \hypertarget vai dentro do
+             titulo pelo mesmo motivo do card de achado: solto na pagina ele
+             abriria um paragrafo vazio antes do card. -->
+        <xsl:text>\consolidatedcard{</xsl:text><xsl:value-of select="$sevkey"/>
+        <xsl:text>}{\hypertarget{</xsl:text>
+        <xsl:value-of select="concat('grp-', translate(concat(substring-before(concat(normalize-space(nvt/name),' '),' '),' ',substring-before(concat(substring-after(normalize-space(nvt/name),' '),' '),' ')), ' ./:,()', '-------'))"/>
+        <xsl:text>}{}</xsl:text><xsl:value-of select="gvm:t('grp_title')"/><xsl:text>: </xsl:text>
+        <xsl:value-of select="$gname"/><xsl:text>}{</xsl:text>
+        <xsl:value-of select="gvm:t('grp_badge')"/><xsl:text>}{%
+  \chipsev{</xsl:text><xsl:value-of select="$sevkey"/><xsl:text>}{</xsl:text>
+        <xsl:if test="$sevkey != 'logsev' and $sevkey != 'falsepos'">
+          <xsl:value-of select="$maxsev"/>
+        </xsl:if>
+        <xsl:text>}%
+  \chip{</xsl:text><xsl:value-of select="$ndist"/><xsl:text> </xsl:text>
+        <xsl:value-of select="gvm:t('grp_adv_caps')"/><xsl:text>}%
 </xsl:text>
-        <xsl:text>\begin{tcolorbox}[breakable, enhanced, sharp corners=uphill, arc=1.2mm,
-  colback=white, colframe=surBorderLt, boxrule=0.5pt,
-  left=3.5mm, right=3.5mm, top=3mm, bottom=3mm,
-  toptitle=1.6mm, bottomtitle=1.6mm, lefttitle=3.5mm,
-  colbacktitle=</xsl:text><xsl:value-of select="$tcolor"/><xsl:text>, coltitle=white,
-  fonttitle=\bfseries,
-  title={\raggedright\surnametxt </xsl:text><xsl:value-of select="gvm:t('grp_title')"/><xsl:text>:\hspace{2mm} </xsl:text>
-        <xsl:value-of select="$gname"/><xsl:text>}]
-</xsl:text>
-        <xsl:text>\noindent </xsl:text>
-        <xsl:call-template name="severity-pill">
-          <xsl:with-param name="severity" select="$maxsev"/>
-        </xsl:call-template>
-        <xsl:text>\hspace{2mm}{\setlength{\fboxsep}{2.2pt}\colorbox{surInk}{\color{white}\scriptsize\bfseries~</xsl:text>
-        <xsl:value-of select="gvm:t('grp_badge')"/>
-        <xsl:text>~}}\par\vspace{2mm}
-</xsl:text>
-        <xsl:text>{\small </xsl:text><xsl:value-of select="gvm:t('grp_intro_a')"/>
-        <xsl:text>\textbf{</xsl:text><xsl:value-of select="$ndist"/><xsl:text>}</xsl:text>
-        <xsl:value-of select="gvm:t('grp_intro_b')"/><xsl:text>}\par\vspace{2mm}
-</xsl:text>
-
-        <!-- Affected hosts (each host once, however many advisories hit it). -->
-        <xsl:text>\fieldlabel{</xsl:text><xsl:value-of select="gvm:t('grp_host')"/><xsl:text>}
-\begingroup\ttfamily\footnotesize\raggedright
-</xsl:text>
-        <xsl:for-each select="$members">
-          <xsl:sort select="host/text()"/>
-          <xsl:variable name="h" select="host/text()"/>
-          <xsl:if test="not(preceding::result[nvt/solution/@type='VendorFix'][host/text() = $h][concat(substring-before(concat(normalize-space(nvt/name),' '),' '),' ',substring-before(concat(substring-after(normalize-space(nvt/name),' '),' '),' ')) = $g])">
-            <xsl:if test="position() &gt; 1"><xsl:text>, </xsl:text></xsl:if>
+        <!-- Um host: o chip nomeia o endereco, como no modelo. Varios: o
+             primeiro chip conta e os seguintes enumeram, com teto declarado. -->
+        <xsl:choose>
+          <xsl:when test="count($ghosts) = 1">
+            <xsl:text>  \chip{</xsl:text><xsl:value-of select="gvm:t('chip_host')"/><xsl:text> </xsl:text>
             <xsl:call-template name="escape_break">
-              <xsl:with-param name="string" select="$h"/>
+              <xsl:with-param name="string" select="string($ghosts[1]/@v)"/>
             </xsl:call-template>
-          </xsl:if>
-        </xsl:for-each>
-        <xsl:text>
-\par\endgroup\vspace{2mm}
+            <xsl:text>}%
+</xsl:text>
+          </xsl:when>
+          <xsl:otherwise>
+            <xsl:text>  \chip{</xsl:text><xsl:value-of select="count($ghosts)"/><xsl:text> </xsl:text>
+            <xsl:value-of select="gvm:t('chip_hosts')"/><xsl:text>}%
+</xsl:text>
+            <xsl:for-each select="$ghosts">
+              <xsl:if test="position() &lt;= 40">
+                <xsl:text>  \chip{</xsl:text>
+                <xsl:call-template name="escape_break">
+                  <xsl:with-param name="string" select="string(@v)"/>
+                </xsl:call-template>
+                <xsl:text>}%
+</xsl:text>
+              </xsl:if>
+            </xsl:for-each>
+            <xsl:if test="count($ghosts) &gt; 40">
+              <xsl:text>  \chip{+</xsl:text><xsl:value-of select="count($ghosts) - 40"/>
+              <xsl:text> </xsl:text><xsl:value-of select="gvm:hx-upper(gvm:t('more_word'))"/>
+              <xsl:text>}%
+</xsl:text>
+            </xsl:if>
+          </xsl:otherwise>
+        </xsl:choose>
+        <xsl:text>}{%
+  </xsl:text><xsl:value-of select="gvm:t('grp_intro_a')"/>
+        <xsl:text>\textbf{</xsl:text><xsl:value-of select="$ndist"/><xsl:text>}</xsl:text>
+        <xsl:value-of select="gvm:t('grp_intro_b')"/>
+        <xsl:text>\textbf{</xsl:text><xsl:value-of select="gvm:t('grp_intro_c')"/><xsl:text>}</xsl:text>
+        <xsl:value-of select="gvm:t('grp_intro_d')"/>
+        <xsl:text>}{%
 </xsl:text>
 
         <!-- The advisories rolled up here, most severe first. -->
-        <xsl:text>\fieldlabel{</xsl:text><xsl:value-of select="gvm:t('grp_th_adv')"/><xsl:text>}
-\renewcommand{\arraystretch}{1.2}
-\begin{longtable}{@{}>{\surname}p{110mm} p{31mm}@{}}
-</xsl:text>
         <xsl:for-each select="$members[generate-id() = generate-id(key('by-updgrp-nvt',concat($g,'||',nvt/@oid))[1])]">
           <xsl:sort select="severity" data-type="number" order="descending"/>
           <!-- Lista só os mais severos. O restante vira UMA linha que declara
@@ -2474,36 +3213,37 @@ SPDX-License-Identifier: GPL-2.0-or-later
                é material de auditoria. A ação de remediação é a mesma para
                todos, então o que se perde é enumeração, não decisão. -->
           <xsl:if test="position() &lt;= number($adv-max)">
-            <xsl:text>{\footnotesize </xsl:text>
+            <xsl:variable name="asev">
+              <xsl:call-template name="sevkey-detail">
+                <xsl:with-param name="severity" select="severity"/>
+              </xsl:call-template>
+            </xsl:variable>
+            <xsl:text>  \advisoryrow{</xsl:text>
             <xsl:call-template name="escape_name">
               <xsl:with-param name="string" select="nvt/name"/>
             </xsl:call-template>
-            <xsl:text>} &amp; </xsl:text>
-            <xsl:call-template name="severity-pill">
-              <xsl:with-param name="severity" select="severity"/>
-            </xsl:call-template>
-            <xsl:text> \\
+            <xsl:text>}{</xsl:text><xsl:value-of select="$asev"/><xsl:text>}{</xsl:text>
+            <xsl:if test="$asev != 'logsev' and $asev != 'falsepos'">
+              <xsl:value-of select="severity"/>
+            </xsl:if>
+            <xsl:text>}
 </xsl:text>
           </xsl:if>
           <xsl:if test="position() = number($adv-max) + 1">
-            <xsl:text>\multicolumn{2}{@{}l@{}}{\footnotesize\itshape\color{surMuted}</xsl:text>
-            <xsl:text>+ </xsl:text><xsl:value-of select="$ndist - number($adv-max)"/>
+            <xsl:text>  \advisorytrunc{+ </xsl:text><xsl:value-of select="$ndist - number($adv-max)"/>
             <xsl:value-of select="gvm:t('grp_more_a')"/>
             <xsl:text>CVSS </xsl:text>
             <xsl:value-of select="format-number(severity, '0.0')"/>
             <xsl:value-of select="gvm:t('grp_more_b')"/>
-            <xsl:text>} \\
+            <xsl:text>}
 </xsl:text>
           </xsl:if>
         </xsl:for-each>
-        <xsl:text>\end{longtable}
-\vspace{1mm}
-</xsl:text>
 
-        <!-- Single remediation action: the fix of the most severe advisory. -->
-        <xsl:text>\fieldlabel{</xsl:text><xsl:value-of select="gvm:t('grp_action')"/><xsl:text>}
-\begin{tcolorbox}[colback=surMist,colframe=surBorderLt,boxrule=0.4pt,arc=1mm,left=2.5mm,right=2.5mm,top=1.5mm,bottom=1.5mm]
-</xsl:text>
+        <!-- Single remediation action: the fix of the most severe advisory.
+             O \consolidatedcard compoe esta faixa em monoespacada sobre navy e
+             ja' escreve o proprio rotulo AÇÃO ÚNICA DE REMEDIAÇÃO. -->
+        <xsl:text>}{</xsl:text>
         <xsl:for-each select="$members">
           <xsl:sort select="severity" data-type="number" order="descending"/>
           <xsl:if test="position() = 1">
@@ -2512,10 +3252,19 @@ SPDX-License-Identifier: GPL-2.0-or-later
             </xsl:call-template>
           </xsl:if>
         </xsl:for-each>
-        <xsl:text>
-\end{tcolorbox}
-\end{tcolorbox}
-\vspace{3mm}
+        <xsl:text>}
+</xsl:text>
+        <!-- Um card consolidado por pagina, como a pg-08 do modelo.
+             O \consolidatedcard e' um tcolorbox `breakable' e a faixa navy da
+             ACAO UNICA e' o ULTIMO pedaco dele, entao quando dois cards
+             dividiam a pagina o segundo partia na unica junta que tem e a faixa
+             de remediacao ia sozinha para o alto da pagina seguinte, desgarrada
+             do card que ela resolve (medido: pg-08 -> pg-09 do primeiro build).
+             O card tem altura limitada — $adv-max linhas de advisory mais a
+             linha de corte — entao uma pagina sempre o comporta inteiro.
+             O \clearpage vem DEPOIS: antes do primeiro card ele deixaria o
+             titulo da secao 5 sozinho numa pagina em branco. -->
+        <xsl:text>\clearpage
 </xsl:text>
       </xsl:if>
     </xsl:for-each>
@@ -2679,16 +3428,6 @@ SPDX-License-Identifier: GPL-2.0-or-later
     </xsl:choose>
   </func:function>
 
-  <!-- Character count weighted for the widest upper-case glyphs of the bold
-       sans face: W is 0.944 em and M 0.833 against a 0.69 average, so counting
-       characters alone under-measures a label like MSSQLSVR by a fifth and
-       WWWWWWWW by a third. Each W M G O Q counts as 1.35 characters, which
-       keeps the estimate above the real width for every upper-case label. -->
-  <func:function name="gvm:hx-wlen">
-    <xsl:param name="s"/>
-    <func:result select="string-length($s) + 0.35 * string-length(translate($s, translate($s,'WMGOQ',''), ''))"/>
-  </func:function>
-
   <func:function name="gvm:hx-max2">
     <xsl:param name="a"/>
     <xsl:param name="b"/>
@@ -2698,66 +3437,21 @@ SPDX-License-Identifier: GPL-2.0-or-later
     </xsl:choose>
   </func:function>
 
-  <!-- Font size that makes a string of $len characters fit $avail points, given
-       a per-character width ratio, clamped between $floor and $base. -->
-  <func:function name="gvm:hx-fit">
-    <xsl:param name="len"/>
-    <xsl:param name="base"/>
-    <xsl:param name="avail"/>
-    <xsl:param name="ratio"/>
-    <xsl:param name="floor"/>
-    <xsl:choose>
-      <xsl:when test="number($len) &lt;= 0"><func:result select="number($base)"/></xsl:when>
-      <xsl:when test="number($avail) div (number($len) * number($ratio)) &gt;= number($base)">
-        <func:result select="number($base)"/>
-      </xsl:when>
-      <xsl:when test="number($avail) div (number($len) * number($ratio)) &lt; number($floor)">
-        <func:result select="number($floor)"/>
-      </xsl:when>
-      <xsl:otherwise>
-        <func:result select="number($avail) div (number($len) * number($ratio))"/>
-      </xsl:otherwise>
-    </xsl:choose>
-  </func:function>
+  <!-- Aqui viviam cinco funcoes da geometria do tabuleiro ANTIGO, todas sem um
+       unico chamador depois que o favo passou a ser desenhado pelo
+       suricatoos-hex (\hexcard / hexboard / \hexport):
 
-  <!-- State -> palette entry. The board uses the dark hex* palette; the table in
-       the body of the document uses the hex*T variants, which are the same hues
-       darkened enough to carry white text on white paper. -->
-  <func:function name="gvm:hx-color">
-    <xsl:param name="st"/>
-    <xsl:choose>
-      <xsl:when test="$st='critico'"><func:result select="'hexCrit'"/></xsl:when>
-      <xsl:when test="$st='alto'"><func:result select="'hexHigh'"/></xsl:when>
-      <xsl:when test="$st='medio'"><func:result select="'hexMed'"/></xsl:when>
-      <xsl:when test="$st='baixo'"><func:result select="'hexLow'"/></xsl:when>
-      <xsl:when test="$st='exposto'"><func:result select="'hexExp'"/></xsl:when>
-      <xsl:otherwise><func:result select="'hexNeu'"/></xsl:otherwise>
-    </xsl:choose>
-  </func:function>
+         gvm:hx-wlen    contagem de caracteres ponderada pelas maiusculas largas
+         gvm:hx-fit     corpo de fonte calculado para caber no hexagono
+         gvm:hx-color   estado -> hexCrit/hexHigh/... (paleta escura)
+         gvm:hx-tcolor  estado -> hexCritT/hexHighT/... (variantes da tabela)
+         gvm:hx-fillop  estado -> opacidade do preenchimento
 
-  <func:function name="gvm:hx-tcolor">
-    <xsl:param name="st"/>
-    <xsl:choose>
-      <xsl:when test="$st='critico'"><func:result select="'hexCritT'"/></xsl:when>
-      <xsl:when test="$st='alto'"><func:result select="'hexHighT'"/></xsl:when>
-      <xsl:when test="$st='medio'"><func:result select="'hexMedT'"/></xsl:when>
-      <xsl:when test="$st='baixo'"><func:result select="'hexLowT'"/></xsl:when>
-      <xsl:when test="$st='exposto'"><func:result select="'hexExpT'"/></xsl:when>
-      <xsl:otherwise><func:result select="'hexNeuT'"/></xsl:otherwise>
-    </xsl:choose>
-  </func:function>
-
-  <func:function name="gvm:hx-fillop">
-    <xsl:param name="st"/>
-    <xsl:choose>
-      <xsl:when test="$st='critico'"><func:result select="'0.22'"/></xsl:when>
-      <xsl:when test="$st='alto'"><func:result select="'0.16'"/></xsl:when>
-      <xsl:when test="$st='medio'"><func:result select="'0.14'"/></xsl:when>
-      <xsl:when test="$st='baixo'"><func:result select="'0.12'"/></xsl:when>
-      <xsl:when test="$st='exposto'"><func:result select="'0.12'"/></xsl:when>
-      <xsl:otherwise><func:result select="'0'"/></xsl:otherwise>
-    </xsl:choose>
-  </func:function>
+       As duas de medida existiam porque o XSLT calculava o \fontsize de cada
+       node de TikZ; o .sty faz isso agora. As tres de cor devolviam nomes da
+       paleta hex* que nao existe mais em .sty nenhum — se alguem as religasse,
+       o pdflatex morreria num "undefined color". O estado viaja como CHAVE
+       (critico|alto|medio|baixo|exposto|neutro) e quem pinta e' \sevcolor. -->
 
   <!-- One state down the ladder. Applied when the highest CONFIRMED finding on a
        port is milder than the highest finding overall, i.e. the peak severity
@@ -3175,60 +3869,24 @@ SPDX-License-Identifier: GPL-2.0-or-later
   </xsl:template>
 
   <!-- ================================================================= -->
-  <!-- Hexmap: board geometry and TikZ rendering                         -->
+  <!-- Hexmap: emission of the board                                     -->
   <!-- ================================================================= -->
 
-  <!-- One hexagon. Pointy-top, circumradius 60 drawn at 57 so neighbours keep a
-       gap; TikZ y grows UPWARDS, so the vertex order below is already signed for
-       LaTeX and not for SVG. Colour is never the only channel: critical and high
-       also carry a filled marker under the top vertex (critical adds a ring), and
-       the outline of a critical cell is thicker. -->
+  <!-- Characters a cell label may carry. \hexport hands its first argument both
+       to the printed name and to \csname (the icon lookup), so anything that
+       escape_text would turn into a control sequence, and anything that utf8x
+       makes active, has to stay out of it. Upper case only: gvm:hx-upper has
+       already run by the time this is applied. -->
+  <xsl:variable name="hx-svcsafe">ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-.+</xsl:variable>
+
+  <!-- One cell of the honeycomb, emitted as \hexport{SERVICO}{PORTA/PROTO}{3a
+       linha}{chave de severidade}. Nothing is drawn here any more: the hexagon,
+       its colour, its icon and the clamping of every line belong to
+       suricatoos-hex.sty. What stays is the DATA of the cell: which service
+       name it carries (abbreviated by hx-abbrev), which label, which third line
+       and which severity key. -->
   <xsl:template name="hx-hex">
-    <xsl:param name="cx"/>
-    <xsl:param name="cy"/>
     <xsl:param name="third"/>
-    <xsl:variable name="st" select="string(@state)"/>
-    <xsl:variable name="col" select="gvm:hx-color($st)"/>
-    <xsl:variable name="x" select="format-number($cx, '0.##')"/>
-    <xsl:variable name="y" select="format-number($cy, '0.##')"/>
-    <xsl:variable name="xl" select="format-number($cx - 49.36, '0.##')"/>
-    <xsl:variable name="xr" select="format-number($cx + 49.36, '0.##')"/>
-    <!-- outline + fill -->
-    <xsl:text>\draw[</xsl:text>
-    <xsl:value-of select="$col"/>
-    <xsl:choose>
-      <xsl:when test="$st = 'critico'"><xsl:text>,line width=4pt</xsl:text></xsl:when>
-      <xsl:otherwise><xsl:text>,line width=3pt</xsl:text></xsl:otherwise>
-    </xsl:choose>
-    <xsl:choose>
-      <xsl:when test="$st = 'neutro'"><xsl:text>,draw opacity=0.70</xsl:text></xsl:when>
-      <xsl:otherwise>
-        <xsl:text>,fill=</xsl:text><xsl:value-of select="$col"/>
-        <xsl:text>,fill opacity=</xsl:text><xsl:value-of select="gvm:hx-fillop($st)"/>
-      </xsl:otherwise>
-    </xsl:choose>
-    <xsl:text>,line join=round] (</xsl:text>
-    <xsl:value-of select="concat($x,',',format-number($cy + 57, '0.##'),') -- (')"/>
-    <xsl:value-of select="concat($xl,',',format-number($cy + 28.5, '0.##'),') -- (')"/>
-    <xsl:value-of select="concat($xl,',',format-number($cy - 28.5, '0.##'),') -- (')"/>
-    <xsl:value-of select="concat($x,',',format-number($cy - 57, '0.##'),') -- (')"/>
-    <xsl:value-of select="concat($xr,',',format-number($cy - 28.5, '0.##'),') -- (')"/>
-    <xsl:value-of select="concat($xr,',',format-number($cy + 28.5, '0.##'),')')"/>
-    <xsl:text> -- cycle;
-</xsl:text>
-    <!-- accessibility marker -->
-    <xsl:if test="$st = 'critico' or $st = 'alto'">
-      <xsl:text>\fill[</xsl:text><xsl:value-of select="$col"/><xsl:text>] (</xsl:text>
-      <xsl:value-of select="concat($x,',',format-number($cy + 42, '0.##'))"/>
-      <xsl:text>) circle (4.5pt);
-</xsl:text>
-      <xsl:if test="$st = 'critico'">
-        <xsl:text>\draw[</xsl:text><xsl:value-of select="$col"/><xsl:text>,line width=1.6pt] (</xsl:text>
-        <xsl:value-of select="concat($x,',',format-number($cy + 42, '0.##'))"/>
-        <xsl:text>) circle (8.5pt);
-</xsl:text>
-      </xsl:if>
-    </xsl:if>
     <!-- line 1: service, upper case, at most 8 characters. A collapsed family
          prints its short form (@svcs), the table keeps the integral name. -->
     <xsl:variable name="svcsrc0">
@@ -3247,34 +3905,22 @@ SPDX-License-Identifier: GPL-2.0-or-later
         </xsl:otherwise>
       </xsl:choose>
     </xsl:variable>
-    <!-- 90pt is what the hexagon really offers across the band this baseline
-         and its cap height occupy (the widest span is 98.7pt, at the corners
-         it is down to 94.5pt); the length is weighted so a run of W or M is
-         measured for what it costs. Both were budgets that under-measured
-         before: WWWWWWWW came out 21pt wider than the cell. -->
-    <xsl:if test="string-length($svcup) &gt; 0">
-      <xsl:text>\node[anchor=base,inner sep=0,text=hexFg,font=\fontsize{</xsl:text>
-      <xsl:value-of select="format-number(gvm:hx-fit(gvm:hx-wlen($svcup), 19, 90, 0.75, 7), '0.##')"/>
-      <xsl:text>}{0}\selectfont\bfseries] at (</xsl:text>
-      <xsl:value-of select="concat($x,',',format-number($cy + 16, '0.##'))"/>
-      <xsl:text>) {</xsl:text>
-      <xsl:call-template name="escape_text"><xsl:with-param name="string" select="string($svcup)"/></xsl:call-template>
-      <xsl:text>};
-</xsl:text>
-    </xsl:if>
-    <!-- line 2: the port WITH its transport (or the collapsed range, or "+N").
-         Without the transport the same number on tcp and on udp draws two
-         hexagons whose three lines of text are identical, and the per-host
-         board has no table underneath to tell them apart. -->
-    <xsl:text>\node[anchor=base,inner sep=0,text=hexFg,font=\fontsize{</xsl:text>
-    <xsl:value-of select="format-number(gvm:hx-fit(string-length(@blabel), 28, 84, 0.58, 9), '0.##')"/>
-    <xsl:text>}{0}\selectfont\bfseries] at (</xsl:text>
-    <xsl:value-of select="concat($x,',',format-number($cy - 11, '0.##'))"/>
-    <xsl:text>) {</xsl:text>
-    <xsl:call-template name="escape_text"><xsl:with-param name="string" select="string(@blabel)"/></xsl:call-template>
-    <xsl:text>};
-</xsl:text>
-    <!-- line 3: the mapped host (global board) or the finding tally (per host) -->
+    <!-- The abbreviated name is what \hexport prints AND what it looks the icon
+         up by: suricatoos-hex.sty builds a \csname out of the same argument
+         (\icofor). A control sequence left behind by escape_text (\_, \&, \#)
+         or an active UTF-8 byte would break that lookup, so the CELL label
+         keeps only characters that mean the same thing raw and escaped. The
+         integral service name is never lost: the port table below prints it in
+         full, through hx-brk/escape_text. Fitting the line inside the hexagon
+         is now the .sty's job (\adjustbox), not a font-size guess here. -->
+    <xsl:variable name="svcsafe"
+      select="translate(string($svcup), translate(string($svcup), $hx-svcsafe, ''), '')"/>
+    <!-- Line 2 of the cell is @blabel: the port WITH its transport (or the
+         collapsed range, or "+N"). Without the transport the same number on tcp
+         and on udp draws two cells whose three lines are identical, and the
+         per-host board has no table underneath to tell them apart.
+         Line 3 is the mapped host (global board) or the finding tally
+         (per-host board). -->
     <xsl:variable name="l3">
       <xsl:choose>
         <xsl:when test="@svcsrc = 'over'"></xsl:when>
@@ -3282,12 +3928,11 @@ SPDX-License-Identifier: GPL-2.0-or-later
           <xsl:value-of select="concat(@nfind, ' ', gvm:t('hx_findings_n'))"/>
         </xsl:when>
         <xsl:when test="number(@nips) = 1">
-          <!-- The baseline sits 35pt below the centre, where the hexagon is
-               only 76pt wide, and the type size bottoms out at 5pt: past 26
-               characters no size change can make the address fit, so it is
-               elided head and tail rather than printed across the outline (an
-               IPv6 in long form ran 22pt past it, into the next cell). The
-               integral address is in the Port -> IP table either way. -->
+          <!-- The .sty scales this line down to fit between the slanted sides,
+               so a long address no longer runs into the next cell — but past
+               ~26 characters the scaling is what makes it unreadable instead.
+               It is elided head and tail at that point; the integral address is
+               in the port table either way. -->
           <xsl:variable name="ip1" select="normalize-space(@ips)"/>
           <xsl:choose>
             <xsl:when test="string-length($ip1) &lt;= 26"><xsl:value-of select="$ip1"/></xsl:when>
@@ -3301,288 +3946,66 @@ SPDX-License-Identifier: GPL-2.0-or-later
         </xsl:when>
       </xsl:choose>
     </xsl:variable>
-    <xsl:if test="string-length($l3) &gt; 0">
-      <xsl:text>\node[anchor=base,inner sep=0,text=hexMuted,font=\fontsize{</xsl:text>
-      <xsl:value-of select="format-number(gvm:hx-fit(string-length($l3), 12, 72, 0.52, 5), '0.##')"/>
-      <xsl:text>}{0}\selectfont] at (</xsl:text>
-      <xsl:value-of select="concat($x,',',format-number($cy - 35, '0.##'))"/>
-      <xsl:text>) {</xsl:text>
-      <xsl:call-template name="escape_text"><xsl:with-param name="string" select="string($l3)"/></xsl:call-template>
-      <xsl:text>};
+    <xsl:text>\hexport{</xsl:text>
+    <xsl:call-template name="escape_text"><xsl:with-param name="string" select="string($svcsafe)"/></xsl:call-template>
+    <xsl:text>}{</xsl:text>
+    <xsl:call-template name="escape_text"><xsl:with-param name="string" select="string(@blabel)"/></xsl:call-template>
+    <xsl:text>}{</xsl:text>
+    <xsl:call-template name="escape_text"><xsl:with-param name="string" select="string($l3)"/></xsl:call-template>
+    <xsl:text>}{</xsl:text>
+    <xsl:value-of select="@state"/>
+    <xsl:text>}
 </xsl:text>
-    </xsl:if>
   </xsl:template>
 
-  <!-- The whole dark panel: header, hex-blob board, legend. $cells must already
-       be in draw order. -->
+  <!-- The port-exposure card: \hexcard{titulo}{meta}{tabuleiro + legenda}.
+       The geometry of the honeycomb — cell footprint, pitch, how many fit in a
+       row, how the rows interlock and centre — now belongs entirely to
+       suricatoos-hex.sty. What is decided HERE is data: which cells go on the
+       board and in which order (hx-draw-cells decided that already), the three
+       lines each cell carries, and the six legend counts.
+       $cells must already be in draw order. $title is plain text and is clamped
+       and escaped below; $meta arrives as ready LaTeX, because its parts are
+       clamped, escaped and joined with \textperiodcentered by the caller. -->
   <xsl:template name="hx-board">
     <xsl:param name="cells"/>
     <xsl:param name="title"/>
     <xsl:param name="meta"/>
     <xsl:param name="third" select="'ip'"/>
-    <xsl:variable name="N" select="count($cells)"/>
 
-    <!-- k = smallest radius whose centred hexagonal number 1+3k(k+1) holds N. -->
-    <xsl:variable name="k">
-      <xsl:choose>
-        <xsl:when test="$N &lt;= 1">0</xsl:when>
-        <xsl:when test="$N &lt;= 7">1</xsl:when>
-        <xsl:when test="$N &lt;= 19">2</xsl:when>
-        <xsl:when test="$N &lt;= 37">3</xsl:when>
-        <xsl:when test="$N &lt;= 61">4</xsl:when>
-        <xsl:when test="$N &lt;= 91">5</xsl:when>
-        <xsl:when test="$N &lt;= 127">6</xsl:when>
-        <xsl:when test="$N &lt;= 169">7</xsl:when>
-        <xsl:otherwise>8</xsl:otherwise>
-      </xsl:choose>
-    </xsl:variable>
-    <xsl:variable name="L" select="2 * number($k) + 1"/>
-    <xsl:variable name="E" select="1 + 3 * number($k) * (number($k) + 1) - $N"/>
-    <!-- The excess is shaved one cell at a time, LAST row then FIRST row and so
-         on, each side stepping inwards when its row is down to a single cell.
-         That alternation is equivalent to giving the bottom ceil(E/2) removals
-         and the top floor(E/2), each consumed greedily from the outside in,
-         which is what the arithmetic below does without simulating the loop. -->
-    <xsl:variable name="B" select="ceiling($E div 2)"/>
-    <xsl:variable name="T" select="floor($E div 2)"/>
-
-    <xsl:variable name="rowsA-rtf">
-      <xsl:for-each select="$hx-ints/i[number(@v) &lt; $L]">
-        <row r="{@v}">
-          <xsl:attribute name="n">
-            <xsl:choose>
-              <xsl:when test="number(@v) &lt;= number($k)"><xsl:value-of select="number($k) + 1 + number(@v)"/></xsl:when>
-              <xsl:otherwise><xsl:value-of select="3 * number($k) + 1 - number(@v)"/></xsl:otherwise>
-            </xsl:choose>
-          </xsl:attribute>
-        </row>
-      </xsl:for-each>
-    </xsl:variable>
-    <xsl:variable name="rowsB-rtf">
-      <xsl:for-each select="exsl:node-set($rowsA-rtf)/row">
-        <xsl:variable name="capB" select="sum(following-sibling::row/@n) - count(following-sibling::row)"/>
-        <xsl:variable name="capT" select="sum(preceding-sibling::row/@n) - count(preceding-sibling::row)"/>
-        <xsl:variable name="want">
-          <xsl:choose>
-            <xsl:when test="number(@r) &gt; number($k)"><xsl:value-of select="$B - $capB"/></xsl:when>
-            <xsl:when test="number(@r) &lt; number($k)"><xsl:value-of select="$T - $capT"/></xsl:when>
-            <xsl:otherwise>
-              <xsl:variable name="lb"><xsl:choose><xsl:when test="$B - $capB &gt; 0"><xsl:value-of select="$B - $capB"/></xsl:when><xsl:otherwise>0</xsl:otherwise></xsl:choose></xsl:variable>
-              <xsl:variable name="lt"><xsl:choose><xsl:when test="$T - $capT &gt; 0"><xsl:value-of select="$T - $capT"/></xsl:when><xsl:otherwise>0</xsl:otherwise></xsl:choose></xsl:variable>
-              <xsl:value-of select="number($lb) + number($lt)"/>
-            </xsl:otherwise>
-          </xsl:choose>
-        </xsl:variable>
-        <xsl:variable name="rem">
-          <xsl:choose>
-            <xsl:when test="number($want) &lt;= 0">0</xsl:when>
-            <xsl:when test="number($want) &gt; number(@n) - 1"><xsl:value-of select="number(@n) - 1"/></xsl:when>
-            <xsl:otherwise><xsl:value-of select="number($want)"/></xsl:otherwise>
-          </xsl:choose>
-        </xsl:variable>
-        <row r="{@r}" n="{number(@n) - number($rem)}"/>
-      </xsl:for-each>
-    </xsl:variable>
-    <!-- Trailing rows with nothing left to hold are dropped (only reachable for
-         a board of two cells, where the blob cannot shrink far enough). -->
-    <xsl:variable name="rowsC-rtf">
-      <xsl:for-each select="exsl:node-set($rowsB-rtf)/row">
-        <xsl:variable name="cum" select="sum(preceding-sibling::row/@n)"/>
-        <xsl:variable name="neff">
-          <xsl:choose>
-            <xsl:when test="$N - $cum &lt;= 0">0</xsl:when>
-            <xsl:when test="$N - $cum &lt; number(@n)"><xsl:value-of select="$N - $cum"/></xsl:when>
-            <xsl:otherwise><xsl:value-of select="@n"/></xsl:otherwise>
-          </xsl:choose>
-        </xsl:variable>
-        <xsl:if test="number($neff) &gt; 0">
-          <row n="{$neff}" cum="{$cum}"/>
-        </xsl:if>
-      </xsl:for-each>
-    </xsl:variable>
-    <!-- Phase correction. Centring each row on its own midpoint leaves two
-         neighbouring rows of the SAME parity sitting on the same lattice
-         columns, which stacks hexagons 120pt tall on a 90pt vertical pitch and
-         makes them overlap. Never happens on an exact blob (sizes step by one),
-         but it does as soon as the excess is trimmed. So the expected phase
-         alternates 0 / half a step down the board, and any row whose natural
-         phase disagrees is shifted half a step to the right. -->
-    <xsl:variable name="rowsD-rtf">
-      <xsl:for-each select="exsl:node-set($rowsC-rtf)/row">
-        <xsl:variable name="idx" select="count(preceding-sibling::row)"/>
-        <xsl:variable name="nat" select="number(@n) mod 2 = 0"/>
-        <xsl:variable name="exp" select="(number(number(../row[1]/@n) mod 2 = 0) + $idx) mod 2 = 1"/>
-        <xsl:variable name="shift">
-          <xsl:choose><xsl:when test="$nat != $exp">0.5</xsl:when><xsl:otherwise>0</xsl:otherwise></xsl:choose>
-        </xsl:variable>
-        <row idx="{$idx}" n="{@n}" cum="{@cum}" x0="{(1 - number(@n)) div 2 + number($shift)}"/>
-      </xsl:for-each>
-    </xsl:variable>
-    <xsl:variable name="rows" select="exsl:node-set($rowsD-rtf)"/>
-
-    <!-- Recentre on the real bounding box, since the shifts break the symmetry. -->
-    <xsl:variable name="minx">
-      <xsl:for-each select="$rows/row">
-        <xsl:sort select="number(@x0)" data-type="number"/>
-        <xsl:if test="position() = 1"><xsl:value-of select="@x0"/></xsl:if>
-      </xsl:for-each>
-    </xsl:variable>
-    <xsl:variable name="maxx">
-      <xsl:for-each select="$rows/row">
-        <xsl:sort select="number(@x0) + number(@n) - 1" data-type="number" order="descending"/>
-        <xsl:if test="position() = 1"><xsl:value-of select="number(@x0) + number(@n) - 1"/></xsl:if>
-      </xsl:for-each>
-    </xsl:variable>
-    <xsl:variable name="xoff" select="(number($minx) + number($maxx)) div 2"/>
-    <xsl:variable name="Leff" select="count($rows/row)"/>
-    <xsl:variable name="BW" select="(number($maxx) - number($minx) + 1) * 103.923048"/>
-    <xsl:variable name="BH" select="(number($Leff) - 1) * 90 + 120"/>
-
-    <!-- Header / legend type sizes, shrunk so the chrome never widens the panel
-         beyond the board itself (a wider panel means a smaller board once the
-         whole picture is scaled to the text width). -->
-    <!-- Both strings come from the report: the title of a per-host board is the
-         host address and the metadata line carries the task name, neither of
-         which the scanner bounds. They size the panel, the panel sizes the
-         tikzpicture, and TeX refuses any dimension past 16383.99pt: an 8000
-         character task name asked for 33585pt and killed the whole PDF. Long
-         before that they simply crowd out the board, because the picture is
-         scaled to the text width as a whole - a 246 character task name shrank
-         a full-page board to 84mm. So they are cut to a length that can never
-         drive the panel wider than the legend already does, and what was cut is
-         shown as such. O corte da capa e da narrativa e' outro ($task-name-max,
-         por altura de pagina); o valor sem corte esta no relatorio de origem. -->
+    <!-- The title of a per-host card is the host address, but the title of the
+         global one is the task name, which the scanner does not bound: an 8000
+         character name would run off the card and out of the page. It is cut,
+         and what was cut is declared. The integral value is on the cover and in
+         the source report. (The narrative's own cut is another one:
+         $task-name-max, by page height.) -->
     <xsl:variable name="title-c">
       <xsl:value-of select="substring($title, 1, 60)"/>
       <xsl:if test="string-length($title) &gt; 60"><xsl:text>...</xsl:text></xsl:if>
     </xsl:variable>
-    <xsl:variable name="meta-c">
-      <xsl:value-of select="substring($meta, 1, 110)"/>
-      <xsl:if test="string-length($meta) &gt; 110"><xsl:text>...</xsl:text></xsl:if>
-    </xsl:variable>
-    <xsl:variable name="tlen" select="string-length($title-c)"/>
-    <xsl:variable name="mlen" select="string-length($meta-c)"/>
-    <xsl:variable name="clen" select="string-length(gvm:t('hx_state_critico')) + string-length(gvm:t('hx_state_alto'))
-                                    + string-length(gvm:t('hx_state_medio')) + string-length(gvm:t('hx_state_baixo'))
-                                    + string-length(gvm:t('hx_state_exposto')) + string-length(gvm:t('hx_state_neutro'))
-                                    + 30"/>
-    <xsl:variable name="tf" select="gvm:hx-fit($tlen, 26, $BW, 0.56, 12)"/>
-    <xsl:variable name="mf" select="gvm:hx-fit($mlen, 14, $BW, 0.52, 8)"/>
-    <xsl:variable name="lf" select="gvm:hx-fit(number($clen) * 0.55 + 17.34, 15, $BW, 1, 9)"/>
-    <xsl:variable name="TW" select="$tf * 0.56 * $tlen"/>
-    <xsl:variable name="MW" select="$mf * 0.52 * $mlen"/>
-    <xsl:variable name="LW" select="$lf * (number($clen) * 0.55 + 17.34)"/>
-    <!-- Hard ceiling as well, so no future input can walk the picture past the
-         dimension TeX will accept. The widest board the geometry can produce is
-         under 1800pt, so this never binds on real data. -->
-    <xsl:variable name="PW" select="gvm:hx-min2(gvm:hx-max2(gvm:hx-max2($BW, $TW), gvm:hx-max2($MW, $LW)), 4000)"/>
-    <xsl:variable name="PX" select="$PW div 2"/>
-    <xsl:variable name="PY1" select="$BH div 2 + 100"/>
-    <xsl:variable name="PY0" select="-($BH div 2) - 78"/>
-    <xsl:variable name="PWt" select="$PW + 56"/>
-    <xsl:variable name="PHt" select="$PY1 - $PY0"/>
-
-    <xsl:text>\begin{center}
+    <xsl:text>\hexcard{</xsl:text>
+    <xsl:call-template name="escape_text">
+      <xsl:with-param name="string" select="string($title-c)"/>
+    </xsl:call-template>
+    <xsl:text>}{</xsl:text>
+    <xsl:value-of select="$meta"/>
+    <xsl:text>}{%
+\begin{hexboard}
 </xsl:text>
-    <!-- Fit to the text width, unless the board is so tall that doing so would
-         push it off the page; then fit to the height instead. -->
-    <xsl:choose>
-      <xsl:when test="$PHt div $PWt &gt; 1.11">
-        <xsl:text>\resizebox{!}{185mm}{%
-</xsl:text>
-      </xsl:when>
-      <xsl:otherwise>
-        <xsl:text>\resizebox{\linewidth}{!}{%
-</xsl:text>
-      </xsl:otherwise>
-    </xsl:choose>
-    <xsl:text>\begin{tikzpicture}[x=1pt,y=1pt]
-\fill[hexBg,rounded corners=10pt] (</xsl:text>
-    <xsl:value-of select="concat(format-number(-$PX - 28,'0.##'),',',format-number($PY0,'0.##'),') rectangle (',format-number($PX + 28,'0.##'),',',format-number($PY1,'0.##'))"/>
-    <xsl:text>);
-</xsl:text>
-    <!-- header -->
-    <xsl:text>\node[anchor=north west,inner sep=0,text=hexFg,font=\fontsize{</xsl:text>
-    <xsl:value-of select="format-number($tf,'0.##')"/>
-    <xsl:text>}{0}\selectfont\bfseries] at (</xsl:text>
-    <xsl:value-of select="concat(format-number(-$PX,'0.##'),',',format-number($PY1 - 20,'0.##'))"/>
-    <xsl:text>) {</xsl:text>
-    <xsl:call-template name="escape_text"><xsl:with-param name="string" select="string($title-c)"/></xsl:call-template>
-    <xsl:text>};
-\node[anchor=north west,inner sep=0,text=hexMuted,font=\fontsize{</xsl:text>
-    <xsl:value-of select="format-number($mf,'0.##')"/>
-    <xsl:text>}{0}\selectfont] at (</xsl:text>
-    <xsl:value-of select="concat(format-number(-$PX,'0.##'),',',format-number($PY1 - 26 - $tf * 1.2,'0.##'))"/>
-    <xsl:text>) {</xsl:text>
-    <xsl:call-template name="escape_text"><xsl:with-param name="string" select="string($meta-c)"/></xsl:call-template>
-    <xsl:text>};
-</xsl:text>
-    <!-- cells, row by row -->
-    <xsl:for-each select="$rows/row">
-      <xsl:variable name="cy" select="-(number(@idx) - (number($Leff) - 1) div 2) * 90"/>
-      <xsl:variable name="rx0" select="number(@x0) - $xoff"/>
-      <xsl:variable name="cum" select="number(@cum)"/>
-      <xsl:variable name="nn" select="number(@n)"/>
-      <xsl:for-each select="$cells[position() &gt; $cum and position() &lt;= $cum + $nn]">
-        <xsl:call-template name="hx-hex">
-          <xsl:with-param name="cx" select="($rx0 + position() - 1) * 103.923048"/>
-          <xsl:with-param name="cy" select="$cy"/>
-          <xsl:with-param name="third" select="$third"/>
-        </xsl:call-template>
-      </xsl:for-each>
+    <xsl:for-each select="$cells">
+      <xsl:call-template name="hx-hex">
+        <xsl:with-param name="third" select="$third"/>
+      </xsl:call-template>
     </xsl:for-each>
-    <!-- legend: one chip per state, in severity order, carrying its count. The
-         six counts add up to the number of hexagons drawn, by construction. -->
-    <xsl:variable name="chips-rtf">
-      <chip st="critico" n="{count($cells[@state='critico'])}"/>
-      <chip st="alto" n="{count($cells[@state='alto'])}"/>
-      <chip st="medio" n="{count($cells[@state='medio'])}"/>
-      <chip st="baixo" n="{count($cells[@state='baixo'])}"/>
-      <chip st="exposto" n="{count($cells[@state='exposto'])}"/>
-      <chip st="neutro" n="{count($cells[@state='neutro'])}"/>
-    </xsl:variable>
-    <xsl:variable name="ly" select="$PY0 + 39"/>
-    <xsl:for-each select="exsl:node-set($chips-rtf)/chip">
-      <xsl:variable name="lbl" select="concat(gvm:t(concat('hx_state_', @st)), ' (', @n, ')')"/>
-      <xsl:variable name="nb" select="count(preceding-sibling::chip)"/>
-      <xsl:variable name="prevchars">
-        <xsl:call-template name="hx-sum-chip-chars">
-          <xsl:with-param name="nodes" select="preceding-sibling::chip"/>
-        </xsl:call-template>
-      </xsl:variable>
-      <xsl:variable name="lx" select="-$PX + $lf * (number($prevchars) * 0.55 + $nb * 2.89)"/>
-      <xsl:text>\fill[</xsl:text><xsl:value-of select="gvm:hx-color(string(@st))"/>
-      <xsl:text>,fill opacity=0.30] (</xsl:text>
-      <xsl:value-of select="concat(format-number($lx + $lf * 0.47,'0.##'),',',format-number($ly + $lf * 0.3,'0.##'))"/>
-      <xsl:text>) circle (</xsl:text><xsl:value-of select="format-number($lf * 0.47,'0.##')"/><xsl:text>pt);
-\draw[</xsl:text><xsl:value-of select="gvm:hx-color(string(@st))"/>
-      <xsl:text>,line width=</xsl:text><xsl:value-of select="format-number($lf * 0.14,'0.##')"/><xsl:text>pt] (</xsl:text>
-      <xsl:value-of select="concat(format-number($lx + $lf * 0.47,'0.##'),',',format-number($ly + $lf * 0.3,'0.##'))"/>
-      <xsl:text>) circle (</xsl:text><xsl:value-of select="format-number($lf * 0.47,'0.##')"/><xsl:text>pt);
-\node[anchor=base west,inner sep=0,text=hexMuted,font=\fontsize{</xsl:text>
-      <xsl:value-of select="format-number($lf,'0.##')"/>
-      <xsl:text>}{0}\selectfont] at (</xsl:text>
-      <xsl:value-of select="concat(format-number($lx + $lf * 1.29,'0.##'),',',format-number($ly,'0.##'))"/>
-      <xsl:text>) {</xsl:text>
-      <xsl:call-template name="escape_text"><xsl:with-param name="string" select="$lbl"/></xsl:call-template>
-      <xsl:text>};
+    <xsl:text>\end{hexboard}
+\hexlegend{</xsl:text>
+    <xsl:value-of select="count($cells[@state='critico'])"/><xsl:text>}{</xsl:text>
+    <xsl:value-of select="count($cells[@state='alto'])"/><xsl:text>}{</xsl:text>
+    <xsl:value-of select="count($cells[@state='medio'])"/><xsl:text>}{</xsl:text>
+    <xsl:value-of select="count($cells[@state='baixo'])"/><xsl:text>}{</xsl:text>
+    <xsl:value-of select="count($cells[@state='exposto'])"/><xsl:text>}{</xsl:text>
+    <xsl:value-of select="count($cells[@state='neutro'])"/><xsl:text>}}
 </xsl:text>
-    </xsl:for-each>
-    <xsl:text>\end{tikzpicture}}
-\end{center}
-</xsl:text>
-  </xsl:template>
-
-  <!-- Total label length of a set of legend chips (used to lay them out left to
-       right without a running accumulator). -->
-  <xsl:template name="hx-sum-chip-chars">
-    <xsl:param name="nodes"/>
-    <xsl:variable name="lens">
-      <xsl:for-each select="$nodes">
-        <n v="{string-length(concat(gvm:t(concat('hx_state_', @st)), ' (', @n, ')'))}"/>
-      </xsl:for-each>
-    </xsl:variable>
-    <xsl:value-of select="sum(exsl:node-set($lens)/n/@v)"/>
   </xsl:template>
 
   <!-- ================================================================= -->
@@ -3618,78 +4041,58 @@ SPDX-License-Identifier: GPL-2.0-or-later
          bloco de deteccao. Na pratica este ramo quase nunca dispara (o maior
          IPv6 tem 39 caracteres), mas quando disparar o leitor ve o tamanho. -->
     <xsl:if test="string-length($s) &gt; 96">
-      <xsl:text>...{\rmfamily\itshape(+</xsl:text>
+      <xsl:text>\suriTruncMark{</xsl:text>
       <xsl:value-of select="string-length($s) - 96"/>
-      <xsl:text>)}</xsl:text>
+      <xsl:text>}</xsl:text>
     </xsl:if>
   </xsl:template>
 
-  <!-- State badge for the light-themed table. Same hues as the board, darkened
-       so white text keeps its contrast on paper. -->
-  <xsl:template name="hx-state-pill">
-    <xsl:param name="st"/>
-    <xsl:text>{\setlength{\fboxsep}{2.2pt}\colorbox{</xsl:text>
-    <xsl:value-of select="gvm:hx-tcolor($st)"/>
-    <xsl:text>}{\color{white}\scriptsize\bfseries~</xsl:text>
-    <xsl:value-of select="gvm:t(concat('hx_state_', $st))"/>
-    <xsl:text>~}}</xsl:text>
-  </xsl:template>
-
   <!-- Every port in the scope, INCLUDING the ones the board could not hold:
-       nothing disappears between the picture and the table. -->
+       nothing disappears between the picture and the table.
+       The table is now the `porttable' environment of suricatoos-blocks.sty:
+       it owns the column widths, the repeating Mono header, the rules and the
+       tinted alto/critico rows, so all that is emitted here is one \portrow per
+       port carrying eight fields of data. -->
   <xsl:template name="hx-table">
     <xsl:param name="ord"/>
-    <xsl:text>\renewcommand{\arraystretch}{1.25}
-\begin{longtable}{@{}>{\raggedright\arraybackslash}p{16mm} >{\raggedright\arraybackslash}p{10mm} >{\raggedright\arraybackslash}p{24mm} >{\raggedright\arraybackslash}p{23mm} >{\raggedright\arraybackslash}p{13mm} >{\raggedright\arraybackslash}p{10mm} >{\raggedright\arraybackslash}p{44mm}@{}}
-\rowcolor{surInk}
-</xsl:text>
-    <xsl:call-template name="hx-table-head"/>
-    <xsl:text>\endfirsthead
-\rowcolor{surInk}
-</xsl:text>
-    <xsl:call-template name="hx-table-head"/>
-    <xsl:text>\endhead
+    <xsl:text>\begin{porttable}
 </xsl:text>
     <xsl:for-each select="$ord/c">
       <xsl:sort select="number(@num)" data-type="number"/>
       <xsl:sort select="@proto"/>
-      <xsl:if test="position() mod 2 = 0"><xsl:text>\rowcolor{surMist}</xsl:text></xsl:if>
-      <!-- port (or collapsed range) -->
-      <xsl:text>{\ttfamily </xsl:text>
+      <!-- \portrow{porta}{marcas}{proto}{servico}{sev}{cvss}{hosts}{ips} -->
+      <xsl:text>  \portrow{</xsl:text>
       <xsl:call-template name="escape_text"><xsl:with-param name="string" select="string(@label)"/></xsl:call-template>
-      <xsl:text>}</xsl:text>
-      <xsl:if test="@qodlow = '1'"><xsl:text>\textsuperscript{\ddag}</xsl:text></xsl:if>
-      <xsl:if test="@collapsed = '1'">
-        <xsl:text>\newline{\tiny\color{surMuted}</xsl:text>
-        <xsl:value-of select="gvm:t('hx_members')"/>
-        <xsl:call-template name="escape_text"><xsl:with-param name="string" select="string(@members)"/></xsl:call-template>
-        <xsl:text>}</xsl:text>
-      </xsl:if>
-      <xsl:text> &amp; {\ttfamily </xsl:text>
+      <!-- the mark beside the port NUMBER: low detection quality on the peak
+           finding, i.e. the state in the ESTADO cell was downgraded a level -->
+      <xsl:text>}{</xsl:text>
+      <xsl:if test="@qodlow = '1'"><xsl:text>\ddag</xsl:text></xsl:if>
+      <xsl:text>}{</xsl:text>
       <xsl:call-template name="escape_text"><xsl:with-param name="string" select="string(@proto)"/></xsl:call-template>
-      <xsl:text>} &amp; {\footnotesize </xsl:text>
+      <xsl:text>}{</xsl:text>
       <xsl:call-template name="hx-brk"><xsl:with-param name="s" select="string(@svc)"/></xsl:call-template>
-      <xsl:if test="@svcsrc = 'iana'"><xsl:text>\textsuperscript{\dag}</xsl:text></xsl:if>
-      <xsl:if test="@svcsrc = 'fam'"><xsl:text>\textsuperscript{*}</xsl:text></xsl:if>
-      <xsl:text>} &amp; </xsl:text>
-      <xsl:call-template name="hx-state-pill"><xsl:with-param name="st" select="string(@state)"/></xsl:call-template>
-      <xsl:text> &amp; </xsl:text>
-      <xsl:choose>
-        <xsl:when test="number(@cvss) &gt;= 0">
-          <xsl:text>{\footnotesize </xsl:text>
-          <xsl:value-of select="format-number(number(@cvss), '0.0')"/>
-          <xsl:text>}</xsl:text>
-        </xsl:when>
-        <xsl:otherwise><xsl:text>{\color{surMuted}\scriptsize ---}</xsl:text></xsl:otherwise>
-      </xsl:choose>
-      <xsl:text> &amp; {\footnotesize </xsl:text>
+      <!-- the mark beside the SERVICE name: where that name came from -->
+      <xsl:if test="@svcsrc = 'iana'"><xsl:text>\portmark{\dag}</xsl:text></xsl:if>
+      <xsl:if test="@svcsrc = 'fam'"><xsl:text>\portmark{*}</xsl:text></xsl:if>
+      <xsl:text>}{</xsl:text>
+      <xsl:value-of select="@state"/>
+      <xsl:text>}{</xsl:text>
+      <!-- No rated result at all leaves the score EMPTY, which is the design's
+           own idiom for "no number" (\hostrow{...}{logsev}{}); printing 0.0
+           there would assert a measurement the scan never made. -->
+      <xsl:if test="number(@cvss) &gt;= 0">
+        <xsl:value-of select="format-number(number(@cvss), '0.0')"/>
+      </xsl:if>
+      <xsl:text>}{</xsl:text>
       <xsl:value-of select="@nips"/>
-      <xsl:text>} &amp; {\tiny\ttfamily </xsl:text>
+      <xsl:text>}{</xsl:text>
       <!-- A collapsed family is ONE cell on the board but it is not one port
            here: printing the union of the family's hosts next to the member
            list asserts pairs the scan never saw (137 was on a single host while
            the family spanned two). When the members do not share the same
-           addresses, each member gets its own line. -->
+           addresses, each member gets its own line; when they do, the member
+           ports are still named, so "135-139" is never read as the whole of
+           135..139. -->
       <xsl:variable name="cips" select="normalize-space(@ips)"/>
       <xsl:choose>
         <xsl:when test="@collapsed = '1' and count(m[normalize-space(@ips) != $cips]) &gt; 0">
@@ -3702,13 +4105,18 @@ SPDX-License-Identifier: GPL-2.0-or-later
           </xsl:for-each>
         </xsl:when>
         <xsl:otherwise>
+          <xsl:if test="@collapsed = '1'">
+            <xsl:value-of select="gvm:t('hx_members')"/>
+            <xsl:call-template name="escape_text"><xsl:with-param name="string" select="string(@members)"/></xsl:call-template>
+            <xsl:text>\newline </xsl:text>
+          </xsl:if>
           <xsl:call-template name="hx-ip-list"/>
         </xsl:otherwise>
       </xsl:choose>
-      <xsl:text>} \\[0.3mm]
+      <xsl:text>}
 </xsl:text>
     </xsl:for-each>
-    <xsl:text>\end{longtable}
+    <xsl:text>\end{porttable}
 </xsl:text>
   </xsl:template>
 
@@ -3724,7 +4132,12 @@ SPDX-License-Identifier: GPL-2.0-or-later
       </xsl:if>
     </xsl:for-each>
     <xsl:if test="number(@nips) &gt; 40">
-      <xsl:text>{\rmfamily\itshape\color{surMuted}</xsl:text>
+      <!-- The cell is already muted Mono; the aside only changes face, and the
+           colour it used to force belongs to the design system now. -->
+      <!-- \suriSans, NOT \rmfamily: the bundle ships no serif face, so \rmfamily
+           falls back to Computer Modern and pdftex renders it as a Type 3
+           bitmap. -->
+      <xsl:text>{\suriSans\itshape </xsl:text>
       <xsl:value-of select="gvm:t('hx_ip_more_a')"/>
       <xsl:value-of select="number(@nips) - 40"/>
       <xsl:value-of select="gvm:t('hx_ip_more_b')"/>
@@ -3732,17 +4145,11 @@ SPDX-License-Identifier: GPL-2.0-or-later
     </xsl:if>
   </xsl:template>
 
-  <xsl:template name="hx-table-head">
-    <xsl:text>\textcolor{white}{\footnotesize\bfseries </xsl:text><xsl:value-of select="gvm:t('hx_th_port')"/>
-    <xsl:text>} &amp; \textcolor{white}{\footnotesize\bfseries </xsl:text><xsl:value-of select="gvm:t('hx_th_proto')"/>
-    <xsl:text>} &amp; \textcolor{white}{\footnotesize\bfseries </xsl:text><xsl:value-of select="gvm:t('hx_th_service')"/>
-    <xsl:text>} &amp; \textcolor{white}{\footnotesize\bfseries </xsl:text><xsl:value-of select="gvm:t('hx_th_state')"/>
-    <xsl:text>} &amp; \textcolor{white}{\footnotesize\bfseries </xsl:text><xsl:value-of select="gvm:t('hx_th_cvss')"/>
-    <xsl:text>} &amp; \textcolor{white}{\footnotesize\bfseries </xsl:text><xsl:value-of select="gvm:t('hx_th_hosts')"/>
-    <xsl:text>} &amp; \textcolor{white}{\footnotesize\bfseries </xsl:text><xsl:value-of select="gvm:t('hx_th_ips')"/>
-    <xsl:text>} \\
-</xsl:text>
-  </xsl:template>
+  <!-- (The column header of the port table used to be emitted here; the
+       `porttable' environment of suricatoos-blocks.sty owns it now, and takes
+       its words from \suriLblPort / \suriLblProto / \suriLblService /
+       \suriLblState / \suriLblCvssMax / \suriLblHostsCol / \suriLblIps, which
+       the preamble renews from gvm:t('hx_th_...'). -->
 
   <!-- How many ports the board stands for, and in how many cells. Family
        collapsing makes the two numbers differ (135, 137, 138 and 139 ride in one
@@ -3775,15 +4182,24 @@ SPDX-License-Identifier: GPL-2.0-or-later
     <!-- Distinct (transport, port) pairs behind the cells: a collapsed cell
          carries one <m> per member port, an uncollapsed one stands for itself. -->
     <xsl:variable name="nraw" select="count($ord/c[not(@collapsed = '1')]) + count($ord/c/m)"/>
-    <xsl:text>\section{</xsl:text><xsl:value-of select="gvm:t('sec_hexmap')"/><xsl:text>}
-</xsl:text>
+    <!-- Section 2 of the report. The runner of the running header is set apart
+         from the title because the title does not fit it (\suriSection would
+         otherwise upper-case the whole "Mapa de Exposicao de Portas"). -->
+    <xsl:text>\suriSection{2}{</xsl:text>
+    <xsl:value-of select="gvm:t('sec_hexmap')"/>
+    <xsl:text>}
+\setsectionrunner{2}{</xsl:text>
+    <xsl:value-of select="gvm:t('hx_runner')"/>
+    <xsl:text>}
+\suriPara{</xsl:text>
     <xsl:value-of select="gvm:t('hx_intro')"/>
-    <xsl:text>\par
+    <xsl:text>}
 </xsl:text>
     <xsl:choose>
       <xsl:when test="$n = 0">
-        <xsl:text>\vspace{2mm}
-{\color{surMuted}</xsl:text><xsl:value-of select="gvm:t('hx_no_ports')"/><xsl:text>}\par
+        <xsl:text>\blocknote{</xsl:text>
+        <xsl:value-of select="gvm:t('hx_no_ports')"/>
+        <xsl:text>}
 </xsl:text>
       </xsl:when>
       <xsl:otherwise>
@@ -3793,92 +4209,134 @@ SPDX-License-Identifier: GPL-2.0-or-later
             <xsl:with-param name="max" select="$hexmap-max"/>
           </xsl:call-template>
         </xsl:variable>
+        <!-- The card names the engagement and the scope: title = task name,
+             meta = hosts, ports and the moment the scan closed. $meta is built
+             as ready LaTeX, so each part is escaped on its own and the
+             separator can be the design's own \textperiodcentered. -->
         <xsl:variable name="meta">
-          <xsl:value-of select="gvm:report()/task/name"/>
-          <xsl:text> -- </xsl:text>
           <xsl:value-of select="count(gvm:report()/host)"/>
           <xsl:text> </xsl:text><xsl:value-of select="gvm:t('hx_hosts_word')"/>
-          <xsl:text> -- </xsl:text>
+          <xsl:text> \textperiodcentered\ </xsl:text>
           <xsl:call-template name="hx-scope-phrase">
             <xsl:with-param name="cells" select="$n"/>
             <xsl:with-param name="ports" select="$nraw"/>
           </xsl:call-template>
-          <xsl:text> -- </xsl:text>
+          <xsl:text> \textperiodcentered\ </xsl:text>
           <xsl:call-template name="emit-date">
             <xsl:with-param name="date" select="gvm:report()/scan_end"/>
           </xsl:call-template>
         </xsl:variable>
-        <xsl:text>\vspace{2mm}
-</xsl:text>
+        <!-- gvm:project() ja' cobre a exportacao "Anonymous XML" (cai para o
+             alvo e depois para o comentario da tarefa). Se nem assim houver
+             nome, o card ainda tem de ser rotulado: cai para o nome da secao,
+             em vez de inventar um projeto. -->
+        <xsl:variable name="board-title">
+          <xsl:choose>
+            <xsl:when test="string-length(normalize-space(gvm:project())) &gt; 0">
+              <xsl:value-of select="normalize-space(gvm:project())"/>
+            </xsl:when>
+            <xsl:otherwise><xsl:value-of select="gvm:t('sec_hexmap')"/></xsl:otherwise>
+          </xsl:choose>
+        </xsl:variable>
         <xsl:call-template name="hx-board">
           <xsl:with-param name="cells" select="exsl:node-set($draw-rtf)/c"/>
-          <xsl:with-param name="title" select="gvm:t('sec_hexmap')"/>
+          <xsl:with-param name="title" select="string($board-title)"/>
           <xsl:with-param name="meta" select="string($meta)"/>
           <xsl:with-param name="third" select="'ip'"/>
         </xsl:call-template>
-        <!-- Everything the board could not show, said out loud. -->
+        <!-- Everything the board could not show, said out loud, under the card. -->
         <xsl:call-template name="hx-notes">
           <xsl:with-param name="omitted" select="$n - count(exsl:node-set($draw-rtf)/c[not(@over)])"/>
-          <xsl:with-param name="iana" select="count($ord/c[@svcsrc='iana'])"/>
-          <xsl:with-param name="fam" select="count($ord/c[@svcsrc='fam'])"/>
-          <xsl:with-param name="qodlow" select="count($ord/c[@qodlow='1'])"/>
         </xsl:call-template>
-        <xsl:text>\vspace{2mm}
+        <!-- The table opens its own page: it is the second half of the section
+             and the model gives it one. -->
+        <xsl:text>\clearpage
+\blocklabel{\suriLblPortsMapped}
 </xsl:text>
         <xsl:call-template name="hx-table">
           <xsl:with-param name="ord" select="$ord"/>
+        </xsl:call-template>
+        <!-- The footnotes of the table belong under the table, not under the
+             board: they explain marks that only the table carries. -->
+        <xsl:call-template name="hx-portnotes">
+          <xsl:with-param name="iana" select="count($ord/c[@svcsrc='iana'])"/>
+          <xsl:with-param name="fam" select="count($ord/c[@svcsrc='fam'])"/>
+          <xsl:with-param name="qodlow" select="count($ord/c[@qodlow='1'])"/>
         </xsl:call-template>
       </xsl:otherwise>
     </xsl:choose>
   </xsl:template>
 
+  <!-- What the BOARD could not show, under the card: one \blocknote per fact.
+       The marks of the table (\dag \ddag *) are not here — they explain the
+       table and hang under it, in \portnotes. -->
   <xsl:template name="hx-notes">
     <xsl:param name="omitted"/>
-    <xsl:param name="iana"/>
-    <xsl:param name="fam" select="0"/>
-    <xsl:param name="qodlow"/>
     <xsl:variable name="total" select="count(gvm:report()/results/result)"/>
     <xsl:variable name="rc-full" select="normalize-space(gvm:report()/result_count/text())"/>
     <xsl:variable name="partial"
       select="string-length($rc-full) &gt; 0 and floor(number($rc-full)) = number($rc-full) and number($rc-full) &gt; $total"/>
-    <xsl:if test="$omitted &gt; 0 or number($hx-genhosts) &gt; 0 or number($hx-malformed) &gt; 0
-                  or number($hx-noip) &gt; 0 or $iana &gt; 0 or $fam &gt; 0 or $qodlow &gt; 0 or $partial">
-      <xsl:text>\vspace{-2mm}
-{\footnotesize\color{surMuted}
+    <xsl:if test="$omitted &gt; 0">
+      <xsl:text>\blocknote{</xsl:text>
+      <xsl:value-of select="$omitted"/><xsl:value-of select="gvm:t('hx_omitted')"/>
+      <xsl:text>}
 </xsl:text>
-      <xsl:if test="$omitted &gt; 0">
-        <xsl:value-of select="$omitted"/><xsl:value-of select="gvm:t('hx_omitted')"/><xsl:text>\par
+    </xsl:if>
+    <xsl:if test="number($hx-genhosts) &gt; 0">
+      <xsl:text>\blocknote{</xsl:text>
+      <xsl:value-of select="$hx-genhosts"/><xsl:value-of select="gvm:t('hx_hostlevel_note')"/>
+      <xsl:text>}
 </xsl:text>
-      </xsl:if>
-      <xsl:if test="number($hx-genhosts) &gt; 0">
-        <xsl:value-of select="$hx-genhosts"/><xsl:value-of select="gvm:t('hx_hostlevel_note')"/><xsl:text>\par
+    </xsl:if>
+    <xsl:if test="number($hx-malformed) &gt; 0">
+      <xsl:text>\blocknote{</xsl:text>
+      <xsl:value-of select="$hx-malformed"/><xsl:value-of select="gvm:t('hx_malformed_note')"/>
+      <xsl:text>}
 </xsl:text>
-      </xsl:if>
-      <xsl:if test="number($hx-malformed) &gt; 0">
-        <xsl:value-of select="$hx-malformed"/><xsl:value-of select="gvm:t('hx_malformed_note')"/><xsl:text>\par
+    </xsl:if>
+    <xsl:if test="number($hx-noip) &gt; 0">
+      <xsl:text>\blocknote{</xsl:text>
+      <xsl:value-of select="$hx-noip"/><xsl:value-of select="gvm:t('hx_noip_note')"/>
+      <xsl:text>}
 </xsl:text>
-      </xsl:if>
-      <xsl:if test="number($hx-noip) &gt; 0">
-        <xsl:value-of select="$hx-noip"/><xsl:value-of select="gvm:t('hx_noip_note')"/><xsl:text>\par
+    </xsl:if>
+    <xsl:if test="$partial">
+      <xsl:text>\blocknote{</xsl:text>
+      <xsl:value-of select="gvm:t('hx_partial')"/>
+      <xsl:text>}
 </xsl:text>
-      </xsl:if>
-      <xsl:if test="$partial">
-        <xsl:value-of select="gvm:t('hx_partial')"/><xsl:text>\par
+    </xsl:if>
+  </xsl:template>
+
+  <!-- The footnotes of the port table: what each mark beside a service name or
+       a port number means. Emitted only for the marks the table actually
+       carries, so a report with no IANA-named port shows no dagger note. -->
+  <xsl:template name="hx-portnotes">
+    <xsl:param name="iana"/>
+    <xsl:param name="fam" select="0"/>
+    <xsl:param name="qodlow"/>
+    <xsl:if test="$iana &gt; 0 or $fam &gt; 0 or $qodlow &gt; 0">
+      <xsl:text>\portnotes{%
 </xsl:text>
-      </xsl:if>
       <xsl:if test="$fam &gt; 0">
-        <xsl:text>\textsuperscript{*}</xsl:text><xsl:value-of select="gvm:t('hx_fam_note')"/><xsl:text>\par
+        <xsl:text>  \portnote{*}{</xsl:text>
+        <xsl:value-of select="normalize-space(gvm:t('hx_fam_note'))"/>
+        <xsl:text>}
 </xsl:text>
       </xsl:if>
       <xsl:if test="$iana &gt; 0">
-        <xsl:text>\textsuperscript{\dag}</xsl:text><xsl:value-of select="gvm:t('hx_iana_note')"/><xsl:text>\par
+        <xsl:text>  \portnote{\dag}{</xsl:text>
+        <xsl:value-of select="normalize-space(gvm:t('hx_iana_note'))"/>
+        <xsl:text>}
 </xsl:text>
       </xsl:if>
       <xsl:if test="$qodlow &gt; 0">
-        <xsl:text>\textsuperscript{\ddag}</xsl:text><xsl:value-of select="gvm:t('hx_low_qod')"/><xsl:text>\par
+        <xsl:text>  \portnote{\ddag}{</xsl:text>
+        <xsl:value-of select="normalize-space(gvm:t('hx_low_qod'))"/>
+        <xsl:text>}
 </xsl:text>
       </xsl:if>
-      <xsl:text>}\par
+      <xsl:text>}
 </xsl:text>
     </xsl:if>
   </xsl:template>
@@ -3893,26 +4351,33 @@ SPDX-License-Identifier: GPL-2.0-or-later
     <xsl:variable name="hosts" select="gvm:report()/host[string-length(normalize-space(ip)) &gt; 0]"/>
     <xsl:variable name="noiph" select="$nhosts - count($hosts)"/>
     <xsl:variable name="nglobal" select="count(exsl:node-set($hx-ord-rtf)/c)"/>
-    <xsl:text>\section{</xsl:text><xsl:value-of select="gvm:t('sec_hexmap_host')"/><xsl:text>}
+    <xsl:text>\suriSection{6}{</xsl:text>
+    <xsl:value-of select="gvm:t('sec_hexmap_host')"/>
+    <xsl:text>}
+\setsectionrunner{6}{</xsl:text>
+    <xsl:value-of select="gvm:t('hx_host_runner')"/>
+    <xsl:text>}
 </xsl:text>
     <xsl:choose>
       <xsl:when test="$nhosts &gt; number($hexmap-per-host-max)">
+        <xsl:text>\suriPara{</xsl:text>
         <xsl:value-of select="gvm:t('hx_host_skipped_a')"/>
         <xsl:value-of select="$nhosts"/>
         <xsl:value-of select="gvm:t('hx_host_skipped_b')"/>
         <xsl:value-of select="$hexmap-per-host-max"/>
         <xsl:value-of select="gvm:t('hx_host_skipped_c')"/>
-        <xsl:text>\par
+        <xsl:text>}
 </xsl:text>
       </xsl:when>
       <xsl:when test="count($hosts) = 0 or $nglobal = 0">
-        <xsl:text>{\color{surMuted}</xsl:text><xsl:value-of select="gvm:t('hx_host_none')"/><xsl:text>}\par
+        <xsl:text>\blocknote{</xsl:text><xsl:value-of select="gvm:t('hx_host_none')"/><xsl:text>}
 </xsl:text>
         <xsl:call-template name="hx-noip-hosts-note"><xsl:with-param name="n" select="$noiph"/></xsl:call-template>
       </xsl:when>
       <xsl:otherwise>
+        <xsl:text>\suriPara{</xsl:text>
         <xsl:value-of select="gvm:t('hx_host_intro')"/>
-        <xsl:text>\par
+        <xsl:text>}
 </xsl:text>
         <xsl:call-template name="hx-noip-hosts-note"><xsl:with-param name="n" select="$noiph"/></xsl:call-template>
         <xsl:for-each select="$hosts">
@@ -3937,19 +4402,16 @@ SPDX-License-Identifier: GPL-2.0-or-later
             </xsl:call-template>
           </xsl:variable>
           <xsl:variable name="hord" select="exsl:node-set($hord-rtf)"/>
-          <xsl:text>\vspace{3mm}
-</xsl:text>
-          <xsl:call-template name="host-banner">
-            <xsl:with-param name="ip" select="$ip"/>
-            <xsl:with-param name="hostname" select="$hostname"/>
-            <xsl:with-param name="os" select="string($os)"/>
-            <xsl:with-param name="portcount" select="0"/>
-          </xsl:call-template>
           <xsl:choose>
             <xsl:when test="count($hord/c) = 0">
-              <xsl:text>{\color{surMuted}\footnotesize </xsl:text>
+              <!-- No card at all would drop the host from the appendix, so the
+                   address is still named, in the note that explains why it has
+                   no board. -->
+              <xsl:text>\blocknote{\dat{</xsl:text>
+              <xsl:call-template name="escape_text"><xsl:with-param name="string" select="string($ip)"/></xsl:call-template>
+              <xsl:text>} \textperiodcentered\ </xsl:text>
               <xsl:value-of select="gvm:t('hp_no_ports')"/>
-              <xsl:text>}\par
+              <xsl:text>}
 </xsl:text>
             </xsl:when>
             <xsl:otherwise>
@@ -3959,9 +4421,22 @@ SPDX-License-Identifier: GPL-2.0-or-later
                   <xsl:with-param name="max" select="$hexmap-per-host-cells"/>
                 </xsl:call-template>
               </xsl:variable>
+              <!-- The card has no OS badge of its own, so what the host banner
+                   used to show (hostname, operating system) rides in the meta
+                   line. Both are scanner text: escaped, and cut so the pair
+                   cannot outgrow the head of the card. -->
               <xsl:variable name="hmeta">
-                <xsl:if test="string-length($hostname) &gt; 0">
-                  <xsl:value-of select="$hostname"/><xsl:text> -- </xsl:text>
+                <xsl:if test="string-length(normalize-space($hostname)) &gt; 0">
+                  <xsl:call-template name="escape_text">
+                    <xsl:with-param name="string" select="substring(normalize-space($hostname), 1, 48)"/>
+                  </xsl:call-template>
+                  <xsl:text> \textperiodcentered\ </xsl:text>
+                </xsl:if>
+                <xsl:if test="string-length(normalize-space($os)) &gt; 0">
+                  <xsl:call-template name="escape_text">
+                    <xsl:with-param name="string" select="substring(normalize-space($os), 1, 40)"/>
+                  </xsl:call-template>
+                  <xsl:text> \textperiodcentered\ </xsl:text>
                 </xsl:if>
                 <xsl:call-template name="hx-scope-phrase">
                   <xsl:with-param name="cells" select="count($hord/c)"/>
@@ -3985,9 +4460,9 @@ SPDX-License-Identifier: GPL-2.0-or-later
   <xsl:template name="hx-noip-hosts-note">
     <xsl:param name="n"/>
     <xsl:if test="number($n) &gt; 0">
-      <xsl:text>{\footnotesize\color{surMuted}</xsl:text>
+      <xsl:text>\blocknote{</xsl:text>
       <xsl:value-of select="$n"/><xsl:value-of select="gvm:t('hx_host_noip')"/>
-      <xsl:text>}\par
+      <xsl:text>}
 </xsl:text>
     </xsl:if>
   </xsl:template>
@@ -4000,19 +4475,42 @@ SPDX-License-Identifier: GPL-2.0-or-later
     </xsl:call-template>
   </xsl:variable>
 
+  <!-- Contracapa (pg-10). O colofao deixou de ser um bloco no fim da ultima
+       pagina de conteudo e virou PAGINA: \suriBackCover abre com \clearpage,
+       pinta a folha de navy, desenha a marca, o logotipo, o paragrafo
+       institucional, o aviso de confidencialidade e a linha de rodape, e fecha
+       devolvendo o papel claro. Como na capa, aqui so' entram DADOS. -->
   <xsl:template name="branded-footer">
-    <xsl:text>
-\vspace{6mm}
-\begin{center}
-{\color{surBorderLt}\rule{\textwidth}{0.4pt}}\\[2.5mm]
-\raisebox{-1.5mm}{\includegraphics[height=6mm]{suricatoos-mark-navy}}\quad{\bfseries\color{surInk}\large Suricatoos Security Platform}\\[1.5mm]
-{\footnotesize\color{surMuted}</xsl:text>
+    <!-- Mesmo raciocinio do corte da capa, outra medida: a linha de rodape da
+         contracapa e' UMA linha centrada de Mono 8.5 com tracking 220 (~7px por
+         caractere), e ela ja carrega o rotulo PROJETO, a data por extenso e
+         "PAGINA n / N" — cerca de 48 caracteres fixos dentro dos ~95 que cabem
+         entre as margens. Sobram ~47 para o nome; 40 deixa folga para a marca de
+         corte. Nao reflui: e' no de TikZ, uma linha so'. -->
+    <xsl:variable name="backcover-name-max" select="40"/>
+    <xsl:variable name="task_escaped">
+      <xsl:call-template name="escape_break">
+        <xsl:with-param name="string" select="gvm:project()"/>
+        <xsl:with-param name="max" select="$backcover-name-max"/>
+      </xsl:call-template>
+    </xsl:variable>
+    <!-- Chaves em TODO valor pelo mesmo motivo da capa: a data localizada e o
+         nome de tarefa carregam virgula, e o aviso de confidencialidade em
+         ingles termina em ponto depois de um travessao. -->
+    <xsl:text>\suriBackCover{
+  projeto={</xsl:text>
+    <xsl:value-of select="$task_escaped"/>
+    <xsl:text>},
+  data={</xsl:text>
+    <xsl:call-template name="emit-today"/>
+    <xsl:text>},
+  texto={</xsl:text>
     <xsl:value-of select="gvm:t('colophon_1')"/>
-    <xsl:text>\\
-</xsl:text>
+    <xsl:text>},
+  aviso={</xsl:text>
     <xsl:value-of select="gvm:t('colophon_2')"/>
     <xsl:text>}
-\end{center}
+}
 </xsl:text>
   </xsl:template>
 
@@ -4020,33 +4518,46 @@ SPDX-License-Identifier: GPL-2.0-or-later
   <!-- Document assembly                                                 -->
   <!-- ================================================================= -->
 
+  <!-- O esqueleto do documento, na ordem do modelo: capa, resumo, mapa de
+       portas, hosts, sumario, detalhados, apendice, contracapa.
+       \clearpage e nao \newpage. As duas terminam a pagina, mas \newpage deixa
+       material flutuante pendurado para a proxima, e o design abre CADA secao
+       com \suriSection, que e' desenhado para ser a primeira coisa da folha (o
+       ar acima dele e' descartado no topo da pagina, como qualquer \addvspace).
+       Com \newpage uma longtable que ainda estivesse escoando podia empurrar o
+       titulo para baixo e a secao abriria fora da grade.
+       \pagestyle{suricatoos} nao e' emitido aqui: suricatoos-page.sty ja o
+       instala como padrao do documento, e a capa e a contracapa trocam para
+       `suribare' sozinhas, dentro de \suriCover / \suriBackCover.
+       Numeracao das secoes, para quem emite \suriSection: 1 resumo executivo,
+       2 mapa de exposicao de portas, 3 hosts e portas abertas, 4 sumario de
+       achados, 5 achados detalhados, 6 apendice (exposicao por host). -->
   <xsl:template name="real-report">
     <xsl:call-template name="header"/>
     <xsl:call-template name="newline"/>
     <xsl:text>\begin{document}
 </xsl:text>
+    <!-- \suriCover fecha com \clearpage: a pagina 2 ja abre no papel claro. -->
     <xsl:call-template name="cover-page"/>
-    <xsl:text>\pagestyle{surfancy}
-</xsl:text>
     <xsl:call-template name="executive-summary"/>
-    <xsl:text>\newpage
+    <xsl:text>\clearpage
 </xsl:text>
     <xsl:call-template name="hexmap-section"/>
-    <xsl:text>\newpage
+    <xsl:text>\clearpage
 </xsl:text>
     <xsl:call-template name="hosts-ports"/>
-    <xsl:text>\newpage
+    <xsl:text>\clearpage
 </xsl:text>
     <xsl:call-template name="findings-summary"/>
-    <xsl:text>\newpage
+    <xsl:text>\clearpage
 </xsl:text>
     <xsl:call-template name="detailed-findings"/>
-    <xsl:text>\newpage
+    <xsl:text>\clearpage
 </xsl:text>
     <xsl:call-template name="hexmap-hosts-section"/>
+    <!-- \suriBackCover abre com \clearpage por conta propria. -->
     <xsl:call-template name="branded-footer"/>
-    <xsl:text>
-\end{document}
+    <xsl:text>\end{document}
 </xsl:text>
   </xsl:template>
 

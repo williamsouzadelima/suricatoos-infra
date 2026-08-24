@@ -27,7 +27,7 @@ import os
 HERE = os.path.dirname(os.path.abspath(__file__))
 BUNDLE = os.path.join(HERE, "suricatoos-premium-pdf")
 
-VERSION = "20260819b"
+VERSION = "20260822a"
 
 # (lang code passed to xsltproc, report_format UUID, dropdown name).
 # EN keeps the original UUID so the already-deployed object is updated in place
@@ -79,12 +79,46 @@ DESCRIPTION = {
 }
 
 # Files whose content is IDENTICAL across all three languages (read from disk).
-SHARED_FILES = [
+# Everything here travels base64-encoded inside each feed object, so gvmd writes
+# it back out next to `generate' at install time; `generate' then copies the
+# .sty modules and unpacks plex-min.tar.gz into the per-run temp dir.
+#
+# The .sty design-system modules are DISCOVERED, not listed: they are written by
+# several hands in parallel and `generate' ships whatever `cp ./*.sty' finds, so
+# a hardcoded list here would silently drop a module and the report would fail to
+# compile in production. Sorted for a stable, reviewable file order.
+STATIC_SHARED_FILES = [
     "latex.xsl",
+    # IBM Plex as a Type1 TDS subtree. BINARY, and by far the largest member of
+    # the bundle: the gvmd container ships no Plex, and without this pdflatex
+    # falls back to Latin Modern without saying a word.
+    "plex-min.tar.gz",
+    "suricatoos-wordmark-navy.pdf",
     "suricatoos-wordmark-white.pdf",
     "suricatoos-mark-navy.pdf",
     "suricatoos-mark-white.pdf",
 ]
+
+
+def shared_files():
+    """The shared bundle members, design-system .sty modules included."""
+    styles = sorted(n for n in os.listdir(BUNDLE) if n.endswith(".sty"))
+    if "suricatoos-tokens.sty" not in styles:
+        raise SystemExit(
+            "bundle is missing suricatoos-tokens.sty — refusing to build a feed "
+            "object that cannot compile"
+        )
+    missing = [n for n in STATIC_SHARED_FILES
+               if not os.path.exists(os.path.join(BUNDLE, n))]
+    if missing:
+        raise SystemExit("bundle is missing: %s" % ", ".join(missing))
+    return STATIC_SHARED_FILES[:1] + styles + STATIC_SHARED_FILES[1:]
+
+
+def object_file_names():
+    """Every <file> the object carries, in the order it is written."""
+    return ["generate", "report_format.xml"] + shared_files()
+
 
 # Canonical generate script, read once and rewritten per language. It carries the
 # literal token "--stringparam lang en"; we swap "en" for the target language.
@@ -101,26 +135,25 @@ def b64_file(path: str) -> str:
 
 
 def generate_for(lang: str) -> bytes:
-    with open(os.path.join(BUNDLE, "generate"), "r", encoding="utf-8") as fh:
+    # Read as BYTES, like every other bundle member: the bundle now carries a
+    # gzip tarball, and one text-mode read anywhere in here would corrupt it, so
+    # the whole path stays on bytes with no encode/decode round trip.
+    with open(os.path.join(BUNDLE, "generate"), "rb") as fh:
         script = fh.read()
-    if GENERATE_TOKEN not in script:
+    token = GENERATE_TOKEN.encode("ascii")
+    if token not in script:
         raise SystemExit(
             "generate: expected token %r not found — cannot set language"
             % GENERATE_TOKEN
         )
-    return script.replace(GENERATE_TOKEN, "--stringparam lang " + lang).encode("utf-8")
+    return script.replace(token, b"--stringparam lang " + lang.encode("ascii"))
 
 
 def report_format_xml_for(fmt_id: str, name: str, lang: str) -> bytes:
     """A per-language report_format.xml embedded as the object's own descriptor.
     gvmd uses the outer feed element for identity, but we keep this consistent so
     the delivered descriptor never contradicts the object it ships in."""
-    files = "\n".join(
-        '  <file name="%s"/>' % n
-        for n in ["generate", "latex.xsl", "report_format.xml",
-                  "suricatoos-wordmark-white.pdf", "suricatoos-mark-navy.pdf",
-                  "suricatoos-mark-white.pdf"]
-    )
+    files = "\n".join('  <file name="%s"/>' % n for n in object_file_names())
     xml = (
         "<!-- Copyright (C) 2026 Suricatoos -->\n"
         '<report_format id="%s">\n'
@@ -152,8 +185,8 @@ def build_feed_object(lang: str, fmt_id: str, name: str) -> str:
     parts.append('  <file name="generate">%s</file>' % b64_bytes(generate_for(lang)))
     parts.append('  <file name="report_format.xml">%s</file>'
                  % b64_bytes(report_format_xml_for(fmt_id, name, lang)))
-    # Shared files (identical bytes across languages).
-    for n in SHARED_FILES:
+    # Shared files (identical bytes across languages), all read in binary.
+    for n in shared_files():
         parts.append('  <file name="%s">%s</file>' % (n, b64_file(os.path.join(BUNDLE, n))))
     parts.append("</report_format>")
     parts.append("")
@@ -161,6 +194,11 @@ def build_feed_object(lang: str, fmt_id: str, name: str) -> str:
 
 
 def main():
+    print("bundle manifest (%s):" % VERSION)
+    for n in object_file_names():
+        src = os.path.join(BUNDLE, n)
+        size = os.path.getsize(src) if os.path.exists(src) else 0
+        print("  %-32s %9s bytes%s" % (n, size or "synth", "" if size else " (synthesised)"))
     for lang, fmt_id, name in LANGS:
         xml = build_feed_object(lang, fmt_id, name)
         out = os.path.join(HERE, "pdf-suricatoos-%s.xml" % fmt_id)

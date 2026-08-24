@@ -1,0 +1,329 @@
+% suricatoos-report.sty — the umbrella package of the Suricatoos report design
+% system.  A document (or the XSLT that writes one) needs exactly two lines:
+%
+%     \documentclass[10pt,a4paper]{article}
+%     \usepackage{suricatoos-report}
+%
+% and from there on it emits DATA through semantic macros.  This file owns four
+% things and nothing else:
+%
+%   1. LOADING.  The four modules in dependency order, plus the encodings that
+%      have to be in place before IBM Plex is pulled in.
+%   2. RHYTHM.  How the blocks of a page stack vertically.  That is the one
+%      design decision no single module can own — a card does not know what came
+%      before it — so the air ABOVE every top-level block is installed here, once,
+%      by patching the block macros.  The consequence is the point of this file:
+%      the .tex never writes \vspace.
+%   3. THE GLUE THAT WAS MISSING.  The body paragraph, the bullet list, the
+%      summary heading of pg-06/07 and the labels of pg-09 — pieces that fall
+%      between the modules.  Nothing visual is re-decided here: every colour and
+%      every size still comes from suricatoos-tokens.
+%   4. THE PLACES WHERE TWO MODULES DISAGREE.  The hex board was measured against
+%      a wider text block than the page module settled on, and \suriSection hides
+%      its own trailing skip from the next block.  Both are reconciled here,
+%      loudly, instead of being fixed twice in two files.
+%
+% Public API (everything else comes from the four modules)
+%   \suriPara        one paragraph of running copy
+%   suribullets      the bullet list of a finding's technical details
+%   \suriSummaryHead the slab + caption that titles a finding summary
+%   \suriGeq         the ">=" relation, composed in the running text font
+%   \portmark        a raised footnote mark on a port table's SERVIÇO cell
+%   \suriEllip       the compact ellipsis that opens a truncation line
+%   strings          \suriLblConfirmed \suriLblIndicators \suriLblQod...
+%                    \suriLblPortsMapped \suriLblFld... (all overridable)
+%
+% Engine: pdflatex ONLY.  No rounded corners, no shadow, no gradient.
+%
+% Copyright (C) 2026 Suricatoos.  SPDX-License-Identifier: GPL-2.0-or-later
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{suricatoos-report}[2026/08/22 Suricatoos premium report bundle]
+
+% ===========================================================================
+% 1. Loading.
+%
+% fontenc/inputenc FIRST: suricatoos-tokens issues \pdfmapfile and loads the
+% Plex packages, and both want the encoding already settled.  Then the modules
+% in dependency order — tokens is the contract, page owns the paper, hex owns
+% the port map (and \icoterm, which blocks only stands in for), blocks owns the
+% content.  blocks pulls hyperref in at \AtEndPreamble, so it must come last.
+% ===========================================================================
+\RequirePackage[T1]{fontenc}
+\RequirePackage[utf8]{inputenc}
+
+\RequirePackage{suricatoos-tokens}
+\RequirePackage{suricatoos-page}
+\RequirePackage{suricatoos-hex}
+\RequirePackage{suricatoos-blocks}
+
+\RequirePackage{etoolbox}
+\RequirePackage{enumitem}
+
+\makeatletter
+
+% ===========================================================================
+% 2. Vertical rhythm.
+%
+% Every top-level block of the model is separated from what precedes it by a
+% fixed amount of air, and that air belongs to the block that STARTS, not to the
+% one that ended: a page whose first element is a card must not begin with a
+% blank strip.  \addvspace has exactly those semantics — it is dropped at the
+% top of a page and it takes the maximum with the skip already on the list, so
+% two adjacent blocks never stack their gaps.
+%
+% \suri@air{px}{\macro} prepends that skip to a block macro (or to the \begin
+% code of a block environment) defined by one of the other modules.  Patching is
+% deliberate: the alternative is a \vskip at every call site, which is exactly
+% what the .tex must never contain.
+% ===========================================================================
+\newcommand{\suri@air}[2]{%
+  \pretocmd{#2}{\par\addvspace{\suripx{#1}}}{}%
+    {\PackageError{suricatoos-report}%
+      {Cannot install leading air on \string#2}%
+      {The module that defines it changed shape; update suricatoos-report.sty.}}}
+
+% \blocklabel is the one block macro that is ALSO used inside a card
+% (\consolidatedcard prints the ADVISORY header with it), where the card has
+% already chosen its own tighter spacing.  Keep a pristine copy and route the
+% inner use through it, so the page rhythm does not leak into the card.
+\let\suri@blocklabelraw\blocklabel
+\patchcmd{\consolidatedcard}
+  {\blocklabel{\suriLblAdvisory}}
+  {\suri@blocklabelraw{\suriLblAdvisory}}{}%
+  {\PackageError{suricatoos-report}{Cannot unhook the inner \string\blocklabel}%
+    {suricatoos-blocks.sty changed; update suricatoos-report.sty.}}
+
+% \suriSection closes its title with "\vspace{17px}\color{body}", and BOTH of
+% those hide that skip from the next \addvspace: \vspace ends with a
+% \vskip\z@skip, and \color leaves a whatsit — either way \lastskip reads zero,
+% so the block that follows stacked 17px PLUS its own air instead of taking the
+% maximum, and every block that opened a section landed 17px too low (pg-08's
+% card sat 46px under the title band; the model has 27).  Colour first, then a
+% plain \addvspace, and the glue is visible again.  A paragraph, which adds no
+% air of its own, still gets the section's 17px unchanged.
+\patchcmd{\suriSection}
+  {\vspace{\suripx{17}}\color{body}}
+  {\color{body}\addvspace{\suripx{17}}}{}%
+  {\PackageError{suricatoos-report}{Cannot retune the tail of \string\suriSection}%
+    {suricatoos-page.sty changed; update suricatoos-report.sty.}}
+
+% The air, in design px, measured off the model page by page.
+\suri@air{30}{\blocklabel}        % chart / table headings (pg-02, pg-04)
+\suri@air{18}{\fieldlabel}        % field headings of a detailed finding (pg-09)
+\suri@air{24}{\kpirow}            % KPI strip (pg-02)
+\suri@air{20}{\hexcard}           % port-map card (pg-03)
+\suri@air{24}{\hostcard}          % host card (pg-05)
+\suri@air{15}{\warnbox}           % amber caveat (pg-07)
+\suri@air{20}{\alertbox}          % "this scan measured nothing" (secao 1)
+\suri@air{17}{\solbox}            % remediation box (pg-09)
+\suri@air{24}{\consolidatedcard}  % consolidated finding (pg-08)
+\suri@air{24}{\findingcard}       % detailed finding header (pg-09)
+\suri@air{18}{\blocknote}         % small note under a card or a table (pg-03/05)
+\suri@air{17}{\porttable}         % the longtable of pg-04, under its heading
+\suri@air{13}{\findingsummary}    % the longtable of pg-06/07, under its tag
+\suri@air{16}{\sevbars}           % severity bars, under their heading (pg-02)
+\suri@air{14}{\timelinestrip}     % timeline strip, under its heading (pg-02)
+
+% ===========================================================================
+% 3a. Body text.
+% ===========================================================================
+% \suriPara{texto} — one paragraph of running copy: Plex Sans 11.5px on a 19px
+% leading in `body', the setting used for every explanatory paragraph of the
+% model (pg-02, pg-03, pg-05, pg-08, pg-09).  It carries its air BELOW, so the
+% next block's own leading air simply wins the \addvspace maximum.
+% The model does NOT run this copy to the full text block: every explanatory
+% paragraph is set on a shorter measure (~93% of the block), which is what makes
+% pg-02's intro break over four lines instead of three.  That is a reading
+% decision, not an accident — 11.5px across the full 711px block runs to ~105
+% characters a line, well past comfortable.  Keep the measure named so it can be
+% re-tuned in one place.
+\newcommand{\suriparameasure}{0.93}
+% [t] is not cosmetic.  Without it the minipage is centred on the current
+% baseline, so its reference point sits half its height below the top; the
+% interline glue TeX then computes (\baselineskip - \prevdepth - height) goes
+% negative for a tall paragraph and collapses to \lineskip, pulling the copy
+% ~4px up and gluing it to the label above.  Measured: the SAME label sat at
+% 7.7pt from its paragraph in the short cases and ~12pt in the tall ones.  With
+% [t] the box's first baseline is the paragraph's first baseline and the gap is
+% one number for every field in the report.
+\newcommand{\suriPara}[1]{%
+  \par\noindent
+  \begin{minipage}[t]{\suriparameasure\linewidth}%
+    \parindent=0pt\raggedright\suriFS{11.5}{19}\color{body}#1%
+  \end{minipage}\par
+  \addvspace{\suripx{10}}}
+
+% suribullets — the bullet list of DETALHES TÉCNICOS (pg-09).  One \item per
+% line of technical detail.  Measured against the model: 10.5px Sans on 17px
+% (an x-height of 10px against the 9px a 9.5px setting gives), and the dot is
+% `body' like the copy it introduces, not the lighter `muted' of a label.
+\newlist{suribullets}{itemize}{1}
+\setlist[suribullets]{
+  label=\textcolor{body}{\textbullet},
+  leftmargin=\suripx{17}, labelsep=\suripx{8},
+  topsep=0pt, partopsep=0pt, parsep=0pt, itemsep=\suripx{7},
+  before=\suriFS{10.5}{17}\color{body}}
+
+% ===========================================================================
+% 3a-bis. Text primitives.
+%
+% Three glyphs the design needs that no module owns: they are too small to be a
+% block and too visual to be written out at the call site.  Each is composed in
+% whatever text font and size it lands in, so it inherits the surrounding
+% setting instead of importing a second typeface into the page.
+% ===========================================================================
+% \suriGeq — the "greater or equal" relation of the summary caption (pg-06).
+%
+% Neither T1 nor the TS1 subset the bundle ships has a >= glyph, and there is no
+% sans maths font in the bundle either, so $\geq$ is served by Latin Modern:
+% larger than its neighbours, lighter, and hung on the maths axis, which leaves
+% its lower bar floating well under the baseline of the words around it.  The
+% model's glyph is Plex's own: a chevron the height of the x-height with a bar
+% ON the baseline under it.  That is exactly what is composed here — the Plex
+% ">" lifted onto a baseline rule of its own stroke weight.  Everything is
+% quoted in em, so weight, size and proportion follow the text it sits in.
+\newsavebox{\suri@gtbox}
+% Calibrated against the model at 9.5px: the chevron then fills the x-height and
+% the bar sits in the row of the baseline, with no daylight between the two.
+\newcommand{\suri@geqlift}{0.06em}   % chevron lifted to just meet the bar
+\newcommand{\suri@geqrule}{0.085em}  % bar thickness (the chevron's own stroke)
+\newcommand{\suri@geqwidth}{0.85}    % bar width, as a fraction of the ">" advance
+\newcommand{\suriGeq}{%
+  \mbox{\sbox\suri@gtbox{\textgreater}%
+    \raisebox{\suri@geqlift}{\usebox\suri@gtbox}%
+    \llap{\makebox[\wd\suri@gtbox][c]{%
+      \rule{\suri@geqwidth\wd\suri@gtbox}{\suri@geqrule}}}}}
+
+% \portmark{simbolo} — a footnote mark hanging off the SERVIÇO cell of the port
+% table (pg-04): "ftp\portmark{\dag}".  The mark is a reference, not part of the
+% service name, so the model sets it raised and small, entirely above the
+% baseline; written inline as "ftp\,\dag" it comes out full size and sitting on
+% the baseline, where it reads as a multiplication sign at the end of the word.
+% #1 is the symbol (\dag, \ddag); the colour is inherited from the cell.
+% NOTE: this is the SERVIÇO mark only.  The mark beside the port NUMBER is set
+% full size on the baseline in the model, and belongs to \portrow.
+\providecommand{\portmark}[1]{\kern\suripx{1.5}\textsuperscript{#1}}
+
+% \suriEllip — the leading ellipsis of a truncation line ("… + 35 achados").
+% The line itself is monospace, and three periods on three monospace cells come
+% out as ". . .", three glyphs wide and set in from the margin by half a cell.
+% The model has one compact ellipsis flush with the margin, so compose this one
+% glyph in the Sans and let the rest of the line stay in Mono.
+\providecommand{\suriEllip}{{\suriSans\textellipsis}}
+
+% \suriTruncMark{n} — the honest tail of a value that did not fit: "…(+12)".
+%
+% It exists as a macro because the XSLT used to write "{\rmfamily\itshape(+n)}"
+% inline, and \rmfamily is a trap in this document: the bundle ships Plex Sans
+% and Plex Mono only — plex-serif is deliberately NOT in the font subset — so
+% \rmfamily resolves to Computer Modern, which has no Type1 on the container's
+% search path either.  pdftex then quietly renders the mark as a **Type 3
+% bitmap**: fuzzy on screen, unselectable, and the only non-Plex glyph in an
+% otherwise all-Plex PDF.  It surfaced on the sample cover, where a long
+% engagement name is truncated; a real scan with a long task name would have
+% shipped it to a client.
+%
+% Italic sans, `muted', and the ellipsis is the text one — never math.
+\newcommand{\suriTruncMark}[1]{{\suriSans\itshape\color{muted}\textellipsis(+#1)}}
+
+% ===========================================================================
+% 3b. Strings that the two glue blocks below print.
+%
+% Same rule as in the modules: every fixed word is a macro so the XSLT can
+% translate the report by \renewcommand-ing it in the preamble it emits.
+% ===========================================================================
+\newcommand{\suriLblConfirmed}{Achados confirmados}
+\newcommand{\suriLblIndicators}{Indicadores a validar}
+% "<" is a real T1 glyph, so it stays in text and comes out of Plex, like the
+% "<" inside the finding titles.  ">=" is in neither T1 nor TS1, so it is
+% composed out of Plex's own ">" by \suriGeq above rather than borrowed from the
+% maths font, which would drop a Latin Modern glyph into a line of Plex.
+\newcommand{\suriLblQodConfirmed}{qualidade de detec\c{c}\~ao \suriGeq\ 70\%}
+\newcommand{\suriLblQodIndicators}{qualidade de detec\c{c}\~ao < 70\%}
+\newcommand{\suriLblPortsMapped}{Portas observadas \textperiodcentered\ Endere\c{c}os mapeados}
+\newcommand{\suriLblFldVector}{Vetor CVSS}
+\newcommand{\suriLblFldAffected}{Sistemas afetados}
+\newcommand{\suriLblFldSummary}{Resumo}
+\newcommand{\suriLblFldTech}{Detalhes t\'ecnicos}
+\newcommand{\suriLblFldDetection}{Resultado da detec\c{c}\~ao}
+\newcommand{\suriLblFldRefs}{Refer\^encias}
+
+% ===========================================================================
+% 3c. The heading of a finding summary (pg-06 / pg-07).
+%
+% \suriSummaryHead{modo} — the slab that titles a summary table plus the grey
+% caption that states the detection-quality band it covers.  `modo' is the same
+% KEY the findingsummary environment takes:
+%   confirmados  -> black slab, "qualidade de detecção >= 70%"
+%   indicadores  -> `medio' slab, "qualidade de detecção < 70%"
+% so the caller states the band once and never picks a colour.
+% ===========================================================================
+% The mode is compared with \ifstrequal, not \ifx on two \def'd macros: a
+% \newcommand carries a \long prefix that an \ifx also compares, so the naive
+% test silently answers "no" and every table came out labelled `confirmados'.
+\newcommand{\suriSummaryHead}[1]{%
+  \par\addvspace{\suripx{17}}%
+  \noindent
+  \ifstrequal{#1}{indicadores}{%
+    \tagboxc{medio}{\suriLblIndicators}%
+    \hspace{\suripx{12}}{\suriFS{9.5}{9.5}\color{muted}\suriLblQodIndicators}%
+  }{%
+    \tagbox{\suriLblConfirmed}%
+    \hspace{\suripx{12}}{\suriFS{9.5}{9.5}\color{muted}\suriLblQodConfirmed}%
+  }%
+  \par\vskip\suripx{13}}
+
+% ===========================================================================
+% 3d. Hex board measure — deliberately NOT overridden.
+%
+% This slot used to shrink the cell to 84/89/58.  That override was calibrated
+% against a 64px page margin; suricatoos-page.sty then settled on 56px, which
+% widens the card enough to hold a row of seven 88px cells at the model's own
+% 94px pitch.  Measured against the model, the module's numbers now give a
+% 676px board against the model's 677px, with the 7/6/6 honeycomb intact — so
+% the right move is to let suricatoos-hex.sty's calibration stand.
+%
+% If the page margin ever moves again, re-measure before re-adding an override:
+% shrinking the cell is a last resort, because it breaks the one place where
+% the board's geometry is the design.
+
+% ===========================================================================
+% 4. Document defaults.
+%
+% Paper colour, body colour and the page style come from suricatoos-page.  What
+% is left is the maths fallback and three settings that decide where a block
+% lands on a page.
+% ===========================================================================
+% Math sizes.
+%
+% This design enters math mode in exactly one construct, at two small text
+% sizes: \textsuperscript, which is \ensuremath underneath, and which sets the
+% dagger of a table footnote (8.5px) and the mark of a SERVIÇO cell (9.5px).
+% LaTeX then asks Computer Modern for script sizes of 4.5pt and 3.2pt, which no
+% CM design size covers, and the log fills with "Font shape ... not available"
+% size substitutions.  Pinning both script sizes to 5pt — the smallest CM that
+% really exists — makes the substitution explicit instead of accidental.
+% \suripx of 9.5px and 8.5px is 7.125pt and 6.375pt.
+\DeclareMathSizes{7.125}{7.125}{5}{5}
+\DeclareMathSizes{6.375}{6.375}{5}{5}
+% The SERVIÇO cell of the port table was later set at 11px (8.25pt), which is a
+% third size the mark can appear at.
+\DeclareMathSizes{8.25}{8.25}{5}{5}
+
+\AtBeginDocument{%
+  \setlength{\parindent}{0pt}%
+  % \topskip is the distance from the top of the text area down to the FIRST
+  % baseline of a page.  At its 10pt default a page that opens with something
+  % short — the Mono heading of pg-04, say — has that 10pt forced on it and
+  % starts 10px lower than a page that opens with a 26px section title, which is
+  % taller than the skip and therefore lands flush.  The design has one rule for
+  % both: the first line's ascender sits on the top of the text area.  Making
+  % \topskip smaller than any real line lets the box's own height set the
+  % baseline, which is exactly that rule.
+  \setlength{\topskip}{\suripx{1}}%
+  % Blocks hang from the top of the text area; a short page must not have its
+  % gaps stretched to fill the measure.
+  \raggedbottom}
+
+\makeatother
+\endinput

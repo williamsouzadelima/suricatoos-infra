@@ -1,0 +1,915 @@
+% suricatoos-blocks.sty — content blocks for the Suricatoos vulnerability report.
+%
+% Everything the report says *inside* a page: the KPI strip and severity bars of
+% the executive summary, the port table, the per-host cards, the two finding
+% summaries, and the two kinds of finding card.  Cover, page furniture and the
+% hex board live in their own modules.
+%
+% This module is purely visual.  Every public macro takes DATA only: severity is
+% always a key (critico|alto|medio|baixo|logsev|exposto|neutro), never a colour,
+% and every size comes from the spec in px through \suripx / \suriFS.  The XSLT
+% that generates the report body must never have to know a hex value or a length.
+%
+% Engine: pdflatex ONLY.  No rounded corners, no shadow, no gradient.
+%
+% Public API
+%   atoms      \sevsquare \sevword \setsevword \sevbadge \sevbadges \sevscore
+%              \sevstate \chip \chipfill \chipsev \chipwarn \chiprow
+%              \tagbox \tagboxc \fieldlabel \blocklabel \blocknote
+%   pg-02      \kpirow \kpibox \kpiboxnavy \sevbars (\sevbar) \timelinestrip
+%   pg-04      porttable env, \portrow, \portnotes, \portnote
+%   pg-05      \hostcard, \hostcols, \hostcolsingle, \hostrow
+%   pg-06/07   findingsummary env, \findingrow, \findingtrunc, \warnbox
+%   alerta     \alertbox — a medicao nao aconteceu (0 hosts vivos)
+%   pg-08      \consolidatedcard, \advisoryrow, \advisorytrunc
+%   pg-09      \findingcard, \fieldcols, \cvssvector, \affectedchips,
+%              termbox env, \solbox, \reflist, \refurl
+%   strings    \suriLbl... (every fixed word the blocks print, overridable)
+%
+% Copyright (C) 2026 Suricatoos.  SPDX-License-Identifier: GPL-2.0-or-later
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{suricatoos-blocks}[2026/08/22 Suricatoos report content blocks]
+
+\RequirePackage{suricatoos-tokens}
+\RequirePackage{tcolorbox}
+% adjustbox: usado pelo \suri@kpibox para impedir que um valor longo estoure a
+% tile. suricatoos-hex.sty tambem o carrega; pedir aqui deixa este modulo de pe
+% sozinho, e um \RequirePackage repetido nao custa nada.
+\RequirePackage{adjustbox}
+\tcbuselibrary{skins,breakable}
+\RequirePackage{longtable}
+\RequirePackage{array}
+\RequirePackage{colortbl}
+\RequirePackage{booktabs}
+\RequirePackage{calc}
+\RequirePackage{etoolbox}
+
+% \reflist needs hyperref, but hyperref insists on being loaded last and blows up
+% with an option clash if somebody else loads it with options after us.  So defer:
+% at the end of the preamble, load it only if the document has not already.
+\AtEndPreamble{\@ifpackageloaded{hyperref}{}{\RequirePackage[hidelinks]{hyperref}}}
+% Fallback only if the document really has no hyperref: run after \AtEndPreamble.
+\AtBeginDocument{\providecommand{\href}[2]{#2}}
+
+\makeatletter
+
+% ===========================================================================
+% Derived colours.
+%
+% Not new brand colours — mixes of the palette in suricatoos-tokens for two
+% situations the token file does not name: secondary text sitting ON navy, and
+% the two box borders the model uses that are tints of an existing ramp colour.
+% ===========================================================================
+\colorlet{onnavy}{baixo!58!white}      % hostname / KPI label over a navy ground
+% Measured off the model: the amber chip text is a deeper, more saturated amber
+% than a plain mix of `medio' with ink, and the warn BOX text is an amber-brown
+% of the same family as its ground -- not the generic blue-grey `body'.
+\definecolor{warnfg}{HTML}{8A5A00}     % text inside a warn chip
+\colorlet{warntext}{medio!45!ink}      % text inside the warn box (#5B4E1C)
+\colorlet{solborder}{baixo!30!white}   % hairline around the remediation box
+
+% ===========================================================================
+% Micro-label weight and tracking.
+%
+% \lbl (suricatoos-tokens) tracks every label at the shared \suritrack.  Measured
+% against the model, the content blocks want three different amounts of air, so
+% they keep their own values here instead of moving the shared one:
+%
+%   \suri@trkhead   table column headers                    ~0.12 em
+%   \suri@trkslab   block labels and the black/colour slabs ~0.22 em
+%   \suri@trkfield  the carmine field labels of pg-09       ~0.18 em
+%   \suri@trkband   the port count on the host card's band  ~0.04 em
+%   \suri@trksev    severity words (bars, ESTADO, badges)   ~0.02 em
+%
+% The model also sets every upper-case Mono label about half again as dark as
+% body Mono.  plex-mono ships regular and bold only (no medium/semibold face
+% exists in the subset -- asking for one is a "Font shape undefined"), and in a
+% MONOSPACED face bold does not change the advance, so the labels take \bfseries
+% and every tracking figure above still holds.
+% ===========================================================================
+\newcommand{\suri@trkhead}{120}
+\newcommand{\suri@trkslab}{220}
+\newcommand{\suri@trkfield}{180}
+\newcommand{\suri@trkband}{40}
+\newcommand{\suri@trksev}{25}
+% \suri@lblx{tracking}{colour}{size-px}{text} — one upper-case Mono label: the
+% signature of the design, in the weight and the tracking the model measures at.
+\newcommand{\suri@lblx}[4]{{\color{#2}\suriFS{#3}{#3}\suriMono\bfseries
+  \textls[#1]{\MakeUppercase{#4}}}}
+% NOTE on row height: an accented cap (MÉDIO, CRÍTICO) is taller than a plain one
+% and would make its row a pixel taller than its neighbours.  The cure is a
+% \suri@rowbase strut taller than any accent — NOT a \raisebox with a declared
+% height: inside a p{} cell that lifts the whole cell off the row's baseline.
+
+% ===========================================================================
+% Rule weights and struts.
+%
+% The design has exactly two rule weights: a 2px section rule in `ink' and a 1px
+% hairline.  A "2pt rule" in the spec is 2 design px; at the page's 0.75 scale
+% that is 1.5pt, which is what the model rasterises to.
+% ===========================================================================
+\newcommand{\suri@thick}{\suripx{2}}
+\newcommand{\suri@hair}{\suripx{1}}
+% \suri@strut{height-px}{depth-px} — invisible box that fixes a row's height.
+\newcommand{\suri@strut}[2]{\rule[-\suripx{#2}]{0pt}{\suripx{#1}}}
+% \suri@hrule{colour}{thickness} — a full-width rule with no surrounding skip.
+\newcommand{\suri@hrule}[2]{\par\nointerlineskip
+  {\color{#1}\hrule height #2\relax}\par\nointerlineskip}
+
+% ---------------------------------------------------------------------------
+% Row metrics.
+%
+% Inside a p{} column the row's vertical geometry comes from \@arstrutbox, and
+% nothing written in the cell can move the first baseline: \arraystretch scales the
+% top offset and the row height together, which is exactly what the model does not
+% want.  So the two are separated into two knobs, both calibrated against the model
+% rather than derived:
+%
+%   \suri@rowbase{px}  builds \strutbox at px/2 with \arraystretch at 1; larger px
+%                      pushes the text further down inside its row
+%   \suri@rowfill{px}  ends a row and pads its depth so the row measures exactly
+%                      px tall (verified: rule-to-rule pitch is px + 1px hairline)
+%
+% Every table here calls \suri@rowbase once, inside its own group, and every row
+% ends with \suri@rowfill.  Do not reach for \arraystretch on top of them.
+% ---------------------------------------------------------------------------
+\newcommand{\suri@rowbaseline}{16}
+\newcommand{\suri@rowbase}[1]{%
+  \renewcommand{\arraystretch}{1}%
+  \renewcommand{\suri@rowbaseline}{#1}%
+  \setbox\strutbox\hbox{\vrule height\dimexpr\suripx{#1}/2\relax depth\z@ \@width\z@}}
+\newcommand{\suri@rowfill}[1]{%
+  \rule[-\dimexpr\suripx{#1}-\suripx{\suri@rowbaseline}\relax]{0pt}{0pt}}
+
+% Table rules, usable after \\ inside longtable (they run in \noalign).
+\newcommand{\suri@rowhair}{\arrayrulecolor{hairlinetwo}\specialrule{\suri@hair}{0pt}{0pt}\arrayrulecolor{black}}
+\newcommand{\suri@rowthick}{\arrayrulecolor{ink}\specialrule{\suri@thick}{0pt}{0pt}\arrayrulecolor{black}}
+% Closing rule: pulled up by one hairline so it swallows the last row's hairline
+% instead of stacking a pale line on top of the dark one.
+\newcommand{\suri@rowclose}{\arrayrulecolor{ink}\specialrule{\suri@thick}{-\suri@hair}{0pt}\arrayrulecolor{black}}
+
+% ===========================================================================
+% Severity vocabulary.
+%
+% The severity KEY is data; the word printed for it is design (and language).
+% \setsevword lets a document override the whole vocabulary without touching
+% this file — the report is PT-BR today, it will not always be.
+% ===========================================================================
+\newcommand{\setsevword}[2]{\@namedef{suri@word@#1}{#2}}
+% \sevword{key} — the human word for a severity key (upper case is applied later)
+\newcommand{\sevword}[1]{\ifcsname suri@word@#1\endcsname\@nameuse{suri@word@#1}\else#1\fi}
+\setsevword{critico}{Cr\'itico}
+\setsevword{alto}{Alto}
+\setsevword{medio}{M\'edio}
+\setsevword{baixo}{Baixo}
+\setsevword{logsev}{Log}
+\setsevword{exposto}{Exposto}
+\setsevword{neutro}{Neutro}
+
+% Membership tests, written so they stay fully expandable: \rowcolor needs a
+% colour NAME, and the name has to survive expansion inside the row.
+\@namedef{suri@high@alto}{}
+\@namedef{suri@high@critico}{}
+\@namedef{suri@crit@critico}{}
+\@namedef{suri@log@logsev}{}
+% \suri@bghigh{sev} -> altobg for alto/critico, else the given fallback ground
+\newcommand{\suri@bghigh}[2]{\ifcsname suri@high@#1\endcsname altobg\else#2\fi}
+\newcommand{\suri@bgcrit}[2]{\ifcsname suri@crit@#1\endcsname criticobg\else#2\fi}
+% \suri@fg{sev} -> the row TEXT colour: Log rows drop to `muted', everything else
+% stays `ink'.  Not `logsev' — that paler grey is the badge's colour, and using it
+% for the name as well washes the whole line out against the model.
+\newcommand{\suri@fg}[1]{\ifcsname suri@log@#1\endcsname muted\else ink\fi}
+% \suri@ifempty{arg}{then}{else}
+\newcommand{\suri@ifempty}[3]{\if\relax\detokenize{#1}\relax#2\else#3\fi}
+
+% Overridable label strings (design furniture, not data).
+\newcommand{\suriLblRisk}{Classifica\c{c}\~ao geral de risco}
+\newcommand{\suriLblSeverityChart}{Achados por severidade}
+\newcommand{\suriLblTimeline}{Linha do tempo da avalia\c{c}\~ao}
+\newcommand{\suriLblPort}{Porta}
+\newcommand{\suriLblProto}{Proto}
+\newcommand{\suriLblService}{Servi\c{c}o}
+\newcommand{\suriLblState}{Estado}
+\newcommand{\suriLblCvssMax}{CVSS m\'ax}
+% (not \suriLblHosts — suricatoos-page.sty owns that one for the cover KPI)
+\newcommand{\suriLblHostsCol}{Hosts}
+\newcommand{\suriLblIps}{IPs mapeados}
+\newcommand{\suriLblAch}{Ach.}
+\newcommand{\suriLblMaxSev}{Maior severidade}
+\newcommand{\suriLblVuln}{Vulnerabilidade}
+\newcommand{\suriLblInst}{Inst.}
+\newcommand{\suriLblSev}{Severidade}
+\newcommand{\suriLblSevCeiling}{Severidade (teto)}
+\newcommand{\suriLblAdvisory}{Advisory}
+\newcommand{\suriLblSingleFix}{A\c{c}\~ao \'unica de remedia\c{c}\~ao}
+\newcommand{\suriLblSolution}{Solu\c{c}\~ao / remedia\c{c}\~ao}
+\newcommand{\suriLblCvssText}{CVSS}
+\newcommand{\suriLblPortsWith}{portas com achados}
+
+% ===========================================================================
+% Atoms: the coloured square, the severity badge, the chips, the tag box.
+% ===========================================================================
+
+% \sevsquare{colour} — the 7px filled square that prefixes every severity word.
+% Takes a COLOUR (already resolved) because it is also used in white on a filled
+% chip; \sevsquare{\sevcolor{alto}} is the normal call.
+\newcommand{\sevsquare}[1]{{\color{#1}\rule[\suripx{0.5}]{\suripx{7}}{\suripx{7}}}}
+
+% A badge must never break across lines, but it must NOT be wrapped in an \mbox
+% either: inside a p{} column an \mbox taller than the array strut drags the whole
+% row's geometry with it.  So the gap after the square is a \kern (not a
+% breakpoint) and the spaces inside the text are non-breaking.
+%
+% \sevbadge{sev}{cvss} — square + "ALTO · CVSS 8.6" in tracked Mono, in the
+% severity colour.  An empty second argument prints the word alone, which is how
+% Log findings read: \sevbadge{logsev}{} -> "LOG".
+\newcommand{\sevbadge}[2]{{%
+  \sevsquare{\sevcolor{#1}}\kern\suripx{5}%
+  \suri@lblx{\suri@trksev}{\sevcolor{#1}}{9}{\sevword{#1}%
+    \suri@ifempty{#2}{}{~\textperiodcentered~\suriLblCvssText~#2}}}}
+
+% \sevbadges{sev}{cvss} — the short form used where the column header already
+% says CVSS: "ALTO · 8.6" (host cards, advisory lists).
+\newcommand{\sevbadges}[2]{{%
+  \sevsquare{\sevcolor{#1}}\kern\suripx{5}%
+  \suri@lblx{\suri@trksev}{\sevcolor{#1}}{8.5}{\sevword{#1}%
+    \suri@ifempty{#2}{}{~\textperiodcentered~#2}}}}
+
+% \sevscore{sev}{cvss} — the same short form WITHOUT the square, for a list that
+% is already all one severity column and reads as a right-hand rail (pg-08).
+\newcommand{\sevscore}[2]{{%
+  \suri@lblx{\suri@trksev}{\sevcolor{#1}}{8.5}{\sevword{#1}%
+    \suri@ifempty{#2}{}{~\textperiodcentered~#2}}}}
+
+% \sevstate{sev} — square + severity word, no score.  The ESTADO column.
+\newcommand{\sevstate}[1]{{%
+  \sevsquare{\sevcolor{#1}}\kern\suripx{6}%
+  \suri@lblx{\suri@trksev}{\sevcolor{#1}}{8.5}{\sevword{#1}}}}
+
+% Chip geometry: 7px inner padding all round plus a strut, which lands the 23px
+% chip height of the model regardless of what is inside.  Every chip carries its
+% own 11px right gap, and that gap is where a chip line is allowed to wrap — so
+% callers just concatenate chips and never have to insert spacing themselves.
+% The model's chip padding is NOT isotropic: ~10.5px left and right against 7px
+% top and bottom.  \fboxsep can only do one number, so it keeps the vertical
+% figure and the extra side air comes from a kern inside the box.
+\newcommand{\suri@chippad}{\kern\suripx{3.5}}
+\newcommand{\suri@chipbody}[1]{\suriFS{9}{9}\suriMono
+  \suri@chippad#1\suri@chippad\suri@strut{9}{2.5}}
+\newcommand{\suri@chipsep}{\hskip\suripx{10}\relax}
+
+% \chip{texto} — outline chip: white ground, hairline border.  CVEs, instance
+% counts, host:port pairs.
+\newcommand{\chip}[1]{{%
+  \setlength{\fboxsep}{\suripx{7}}\setlength{\fboxrule}{\suri@hair}%
+  \fcolorbox{hairline}{card}{\color{body}\suri@chipbody{#1}}\suri@chipsep}}
+
+% \chipfill{sev}{texto} — chip filled with the severity colour, white text.
+\newcommand{\chipfill}[2]{{%
+  \setlength{\fboxsep}{\suripx{7}}\setlength{\fboxrule}{0pt}%
+  \fcolorbox{\sevcolor{#1}}{\sevcolor{#1}}{\color{white}\suri@chipbody{#2}}\suri@chipsep}}
+
+% \chipsev{sev}{cvss} — the filled chip a finding card leads with:
+% white square + "ALTO · CVSS 8.6" on the severity colour.
+% Filled chips carry their text in bold, outline chips do not — that is what the
+% model measures, and it is why \bfseries lives here and not in \suri@chipbody.
+\newcommand{\chipsev}[2]{\chipfill{#1}{%
+  \sevsquare{white}\kern\suripx{5}\bfseries
+  \textls[\suri@trksev]{\MakeUppercase{\sevword{#1}%
+    \suri@ifempty{#2}{}{~\textperiodcentered~\suriLblCvssText~#2}}}}}
+
+% \chipwarn{texto} — the amber "low confidence" chip (warnbg / warnborder).
+\newcommand{\chipwarn}[1]{{%
+  \setlength{\fboxsep}{\suripx{7}}\setlength{\fboxrule}{\suri@hair}%
+  \fcolorbox{warnborder}{warnbg}{\color{warnfg}\bfseries\suri@chipbody{#1}}\suri@chipsep}}
+
+% \chiprow{chips} — a wrapping line of chips.  Feed it \chip/\chipfill/\chipwarn
+% calls; it supplies the horizontal gap and the line spacing between wrapped rows.
+% Chip lines are boxes, not text: zero \baselineskip with an unreachable
+% \lineskiplimit turns every inter-line gap — including the one above the first
+% chip line — into a flat 8px, which is what makes the spacing predictable.
+\newcommand{\chiprow}[1]{{\par\raggedright
+  \parindent=0pt \parskip=0pt
+  \baselineskip=0pt \lineskip=\suripx{8}\relax \lineskiplimit=\maxdimen
+  \noindent#1\unskip\par}}
+
+% \tagbox{texto} — the black slab that titles a summary ("ACHADOS CONFIRMADOS").
+\newcommand{\tagbox}[1]{\tagboxc{ink}{#1}}
+% \tagboxc{cor}{texto} — same slab in another colour ("INDICADORES A VALIDAR").
+% The colour is a token name, e.g. `medio'.
+\newcommand{\tagboxc}[2]{{%
+  \setlength{\fboxsep}{\suripx{6}}%
+  \colorbox{#1}{\hspace{\suripx{7}}%
+    \suri@lblx{\suri@trkslab}{white}{9}{#2}\suri@strut{9}{2}%
+    \hspace{\suripx{7}}}}}
+
+% \fieldlabel{texto} — the small carmine Mono label over a block (pg-09).
+% \nopagebreak: a label is the heading of the block under it, and a page that
+% ends with the label alone sends the reader to the next page to find out what
+% it was labelling.  The penalty forbids the break at the 3px gap, so the label
+% travels with the first line of its own copy.
+\newcommand{\fieldlabel}[1]{\par\nointerlineskip
+  {\parindent=0pt\suri@lblx{\suri@trkfield}{critico}{8.5}{#1}\par}%
+  \nopagebreak\vskip\suripx{3}\nopagebreak}
+
+% \blocklabel{texto} — the same label in muted grey, for chart and table titles.
+\newcommand{\blocklabel}[1]{\par\nointerlineskip
+  {\parindent=0pt\suri@lblx{\suri@trkslab}{muted}{9}{#1}\par}%
+  \nopagebreak\vskip\suripx{9}\nopagebreak}
+
+% Table column headers, left and right aligned.  Zero-width boxes: a long label
+% such as "CVSS MAX" then hangs over its neighbour instead of breaking in two,
+% which is what the model does and what a narrow column needs.
+\newcommand{\suri@hlbl}[1]{\makebox[0pt][l]{\suri@lblx{\suri@trkhead}{muted}{8.5}{#1}}}
+\newcommand{\suri@hlblr}[1]{\makebox[0pt][r]{\suri@lblx{\suri@trkhead}{muted}{8.5}{#1}}}
+
+% \blocknote{texto} — the small muted note that hangs under a card or a table.
+\newcommand{\blocknote}[1]{\par{\parindent=0pt\raggedright
+  \suriFS{9.5}{14.5}\color{muted}#1\par}}
+
+% ===========================================================================
+% KPI strip (pg-02).
+% ===========================================================================
+\newlength{\suri@kpiA}   % navy box
+\newlength{\suri@kpiB}   % each white box
+\newlength{\suri@kpiG}   % gutter
+
+% \suri@fitvalue{value} — the value as it is, unless it does not fit.
+% The VALUE of the navy tile is a word, and a word is language: "CRÍTICO" fits
+% the 0.3042 measure at 34px, but "INFORMATIVO" — the risk word of a CLEAN scan
+% in pt and in es — runs 53.6pt past the tile and the ink is clipped by the
+% border.  Nothing happens while the value fits, which is every number and
+% every short word; only the rare long one is scaled to the measure.
+% The declared height and depth stay those of the UNSCALED box, so the shrunken
+% word still sits on the same baseline as the three numbers beside it — which is
+% the whole point of the fixed 112px tile.
+\newsavebox{\suri@valbox}
+\newcommand{\suri@fitvalue}[1]{%
+  \sbox\suri@valbox{#1}%
+  \ifdim\wd\suri@valbox>\linewidth
+    \raisebox{\z@}[\ht\suri@valbox][\dp\suri@valbox]{%
+      \resizebox{\linewidth}{!}{\usebox\suri@valbox}}%
+  \else \usebox\suri@valbox \fi}
+
+% \suri@kpibox{ground}{labelcolour}{valuecolour}{frame}{width}{label}{value}
+% Fixed 112px tall: the label hangs from the top, the value sits on the bottom,
+% so a one-line and a two-line label still share the same value baseline.
+\newcommand{\suri@kpibox}[7]{%
+  \begin{tcolorbox}[nobeforeafter,enhanced,sharp corners,arc=0pt,outer arc=0pt,
+      colback=#1,colframe=#4,boxrule=\suri@hair,
+      width=#5,valign=top,
+      left=\suripx{20},right=\suripx{26},top=0pt,bottom=0pt,boxsep=0pt]%
+    \vbox to \suripx{110}{%
+      \vskip\suripx{20}%
+      % \suriFS here as well as inside the label: a two-line KPI label breaks its
+      % lines with the \baselineskip in force OUTSIDE \suri@lblx's own group.
+      {\parindent=0pt\raggedright\suriFS{8.5}{11}%
+        \suri@lblx{\suri@trkslab}{#2}{8.5}{#6}\par}%
+      \vfill
+      {\parindent=0pt\color{#3}\suriFS{34}{34}\bfseries\suri@fitvalue{#7}\par}%
+      \vskip\suripx{28}}%
+  \end{tcolorbox}}
+
+% \kpibox{rotulo}{valor} — one white KPI tile on its own (hairline border,
+% muted Mono label, 34px number).  Width = \linewidth.
+\newcommand{\kpibox}[2]{\suri@kpibox{card}{muted}{ink}{hairline}{\linewidth}{#1}{\dat{#2}}}
+
+% \kpiboxnavy{rotulo}{valor} — the dark tile: navy ground, value in `riskvalue'.
+\newcommand{\kpiboxnavy}[2]{\suri@kpibox{navy}{onnavy}{riskvalue}{navy}{\linewidth}{#1}{#2}}
+
+% \kpirow{r1}{v1}{r2}{v2}{r3}{v3}{r4}{v4} — the four-tile strip of pg-02.
+% Tile 1 is the navy risk classification (value set in Sans, it is a WORD);
+% tiles 2-4 are white with hairline borders and Mono numbers.  Tile 1 is wider
+% than the other three, exactly as in the model: the risk word needs the room.
+\newcommand{\kpirow}[8]{%
+  \setlength{\suri@kpiA}{0.3042\linewidth}%
+  \setlength{\suri@kpiB}{0.2169\linewidth}%
+  \setlength{\suri@kpiG}{0.0150\linewidth}%
+  \par\noindent
+  \suri@kpibox{navy}{onnavy}{riskvalue}{navy}{\suri@kpiA}{#1}{#2}\hspace{\suri@kpiG}%
+  \suri@kpibox{card}{muted}{ink}{hairline}{\suri@kpiB}{#3}{\dat{#4}}\hspace{\suri@kpiG}%
+  \suri@kpibox{card}{muted}{ink}{hairline}{\suri@kpiB}{#5}{\dat{#6}}\hspace{\suri@kpiG}%
+  \suri@kpibox{card}{muted}{ink}{hairline}{\suri@kpiB}{#7}{\dat{#8}}%
+  \par}
+
+% ===========================================================================
+% Severity bars (pg-02).
+%
+% \sevbars{\sevbar{critico}{4}\sevbar{alto}{58}...} — horizontal bars scaled to
+% the largest count in the list.  The argument is read twice: once to find the
+% maximum, once to draw.  That keeps the caller from having to pass the maximum,
+% which the XSLT would otherwise have to compute.
+% ===========================================================================
+\newcounter{suri@barmax}
+\newcommand{\suri@barscan}[2]{\ifnum#2>\value{suri@barmax}\setcounter{suri@barmax}{#2}\fi}
+% One bar.  The label is NOT a \lbl: in the model the severity word beside a bar
+% is set solid — Mono bold, one size up and with next to no tracking, so that
+% BAIXO and MEDIO read as words — and it is lifted to sit optically centred in
+% the bar instead of sharing the bar's own baseline.
+\newcommand{\suri@bardraw}[2]{%
+  \par\nointerlineskip\noindent
+  % label, right aligned, in the severity colour
+  \makebox[0.0944\linewidth][r]{\raisebox{\suripx{5.75}}{%
+    \suri@lblx{\suri@trksev}{\sevcolor{#1}}{10}{\sevword{#1}}}}%
+  \hspace{0.0169\linewidth}%
+  % track + filled bar, both 16.5px tall, sharing a baseline
+  \makebox[0.8127\linewidth][l]{%
+    \rlap{{\color{track}\rule{0.8127\linewidth}{\suripx{16.5}}}}%
+    {\color{\sevcolor{#1}}\rule{\dimexpr0.8127\linewidth*#2/\value{suri@barmax}\relax}{\suripx{16.5}}}}%
+  \hspace{0.0169\linewidth}%
+  % count — the number the eye goes to first, so it carries the weight
+  \makebox[0.0592\linewidth][l]{\raisebox{\suripx{4}}{\dat{\suriFS{11}{11}\bfseries\color{ink}#2}}}%
+  \par\vskip\suripx{9}}
+\newcommand{\sevbars}[1]{{%
+  \parindent=0pt\parskip=0pt
+  \setcounter{suri@barmax}{1}%
+  \let\sevbar\suri@barscan #1%
+  \let\sevbar\suri@bardraw #1%
+  \par}}
+% \sevbar{sev}{contagem} — one row inside \sevbars.  Never used on its own.
+\newcommand{\sevbar}[2]{}
+
+% ===========================================================================
+% Timeline strip (pg-02).
+% ===========================================================================
+\newlength{\suri@tlcol}
+% One timeline cell.  #1 is `l' for the first column (no boundary rule, no inset)
+% and `r' for the others, which carry the hairline that marks the column boundary
+% plus a 15px inset, so the three text blocks land on exact thirds of the measure.
+\newcommand{\suri@tlcell}[3]{%
+  \makebox[\suri@tlcol][l]{%
+    \if r#1{\color{hairline}\rule[-\suripx{37}]{\suri@hair}{\suripx{60}}}\hspace{\suripx{14}}\fi
+    \begin{minipage}[t][\suripx{60}][t]{\dimexpr\suri@tlcol-\if r#1\suripx{15}\else\z@\fi\relax}%
+      \parindent=0pt\raggedright
+      \suri@lblx{\suri@trkfield}{critico}{8.5}{#2}\par\vskip\suripx{9}%
+      {\suriMono\bfseries\suriFS{11}{14}\color{ink}#3\par}%
+    \end{minipage}}}
+% \timelinestrip{r1}{v1}{r2}{v2}{r3}{v3} — three columns under a 2px ink rule,
+% separated by full-height hairlines.  A value may carry a \\ to break its second
+% line ("ter, 30 jun 2026\\00:00 UTC").
+\newcommand{\timelinestrip}[6]{%
+  \par\suri@hrule{ink}{\suri@thick}%
+  \setlength{\suri@tlcol}{\dimexpr\linewidth/3\relax}%
+  \noindent
+  \suri@tlcell{l}{#1}{#2}%
+  \suri@tlcell{r}{#3}{#4}%
+  \suri@tlcell{r}{#5}{#6}%
+  \par}
+
+% ===========================================================================
+% Port table (pg-04).
+%
+%   \begin{porttable}
+%     \portrow{21}{\ddag}{tcp}{ftp\,\dag}{medio}{7.5}{1}{162.241.63.40}
+%     ...
+%   \end{porttable}
+%   \portnotes{\portnote{\dag}{...}\portnote{\ddag}{...}}
+%
+% longtable, so the Mono header under its 2px ink rule repeats on every page and
+% the table closes with a second 2px rule.  Rows carry a hairline underneath and
+% alto/critico rows get the soft `altobg' ground.
+% ===========================================================================
+\newlength{\suri@ptw}
+% the gutter between HOSTS and IPS, owned by the HOSTS cell (see above)
+\newcommand{\suri@ptgut}{\kern0.0141\suri@ptw}
+\newcommand{\suri@pthead}{%
+  \suri@hlbl{\suriLblPort}&\suri@hlbl{\suriLblProto}&
+  \suri@hlbl{\suriLblService}&\suri@hlbl{\suriLblState}&
+  \suri@hlblr{\suriLblCvssMax}&\suri@hlblr{\suriLblHostsCol}\suri@ptgut&
+  \suri@hlbl{\suriLblIps}\suri@rowfill{27}\\
+  \suri@rowthick}
+\newenvironment{porttable}{%
+  \setlength{\suri@ptw}{\linewidth}%
+  \suri@rowbase{16}%
+  \setlength{\tabcolsep}{0pt}%
+  \setlength{\LTpre}{0pt}\setlength{\LTpost}{0pt}%
+  \setlength{\LTleft}{0pt}\setlength{\LTright}{0pt}%
+  \longtable{@{}%
+    >{\raggedright\arraybackslash}p{0.0972\suri@ptw}%
+    >{\raggedright\arraybackslash}p{0.0817\suri@ptw}%
+    >{\raggedright\arraybackslash}p{0.1239\suri@ptw}%
+    >{\raggedright\arraybackslash}p{0.1930\suri@ptw}%
+    >{\raggedleft\arraybackslash}p{0.0704\suri@ptw}%
+    >{\raggedleft\arraybackslash}p{0.0930\suri@ptw}%
+    >{\raggedright\arraybackslash}p{0.3408\suri@ptw}@{}}
+  \suri@pthead\endfirsthead
+  \suri@pthead\endhead
+  \suri@rowclose\endlastfoot
+}{\endlongtable}
+
+% \portrow{porta}{marcas}{proto}{servico}{sev}{cvss}{hosts}{ips}
+% `marcas' are the footnote symbols that sit next to the port number (\dag,
+% \ddag or empty); `sev' is the severity key that drives both the ESTADO cell
+% and whether the row gets the alto ground.
+\newcommand{\portrow}[8]{%
+  \rowcolor{\suri@bghigh{#5}{paper}}%
+  {\dat{\suriFS{9.5}{9.5}\bfseries\color{ink}#1}%
+    \suri@ifempty{#2}{}{\kern\suripx{3}{\color{ink}\suriFS{9.5}{9.5}#2}}}&
+  {\dat{\suriFS{9.5}{9.5}\color{muted}#3}}&
+  {\suriFS{11}{12}\color{ink}#4}&
+  {\sevstate{#5}}&
+  {\dat{\suriFS{10}{10}\bfseries\color{ink}#6}}&
+  {\dat{\suriFS{10}{10}\color{ink}#7}\suri@ptgut}&
+  {\dat{\suriFS{9.5}{12}\color{muted}#8}}\suri@rowfill{26}\\
+  \suri@rowhair}
+
+% \portnote{simbolo}{texto} — one footnote line under the table.
+\newcommand{\portnote}[2]{\par{\parindent=0pt\raggedright
+  \suriFS{9.5}{14}\color{muted}\textsuperscript{{\bfseries\color{ink}#1}}\,#2\par}%
+  \vskip\suripx{4}}
+% \portnotes{conteudo} — the block of \portnote lines; supplies the space above.
+\newcommand{\portnotes}[1]{\par\vskip\suripx{12}#1\par}
+
+% ===========================================================================
+% Host card (pg-05).
+%
+%   \hostcard{162.241.63.40}{webmail.loga.com.br}{Linux/Unix}{19}{%
+%     \hostcols{\hostrow{21/tcp}{55}{alto}{7.5} ...}{\hostrow{2078/tcp}{67}{alto}{7.5} ...}}
+%
+% Navy title band (Mono IP, grey hostname, OS badge in a `navychip' box, port
+% count on the right) over a white body of two mini-tables.
+%
+% LIMIT: the two columns are minipages, so the body cannot break across a page —
+% two side-by-side tables have no legal breakpoint between them.  About 30 rows
+% per column is what fits on an A4 page; a host with more ports has to be emitted
+% as several \hostcard chunks by the caller.
+% ===========================================================================
+% The terminal glyph belongs to suricatoos-hex.sty, where it takes an optional
+% colour (\icoterm[onnavy]).  If that module is not loaded we still need SOMETHING
+% in the OS badge, so a plain prompt with the same signature stands in.  Deferred
+% to \begin{document} so hex.sty keeps the right to \newcommand it.
+\AtBeginDocument{\providecommand{\icoterm}[1][muted]{%
+  \raisebox{\suripx{0.5}}{\color{#1}\suriFS{8}{8}\textgreater\_}}}
+
+\newlength{\suri@hcw}   % width of one mini-table column
+% the gutter before MAIOR SEVERIDADE, owned by the ACH. cell (see the port table)
+\newcommand{\suri@hcgut}{\kern0.0282\suri@hcw}
+\newcommand{\suri@hchead}{%
+  \suri@hlbl{\suriLblPort}&\suri@hlblr{\suriLblAch}\suri@hcgut&
+  \suri@hlbl{\suriLblMaxSev}\suri@rowfill{24}\\
+  \arrayrulecolor{ink}\specialrule{\suri@hair}{0pt}{0pt}\arrayrulecolor{black}%
+  \noalign{\global\let\suri@rowsep\@empty}}
+
+% The mini-table draws its hairline BETWEEN rows, never after the last one: the
+% model closes each column on white, and a rule hard against the card's bottom
+% edge reads as a mistake.  So a row opens with the separator its predecessor
+% owed and never closes itself; \end{tabular} finishes the final row.
+% \suri@rowsep must be set globally — an assignment inside a cell would be undone
+% when the cell's group closes.
+\newcommand{\suri@rowsep}{}
+\newcommand{\suri@rowsepnext}{\\\suri@rowhair}
+
+% \hostrow{porta}{n-achados}{sev}{cvss} — one line of a host mini-table.
+% Critical lines take the soft `criticobg' ground; everything else stays white.
+\newcommand{\hostrow}[4]{%
+  \suri@rowsep
+  \noalign{\global\let\suri@rowsep\suri@rowsepnext}%
+  \rowcolor{\suri@bgcrit{#3}{card}}%
+  {\dat{\suriFS{9.5}{9.5}\bfseries\color{ink}#1}}&
+  {\dat{\suriFS{9.5}{9.5}\color{ink}#2}\suri@hcgut}&
+  {\sevbadges{#3}{#4}}\suri@rowfill{24}}
+
+% The gap before MAIOR SEVERIDADE is part of that column, not an @{} group:
+% colortbl paints cells, never the material between them, so a gutter written as
+% @{\hspace{...}} punches a white notch straight through every tinted row.
+\newcommand{\suri@hostcol}[1]{%
+  \begin{minipage}[t]{\suri@hcw}%
+    \suri@rowbase{16.5}%
+    \global\let\suri@rowsep\@empty
+    \setlength{\tabcolsep}{0pt}%
+    \begin{tabular}{@{}>{\raggedright\arraybackslash}p{0.2508\suri@hcw}%
+                      >{\raggedleft\arraybackslash}p{0.1160\suri@hcw}%
+                      >{\raggedright\arraybackslash}p{0.6332\suri@hcw}@{}}
+      \suri@hchead #1
+    \end{tabular}%
+  \end{minipage}}
+
+% \hostcols{linhas-esquerda}{linhas-direita} — the two-column body of a host
+% card.  Each side is a run of \hostrow.
+\newcommand{\hostcols}[2]{%
+  \setlength{\suri@hcw}{\dimexpr(\linewidth-\suripx{31})/2\relax}%
+  \noindent\suri@hostcol{#1}\hspace{\suripx{31}}\suri@hostcol{#2}\par}
+% \hostcolsingle{linhas} — one full-width mini-table, for hosts with few ports.
+\newcommand{\hostcolsingle}[1]{%
+  \setlength{\suri@hcw}{\linewidth}%
+  \noindent\suri@hostcol{#1}\par}
+
+% \hostcard{ip}{hostname}{so}{n-portas}{corpo}
+\newcommand{\hostcard}[5]{%
+  \begin{tcolorbox}[breakable,enhanced,sharp corners,arc=0pt,outer arc=0pt,
+      colback=card,colframe=hairline,boxrule=\suri@hair,
+      left=0pt,right=0pt,top=0pt,bottom=0pt,boxsep=0pt]%
+    % --- navy title band -------------------------------------------------
+    {\setlength{\fboxsep}{0pt}%
+     \colorbox{navy}{\begin{minipage}{\linewidth}%
+       \vspace*{\suripx{12}}%
+       % same 20px inset as the table below it, so band and body share an edge
+       \noindent\hspace{\suripx{20}}%
+       \dat{\suriFS{13}{13}\bfseries\color{white}#1}\hspace{\suripx{11}}%
+       {\suriFS{11}{11}\color{onnavy}#2}\hspace{\suripx{13}}%
+       % The OS chip is wider than it is tall: \fboxsep is symmetric and cannot
+       % give 9px of side air on a 15px-high box, so the sides get their own kern.
+       {\setlength{\fboxsep}{\suripx{3}}%
+        \colorbox{navychip}{\kern\suripx{6}\color{onnavy}\icoterm[onnavy]\hspace{\suripx{5}}%
+          \suri@lblx{\suri@trkslab}{onnavy}{8.5}{#3}\suri@strut{8}{1}\kern\suripx{6}}}%
+       \hfill
+       {\suri@lblx{\suri@trkband}{onnavy}{8.5}{#4\ \suriLblPortsWith}}\hspace*{\suripx{20}}%
+       \par\vspace*{\suripx{14}}%
+     \end{minipage}}}%
+    % --- body ------------------------------------------------------------
+    % \vskip at the very end of a vbox is discarded, so the closing air has to be
+    % \vspace* after a \par or the last row ends up flush against the frame.
+    \vskip\suripx{14}%
+    \noindent\hspace{\suripx{20}}%
+    \begin{minipage}{\dimexpr\linewidth-\suripx{40}\relax}#5\end{minipage}%
+    \hspace{\suripx{20}}%
+    \par\vspace*{\suripx{20}}%
+  \end{tcolorbox}}
+
+% ===========================================================================
+% Finding summaries (pg-06 / pg-07).
+%
+%   \begin{findingsummary}{confirmados}   % or {indicadores}
+%     \findingrow{1}{ISC BIND --- Atualiza\c{c}\~ao pendente}{22}{alto}{8.6}
+%     \findingrow{10}{SSL/TLS: ...}{60}{logsev}{}
+%   \end{findingsummary}
+%   \findingtrunc{\ldots\ + 35 achados informativos (Log)}
+%
+% `modo' selects the last column header and whether a critical row is highlighted:
+% in the "indicadores" table (QoD < 70%) the severity is a ceiling, and the
+% critical line is called out with the soft carmine ground.
+% ===========================================================================
+\newlength{\suri@fsw}
+% the gutter before SEVERIDADE, owned by the INST. cell (see the port table)
+\newcommand{\suri@fsgut}{\kern0.0155\suri@fsw}
+\newcommand{\suri@fsbg}[1]{paper}
+\newcommand{\suri@fssevlbl}{\suriLblSev}
+\newcommand{\suri@fshead}{%
+  \suri@hlbl{\#}&\suri@hlbl{\suriLblVuln}&
+  \suri@hlblr{\suriLblInst}\suri@fsgut&\suri@hlbl{\suri@fssevlbl}\suri@rowfill{25}\\
+  \suri@rowthick}
+\newenvironment{findingsummary}[1]{%
+  \def\suri@fsmode{#1}%
+  \def\suri@fsmodeind{indicadores}%
+  \ifx\suri@fsmode\suri@fsmodeind
+    \renewcommand{\suri@fsbg}[1]{\suri@bgcrit{##1}{paper}}%
+    \renewcommand{\suri@fssevlbl}{\suriLblSevCeiling}%
+  \else
+    \renewcommand{\suri@fsbg}[1]{paper}%
+    \renewcommand{\suri@fssevlbl}{\suriLblSev}%
+  \fi
+  \setlength{\suri@fsw}{\linewidth}%
+  \suri@rowbase{17}%
+  \setlength{\tabcolsep}{0pt}%
+  \setlength{\LTpre}{0pt}\setlength{\LTpost}{0pt}%
+  \setlength{\LTleft}{0pt}\setlength{\LTright}{0pt}%
+  \longtable{@{}%
+    >{\raggedright\arraybackslash}p{0.0592\suri@fsw}%
+    >{\raggedright\arraybackslash}p{0.6182\suri@fsw}%
+    >{\raggedleft\arraybackslash}p{0.0761\suri@fsw}%
+    >{\raggedright\arraybackslash}p{0.2465\suri@fsw}@{}}
+  \suri@fshead\endfirsthead
+  \suri@fshead\endhead
+  \endlastfoot
+}{\endlongtable}
+
+% \findingrow{n}{nome}{instancias}{sev}{cvss} — one summary line.  A Log finding
+% greys out completely (number, name, count and badge) and shows no score.
+\newcommand{\findingrow}[5]{%
+  \rowcolor{\suri@fsbg{#4}}%
+  {\dat{\suriFS{10}{10}\color{muted}#1}}&
+  {\suriFS{10.75}{13}\color{\suri@fg{#4}}#2}&
+  {\dat{\suriFS{10}{10}\color{\suri@fg{#4}}#3}\suri@fsgut}&
+  {\sevbadge{#4}{#5}}\suri@rowfill{24}\\
+  \suri@rowhair}
+
+% \findingtrunc{texto} — the muted Mono line that closes a truncated summary.
+\newcommand{\findingtrunc}[1]{\par\vskip\suripx{10}%
+  {\parindent=0pt\raggedright\suriMono\suriFS{9}{13}\color{logsev}#1\par}}
+
+% \warnbox{texto} — the amber caveat box of pg-07.
+\newcommand{\warnbox}[1]{%
+  \begin{tcolorbox}[breakable,enhanced,sharp corners,arc=0pt,outer arc=0pt,
+      colback=warnbg,colframe=warnborder,coltext=warntext,boxrule=\suri@hair,
+      left=\suripx{17},right=\suripx{17},top=\suripx{16},bottom=\suripx{16},boxsep=0pt]%
+    {\parindent=0pt\raggedright\suriFS{11}{16}#1\par}%
+  \end{tcolorbox}}
+
+% \alertbox{titulo}{texto} — the loudest block in the system.
+%
+% \warnbox qualifies a finding ("treat this severity as a ceiling").  This one
+% says something else entirely: THE MEASUREMENT DID NOT HAPPEN.  It exists
+% because a vulnerability scan that reached no host still ends as "Done", and a
+% report that then prints an empty summary reads as a clean bill of health —
+% the most dangerous thing this document can do.  So it gets the critical
+% colour, a 4px spine, and a title, and it is deliberately not subtle.
+\newcommand{\alertbox}[2]{%
+  \begin{tcolorbox}[breakable,enhanced,sharp corners,arc=0pt,outer arc=0pt,
+      colback=criticobg,colframe=critico,coltext=ink,boxrule=\suri@hair,
+      borderline west={\suripx{4}}{0pt}{critico},
+      left=\suripx{17},right=\suripx{17},top=\suripx{15},bottom=\suripx{16},
+      boxsep=0pt]%
+    {\parindent=0pt\raggedright
+     \suri@lblx{\suri@trkslab}{critico}{10}{#1}\par\vskip\suripx{7}%
+     \suriFS{11}{16}#2\par}%
+  \end{tcolorbox}}
+
+% ===========================================================================
+% Consolidated finding card (pg-08).
+% ===========================================================================
+\newlength{\suri@ccl}   % card padding, left
+\newlength{\suri@ccr}   % card padding, right
+\newlength{\suri@ccb}   % width of the severity spine on the left border
+\newsavebox{\suri@cchdr} % title + chips + paragraph, boxed so the spine can
+                         % measure itself against exactly that block
+
+% \advisoryrow{nome}{sev}{cvss} — one advisory: name left in ink, "ALTO · 8.6"
+% right in the severity colour, hairline underneath.
+% Both halves open with the same strut so their first lines have identical
+% height — without it the badge and the advisory name sit on different baselines,
+% because each minipage would take its first-line height from its own content.
+% The list carries no severity square: the whole right-hand rail is one column
+% of scores, so the square adds nothing and only widens the column.
+\newcommand{\advisoryrow}[3]{%
+  \par\nointerlineskip\vskip\suripx{4}%
+  \noindent
+  \begin{minipage}[t]{\dimexpr\linewidth-0.20\linewidth\relax}%
+    \parindent=0pt\raggedright\suri@strut{12}{4}%
+    \suriFS{10.5}{13}\color{ink}#1%
+  \end{minipage}%
+  \begin{minipage}[t]{0.20\linewidth}%
+    \parindent=0pt\raggedleft\suri@strut{12}{4}\sevscore{#2}{#3}%
+  \end{minipage}%
+  \par\nointerlineskip\vskip\suripx{5}%
+  \suri@hrule{hairlinetwo}{\suri@hair}}
+
+% \advisorytrunc{texto} — "+ 12 advisories a mais…" under the list.
+\newcommand{\advisorytrunc}[1]{\par\vskip\suripx{8}%
+  {\parindent=0pt\raggedright\suriMono\suriFS{9}{13}\color{logsev}#1\par}}
+
+% \suri@fullband{colour}{content} — a band that ignores the card's padding and
+% bleeds to both frame edges.  Used for the navy remediation footer.
+% The spine no longer runs the height of the card (it belongs to the header
+% block alone), so the band reaches the frame on both sides with nothing left
+% over — no white filet between spine and band.
+\newcommand{\suri@fullband}[2]{%
+  \par\nointerlineskip
+  % The band is deliberately wider than the text measure — it has to reach the
+  % card's inner edges — so silence the overfull report it would otherwise raise.
+  \hfuzz=\dimexpr\suri@ccl+\suri@ccr\relax
+  \noindent\hspace*{-\suri@ccl}%
+  {\setlength{\fboxsep}{0pt}%
+   \colorbox{#1}{\begin{minipage}{\dimexpr\linewidth+\suri@ccl+\suri@ccr\relax}#2\end{minipage}}}%
+  \par}
+
+% \consolidatedcard{sev}{titulo}{tag}{chips}{paragrafo}{advisories}{acao}
+%   sev        severity key -> left border colour
+%   titulo     product/finding title (Sans semibold)
+%   tag        text of the black slab on the right, e.g. CONSOLIDADO
+%   chips      a \chiprow{...} worth of chips
+%   paragrafo  the explanatory sentence
+%   advisories a run of \advisoryrow, optionally closed by \advisorytrunc
+%   acao       the single remediation command, set in Mono on navy
+\newcommand{\consolidatedcard}[7]{%
+  \setlength{\suri@ccl}{\suripx{22}}\setlength{\suri@ccr}{\suripx{20}}%
+  \setlength{\suri@ccb}{\suripx{5}}%
+  \begin{tcolorbox}[breakable,enhanced,sharp corners,arc=0pt,outer arc=0pt,
+      colback=card,colframe=hairline,coltext=body,boxrule=\suri@hair,
+      left=\suri@ccl,right=\suri@ccr,top=\suripx{5},bottom=0pt,boxsep=0pt]%
+    \parindent=0pt
+    % The severity spine belongs to the HEADER, not to the frame: in the model it
+    % stops where the ADVISORY label starts.  A tcolorbox `borderline west' would
+    % paint the full height of the card and sit on top of the navy band as well,
+    % so the header goes into a box and the spine is drawn to its measure.
+    \sbox{\suri@cchdr}{\begin{minipage}[t]{\linewidth}%
+      \parindent=0pt
+      % title + tag
+      \noindent\begin{minipage}[t]{\dimexpr\linewidth-0.20\linewidth\relax}%
+        \raggedright\suriFS{16}{22}\suriSB\color{ink}#2%
+      \end{minipage}%
+      % Both minipages are [t], so the slab's own baseline lands on the title's
+      % first baseline — which hangs the slab ~11px ABOVE the title's optical
+      % centre.  The model centres it on the title line, so drop it by that much.
+      \begin{minipage}[t]{0.20\linewidth}\raggedleft
+        \raisebox{-\suripx{11}}[0pt][0pt]{\tagbox{#3}}%
+      \end{minipage}%
+      \par\vskip\suripx{4}%
+      \chiprow{#4}%
+      \vskip\suripx{14}%
+      {\raggedright\suriFS{11}{16}\color{body}#5\par}%
+    \end{minipage}}%
+    \noindent\hspace*{-\suri@ccl}%
+      \raisebox{0pt}[0pt][0pt]{\rlap{\color{\sevcolor{#1}}%
+        \rule[-\dimexpr\dp\suri@cchdr+\suripx{17}\relax]{\suri@ccb}%
+          {\dimexpr\ht\suri@cchdr+\dp\suri@cchdr+\suripx{5}+\suripx{17}\relax}}}%
+      \hspace*{\suri@ccl}%
+      \usebox{\suri@cchdr}%
+    \par\vskip\suripx{17}%
+    \blocklabel{\suriLblAdvisory}%
+    \suri@hrule{ink}{\suri@hair}%
+    #6%
+    \vskip\suripx{18}%
+    \suri@fullband{navy}{%
+      \vspace*{\suripx{14}}%
+      \noindent\hspace{\suri@ccl}%
+        \suri@lblx{\suri@trkfield}{gold}{8.5}{\suriLblSingleFix}\par
+      \vskip\suripx{4}%
+      \noindent\hspace{\suri@ccl}%
+        \dat{\suriFS{11}{15}\color{white}#7}\par
+      \vspace*{\suripx{15}}}%
+  \end{tcolorbox}}
+
+% ===========================================================================
+% Detailed finding card and its labelled blocks (pg-09).
+% ===========================================================================
+
+% \findingcard{sev}{numero}{titulo}{chips} — the header card: "#16" in carmine
+% Mono, the title in Sans semibold, then the chip line.  The labelled blocks
+% (\fieldlabel, \cvssvector, \termbox, ...) sit on the page BELOW the card, not
+% inside it — that is how the model is built.
+% NOT breakable: the card is three lines at most, and when it was allowed to
+% split, a page ended with the title bar alone and the next one opened with an
+% anonymous chip row (SEVERIDADE · CVSS · QoD) with no vulnerability name over
+% it — the reader could not tell which finding those chips belonged to.  An
+% unbreakable box simply moves whole to the next page.
+\newcommand{\findingcard}[4]{%
+  \begin{tcolorbox}[enhanced,sharp corners,arc=0pt,outer arc=0pt,
+      colback=card,colframe=hairline,boxrule=\suri@hair,
+      borderline west={\suripx{3}}{0pt}{\sevcolor{#1}},
+      left=\suripx{22},right=\suripx{20},top=\suripx{18},bottom=\suripx{13},boxsep=0pt,
+      % ...and the card is a heading: it travels with the first block under it,
+      % so a page never ends on a finding header whose body is overleaf.  The
+      % penalty has to replace tcolorbox's own after-skip (`after'), not follow
+      % it: a \nopagebreak written after \end{tcolorbox} arrives too late,
+      % because the page then simply breaks at that glue instead.  The gap under
+      % the card is unaffected — every block below carries its own leading air.
+      after={\par\nopagebreak}]%
+    \parindent=0pt
+    % the number carries the finding's severity, exactly like the spine beside it
+    \noindent{\dat{\suriFS{13}{17}\bfseries\color{\sevcolor{#1}}#2}}\hspace{\suripx{10}}%
+    {\suriFS{15}{20}\suriSB\color{ink}#3}%
+    \par\vskip\suripx{4}%
+    \chiprow{#4}%
+  \end{tcolorbox}}
+
+% \fieldcols{esquerda}{direita} — the two-up row of pg-09 (VETOR CVSS beside
+% SISTEMAS AFETADOS).  Each side gets just under half the measure.
+\newcommand{\fieldcols}[2]{\par\noindent
+  \begin{minipage}[t]{0.49\linewidth}#1\end{minipage}\hfill
+  \begin{minipage}[t]{0.49\linewidth}#2\end{minipage}\par}
+
+% \cvssvector{vetor} — the grey Mono box holding the CVSS vector string.
+\newcommand{\cvssvector}[1]{%
+  \begin{tcolorbox}[enhanced,sharp corners,arc=0pt,outer arc=0pt,
+      colback=track,colframe=hairline,boxrule=\suri@hair,
+      height=\suripx{31},valign=center,
+      left=\suripx{14},right=\suripx{14},top=0pt,bottom=0pt,boxsep=0pt]%
+    \parindent=0pt\dat{\suriFS{10}{14}\color{ink}#1}%
+  \end{tcolorbox}}
+
+% \affectedchips{chips} — the wrapping run of `host:porta' chips.  Feed it \chip
+% calls; it only supplies the spacing.
+\newcommand{\affectedchips}[1]{\chiprow{#1}}
+
+% termbox — the detection-result terminal: navy ground, green Mono, one output
+% line per source line.  Breakable, because scanner output is often long.
+%
+%   \begin{termbox}
+%   Installed version: 9.9
+%   Fixed version:     10.1
+%   \end{termbox}
+\newenvironment{termbox}{%
+  \tcolorbox[breakable,enhanced,sharp corners,arc=0pt,outer arc=0pt,
+      colback=termbg,colframe=termbg,coltext=termfg,boxrule=0pt,
+      left=\suripx{17},right=\suripx{17},top=\suripx{16},bottom=\suripx{15},boxsep=0pt]%
+  \parindent=0pt\parskip=0pt\raggedright\suriMono\suriFS{10}{17}%
+  \obeylines\ignorespaces
+}{\endtcolorbox}
+
+% \solbox{texto} — the remediation box: `solbg' ground, its own carmine label,
+% the vendor fix usually set in bold inside the text.
+\newcommand{\solbox}[1]{%
+  \begin{tcolorbox}[breakable,enhanced,sharp corners,arc=0pt,outer arc=0pt,
+      colback=solbg,colframe=solborder,coltext=ink,boxrule=\suri@hair,
+      left=\suripx{17},right=\suripx{17},top=\suripx{12},bottom=\suripx{10},boxsep=0pt]%
+    \parindent=0pt
+    % The box is breakable because a vendor fix can run long; the penalties keep
+    % the split honest — never the label alone at the foot of a page, never a
+    % single leftover line at the top of the next one with no label over it.
+    \clubpenalty=10000 \widowpenalty=10000
+    \suri@lblx{\suri@trkfield}{critico}{8.5}{\suriLblSolution}\par
+    \nopagebreak\vskip\suripx{3}\nopagebreak
+    {\raggedright\suriFS{11}{16}#1\par}%
+  \end{tcolorbox}}
+
+% \refurl{url} — one reference line, carmine Mono, hyperlinked.
+\newcommand{\refurl}[1]{\par\noindent{\suriMono\suriFS{9}{14}\color{critico}\href{#1}{#1}}\par}
+% \reflist{urls} — the REFERÊNCIAS block; feed it \refurl calls.  Each \refurl is
+% its own paragraph, so \parskip has to be zeroed or the list opens up by a
+% paragraph gap per line — and the leading has to be set HERE, because the
+% \baselineskip that spaces two paragraphs is the one outside \refurl's group.
+\newcommand{\reflist}[1]{\par{\parindent=0pt\parskip=0pt
+  \suriFS{9}{14}\raggedright#1\par}}
+
+\makeatother
+\endinput

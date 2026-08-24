@@ -1,0 +1,121 @@
+% suricatoos-tokens.sty — design tokens for the Suricatoos vulnerability report.
+%
+% This is the CONTRACT every other module of the report design system builds on:
+% the type stack, the colour palette, the px->pt scale and the low-level text
+% helpers.  Nothing here draws anything; it only names things.
+%
+% Engine: pdflatex ONLY.  The production gvmd container has no luaotfload, so
+% fontspec/lualatex is not an option; IBM Plex is loaded as Type1 through the
+% CTAN `plex' package, whose TDS subtree ships with the report format bundle and
+% is put on TEXMFHOME by the `generate' script.
+%
+% Copyright (C) 2026 Suricatoos.  SPDX-License-Identifier: GPL-2.0-or-later
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{suricatoos-tokens}[2026/08/22 Suricatoos report design tokens]
+
+\RequirePackage{xcolor}
+\RequirePackage{letterspace}
+
+% ---------------------------------------------------------------------------
+% Type stack.
+%
+% \pdfmapfile MUST come before the plex packages: the font map is not installed
+% in the container's texmf tree, it travels with the bundle, so pdftex has to be
+% told about it explicitly or every Plex face silently falls back to Latin
+% Modern.  `sfdefault' makes Plex Sans the document font; `semibold' enables the
+% sb series used by section titles and card headings.
+% ---------------------------------------------------------------------------
+\pdfmapfile{+plex.map}
+\RequirePackage[type1,sfdefault,semibold]{plex-sans}
+\RequirePackage[type1]{plex-mono}
+
+\newcommand{\suriSans}{\sffamily}
+\newcommand{\suriMono}{\ttfamily}
+% Semibold is a real face (plxSans-SmBld), not a synthetic weight.
+\newcommand{\suriSB}{\fontseries{sb}\selectfont}
+
+% ---------------------------------------------------------------------------
+% px -> pt.
+%
+% The design was authored in CSS pixels on an A4 page (794x1123 px); the PDF page
+% is 595x842 pt.  The ratio is 0.75, i.e. the usual 96dpi px.  Every size in the
+% spec is quoted in px, so keep converting through here instead of hand-rounding
+% at each call site.
+% ---------------------------------------------------------------------------
+\newcommand{\suripx}[1]{\dimexpr#1pt*3/4\relax}
+% \suriFS{size-in-px}{leading-in-px}
+\newcommand{\suriFS}[2]{\fontsize{\suripx{#1}}{\suripx{#2}}\selectfont}
+
+% ---------------------------------------------------------------------------
+% Palette.
+% ---------------------------------------------------------------------------
+\definecolor{ink}{HTML}{16212C}
+\definecolor{navy}{HTML}{101B29}
+\definecolor{navyline}{HTML}{26374C}
+\definecolor{navychip}{HTML}{22344A}
+\definecolor{paper}{HTML}{FBFAF7}
+\definecolor{card}{HTML}{FFFFFF}
+\definecolor{hairline}{HTML}{DEE2E7}
+\definecolor{hairlinetwo}{HTML}{ECEEF1}
+\definecolor{muted}{HTML}{63707F}
+\definecolor{body}{HTML}{3D4A59}
+
+% Severity ramp.  `exposto' is a port that answered but carries no scored
+% finding; `neutro' is a port with nothing at all.
+\definecolor{critico}{HTML}{A81E3C}
+\definecolor{alto}{HTML}{C25A14}
+\definecolor{medio}{HTML}{B08508}
+\definecolor{baixo}{HTML}{47708D}
+\definecolor{logsev}{HTML}{8A94A0}
+\definecolor{exposto}{HTML}{6D5FA5}
+\definecolor{neutro}{HTML}{C4CBD3}
+
+% Soft fills paired with the ramp above.
+\definecolor{criticobg}{HTML}{FBEFF1}
+\definecolor{altobg}{HTML}{FDF6F0}
+\definecolor{altobgdeep}{HTML}{FBEADC}
+\definecolor{mediobg}{HTML}{FBF5E1}
+\definecolor{baixobg}{HTML}{EDF1F5}
+\definecolor{logsevbg}{HTML}{F1F3F5}
+\definecolor{expostobg}{HTML}{EFECF7}
+\definecolor{neutrobg}{HTML}{F4F6F8}
+
+\definecolor{gold}{HTML}{E4B24C}
+\definecolor{riskvalue}{HTML}{FF4D6A}   % risk word on a navy ground
+\definecolor{track}{HTML}{F1EFEA}       % unfilled part of a severity bar
+\definecolor{warnbg}{HTML}{FBF3DC}
+\definecolor{warnborder}{HTML}{E3CE8E}
+\definecolor{termbg}{HTML}{101B29}
+\definecolor{termfg}{HTML}{9FE8B8}
+\definecolor{solbg}{HTML}{EFF3F6}
+
+% ---------------------------------------------------------------------------
+% Severity lookup.
+%
+% \sevcolor{alto} -> the ramp colour, \sevbg{alto} -> the soft fill.  Callers
+% pass the severity key as data (it comes straight from the XSLT), so an unknown
+% key must degrade to something readable rather than blow up the run.
+% ---------------------------------------------------------------------------
+\newcommand{\sevcolor}[1]{%
+  \ifcsname\string\color@#1\endcsname #1\else muted\fi}
+\newcommand{\sevbg}[1]{%
+  \ifcsname\string\color@#1bg\endcsname #1bg\else neutrobg\fi}
+
+% ---------------------------------------------------------------------------
+% Text helpers.
+%
+% \lbl is the signature of this design: monospace, upper case, widely tracked.
+% Letter-spacing is quoted in the spec in px of tracking; \textls takes
+% thousandths of an em, and 1.5-3px at these sizes lands around 180-260.
+% ---------------------------------------------------------------------------
+\newcommand{\suritrack}{220}
+\newcommand{\lbl}[1]{{\suriMono\textls[\suritrack]{\MakeUppercase{#1}}}}
+% \lblc{colour}{text} and \lbls{px}{text} for the coloured / resized variants.
+\newcommand{\lblc}[2]{{\color{#1}\lbl{#2}}}
+\newcommand{\lbls}[2]{{\suriFS{#1}{#1}\lbl{#2}}}
+\newcommand{\lblcs}[3]{{\color{#1}\suriFS{#2}{#2}\lbl{#3}}}
+
+% Monospace data (IPs, ports, CVSS, timestamps) — never tracked, never upper.
+\newcommand{\dat}[1]{{\suriMono #1}}
+
+\endinput

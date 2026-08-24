@@ -1,0 +1,306 @@
+% main.tex — the worked example of the Suricatoos premium report.
+%
+% This file is the CONTRACT the XSLT imitates: ten pages, each one a handful of
+% semantic macro calls carrying DATA.  There is not a single colour, length or
+% \vspace below — if one were needed, the macro is missing from a .sty.
+%
+% Data: project loga.com.br, host 162.241.63.40 / webmail.loga.com.br.
+% Build: pdflatex main.tex (twice, for \pageref{LastPage}).
+\documentclass[10pt,a4paper]{article}
+\usepackage{suricatoos-report}
+
+\begin{document}
+
+% ===================================================================== pg-01
+% Cover.
+% ===========================================================================
+\suriCover{
+  kicker={Avalia\c{c}\~ao de Vulnerabilidades},
+  title={Relat\'orio de Avalia\c{c}\~ao\\de Vulnerabilidades},
+  subtitle={Elaborado pela Plataforma de Seguran\c{c}a Suricatoos},
+  projeto={loga.com.br},
+  hosts={1},
+  inicio={ter, 30 jun 2026 00:00 UTC},
+  fim={qua, 1 jul 2026 00:02 UTC},
+  data={20 de agosto de 2026},
+  classificacao={CONFIDENCIAL}
+}
+
+% ===================================================================== pg-02
+% Section 1 — executive summary.
+% ===========================================================================
+\suriSection{1}{Resumo Executivo}
+
+\suriPara{Este relat\'orio apresenta os resultados de uma avalia\c{c}\~ao de
+vulnerabilidades realizada pela Plataforma de Seguran\c{c}a Suricatoos.
+O projeto \textbf{``loga.com.br''} avaliou 1 host(s) e produziu 797
+resultado(s), descrevendo 98 vulnerabilidade(s) \'unica(s). Destas,
+\textbf{62 achado(s) s\~ao de severidade Alta ou Cr\'itica} e exigem
+remedia\c{c}\~ao imediata --- 62 de baixa confian\c{c}a (valida\c{c}\~ao
+manual necess\'aria).}
+
+\kpirow{\suriLblRisk}{CR\'ITICO}%
+       {Hosts avaliados}{1}%
+       {Total de achados}{797}%
+       {Vulns \'unicas}{98}
+
+\blocklabel{\suriLblSeverityChart}
+\sevbars{\sevbar{critico}{4}\sevbar{alto}{58}\sevbar{medio}{98}\sevbar{baixo}{7}}
+
+\blocklabel{\suriLblTimeline}
+\timelinestrip{In\'icio do scan}{ter, 30 jun 2026\\00:00 UTC}%
+              {Fim do scan}{qua, 1 jul 2026\\00:02 UTC}%
+              {Relat\'orio gerado}{20 de agosto\\de 2026}
+
+% ===================================================================== pg-03
+% Section 2 — port exposure map.  The header runner is shorter than the title.
+% ===========================================================================
+\clearpage
+\suriSection{2}{Mapa de Exposi\c{c}\~ao de Portas}
+\setsectionrunner{2}{MAPA DE EXPOSI\c{C}\~AO}
+
+\suriPara{Cada hex\'agono \'e uma porta de rede observada no escopo avaliado;
+a chave da c\'elula \'e o par (transporte, porta). Cor e preenchimento carregam
+a \textbf{maior severidade observada} naquela porta em todos os hosts que a
+exp\~oem.}
+
+\hexcard{loga.com.br}{1 host \textperiodcentered\ 19 portas \'unicas
+                      \textperiodcentered\ qua, 1 jul 2026 00:02 UTC}{%
+  \begin{hexboard}
+    \hexport{FTP}{21/TCP}{162.241.63.40}{medio}
+    \hexport{SSH}{22/TCP}{162.241.63.40}{medio}
+    \hexport{DOMAIN}{53/TCP}{162.241.63.40}{medio}
+    \hexport{HTTP}{80/TCP}{162.241.63.40}{alto}
+    \hexport{POP3}{110/TCP}{162.241.63.40}{medio}
+    \hexport{IMAP}{143/TCP}{162.241.63.40}{medio}
+    \hexport{HTTPS}{443/TCP}{162.241.63.40}{alto}
+    \hexport{IMAPS}{993/TCP}{162.241.63.40}{exposto}
+    \hexport{POP3S}{995/TCP}{162.241.63.40}{exposto}
+    \hexport{TCP}{2077/TCP}{162.241.63.40}{medio}
+    \hexport{TCP}{2078/TCP}{162.241.63.40}{medio}
+    \hexport{TCP}{2082/TCP}{162.241.63.40}{medio}
+    \hexport{TCP}{2083/TCP}{162.241.63.40}{medio}
+    \hexport{TCP}{2086/TCP}{162.241.63.40}{medio}
+    \hexport{TCP}{2087/TCP}{162.241.63.40}{medio}
+    \hexport{TCP}{2095/TCP}{162.241.63.40}{medio}
+    \hexport{TCP}{2096/TCP}{162.241.63.40}{medio}
+    \hexport{TCP}{2222/TCP}{162.241.63.40}{medio}
+    \hexport{MYSQL}{3306/TCP}{162.241.63.40}{medio}
+  \end{hexboard}
+  \hexlegend{0}{2}{15}{0}{2}{0}}
+
+\blocknote{1 host(s) tamb\'em t\^em achados de n\'ivel de host (general/*).
+Esses n\~ao s\~ao portas de rede e est\~ao deliberadamente fora do tabuleiro;
+aparecem na se\c{c}\~ao \emph{Hosts e Portas Abertas}.}
+
+% ===================================================================== pg-04
+% Section 2, continued — the observed-port table.
+% ===========================================================================
+\clearpage
+\blocklabel{\suriLblPortsMapped}
+\begin{porttable}
+  \portrow{21}{\ddag}{tcp}{ftp\portmark{\dag}}{medio}{7.5}{1}{162.241.63.40}
+  \portrow{22}{\ddag}{tcp}{ssh\portmark{\dag}}{medio}{7.5}{1}{162.241.63.40}
+  \portrow{53}{\ddag}{tcp}{domain\portmark{\dag}}{medio}{8.6}{1}{162.241.63.40}
+  \portrow{80}{\ddag}{tcp}{http\portmark{\dag}}{alto}{9.9}{1}{162.241.63.40}
+  \portrow{110}{}{tcp}{pop3\portmark{\dag}}{medio}{4.8}{1}{162.241.63.40}
+  \portrow{143}{}{tcp}{imap\portmark{\dag}}{medio}{4.8}{1}{162.241.63.40}
+  \portrow{443}{\ddag}{tcp}{https\portmark{\dag}}{alto}{9.9}{1}{162.241.63.40}
+  \portrow{993}{}{tcp}{imaps\portmark{\dag}}{exposto}{0.0}{1}{162.241.63.40}
+  \portrow{995}{}{tcp}{pop3s\portmark{\dag}}{exposto}{0.0}{1}{162.241.63.40}
+  \portrow{2077}{}{tcp}{tcp}{medio}{4.8}{1}{162.241.63.40}
+  \portrow{2078}{\ddag}{tcp}{tcp}{medio}{7.5}{1}{162.241.63.40}
+  \portrow{2082}{}{tcp}{tcp}{medio}{4.8}{1}{162.241.63.40}
+  \portrow{2083}{\ddag}{tcp}{tcp}{medio}{7.5}{1}{162.241.63.40}
+  \portrow{2086}{}{tcp}{tcp}{medio}{4.8}{1}{162.241.63.40}
+  \portrow{2087}{\ddag}{tcp}{tcp}{medio}{7.5}{1}{162.241.63.40}
+  \portrow{2095}{}{tcp}{tcp}{medio}{4.8}{1}{162.241.63.40}
+  \portrow{2096}{\ddag}{tcp}{tcp}{medio}{7.5}{1}{162.241.63.40}
+  \portrow{2222}{\ddag}{tcp}{tcp}{medio}{7.5}{1}{162.241.63.40}
+  \portrow{3306}{\ddag}{tcp}{mysql\portmark{\dag}}{medio}{7.5}{1}{162.241.63.40}
+\end{porttable}
+\portnotes{%
+  \portnote{\dag}{nome IANA da porta: o scan N\~AO identificou o servi\c{c}o em
+    execu\c{c}\~ao nesta porta.}
+  \portnote{\ddag}{o achado de maior severidade nesta porta foi reportado com
+    BAIXA qualidade de detec\c{c}\~ao --- o estado exibido foi rebaixado um
+    n\'ivel e precisa ser validado manualmente.}}
+
+% ===================================================================== pg-05
+% Section 3 — hosts and open ports.
+% ===========================================================================
+\clearpage
+\suriSection{3}{Hosts e Portas Abertas}
+\setsectionrunner{3}{HOSTS E PORTAS}
+
+\suriPara{Servi\c{c}os de rede descobertos em cada host avaliado, com o n\'umero
+de achados e a maior severidade observada em cada porta.}
+
+\hostcard{162.241.63.40}{webmail.loga.com.br}{Linux/Unix}{19}{%
+  \hostcols{%
+    \hostrow{21/tcp}{55}{alto}{7.5}
+    \hostrow{22/tcp}{12}{alto}{7.5}
+    \hostrow{53/tcp}{23}{alto}{8.6}
+    \hostrow{80/tcp}{38}{critico}{9.9}
+    \hostrow{110/tcp}{36}{medio}{4.8}
+    \hostrow{143/tcp}{36}{medio}{4.8}
+    \hostrow{443/tcp}{92}{critico}{9.9}
+    \hostrow{993/tcp}{35}{logsev}{}
+    \hostrow{995/tcp}{35}{logsev}{}
+    \hostrow{2077/tcp}{24}{medio}{4.8}
+  }{%
+    \hostrow{2078/tcp}{67}{alto}{7.5}
+    \hostrow{2082/tcp}{31}{medio}{4.8}
+    \hostrow{2083/tcp}{72}{alto}{7.5}
+    \hostrow{2086/tcp}{31}{medio}{4.8}
+    \hostrow{2087/tcp}{72}{alto}{7.5}
+    \hostrow{2095/tcp}{31}{medio}{4.8}
+    \hostrow{2096/tcp}{72}{alto}{7.5}
+    \hostrow{2222/tcp}{13}{alto}{7.5}
+    \hostrow{3306/tcp}{10}{alto}{7.5}
+    \hostrow{geral}{12}{baixo}{2.6}
+  }}
+
+\blocknote{Achados de n\'ivel de host (general/*) n\~ao s\~ao portas de rede ---
+1 achado Log e 11 achados Baixo \textperiodcentered\ CVSS 2.6 agregados na linha
+\dat{geral}.}
+
+% ===================================================================== pg-06
+% Section 4 — summary of confirmed findings (QoD >= 70%).
+% ===========================================================================
+\clearpage
+\suriSection{4}{Sum\'ario de Achados}
+
+\suriSummaryHead{confirmados}
+\begin{findingsummary}{confirmados}
+  \findingrow{1}{ISC BIND --- Atualiza\c{c}\~ao pendente}{22}{alto}{8.6}
+  \findingrow{2}{Oracle MySQL --- Atualiza\c{c}\~ao pendente}{7}{alto}{7.5}
+  \findingrow{3}{Anonymous FTP Login Reporting}{1}{medio}{6.4}
+  \findingrow{4}{Cleartext Transmission of Sensitive Information via HTTP}{24}{medio}{4.8}
+  \findingrow{5}{IMAP Unencrypted Cleartext Login}{1}{medio}{4.8}
+  \findingrow{6}{FTP Unencrypted Cleartext Login}{6}{medio}{4.8}
+  \findingrow{7}{POP3 Unencrypted Cleartext Login}{1}{medio}{4.8}
+  \findingrow{8}{Weak MAC Algorithm(s) Supported (SSH)}{2}{baixo}{2.6}
+  \findingrow{9}{TCP Timestamps Information Disclosure}{1}{baixo}{2.6}
+  \findingrow{10}{SSL/TLS: Report Perfect Forward Secrecy (PFS) Cipher Suites}{60}{logsev}{}
+  \findingrow{11}{SSL/TLS: Safe/Secure Renegotiation Support Status}{60}{logsev}{}
+  \findingrow{12}{SSL/TLS: NPN / ALPN Extension and Protocol Support Detection}{6}{logsev}{}
+  \findingrow{13}{HTTP Security Headers Detection}{60}{logsev}{}
+  \findingrow{14}{HTTP Server type and version}{24}{logsev}{}
+  \findingrow{15}{Unknown OS and Service Banner Reporting}{1}{logsev}{}
+  \findingrow{16}{Anti-Scanner Defenses (HTTP)}{2}{logsev}{}
+  \findingrow{17}{SSL/TLS: Report Medium Cipher Suites}{60}{logsev}{}
+  \findingrow{18}{SSL/TLS: Report Non Weak Cipher Suites}{60}{logsev}{}
+  \findingrow{19}{SSL/TLS: Report Supported Cipher Suites}{60}{logsev}{}
+  \findingrow{20}{CPE Inventory}{1}{logsev}{}
+\end{findingsummary}
+\findingtrunc{\suriEllip\ + 35 achados informativos (Log) --- lista completa no
+  relat\'orio integral.}
+
+% ===================================================================== pg-07
+% Section 4, continued — indicators to validate (QoD < 70%).
+% ===========================================================================
+\clearpage
+\suriSummaryHead{indicadores}
+
+\warnbox{O scanner reportou os itens abaixo com \textbf{baixa qualidade de
+detec\c{c}\~ao}. S\~ao inconclusivos por natureza e precisam ser validados
+manualmente antes de qualquer esfor\c{c}o de remedia\c{c}\~ao --- trate a
+severidade exibida como um \textbf{teto}, n\~ao como fato confirmado.}
+
+\begin{findingsummary}{indicadores}
+  \findingrow{1}{jQuery End of Life (EOL) Detection --- Linux}{4}{critico}{9.9}
+  \findingrow{2}{Diffie-Hellman Ephemeral Key Exchange DoS (SSL/TLS, D(HE)ater)}{36}{alto}{7.5}
+  \findingrow{3}{Diffie-Hellman Ephemeral Key Exchange DoS (SSH, D(HE)ater)}{2}{alto}{7.5}
+  \findingrow{4}{OpenBSD OpenSSH 6.8p1 -- 9.9p1 MitM Vulnerability}{2}{medio}{6.8}
+  \findingrow{5}{Mailman < 3.3.5 REST API Vulnerability}{2}{medio}{6.3}
+  \findingrow{6}{jQuery < 3.4.0 Object Extensions Vulnerability}{4}{medio}{6.1}
+  \findingrow{7}{jQuery 1.2 < 3.5.0 XSS Vulnerability}{4}{medio}{6.1}
+  \findingrow{8}{jQuery 1.0.3 < 3.5.0 XSS Vulnerability}{4}{medio}{6.1}
+  \findingrow{9}{jQuery < 3.0.0 XSS Vulnerability}{4}{medio}{6.1}
+  \findingrow{10}{SSL/TLS: BREACH attack against HTTP compression}{28}{medio}{5.9}
+  \findingrow{11}{Prefix Truncation Attacks in SSH Specification (Terrapin Attack)}{2}{medio}{5.9}
+  \findingrow{12}{OpenBSD OpenSSH 9.5p1 -- 9.9p1 DoS Vulnerability}{2}{medio}{5.9}
+  \findingrow{13}{WordPress `wp-cron.php' Accessible/Enabled (HTTP) --- Active Check}{2}{medio}{5.3}
+  \findingrow{14}{OpenSSH Information Disclosure Vulnerability (CVE-2016-20012)}{2}{medio}{5.3}
+  \findingrow{15}{OpenBSD OpenSSH 7.4 -- 9.9 Unspecified Vulnerability}{2}{baixo}{3.8}
+  \findingrow{16}{OpenBSD OpenSSH < 10.1 Multiple Vulnerabilities}{2}{baixo}{2.4}
+\end{findingsummary}
+
+% ===================================================================== pg-08
+% Section 5 — detailed findings: the consolidated card.
+% ===========================================================================
+\clearpage
+\suriSection{5}{Achados Detalhados}
+
+\consolidatedcard{alto}{Atualiza\c{c}\~ao pendente: ISC BIND}{Consolidado}{%
+    \chipsev{alto}{8.6}\chip{22 ADVISORIES}\chip{HOST 162.241.63.40}}{%
+    O scanner reportou 22 advisories separados para este produto. Eles se
+    acumulam um por vers\~ao do fornecedor e s\~ao resolvidos por uma
+    \textbf{\'unica a\c{c}\~ao}: atualizar o produto para uma vers\~ao
+    suportada.}{%
+    \advisoryrow{ISC BIND Cache-Poisoning Vulnerability (CVE-2025-40776, Birthday Attack) --- Linux}{alto}{8.6}
+    \advisoryrow{ISC BIND Cache Poisoning Vulnerability (CVE-2025-40778) --- Linux}{alto}{8.6}
+    \advisoryrow{ISC BIND Cache Poisoning Vulnerability (CVE-2025-40780) --- Linux}{alto}{8.6}
+    \advisoryrow{ISC BIND DoS Vulnerability (CVE-2024-1737) --- Linux}{alto}{7.5}
+    \advisoryrow{ISC BIND Multiple DoS Vulnerabilities (CVE-2022-3736, CVE-2022-3924) --- Linux}{alto}{7.5}
+    \advisoryrow{ISC BIND DoS Vulnerability (CVE-2023-4408) --- Linux}{alto}{7.5}
+    \advisoryrow{ISC BIND DoS Vulnerability (CVE-2024-4076) --- Linux}{alto}{7.5}
+    \advisoryrow{ISC BIND DoS Vulnerability (CVE-2023-5517) --- Linux}{alto}{7.5}
+    \advisoryrow{ISC BIND DoS Vulnerability (CVE-2023-5679) --- Linux}{alto}{7.5}
+    \advisoryrow{ISC BIND DoS Vulnerability (CVE-2023-6516) --- Linux}{alto}{7.5}
+    \advisorytrunc{+ 12 advisories a mais deste produto, at\'e CVSS 7.5 ---
+      todos resolvidos pela mesma atualiza\c{c}\~ao.}}{%
+    Update to version 9.20.11, 9.18.38-S1, 9.20.11-S1 or later.}
+
+% ===================================================================== pg-09
+% Section 5, continued — one detailed finding.
+% ===========================================================================
+\clearpage
+\findingcard{baixo}{\#16}{OpenBSD OpenSSH < 10.1 Multiple Vulnerabilities}{%
+  \chipsev{baixo}{2.4}%
+  \chipwarn{QoD 30\% \textperiodcentered\ BAIXA CONFIAN\c{C}A}%
+  \chip{2 INST\^ANCIAS}\chip{CVE-2025-61984}\chip{CVE-2025-61985}}
+
+\fieldcols{%
+  \fieldlabel{\suriLblFldVector}%
+  \cvssvector{AV:L/AC:H/Au:S/C:P/I:P/A:N}}{%
+  \fieldlabel{\suriLblFldAffected}%
+  \affectedchips{\chip{162.241.63.40:22/tcp}\chip{162.241.63.40:2222/tcp}}}
+
+\fieldlabel{\suriLblFldSummary}
+\suriPara{OpenBSD OpenSSH is prone to multiple vulnerabilities.}
+
+\fieldlabel{\suriLblFldTech}
+\begin{suribullets}
+\item \textbf{CVE-2025-61984:} `ssh' allows control characters in usernames that
+  originate from certain possibly untrusted sources, potentially leading to code
+  execution when a ProxyCommand is used.
+\item \textbf{CVE-2025-61985:} `ssh' allows the `\textbackslash0' character in an
+  ssh:// URI, potentially leading to code execution when a ProxyCommand is used.
+\end{suribullets}
+
+\fieldlabel{\suriLblFldDetection}
+\begin{termbox}
+Installed version: 9.9
+Fixed version: 10.1
+Installation path / port: 22/tcp
+\end{termbox}
+
+\solbox{Corre\c{c}\~ao do Fornecedor: \textbf{Update to version 10.1 or later.}}
+
+\fieldlabel{\suriLblFldRefs}
+\reflist{%
+  \refurl{https://www.openssh.com/txt/release-10.1}
+  \refurl{https://www.openssh.com/security.html}
+  \refurl{https://www.openwall.com/lists/oss-security/2025/10/06/1}}
+
+% ===================================================================== pg-10
+% Back cover.
+% ===========================================================================
+\suriBackCover{
+  projeto={loga.com.br},
+  data={20 de agosto de 2026}
+}
+
+\end{document}
