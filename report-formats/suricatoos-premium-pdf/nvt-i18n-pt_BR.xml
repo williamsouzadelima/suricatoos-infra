@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Catalogo de traducao dos NVTs, indexado pelo OID.
-     Origem: textos do Greenbone Community Feed (GPL), traduzidos para pt-BR.
-     Quebras de linha ja desescapadas: a coluna do banco guarda "\n" como dois
-     caracteres, e o XML do relatorio entrega quebra real. -->
+<!-- Catálogo de tradução dos NVTs, indexado pelo OID.
+     Origem: textos do Greenbone Community Feed (GPL), traduzidos.
+     Gerado por tools/build-nvt-catalog.py — não editar à mão.
+     OID ausente aqui faz o relatório cair no texto do fornecedor, e o
+     card recebe o chip "ORIGINAL DO FORNECEDOR". -->
 <nvti18n lang="pt_BR">
 <n o="1.3.6.1.4.1.25623.1.1.12.2025.7756.1"><name>Ubuntu: Aviso de segurança (USN-7756-1)</name><summary>O host remoto está sem uma atualização para o(s) pacote(s) 'imagemagick' anunciada no aviso USN-7756-1.</summary><insight>Foi descoberto que o ImageMagick não tratava a memória corretamente ao
 realizar cálculos de tamanho ampliado. Um atacante poderia usar esse
