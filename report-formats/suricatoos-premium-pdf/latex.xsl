@@ -280,6 +280,11 @@ SPDX-License-Identifier: GPL-2.0-or-later
          empty report. Printing the normal summary over that reads as a clean bill
          of health, which is the worst thing this document can say. These three
          strings exist so it says the opposite, loudly. -->
+    <!-- Quando o filtro da exportacao carrega um piso de QoD, o que ele descarta
+         sao justamente os achados de baixa confianca: os mesmos que a secao
+         "Indicadores a validar" existe para mostrar. O leitor precisa saber. -->
+    <s k="sample_qod_a" en=" The export filter required QoD " pt=" O filtro da exportação exigiu QoD " es=" El filtro de la exportación exigió QoD "/>
+    <s k="sample_qod_b" en="\% or higher, so low-confidence findings were dropped before this document was written --- the \textquotedblleft Indicators to validate\textquotedblright\ section is likely incomplete." pt="\% ou mais, então achados de baixa confiança foram descartados antes deste documento ser escrito --- a seção \textquotedblleft Indicadores a validar\textquotedblright\ provavelmente está incompleta." es="\% o más, así que los hallazgos de baja confianza se descartaron antes de escribir este documento --- la sección \textquotedblleft Indicadores a validar\textquotedblright\ probablemente está incompleta."/>
     <s k="risk_notmeasured" en="NOT MEASURED" pt="NÃO MEDIDO" es="NO MEDIDO"/>
     <s k="nohost_title" en="This scan measured nothing" pt="Este scan não mediu nada" es="Este escaneo no midió nada"/>
     <!-- Split in three because these are attribute VALUES, and an attribute in a
@@ -1698,10 +1703,40 @@ SPDX-License-Identifier: GPL-2.0-or-later
   </xsl:template>
 
   <xsl:template name="executive-summary">
-    <xsl:variable name="crit" select="count(gvm:report()/results/result[number(severity) &gt;= 9.0])"/>
-    <xsl:variable name="high" select="count(gvm:report()/results/result[number(severity) &gt;= 7.0 and number(severity) &lt; 9.0])"/>
-    <xsl:variable name="med"  select="count(gvm:report()/results/result[number(severity) &gt;= 4.0 and number(severity) &lt; 7.0])"/>
-    <xsl:variable name="low"  select="count(gvm:report()/results/result[number(severity) &gt;= 0.1 and number(severity) &lt; 4.0])"/>
+    <!-- Severity counts come from gvmd's own <result_count>, band by band, NOT
+         from counting the <result> elements this export happens to carry.
+         v4 fixed exactly this for the TOTAL and stopped there; the bars kept
+         counting the filter window, so a filtered export under-reported them.
+         Measured in production: a report whose scan produced 4 High printed
+         "ALTO 2", because the default export filter (min_qod=70) had dropped
+         the two low-confidence High results before the stylesheet saw them.
+         The <full> child is the scan; <filtered> is the window. Fall back to
+         counting only when gvmd did not send the element. -->
+    <xsl:variable name="rc" select="gvm:report()/result_count"/>
+    <xsl:variable name="crit">
+      <xsl:choose>
+        <xsl:when test="$rc/critical/full"><xsl:value-of select="number($rc/critical/full)"/></xsl:when>
+        <xsl:otherwise><xsl:value-of select="count(gvm:report()/results/result[number(severity) &gt;= 9.0])"/></xsl:otherwise>
+      </xsl:choose>
+    </xsl:variable>
+    <xsl:variable name="high">
+      <xsl:choose>
+        <xsl:when test="$rc/high/full"><xsl:value-of select="number($rc/high/full)"/></xsl:when>
+        <xsl:otherwise><xsl:value-of select="count(gvm:report()/results/result[number(severity) &gt;= 7.0 and number(severity) &lt; 9.0])"/></xsl:otherwise>
+      </xsl:choose>
+    </xsl:variable>
+    <xsl:variable name="med">
+      <xsl:choose>
+        <xsl:when test="$rc/medium/full"><xsl:value-of select="number($rc/medium/full)"/></xsl:when>
+        <xsl:otherwise><xsl:value-of select="count(gvm:report()/results/result[number(severity) &gt;= 4.0 and number(severity) &lt; 7.0])"/></xsl:otherwise>
+      </xsl:choose>
+    </xsl:variable>
+    <xsl:variable name="low">
+      <xsl:choose>
+        <xsl:when test="$rc/low/full"><xsl:value-of select="number($rc/low/full)"/></xsl:when>
+        <xsl:otherwise><xsl:value-of select="count(gvm:report()/results/result[number(severity) &gt;= 0.1 and number(severity) &lt; 4.0])"/></xsl:otherwise>
+      </xsl:choose>
+    </xsl:variable>
     <!-- Log = informativo (severidade 0 a 0.1). Falso positivo tem severidade
          NEGATIVA no GVM e é contado à parte: somá-lo ao Log inflaria o
          informativo com itens que foram explicitamente descartados. -->
@@ -1856,6 +1891,20 @@ SPDX-License-Identifier: GPL-2.0-or-later
       <xsl:value-of select="gvm:t('sample_b')"/>
       <xsl:text>\textbf{</xsl:text><xsl:value-of select="$total-full"/><xsl:text>}</xsl:text>
       <xsl:value-of select="gvm:t('sample_c')"/>
+      <!-- Name the QoD floor when the export carried one: "51 of 53" alone does
+           not tell the reader that what was cut is precisely the low-confidence
+           population that section 4 segregates. gvmd echoes the applied filter
+           in <filters><term>. -->
+      <xsl:variable name="fterm" select="string(gvm:report()/filters/term)"/>
+      <xsl:if test="contains($fterm, 'min_qod=')">
+        <xsl:variable name="mq"
+          select="substring-before(concat(substring-after($fterm,'min_qod='),' '),' ')"/>
+        <xsl:if test="number($mq) &gt; 1">
+          <xsl:value-of select="gvm:t('sample_qod_a')"/>
+          <xsl:text>\textbf{</xsl:text><xsl:value-of select="$mq"/><xsl:text>}</xsl:text>
+          <xsl:value-of select="gvm:t('sample_qod_b')"/>
+        </xsl:if>
+      </xsl:if>
       <xsl:text>}
 
 </xsl:text>
