@@ -114,3 +114,17 @@ o XML do relatório entrega quebra real; sem isso o `\n` sai impresso no PDF.
 Antes de publicar, confira por script que nenhum identificador mudou entre
 origem e tradução — CVE, CWE, USN/DSA/RHSA, vetores CVSS, URLs e números de
 versão. Um CVE trocado num relatório de cliente é pior que o inglês.
+
+## Teste de tortura (obrigatório ao estender o catálogo)
+
+Um relatório real toca ~100 dos ~670 NVTs. Compilar um relatório de verdade prova
+pouco: um caractere não escapado nas outras entradas só apareceria quando um
+cliente batesse nela.
+
+`tools/build-torture-fixture.py <lang>` monta um relatório sintético com **um
+achado por OID do catálogo**. Compilou limpo = toda a tradução está provada segura
+no LaTeX. Resultado da primeira rodada pt-BR: 666 entradas, 184 páginas, **0 erro,
+0 `Font shape undefined`, 0 overfull hbox, 0 fonte Type 3, 0 macro vazada**.
+
+Gate obrigatório, e não é opcional: `pdflatex` em `batchmode` **produz PDF mesmo
+com erro**. Contar `^! ` no log é o que vale; "saiu PDF" não prova nada.
