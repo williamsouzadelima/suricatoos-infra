@@ -116,6 +116,15 @@
 %
 % \suriWordmarkDark{px} / \suriWordmarkLight{px}: the horizontal logotype, drawn
 %   to the given height in design px, for light and navy grounds respectively.
+% Palette of the two LIGHT logos (they are assets, not colours this module can
+% set): the model paints them marfim #F4F2EE (= papernavy, below) for the S and
+% the letters, #D8506E for the halo, and #A81E3C (= critico) for the meerkat's
+% silhouette.  The first port shipped the raw brand SVGs -- pure white, coral
+% #FF7678, and NO fill at all on the silhouette, so the animal came out as a
+% navy hole -- and both navy pages showed it.  Fixed in the assets themselves
+% (assets/{mark,wordmark}-white.svg -> suricatoos-{mark,wordmark}-white.pdf);
+% nothing here depends on it beyond expecting the files to be the light pair.
+%
 % \suriMarkLight{px}: the square meerkat mark alone, for the navy back cover.
 %   Its art board is NOT centred on its ink -- rasterised on its own the drawing
 %   sits at x 53..500 of a 605px canvas, 51px more air on the right than on the
@@ -314,25 +323,33 @@
 \gdef\suri@cv@projeto{}\gdef\suri@cv@hosts{}\gdef\suri@cv@inicio{}
 \gdef\suri@cv@fim{}\gdef\suri@cv@data{}\gdef\suri@cv@class{}
 
-% One outline hexagon: #1,#2 = centre in px from the page's top-left corner,
-% #3 = width in px.  Flat top and bottom, vertices left and right; the vertical
+% One hexagon: #2,#3 = centre in px from the page's top-left corner,
+% #4 = width in px.  Flat top and bottom, vertices left and right; the vertical
 % half-diagonal of a regular hexagon is 0.4330127 of its width.
-% #4 = colour.  Coordinates are worked out in \dimexpr so no calc library is
-% needed and nothing is rounded twice.
-\newcommand{\suri@hex}[4]{%
-  \draw[#4, line width=\suri@u{1.2}, line join=miter]
-       (\the\dimexpr#1pt*3/4+#3pt*3/8\relax,
-       -\the\dimexpr#2pt*3/4\relax)
-    -- (\the\dimexpr#1pt*3/4+#3pt*3/16\relax,
-       -\the\dimexpr#2pt*3/4+#3pt*3248/10000\relax)
-    -- (\the\dimexpr#1pt*3/4-#3pt*3/16\relax,
-       -\the\dimexpr#2pt*3/4+#3pt*3248/10000\relax)
-    -- (\the\dimexpr#1pt*3/4-#3pt*3/8\relax,
-       -\the\dimexpr#2pt*3/4\relax)
-    -- (\the\dimexpr#1pt*3/4-#3pt*3/16\relax,
-       -\the\dimexpr#2pt*3/4-#3pt*3248/10000\relax)
-    -- (\the\dimexpr#1pt*3/4+#3pt*3/16\relax,
-       -\the\dimexpr#2pt*3/4-#3pt*3248/10000\relax)
+% #5 = colour of the outline.  Coordinates are worked out in \dimexpr so no calc
+% library is needed and nothing is rounded twice.
+%
+% #1 = fill, `none' by default.  The model's small carmine hexagon is OPAQUE: it
+% is filled with the page colour so the big navyline hexagon that runs behind it
+% is MASKED, and its lower-left edge stops dead where it meets the carmine
+% outline.  Drawn as a bare outline the big hexagon shows straight through the
+% small one -- a 160px navy rule across its middle -- which the model does not
+% have.  So the fill is a cut-out, not decoration; on the navy cover the value to
+% pass is `navy'.
+\newcommand{\suri@hex}[5][none]{%
+  \draw[#5, fill=#1, line width=\suri@u{1.2}, line join=miter]
+       (\the\dimexpr#2pt*3/4+#4pt*3/8\relax,
+       -\the\dimexpr#3pt*3/4\relax)
+    -- (\the\dimexpr#2pt*3/4+#4pt*3/16\relax,
+       -\the\dimexpr#3pt*3/4+#4pt*3248/10000\relax)
+    -- (\the\dimexpr#2pt*3/4-#4pt*3/16\relax,
+       -\the\dimexpr#3pt*3/4+#4pt*3248/10000\relax)
+    -- (\the\dimexpr#2pt*3/4-#4pt*3/8\relax,
+       -\the\dimexpr#3pt*3/4\relax)
+    -- (\the\dimexpr#2pt*3/4-#4pt*3/16\relax,
+       -\the\dimexpr#3pt*3/4-#4pt*3248/10000\relax)
+    -- (\the\dimexpr#2pt*3/4+#4pt*3/16\relax,
+       -\the\dimexpr#3pt*3/4-#4pt*3248/10000\relax)
     -- cycle;}
 
 % Geometry of the cover's metadata grid, worked out from the real paper so the
@@ -340,13 +357,20 @@
 %
 % Off the paper, deliberately, not off \textwidth: the cover keeps its own 64px
 % margin whatever the body's is, so a column derived from the text block would
-% drift every time the body margin moved.  64+64 of margin and 42 of gutter come
+% drift every time the body margin moved.  64+64 of margin and 38 of gutter come
 % off the sheet, and what is left splits in two.
+%
+% The gutter is measured, not chosen.  With 42 the second column's label opened
+% 3px right of where the model opens it (437 against 434 in the 100dpi raster).
+% Correlating the whole ink profile against the model at sub-pixel steps, and
+% discounting the ~1px the model's cover sits left of ours at the LEFT margin
+% (its right margin agrees exactly), both columns give the same answer: the
+% column is 2.0px of design too narrow, so the gutter is 4 too wide.  42-4=38.
 \newlength{\suri@cvcolw}   % width of one metadata column
 \newlength{\suri@cvright}  % x of the right margin
 \AtBeginDocument{%
   \setlength{\suri@cvcolw}{%
-    \dimexpr(\paperwidth-\suripx{64}-\suripx{64}-\suripx{42})/2\relax}%
+    \dimexpr(\paperwidth-\suripx{64}-\suripx{64}-\suripx{38})/2\relax}%
   \setlength{\suri@cvright}{\dimexpr\paperwidth-\suripx{64}\relax}}
 
 % One metadata cell: label at the left edge, value flush to the right edge.
@@ -391,7 +415,7 @@
     \begin{tikzpicture}[overlay]
       % two thin outline hexagons, the big one running off the right edge
       \suri@hex{718}{243}{306}{navyline}
-      \suri@hex{658}{395}{149}{critico}
+      \suri@hex[navy]{660.5}{397}{149}{critico}
       % masthead: white wordmark + tracked lockup
       \node[anchor=north west, inner sep=0pt] at (\suripx{64},-\suripx{64})
         {\suriWordmarkLight{26.2}};
@@ -401,7 +425,7 @@
       % kicker / title / carmine bar / subtitle
       \node[anchor=base west, inner sep=0pt]
         at (\suripx{64},-\suripx{253})
-        {\suri@lblb{245}{critico}{11.5}{\suri@cv@kicker}};
+        {\suri@lbl{245}{critico}{11.5}{\suri@cv@kicker}};
       % \fontseries{b}, not \bfseries: plex-sans is loaded with [semibold], so
       % \bfseries resolves to the sb series and plxSans-Bold never reaches the
       % PDF.  The model's title is the real Bold -- same cap height, 10% more ink
@@ -461,8 +485,14 @@
 \newcommand{\suri@backart}{%
   \put(0,\LenToUnit{\paperheight}){%
     \begin{tikzpicture}[overlay]
-      \node[anchor=north, inner sep=0pt] at (0.5\paperwidth,-\suripx{492})
-        {\suriMarkLight{128}};
+      % The mark is 141px, not the ~120 the spec rounds to: the model's symbol
+      % measures 98 raster px across against 89 for a 128px box, so the drawing
+      % is 10% larger than the first port made it.  Height and anchor move
+      % TOGETHER -- the node hangs from its north edge, so growing the box alone
+      % would push the foot of the S down and eat the air above the wordmark.
+      % 141px hung at 480px puts the ink back on the model's 504..636 band.
+      \node[anchor=north, inner sep=0pt] at (0.5\paperwidth,-\suripx{480})
+        {\suriMarkLight{141}};
       \node[anchor=north, inner sep=0pt] at (0.5\paperwidth,-\suripx{637})
         {\suriWordmarkLight{30}};
       % a \parbox, not TikZ's align=/text width=: inside a node those two

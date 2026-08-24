@@ -56,6 +56,40 @@ SPDX-License-Identifier: GPL-2.0-or-later
        hand. 70 mirrors the min_qod the GSA offers by default. Results carrying
        no <qod> at all are treated as confirmed: absence of the field is not
        evidence of low quality. -->
+  <!-- ===================================================================
+       Catalogo de traducao dos NVTs.
+
+       O texto de vulnerabilidade vem do feed do Greenbone e so existe em
+       INGLES: resumo, detalhes, impacto, sistemas afetados e solucao. Num
+       relatorio entregue em pt-BR isso saia como metade da prosa em outro
+       idioma. Nao da para traduzir em tempo de geracao (o container do gvmd
+       nao tem rede, e o download pela GSA passa direto por ele, sem ponto de
+       intercepcao), entao a traducao viaja pronta, indexada pelo OID do NVT.
+
+       Cobre os NVTs que ja produziram achado nesta plataforma. OID ausente cai
+       para o texto original, e o card DIZ que caiu, em vez de misturar idiomas
+       em silencio.
+
+       Ha um catalogo por idioma, inclusive um vazio para `en', para que o
+       document() sempre resolva e o xsltproc nao emita aviso.
+       =================================================================== -->
+  <xsl:variable name="nvtcat"
+                select="document(concat('nvt-i18n-', $lang, '.xml'))/nvti18n"/>
+
+  <!-- O campo traduzido do NVT do contexto, ou o original se nao houver.
+       Chamar com o `result' como no de contexto: e de la que sai o @oid. -->
+  <xsl:template name="nvt-i18n">
+    <xsl:param name="field"/>
+    <xsl:param name="orig"/>
+    <xsl:variable name="tr" select="$nvtcat/n[@o = string(current()/nvt/@oid)]/*[name() = $field]"/>
+    <xsl:choose>
+      <xsl:when test="string-length(normalize-space($tr)) &gt; 0">
+        <xsl:value-of select="$tr"/>
+      </xsl:when>
+      <xsl:otherwise><xsl:value-of select="$orig"/></xsl:otherwise>
+    </xsl:choose>
+  </xsl:template>
+
   <xsl:param name="qod-min" select="70"/>
 
   <!-- Teto do nome da tarefa na capa e na narrativa executiva. NAO e' um limite de
@@ -259,8 +293,17 @@ SPDX-License-Identifier: GPL-2.0-or-later
     <s k="sub_confirmed" en="Confirmed findings" pt="Achados confirmados" es="Hallazgos confirmados"/>
     <s k="sub_indicators" en="Indicators to validate" pt="Indicadores a validar" es="Indicadores a validar"/>
     <s k="conf_intro" en="Findings below were reported by the scanner with a detection quality of at least " pt="Os achados abaixo foram reportados pelo scanner com qualidade de detecção de pelo menos " es="Los hallazgos siguientes fueron reportados por el escáner con una calidad de detección de al menos "/>
-    <s k="ind_intro" en="The scanner reported the items below with LOW detection quality (under " pt="O scanner reportou os itens abaixo com BAIXA qualidade de detecção (abaixo de " es="El escáner reportó los elementos siguientes con BAJA calidad de detección (por debajo de "/>
-    <s k="ind_intro2" en="). They are inconclusive by nature and must be validated manually before any remediation effort — treat the severity shown as an upper bound, not as a confirmed fact." pt="). São inconclusivos por natureza e precisam ser validados manualmente antes de qualquer esforço de remediação — trate a severidade exibida como um teto, não como fato confirmado." es="). Son inconclusos por naturaleza y deben validarse manualmente antes de cualquier esfuerzo de remediación — trate la severidad mostrada como un techo, no como un hecho confirmado."/>
+    <!-- Seis pedacos porque o modelo carrega DUAS enfases em negrito nesta caixa
+         ("baixa qualidade de deteccao" e "teto") e um "\textbf{...}" nao cabe num
+         valor de atributo. O contorno antigo era escrever BAIXA em caixa alta:
+         isso nao e' negrito, e' outra coisa — e deixava "teto" sem enfase
+         nenhuma, que e' justamente a palavra que segura o sentido da frase. -->
+    <s k="ind_intro_a" en="The scanner reported the items below with " pt="O scanner reportou os itens abaixo com " es="El escáner reportó los elementos siguientes con "/>
+    <s k="ind_intro_em1" en="low detection quality" pt="baixa qualidade de detecção" es="baja calidad de detección"/>
+    <s k="ind_intro_b" en=" (under " pt=" (abaixo de " es=" (por debajo de "/>
+    <s k="ind_intro_c" en="). They are inconclusive by nature and must be validated manually before any remediation effort — treat the severity shown as an " pt="). São inconclusivos por natureza e precisam ser validados manualmente antes de qualquer esforço de remediação — trate a severidade exibida como um " es="). Son inconclusos por naturaleza y deben validarse manualmente antes de cualquier esfuerzo de remediación — trate la severidad mostrada como un "/>
+    <s k="ind_intro_em2" en="upper bound" pt="teto" es="techo"/>
+    <s k="ind_intro_d" en=", not as a confirmed fact." pt=", não como fato confirmado." es=", no como un hecho confirmado."/>
     <s k="none_confirmed" en="No confirmed findings above informational severity were recorded." pt="Nenhum achado confirmado acima da severidade informativa foi registrado." es="No se registraron hallazgos confirmados por encima de la severidad informativa."/>
     <!-- Appended after a bare count, so it must read correctly for 1 and for N:
          no conjugated verb agreeing with the number. -->
@@ -285,6 +328,10 @@ SPDX-License-Identifier: GPL-2.0-or-later
          "Indicadores a validar" existe para mostrar. O leitor precisa saber. -->
     <s k="sample_qod_a" en=" The export filter required QoD " pt=" O filtro da exportação exigiu QoD " es=" El filtro de la exportación exigió QoD "/>
     <s k="sample_qod_b" en="\% or higher, so low-confidence findings were dropped before this document was written --- the \textquotedblleft Indicators to validate\textquotedblright\ section is likely incomplete." pt="\% ou mais, então achados de baixa confiança foram descartados antes deste documento ser escrito --- a seção \textquotedblleft Indicadores a validar\textquotedblright\ provavelmente está incompleta." es="\% o más, así que los hallazgos de baja confianza se descartaron antes de escribir este documento --- la sección \textquotedblleft Indicadores a validar\textquotedblright\ probablemente está incompleta."/>
+    <!-- Marcador de fallback do catalogo de traducao: o NVT nao esta no
+         catalogo, entao a prosa deste card saiu no idioma do fornecedor.
+         Dizer isso e melhor que misturar idiomas em silencio. -->
+    <s k="vendor_original" en="VENDOR ORIGINAL" pt="ORIGINAL DO FORNECEDOR" es="ORIGINAL DEL PROVEEDOR"/>
     <s k="risk_notmeasured" en="NOT MEASURED" pt="NÃO MEDIDO" es="NO MEDIDO"/>
     <s k="nohost_title" en="This scan measured nothing" pt="Este scan não mediu nada" es="Este escaneo no midió nada"/>
     <!-- Split in three because these are attribute VALUES, and an attribute in a
@@ -383,7 +430,14 @@ SPDX-License-Identifier: GPL-2.0-or-later
     <s k="sec_hexmap" en="Port Exposure Map" pt="Mapa de Exposição de Portas" es="Mapa de Exposición de Puertos"/>
     <!-- Retexto para o desenho novo: o tabuleiro nao tem mais espessura de traco
          nem marcador no vertice, e a tabela nao fica mais logo abaixo dele. -->
-    <s k="hx_intro" en="Every hexagon is one network port observed in the assessed scope; the cell key is the pair (transport, port number), so a port seen on many hosts is a single hexagon. Colour and fill carry the HIGHEST severity observed on that port across every host that exposes it. The third line inside the cell names the exposed host, or counts them when the port is open on more than one. The table on the next page lists every port with its mapped IP addresses, up to 40 per port." pt="Cada hexágono é uma porta de rede observada no escopo avaliado; a chave da célula é o par (transporte, porta), então uma porta vista em vários hosts é um único hexágono. Cor e preenchimento carregam a MAIOR severidade observada naquela porta em todos os hosts que a expõem. A terceira linha da célula nomeia o host exposto, ou conta quantos são quando a porta está aberta em mais de um. A tabela da página seguinte lista todas as portas com os endereços IP mapeados, até 40 por porta." es="Cada hexágono es un puerto de red observado en el alcance evaluado; la clave de la celda es el par (transporte, puerto), así que un puerto visto en varios hosts es un único hexágono. Color y relleno llevan la MAYOR severidad observada en ese puerto en todos los hosts que lo exponen. La tercera línea de la celda nombra el host expuesto, o los cuenta cuando el puerto está abierto en más de uno. La tabla de la página siguiente lista todos los puertos con las direcciones IP mapeadas, hasta 40 por puerto."/>
+    <!-- Em TRES pedacos pela mesma razao do nohost_body: isto e' VALOR DE
+         ATRIBUTO, e uma chave e' markup ali, entao "\textbf{...}" nao cabe na
+         string. A enfase do modelo cai sobre o pedaco _b e e' o stylesheet que
+         a aplica. Caixa alta NAO e' enfase: era o contorno antigo ("MAIOR"), e
+         ele imprimia um grito onde o modelo pede negrito. -->
+    <s k="hx_intro_a" en="Every hexagon is one network port observed in the assessed scope; the cell key is the pair (transport, port number), so a port seen on many hosts is a single hexagon. Colour and fill carry the " pt="Cada hexágono é uma porta de rede observada no escopo avaliado; a chave da célula é o par (transporte, porta), então uma porta vista em vários hosts é um único hexágono. Cor e preenchimento carregam a " es="Cada hexágono es un puerto de red observado en el alcance evaluado; la clave de la celda es el par (transporte, puerto), así que un puerto visto en varios hosts es un único hexágono. Color y relleno llevan la "/>
+    <s k="hx_intro_b" en="highest severity observed" pt="maior severidade observada" es="mayor severidad observada"/>
+    <s k="hx_intro_c" en=" on that port across every host that exposes it. The third line inside the cell names the exposed host, or counts them when the port is open on more than one. The table on the next page lists every port with its mapped IP addresses, up to 40 per port." pt=" naquela porta em todos os hosts que a expõem. A terceira linha da célula nomeia o host exposto, ou conta quantos são quando a porta está aberta em mais de um. A tabela da página seguinte lista todas as portas com os endereços IP mapeados, até 40 por porta." es=" en ese puerto en todos los hosts que lo exponen. La tercera línea de la celda nombra el host expuesto, o los cuenta cuando el puerto está abierto en más de uno. La tabla de la página siguiente lista todos los puertos con las direcciones IP mapeadas, hasta 40 por puerto."/>
     <s k="hx_state_critico" en="Critical" pt="Crítico" es="Crítico"/>
     <s k="hx_state_alto" en="High" pt="Alto" es="Alto"/>
     <s k="hx_state_medio" en="Medium" pt="Médio" es="Medio"/>
@@ -394,7 +448,13 @@ SPDX-License-Identifier: GPL-2.0-or-later
     <s k="hx_th_proto" en="Proto" pt="Proto" es="Proto"/>
     <s k="hx_th_service" en="Service" pt="Serviço" es="Servicio"/>
     <s k="hx_th_state" en="State" pt="Estado" es="Estado"/>
+    <!-- DUAS chaves de proposito. Em prosa corrida ("... CVSS max. 8.6") o ponto
+         e' o ponto da ABREVIACAO e tem de ficar; no cabecalho da coluna o modelo
+         nao tem ponto nenhum, e ali ele nao e' so' um caractere a mais: a celula
+         e' caixa de largura zero alinhada a' direita, entao o ponto empurra o
+         rotulo inteiro ~5px para a esquerda e desalinha a coluna. -->
     <s k="hx_th_cvss" en="Max CVSS" pt="CVSS máx." es="CVSS máx."/>
+    <s k="hx_th_cvss_col" en="Max CVSS" pt="CVSS máx" es="CVSS máx"/>
     <s k="hx_th_hosts" en="Hosts" pt="Hosts" es="Hosts"/>
     <s k="hx_th_ips" en="Mapped IP addresses" pt="IPs mapeados" es="IPs mapeados"/>
     <s k="hx_ips_n" en="IPs" pt="IPs" es="IPs"/>
@@ -416,7 +476,12 @@ SPDX-License-Identifier: GPL-2.0-or-later
     <s k="hx_omitted" en=" port(s) did not fit the board and were rolled into the final cell. None was dropped: every one of them is listed in the table on the next page." pt=" porta(s) não couberam no tabuleiro e foram somadas na célula final. Nenhuma foi descartada: todas estão listadas na tabela da página seguinte." es=" puerto(s) no cupieron en el tablero y se sumaron en la celda final. Ninguno fue descartado: todos están listados en la tabla de la página siguiente."/>
     <s k="hx_iana_note" en=" well-known port name taken from the IANA registry: the scan did NOT identify the service running on this port." pt=" nome IANA da porta: o scan NÃO identificou o serviço em execução nesta porta." es=" nombre IANA del puerto: el escaneo NO identificó el servicio en ejecución en este puerto."/>
     <s k="hx_low_qod" en=" the highest-severity finding on this port was reported with LOW detection quality, so the state shown was downgraded one level and must be validated by hand." pt=" o achado de maior severidade nesta porta foi reportado com BAIXA qualidade de detecção, então o estado exibido foi rebaixado um nível e precisa ser validado manualmente." es=" el hallazgo de mayor severidad en este puerto fue reportado con BAJA calidad de detección, así que el estado mostrado fue rebajado un nivel y debe validarse manualmente."/>
-    <s k="hx_hostlevel_note" en=" host(s) also carry host-level findings (general/*). Those are not network ports and are deliberately absent from the board; they appear in the Hosts and Open Ports section." pt=" host(s) também têm achados de nível de host (general/*). Esses não são portas de rede e estão deliberadamente fora do tabuleiro; aparecem na seção Hosts e Portas Abertas." es=" host(s) también tienen hallazgos de nivel de host (general/*). Esos no son puertos de red y están deliberadamente fuera del tablero; aparecen en la sección Hosts y Puertos Abiertos."/>
+    <!-- Tres pedacos, mesma regra do hx_intro: o nome da secao sai em ITALICO no
+         modelo e "\textit{...}" nao cabe num valor de atributo. O ponto final
+         mora no pedaco _c, FORA do italico. -->
+    <s k="hx_hostlevel_note_a" en=" host(s) also carry host-level findings (general/*). Those are not network ports and are deliberately absent from the board; they appear in the " pt=" host(s) também têm achados de nível de host (general/*). Esses não são portas de rede e estão deliberadamente fora do tabuleiro; aparecem na seção " es=" host(s) también tienen hallazgos de nivel de host (general/*). Esos no son puertos de red y están deliberadamente fuera del tablero; aparecen en la sección "/>
+    <s k="hx_hostlevel_note_b" en="Hosts and Open Ports" pt="Hosts e Portas Abertas" es="Hosts y Puertos Abiertos"/>
+    <s k="hx_hostlevel_note_c" en=" section." pt="." es="."/>
     <s k="hx_malformed_note" en=" malformed port entr(y/ies) in the source report could not be parsed as a port and were discarded." pt=" entrada(s) de porta malformada(s) no relatório de origem não puderam ser interpretadas como porta e foram descartadas." es=" entrada(s) de puerto malformada(s) en el informe de origen no pudieron interpretarse como puerto y fueron descartadas."/>
     <s k="hx_no_ports" en="No network port was observed in this report, so there is no exposure map to draw." pt="Nenhuma porta de rede foi observada neste relatório, portanto não há mapa de exposição a desenhar." es="No se observó ningún puerto de red en este informe, por lo tanto no hay mapa de exposición que dibujar."/>
     <s k="hx_partial" en="The scan produced more results than this export carries, so this map describes only the ports present in the filtered window." pt="A varredura produziu mais resultados do que esta exportação carrega, portanto este mapa descreve apenas as portas presentes na janela filtrada." es="El escaneo produjo más resultados de los que lleva esta exportación, por lo tanto este mapa describe solo los puertos presentes en la ventana filtrada."/>
@@ -1335,7 +1400,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
       <m c="suriLblProto"        k="hx_th_proto"/>
       <m c="suriLblService"      k="hx_th_service"/>
       <m c="suriLblState"        k="hx_th_state"/>
-      <m c="suriLblCvssMax"      k="hx_th_cvss"/>
+      <m c="suriLblCvssMax"      k="hx_th_cvss_col"/>
       <m c="suriLblHostsCol"     k="hx_th_hosts"/>
       <m c="suriLblIps"          k="hx_th_ips"/>
       <m c="suriLblAch"          k="th_ach"/>
@@ -1824,7 +1889,11 @@ SPDX-License-Identifier: GPL-2.0-or-later
 </xsl:text>
       </xsl:when>
       <xsl:otherwise>
-    <xsl:text>\suriPara{</xsl:text>
+    <!-- \suriLede, not \suriPara: the model sets this one paragraph — and only
+         this one — larger than the rest of the running copy (12.2px on a 19px
+         leading against 11.5px on 17.25px), with more air under the section
+         title.  It is the lede of the executive summary, not body text. -->
+    <xsl:text>\suriLede{</xsl:text>
     <xsl:choose>
       <xsl:when test="$L='pt'">
         <xsl:text>Este relatório apresenta os resultados de uma avaliação de vulnerabilidades realizada pela Plataforma de Segurança Suricatoos. O projeto \textbf{``</xsl:text>
@@ -2418,8 +2487,12 @@ SPDX-License-Identifier: GPL-2.0-or-later
     <xsl:if test="$n-low &gt; 0">
       <xsl:text>\clearpage
 \suriSummaryHead{indicadores}
-\warnbox{</xsl:text><xsl:value-of select="gvm:t('ind_intro')"/>
-      <xsl:value-of select="$qod-min"/><xsl:text>\%</xsl:text><xsl:value-of select="gvm:t('ind_intro2')"/>
+\warnbox{</xsl:text><xsl:value-of select="gvm:t('ind_intro_a')"/>
+      <xsl:text>\textbf{</xsl:text><xsl:value-of select="gvm:t('ind_intro_em1')"/><xsl:text>}</xsl:text>
+      <xsl:value-of select="gvm:t('ind_intro_b')"/>
+      <xsl:value-of select="$qod-min"/><xsl:text>\%</xsl:text><xsl:value-of select="gvm:t('ind_intro_c')"/>
+      <xsl:text>\textbf{</xsl:text><xsl:value-of select="gvm:t('ind_intro_em2')"/><xsl:text>}</xsl:text>
+      <xsl:value-of select="gvm:t('ind_intro_d')"/>
       <xsl:text>}
 </xsl:text>
       <xsl:call-template name="findings-summary-table">
@@ -2827,8 +2900,12 @@ SPDX-License-Identifier: GPL-2.0-or-later
     <xsl:if test="$n-low &gt; 0">
       <xsl:text>\clearpage
 \suriSummaryHead{indicadores}
-\warnbox{</xsl:text><xsl:value-of select="gvm:t('ind_intro')"/>
-      <xsl:value-of select="$qod-min"/><xsl:text>\%</xsl:text><xsl:value-of select="gvm:t('ind_intro2')"/>
+\warnbox{</xsl:text><xsl:value-of select="gvm:t('ind_intro_a')"/>
+      <xsl:text>\textbf{</xsl:text><xsl:value-of select="gvm:t('ind_intro_em1')"/><xsl:text>}</xsl:text>
+      <xsl:value-of select="gvm:t('ind_intro_b')"/>
+      <xsl:value-of select="$qod-min"/><xsl:text>\%</xsl:text><xsl:value-of select="gvm:t('ind_intro_c')"/>
+      <xsl:text>\textbf{</xsl:text><xsl:value-of select="gvm:t('ind_intro_em2')"/><xsl:text>}</xsl:text>
+      <xsl:value-of select="gvm:t('ind_intro_d')"/>
       <xsl:text>}
 </xsl:text>
       <xsl:call-template name="finding-cards">
@@ -2864,9 +2941,23 @@ SPDX-License-Identifier: GPL-2.0-or-later
           <xsl:value-of select="severity"/>
         </xsl:if>
       </xsl:variable>
+      <!-- O titulo sai traduzido, mas o nome ORIGINAL fica logo abaixo: e a
+           chave que o analista usa para achar o NVT no Greenbone ou numa busca.
+           Quando nao ha traducao, o original ja E o titulo e nao se repete. -->
+      <xsl:variable name="name-pt">
+        <xsl:call-template name="nvt-i18n">
+          <xsl:with-param name="field" select="'name'"/>
+          <xsl:with-param name="orig" select="string(nvt/name)"/>
+        </xsl:call-template>
+      </xsl:variable>
       <xsl:variable name="name_escaped">
         <xsl:call-template name="escape_name">
-          <xsl:with-param name="string" select="nvt/name"/>
+          <xsl:with-param name="string" select="string($name-pt)"/>
+        </xsl:call-template>
+      </xsl:variable>
+      <xsl:variable name="name_orig_escaped">
+        <xsl:call-template name="escape_name">
+          <xsl:with-param name="string" select="string(nvt/name)"/>
         </xsl:call-template>
       </xsl:variable>
 
@@ -2879,6 +2970,11 @@ SPDX-License-Identifier: GPL-2.0-or-later
       <xsl:text>}{\hypertarget{</xsl:text><xsl:value-of select="$anchor"/><xsl:text>}{}\#</xsl:text>
       <xsl:value-of select="position()"/><xsl:text>}{</xsl:text>
       <xsl:value-of select="$name_escaped"/>
+      <xsl:if test="string($name-pt) != string(nvt/name)">
+        <xsl:text>\findingorig{</xsl:text>
+        <xsl:value-of select="$name_orig_escaped"/>
+        <xsl:text>}</xsl:text>
+      </xsl:if>
       <xsl:text>}{%
   \chipsev{</xsl:text><xsl:value-of select="$sevkey"/><xsl:text>}{</xsl:text>
       <xsl:value-of select="$score"/><xsl:text>}%
@@ -2902,6 +2998,17 @@ SPDX-License-Identifier: GPL-2.0-or-later
       <xsl:text>  \chip{</xsl:text><xsl:value-of select="$instances"/><xsl:text> </xsl:text>
       <xsl:value-of select="gvm:hx-upper(gvm:t('lbl_instances'))"/><xsl:text>}%
 </xsl:text>
+      <!-- Sem entrada no catalogo: o card sai no idioma do fornecedor, e diz. -->
+      <!-- So' marca quando HA catalogo para o idioma e ESTE NVT ficou de fora.
+           Com catalogo vazio (idioma ainda nao traduzido) o relatorio inteiro
+           sai no idioma do fornecedor, e carimbar os 98 cards seria ruido, nao
+           informacao. -->
+      <xsl:if test="$nvtcat/n and not($nvtcat/n[@o = string(current()/nvt/@oid)])">
+        <xsl:text>  \chip{</xsl:text>
+        <xsl:value-of select="gvm:t('vendor_original')"/>
+        <xsl:text>}%
+</xsl:text>
+      </xsl:if>
       <!-- CVE chips. Sem teto: a lista reflui sozinha na linha de chips, e
            cortar CVE de um achado seria esconder exatamente o identificador que
            o leitor vai procurar. -->
@@ -2930,7 +3037,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
         <xsl:for-each select="$uniqhosts">
           <xsl:sort select="host/text()"/>
           <xsl:if test="position() &lt;= 40">
-            <xsl:text>  \chip{</xsl:text>
+            <xsl:text>  \chiphost{</xsl:text>
             <xsl:call-template name="escape_break">
               <xsl:with-param name="string" select="host/text()"/>
             </xsl:call-template>
@@ -2945,7 +3052,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
           </xsl:if>
         </xsl:for-each>
         <xsl:if test="count($uniqhosts) &gt; 40">
-          <xsl:text>  \chip{+</xsl:text>
+          <xsl:text>  \chiphost{+</xsl:text>
           <xsl:value-of select="count($uniqhosts) - 40"/>
           <xsl:text> </xsl:text><xsl:value-of select="gvm:hx-upper(gvm:t('more_word'))"/>
           <xsl:text>}%
@@ -2999,21 +3106,45 @@ SPDX-License-Identifier: GPL-2.0-or-later
            system (\suriLblFld...), traduzido no preambulo; IMPACTO e
            SOFTWARE/SO AFETADO nao tem, e por isso continuam vindo do gvm:t()
            direto. -->
+      <xsl:variable name="i18n_summary">
+        <xsl:call-template name="nvt-i18n">
+          <xsl:with-param name="field" select="'summary'"/>
+          <xsl:with-param name="orig" select="gvm:get-nvt-tag('summary')"/>
+        </xsl:call-template>
+      </xsl:variable>
       <xsl:call-template name="finding-field">
         <xsl:with-param name="label" select="'\suriLblFldSummary'"/>
-        <xsl:with-param name="value" select="gvm:get-nvt-tag('summary')"/>
+        <xsl:with-param name="value" select="$i18n_summary"/>
       </xsl:call-template>
+      <xsl:variable name="i18n_impact">
+        <xsl:call-template name="nvt-i18n">
+          <xsl:with-param name="field" select="'impact'"/>
+          <xsl:with-param name="orig" select="gvm:get-nvt-tag('impact')"/>
+        </xsl:call-template>
+      </xsl:variable>
       <xsl:call-template name="finding-field">
         <xsl:with-param name="label" select="gvm:t('f_impact')"/>
-        <xsl:with-param name="value" select="gvm:get-nvt-tag('impact')"/>
+        <xsl:with-param name="value" select="$i18n_impact"/>
       </xsl:call-template>
+      <xsl:variable name="i18n_insight">
+        <xsl:call-template name="nvt-i18n">
+          <xsl:with-param name="field" select="'insight'"/>
+          <xsl:with-param name="orig" select="gvm:get-nvt-tag('insight')"/>
+        </xsl:call-template>
+      </xsl:variable>
       <xsl:call-template name="finding-field">
         <xsl:with-param name="label" select="'\suriLblFldTech'"/>
-        <xsl:with-param name="value" select="gvm:get-nvt-tag('insight')"/>
+        <xsl:with-param name="value" select="$i18n_insight"/>
       </xsl:call-template>
+      <xsl:variable name="i18n_affected">
+        <xsl:call-template name="nvt-i18n">
+          <xsl:with-param name="field" select="'affected'"/>
+          <xsl:with-param name="orig" select="gvm:get-nvt-tag('affected')"/>
+        </xsl:call-template>
+      </xsl:variable>
       <xsl:call-template name="finding-field">
         <xsl:with-param name="label" select="gvm:t('f_affected_sw')"/>
-        <xsl:with-param name="value" select="gvm:get-nvt-tag('affected')"/>
+        <xsl:with-param name="value" select="$i18n_affected"/>
       </xsl:call-template>
 
       <!-- Detection result (representative).
@@ -3072,7 +3203,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
       </xsl:if>
 
       <!-- Solution / Remediation -->
-      <xsl:variable name="solution">
+      <xsl:variable name="solution-orig">
         <xsl:choose>
           <xsl:when test="string-length(normalize-space(nvt/solution)) &gt; 0">
             <xsl:value-of select="nvt/solution"/>
@@ -3082,6 +3213,12 @@ SPDX-License-Identifier: GPL-2.0-or-later
           </xsl:otherwise>
         </xsl:choose>
       </xsl:variable>
+      <xsl:variable name="solution">
+        <xsl:call-template name="nvt-i18n">
+          <xsl:with-param name="field" select="'solution'"/>
+          <xsl:with-param name="orig" select="$solution-orig"/>
+        </xsl:call-template>
+      </xsl:variable>
       <xsl:if test="string-length(normalize-space($solution)) &gt; 0">
         <!-- O \solbox imprime o proprio rotulo SOLUCAO / REMEDIACAO, entao aqui
              nao vai \fieldlabel nenhum.
@@ -3090,9 +3227,23 @@ SPDX-License-Identifier: GPL-2.0-or-later
              o que a pg-09 do modelo mostra; numa mitigacao de dez linhas o
              negrito vira parede, entao ali ele volta para o rotulo do tipo e o
              texto sai limpo. O criterio e' o tamanho do texto, nao o gosto. -->
+        <!-- O teste roda sobre o texto JA' normalizado, nao sobre o cru.  O feed
+             embrulha frase unica na largura do terminal de quem escreveu o NVT
+             ("...disable anonymous\n  logins."): isso e' quebra MACIA, e o
+             solution-body a reflui num paragrafo so'.  Testar '\n' no cru
+             derrubava a correcao curta por causa dela — na pg-09 de producao o
+             negrito ia para o rotulo e a correcao, que e' o que o leitor tem de
+             executar, saia em peso regular.  O que de fato impede o \textbf e'
+             LISTA: ali o negrito viraria parede.  Entao a pergunta passa a ser a
+             de solution-body — sobra marcador depois de normalizar? -->
+        <xsl:variable name="sol-mk" select="concat('&#10;', str:replace(str:replace(str:replace(
+          str:replace(str:replace(str:replace(str:replace(str:replace(string($solution),
+          '&#13;&#10;', '&#10;'), '&#13;', '&#10;'),
+          '&#10;      - ', '&#10;- '), '&#10;     - ', '&#10;- '), '&#10;    - ', '&#10;- '),
+          '&#10;   - ', '&#10;- '), '&#10;  - ', '&#10;- '), '&#10; - ', '&#10;- '))"/>
         <xsl:variable name="solshort"
           select="string-length(normalize-space($solution)) &lt;= 200
-                  and not(contains($solution, '&#10;'))"/>
+                  and not(contains($sol-mk, '&#10;- '))"/>
         <xsl:text>\solbox{</xsl:text>
         <xsl:if test="string-length(nvt/solution/@type) &gt; 0">
           <xsl:if test="not($solshort)"><xsl:text>{\bfseries </xsl:text></xsl:if>
@@ -3104,9 +3255,9 @@ SPDX-License-Identifier: GPL-2.0-or-later
         </xsl:if>
         <xsl:if test="$solshort"><xsl:text>\textbf{</xsl:text></xsl:if>
         <!-- solution-body, nao escape_prose direto: a mitigacao tambem vem em
-             lista de marcadores. O caminho de lista so' dispara com quebra de
-             linha no texto, e $solshort exige texto SEM quebra de linha, entao
-             o \textbf acima nunca abraca uma lista. -->
+             lista de marcadores. O caminho de lista so' dispara com marcador
+             sobrevivendo a normalizacao, e $solshort testa exatamente isso,
+             entao o \textbf acima nunca abraca uma lista. -->
         <xsl:call-template name="solution-body">
           <xsl:with-param name="value" select="$solution"/>
         </xsl:call-template>
@@ -3246,7 +3397,10 @@ SPDX-License-Identifier: GPL-2.0-or-later
         </xsl:choose>
         <xsl:text>}{%
   </xsl:text><xsl:value-of select="gvm:t('grp_intro_a')"/>
-        <xsl:text>\textbf{</xsl:text><xsl:value-of select="$ndist"/><xsl:text>}</xsl:text>
+        <!-- O numero sai em peso REGULAR: o card ja' o carrega em chip proprio
+             ("22 ADVISORIES") logo acima, e o negrito deste paragrafo e' um so',
+             reservado para a acao unica de remediacao em grp_intro_c. -->
+        <xsl:value-of select="$ndist"/>
         <xsl:value-of select="gvm:t('grp_intro_b')"/>
         <xsl:text>\textbf{</xsl:text><xsl:value-of select="gvm:t('grp_intro_c')"/><xsl:text>}</xsl:text>
         <xsl:value-of select="gvm:t('grp_intro_d')"/>
@@ -4241,7 +4395,9 @@ SPDX-License-Identifier: GPL-2.0-or-later
     <xsl:value-of select="gvm:t('hx_runner')"/>
     <xsl:text>}
 \suriPara{</xsl:text>
-    <xsl:value-of select="gvm:t('hx_intro')"/>
+    <xsl:value-of select="gvm:t('hx_intro_a')"/>
+    <xsl:text>\textbf{</xsl:text><xsl:value-of select="gvm:t('hx_intro_b')"/><xsl:text>}</xsl:text>
+    <xsl:value-of select="gvm:t('hx_intro_c')"/>
     <xsl:text>}
 </xsl:text>
     <xsl:choose>
@@ -4333,7 +4489,9 @@ SPDX-License-Identifier: GPL-2.0-or-later
     </xsl:if>
     <xsl:if test="number($hx-genhosts) &gt; 0">
       <xsl:text>\blocknote{</xsl:text>
-      <xsl:value-of select="$hx-genhosts"/><xsl:value-of select="gvm:t('hx_hostlevel_note')"/>
+      <xsl:value-of select="$hx-genhosts"/><xsl:value-of select="gvm:t('hx_hostlevel_note_a')"/>
+      <xsl:text>\textit{</xsl:text><xsl:value-of select="gvm:t('hx_hostlevel_note_b')"/><xsl:text>}</xsl:text>
+      <xsl:value-of select="gvm:t('hx_hostlevel_note_c')"/>
       <xsl:text>}
 </xsl:text>
     </xsl:if>

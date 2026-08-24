@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Catalogo vazio: o relatorio em ingles nao traduz nada, mas o document()
+     do latex.xsl precisa resolver para nao emitir aviso. -->
+<nvti18n lang="en"/>

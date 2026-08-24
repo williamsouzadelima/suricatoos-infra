@@ -38,6 +38,11 @@ TMP=`mktemp -d` || exit 1
 # trailing ':' keeps the compiled-in default path.
 cp ./suricatoos-*.pdf "${TMP}/" 2>/dev/null
 cp ./*.sty "${TMP}/" 2>/dev/null
+# Catalogo de traducao dos NVTs, um por idioma. O latex.xsl o carrega com
+# document(), e o caminho resolve relativo ao proprio .xsl -- que roda a partir
+# deste diretorio, nao do ${TMP}. Copiar mesmo assim mantem o bundle coeso se o
+# xsltproc for invocado de outro lugar.
+cp ./nvt-i18n-*.xml "${TMP}/" 2>/dev/null
 TEXINPUTS="${TMP}:"; export TEXINPUTS
 
 # IBM Plex ships with the bundle as a TDS subtree, not with the container: the

@@ -54,50 +54,82 @@
 % (default `muted').  The box sits 0.5px below the surrounding text baseline so
 % the icon optically centres on a line of 10px caps sitting next to it.
 % Each icon takes an optional colour: \icoglobe[alto].
+%
+% Every path is centred on (4.5,4.5) — the canvas may grow around it, the drawing
+% may not move: the baseline offset above puts that centre 4px over the text
+% baseline and that is what makes the icon sit on the line.
 % ===========================================================================
 \newcommand{\hexiconcolor}{muted}
+
+% Padding around the 9x9 canvas, in px, and zero by default.  \icoterm doubles as
+% the LINUX/UNIX badge in suricatoos-blocks, where the box IS the chip around it,
+% so the default box may not grow.  The port map sets \hexicopad because the model
+% draws the board's icons to a wider footprint than the badge's — 9.2px across the
+% stroke centres against 7.6 — and the ink of those paths needs the room.
+\newcommand{\hexicopad}{0}
 
 % \suri@ico{colour}{path commands} — internal canvas, 9x9px, origin bottom-left.
 \newcommand{\suri@ico}[2]{%
   \begin{tikzpicture}[x=\suripx{1},y=\suripx{1},baseline={\suripx{0.5}},%
       line width=\suripx{1.1},line cap=round,line join=round,draw=#1]%
-    \useasboundingbox (0,0) rectangle (9,9);%
+    \useasboundingbox (-\hexicopad,-\hexicopad)
+                      rectangle (9+\hexicopad,9+\hexicopad);%
     #2%
   \end{tikzpicture}%
 }
 
 % \icofolder — folder with a raised left tab.  Service: FTP.
+% Wide and low: the model measures 9.25 x 6.6px across the stroke centres (an
+% aspect of 1.4), not the near-square 7.6 x 6.5 this used to draw.
 \newcommand{\icofolder}[1][\hexiconcolor]{\suri@ico{#1}{%
-  \draw (0.7,1.0) -- (0.7,7.5) -- (3.3,7.5) -- (4.3,6.3)
-     -- (8.3,6.3) -- (8.3,1.0) -- cycle;}}
+  \draw (-0.1,1.2) -- (-0.1,7.8) -- (3.5,7.8) -- (4.8,6.55)
+     -- (9.1,6.55) -- (9.1,1.2) -- cycle;}}
 
-% \icoterm — framed terminal prompt ">_".  Service: SSH/2222; also the
-% Linux/Unix operating-system badge used elsewhere in the report.
+% \icoterm — framed terminal prompt ">_".  This is the BADGE size: the
+% Linux/Unix operating-system badge in suricatoos-blocks is the only caller, and
+% the model measures its frame at 7.6 x 7.4px across the stroke centres, which is
+% what this draws.  The port map draws the same glyph one size up — see
+% \icotermwide below — because the model does.
 \newcommand{\icoterm}[1][\hexiconcolor]{\suri@ico{#1}{%
   \draw (0.7,0.8) rectangle (8.3,8.2);
   \draw (2.5,6.4) -- (4.2,5.2) -- (2.5,4.0);
   \draw (5.0,3.3) -- (6.7,3.3);}}
 
+% \icotermwide — the terminal at the board's footprint (9.2 x 8.2px), with the
+% prompt scaled up with the frame.  Services: SSH/2222/telnet.
+% Not \icoterm enlarged: the badge's box IS the navy chip drawn around it, and
+% that chip already measures wider than the model's, so growing \icoterm would
+% push it further out.  Two sizes is what the model itself shows.
+\newcommand{\icotermwide}[1][\hexiconcolor]{\suri@ico{#1}{%
+  \draw (-0.1,0.4) rectangle (9.1,8.6);
+  \draw (2.45,6.35) -- (4.4,4.4) -- (2.45,2.45);
+  \draw (5.35,2.45) -- (6.8,2.45);}}
+
 % \icodns — three linked nodes (one parent, two children).  Service: DOMAIN/DNS.
+% Each node is a RING, not a dot: the model leaves a hole of ~1.9px inside a
+% stroke circle of radius 1.45px.  At the old 1.15 the 1.1px stroke closed the
+% hole and the three nodes rasterised as blobs.  The links stop on the rings.
 \newcommand{\icodns}[1][\hexiconcolor]{\suri@ico{#1}{%
-  \draw (4.5,7.4) circle (1.15);
-  \draw (1.5,1.6) circle (1.15);
-  \draw (7.5,1.6) circle (1.15);
-  \draw (4.5,6.25) -- (4.5,4.9);
-  \draw (4.5,4.9) -- (2.2,2.6);
-  \draw (4.5,4.9) -- (6.8,2.6);}}
+  \draw (4.5,7.55) circle (1.45);
+  \draw (1.45,1.5) circle (1.45);
+  \draw (7.55,1.5) circle (1.45);
+  \draw (4.5,6.1) -- (4.5,4.9);
+  \draw (4.5,4.9) -- (2.42,2.58);
+  \draw (4.5,4.9) -- (6.58,2.58);}}
 
 % \icoglobe — meridian globe.  Service: HTTP.
 \newcommand{\icoglobe}[1][\hexiconcolor]{\suri@ico{#1}{%
-  \draw (4.5,4.3) circle (3.85);
-  \draw (0.65,4.3) -- (8.35,4.3);
-  \draw (4.5,0.45) -- (4.5,8.15);
-  \draw (4.5,4.3) ellipse (2.0 and 3.85);}}
+  \draw (4.5,4.5) circle (4.6);
+  \draw (-0.1,4.5) -- (9.1,4.5);
+  \draw (4.5,-0.1) -- (4.5,9.1);
+  \draw (4.5,4.5) ellipse (2.4 and 4.6);}}
 
 % \icomail — envelope with a V flap.  Services: POP3, IMAP, SMTP.
+% Wide and low like the folder (the model: 9.1 x 6.2px), and the V of the flap
+% bites deeper — its point sits 40% up the envelope, not halfway.
 \newcommand{\icomail}[1][\hexiconcolor]{\suri@ico{#1}{%
-  \draw (0.7,1.3) rectangle (8.3,7.2);
-  \draw (0.7,7.2) -- (4.5,4.3) -- (8.3,7.2);}}
+  \draw (-0.05,1.4) rectangle (9.05,7.6);
+  \draw (-0.05,7.6) -- (4.5,3.9) -- (9.05,7.6);}}
 
 % \icolock — padlock.  Services: HTTPS, IMAPS, POP3S — anything TLS-wrapped.
 \newcommand{\icolock}[1][\hexiconcolor]{\suri@ico{#1}{%
@@ -105,20 +137,28 @@
   \draw (2.9,5.1) -- (2.9,6.3) arc (180:0:1.6) -- (6.1,5.1);}}
 
 % \icochip — square die with four pins.  Generic TCP port with no known service.
+% Big die, short pins — the model measures a body of 5.8 x 4.8px inside a
+% footprint of 8.7px, where this drew a 4.2px body with pins nearly as long as
+% the body was wide, which read as a compass rose rather than a chip.
 \newcommand{\icochip}[1][\hexiconcolor]{\suri@ico{#1}{%
-  \draw (2.4,2.4) rectangle (6.6,6.6);
-  \draw (4.5,6.6) -- (4.5,8.4);
-  \draw (4.5,2.4) -- (4.5,0.6);
-  \draw (2.4,4.5) -- (0.6,4.5);
-  \draw (6.6,4.5) -- (8.4,4.5);}}
+  \draw (1.6,2.1) rectangle (7.4,6.9);
+  \draw (4.5,6.9) -- (4.5,8.8);
+  \draw (4.5,2.1) -- (4.5,0.2);
+  \draw (1.6,4.5) -- (0.2,4.5);
+  \draw (7.4,4.5) -- (8.8,4.5);}}
 
 % \icodb — cylinder.  Service: MySQL and any other database port.
+% An OPEN cylinder: lid, two sides, one curve at the foot, and nothing between
+% them.  The model shows a hollow can.  The second arc this used to draw at
+% mid-body landed ~2.3px from the foot arc, and at 1.1px of stroke the two fused
+% into a stack of dark bands — the icon read as a blot, not as a database.
+% Wider and taller than the old one as well: the model measures 8.2px across the
+% stroke centres and 6.4px from the lid to the foot, against 6.6 and 4.5.
 \newcommand{\icodb}[1][\hexiconcolor]{\suri@ico{#1}{%
-  \draw (4.5,7.0) ellipse (3.3 and 1.5);
-  \draw (1.2,7.0) -- (1.2,2.5);
-  \draw (7.8,7.0) -- (7.8,2.5);
-  \draw (1.2,4.75) arc (180:360:3.3 and 1.5);
-  \draw (1.2,2.5) arc (180:360:3.3 and 1.5);}}
+  \draw (4.5,7.7) ellipse (4.1 and 1.6);
+  \draw (0.4,7.7) -- (0.4,1.3);
+  \draw (8.6,7.7) -- (8.6,1.3);
+  \draw (0.4,1.3) arc (180:360:4.1 and 1.6);}}
 
 % --- service name -> icon -------------------------------------------------
 % Keys are lower case; \icofor lowercases whatever the data hands it.  Anything
@@ -127,11 +167,11 @@
 \newcommand{\suri@icomap}[2]{\expandafter\def\csname suri@ico@#1\endcsname{#2}}
 \suri@icomap{ftp}{\icofolder}
 \suri@icomap{ftps}{\icolock}
-\suri@icomap{ssh}{\icoterm}
-\suri@icomap{2222}{\icoterm}
-\suri@icomap{linux}{\icoterm}
-\suri@icomap{unix}{\icoterm}
-\suri@icomap{telnet}{\icoterm}
+\suri@icomap{ssh}{\icotermwide}
+\suri@icomap{2222}{\icotermwide}
+\suri@icomap{linux}{\icotermwide}
+\suri@icomap{unix}{\icotermwide}
+\suri@icomap{telnet}{\icotermwide}
 \suri@icomap{domain}{\icodns}
 \suri@icomap{dns}{\icodns}
 \suri@icomap{http}{\icoglobe}
@@ -219,6 +259,7 @@
   \node[anchor=base,inner sep=0pt] at ({#1},{#2+\hex@baseone}) {%
     \adjustbox{max width=\suripx{\hex@maxone}}{%
       \renewcommand{\hexiconcolor}{\hex@ico}%
+      \renewcommand{\hexicopad}{0.7}%
       \icofor{#3}\hspace{\suripx{3.5}}%
       {\color{\hex@txt}\suriSans\bfseries\suriFS{10}{10}\MakeUppercase{#3}}}};
   \node[anchor=base,inner sep=0pt] at ({#1},{#2+\hex@basetwo}) {%

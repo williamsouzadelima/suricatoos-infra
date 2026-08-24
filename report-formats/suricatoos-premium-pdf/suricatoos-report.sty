@@ -99,11 +99,18 @@
 % so the block that follows stacked 17px PLUS its own air instead of taking the
 % maximum, and every block that opened a section landed 17px too low (pg-08's
 % card sat 46px under the title band; the model has 27).  Colour first, then a
-% plain \addvspace, and the glue is visible again.  A paragraph, which adds no
-% air of its own, still gets the section's 17px unchanged.
+% plain \addvspace, and the glue is visible again.
+%
+% The skip itself is 8px, not the 17px this patch first carried.  Every block
+% that opens a section brings air of its own and wins the \addvspace maximum,
+% so 17 was only ever visible in the one case that brings none: a paragraph
+% directly under the title.  Measured on the model, the title's baseline is 45px
+% above the paragraph's first baseline on pg-03 and 44px on pg-05; with 17px the
+% port lands them at 54px, with 8px at 45px.  pg-02 needs 5px more than that,
+% and gets them from \suriLede's own air rather than from here.
 \patchcmd{\suriSection}
   {\vspace{\suripx{17}}\color{body}}
-  {\color{body}\addvspace{\suripx{17}}}{}%
+  {\color{body}\nobreak\addvspace{\suripx{8}}}{}%
   {\PackageError{suricatoos-report}{Cannot retune the tail of \string\suriSection}%
     {suricatoos-page.sty changed; update suricatoos-report.sty.}}
 
@@ -112,7 +119,7 @@
 \suri@air{18}{\fieldlabel}        % field headings of a detailed finding (pg-09)
 \suri@air{24}{\kpirow}            % KPI strip (pg-02)
 \suri@air{20}{\hexcard}           % port-map card (pg-03)
-\suri@air{24}{\hostcard}          % host card (pg-05)
+\suri@air{22}{\hostcard}          % host card (pg-05)
 \suri@air{15}{\warnbox}           % amber caveat (pg-07)
 \suri@air{20}{\alertbox}          % "this scan measured nothing" (secao 1)
 \suri@air{17}{\solbox}            % remediation box (pg-09)
@@ -127,10 +134,13 @@
 % ===========================================================================
 % 3a. Body text.
 % ===========================================================================
-% \suriPara{texto} — one paragraph of running copy: Plex Sans 11.5px on a 19px
-% leading in `body', the setting used for every explanatory paragraph of the
-% model (pg-02, pg-03, pg-05, pg-08, pg-09).  It carries its air BELOW, so the
-% next block's own leading air simply wins the \addvspace maximum.
+% \suriPara{texto} — one paragraph of running copy: Plex Sans 11.5px on a
+% 17.25px leading in `body', the setting the model uses for every explanatory
+% paragraph EXCEPT the one that opens the executive summary (see \suriLede).
+% The leading is measured, not assumed: on pg-03 and pg-05 the model puts 18
+% device px between consecutive baselines of this copy, which is 17.25 design px
+% — 1.5 x the 11.5px body — where a 19px leading puts 20.  It carries its air
+% BELOW, so the next block's own leading air simply wins the \addvspace maximum.
 % The model does NOT run this copy to the full text block: every explanatory
 % paragraph is set on a shorter measure (~93% of the block), which is what makes
 % pg-02's intro break over four lines instead of three.  That is a reading
@@ -149,7 +159,27 @@
 \newcommand{\suriPara}[1]{%
   \par\noindent
   \begin{minipage}[t]{\suriparameasure\linewidth}%
-    \parindent=0pt\raggedright\suriFS{11.5}{19}\color{body}#1%
+    \parindent=0pt\raggedright\suriFS{11.5}{17.25}\color{body}#1%
+  \end{minipage}\par
+  \addvspace{\suripx{10}}}
+
+% \suriLede{texto} — the opening paragraph of the executive summary (pg-02),
+% and the ONE place the model sets running copy larger than \suriPara.
+%
+% Measured off the model: every explanatory paragraph of pg-03/pg-05 sets its
+% words on exactly the advance \suriPara gives at 11.5px, but the SAME fifteen
+% words of pg-02's first line run 6% wider — 656px against 619px — with a
+% leading of 19px against the 17.25px of the rest, and 5px more air under the
+% section title.  Three measurements, one conclusion: the executive summary
+% opens on a lede, not on body copy, so it gets a style of its own instead of
+% dragging every other paragraph in the report up with it.
+%
+% Everything else — the measure, the colour, the air below — is \suriPara's, so
+% the two stay one family.
+\newcommand{\suriLede}[1]{%
+  \par\addvspace{\suripx{12}}\noindent
+  \begin{minipage}[t]{\suriparameasure\linewidth}%
+    \parindent=0pt\raggedright\suriFS{12.2}{19}\color{body}#1%
   \end{minipage}\par
   \addvspace{\suripx{10}}}
 
@@ -160,7 +190,7 @@
 \newlist{suribullets}{itemize}{1}
 \setlist[suribullets]{
   label=\textcolor{body}{\textbullet},
-  leftmargin=\suripx{17}, labelsep=\suripx{8},
+  leftmargin=\suripx{17}, labelsep=\suripx{11},
   topsep=0pt, partopsep=0pt, parsep=0pt, itemsep=\suripx{7},
   before=\suriFS{10.5}{17}\color{body}}
 
@@ -202,7 +232,17 @@
 % #1 is the symbol (\dag, \ddag); the colour is inherited from the cell.
 % NOTE: this is the SERVIÇO mark only.  The mark beside the port NUMBER is set
 % full size on the baseline in the model, and belongs to \portrow.
-\providecommand{\portmark}[1]{\kern\suripx{1.5}\textsuperscript{#1}}
+%
+% The mark is raised and sized by hand instead of through \textsuperscript,
+% which took its body from \sf@size — a length only \normalsize and friends
+% update, never a bare \fontsize — so the mark had no relation at all to the
+% \suriFS{11}{12} of the cell it hangs off, and came out at whatever
+% \DeclareMathSizes happened to declare for the cell's size.  Measured against
+% the model, that dagger was 3px wide against the model's 5px and carried half
+% its ink; at 7.5px semibold it matches both.  The kern is 4px, not the 1.5px
+% that read as a multiplication sign glued to the word: the model leaves 4px of
+% white between the service name and the mark.
+\providecommand{\portmark}[1]{\kern\suripx{4}\raisebox{\suripx{3}}{\suriFS{7.5}{7.5}\bfseries#1}}
 
 % \suriEllip — the leading ellipsis of a truncation line ("… + 35 achados").
 % The line itself is monospace, and three periods on three monospace cells come
@@ -266,10 +306,10 @@
   \noindent
   \ifstrequal{#1}{indicadores}{%
     \tagboxc{medio}{\suriLblIndicators}%
-    \hspace{\suripx{12}}{\suriFS{9.5}{9.5}\color{muted}\suriLblQodIndicators}%
+    \hspace{\suripx{12}}{\suriFS{10.4}{10.4}\color{muted}\suriLblQodIndicators}%
   }{%
     \tagbox{\suriLblConfirmed}%
-    \hspace{\suripx{12}}{\suriFS{9.5}{9.5}\color{muted}\suriLblQodConfirmed}%
+    \hspace{\suripx{12}}{\suriFS{10.4}{10.4}\color{muted}\suriLblQodConfirmed}%
   }%
   \par\vskip\suripx{13}}
 
@@ -298,7 +338,10 @@
 %
 % This design enters math mode in exactly one construct, at two small text
 % sizes: \textsuperscript, which is \ensuremath underneath, and which sets the
-% dagger of a table footnote (8.5px) and the mark of a SERVIÇO cell (9.5px).
+% dagger of a table footnote (8.5px).  (The SERVIÇO cell's mark used to go
+% through it too, at 9.5px and later 11px; \portmark now composes that one by
+% hand, but the declarations below stay — they cost nothing and the footnote
+% mark still needs the 8.5px one.)
 % LaTeX then asks Computer Modern for script sizes of 4.5pt and 3.2pt, which no
 % CM design size covers, and the log fills with "Font shape ... not available"
 % size substitutions.  Pinning both script sizes to 5pt — the smallest CM that

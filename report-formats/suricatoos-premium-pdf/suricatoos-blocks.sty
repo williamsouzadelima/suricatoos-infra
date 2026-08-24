@@ -254,14 +254,27 @@
 % top and bottom.  \fboxsep can only do one number, so it keeps the vertical
 % figure and the extra side air comes from a kern inside the box.
 \newcommand{\suri@chippad}{\kern\suripx{3.5}}
-\newcommand{\suri@chipbody}[1]{\suriFS{9}{9}\suriMono
-  \suri@chippad#1\suri@chippad\suri@strut{9}{2.5}}
+% The body is BOXED to a declared height and depth instead of merely strutted:
+% a strut only guarantees a minimum, so a parenthesis or an accent (INSTANCIA(S))
+% grew its chip 3px taller than the chip beside it.  In the model every chip on a
+% line measures exactly the same 24px, so the box is fixed and the rare tall
+% glyph rides into the 7px of padding, where nobody can see it.
+% Weight: EVERY chip is bold, outline ones included — measured on the model, the
+% CVE and "22 ADVISORIES" chips carry 1.3x the ink of the same string set
+% regular at the same size, which is the bold/regular ratio of plex-mono here.
+\newcommand{\suri@chipbody}[1]{\raisebox{\z@}[\suripx{6.5}][\suripx{2.5}]{%
+  \suriFS{9.5}{9.5}\suriMono\bfseries\suri@chippad#1\suri@chippad}}
 \newcommand{\suri@chipsep}{\hskip\suripx{10}\relax}
+% An OUTLINE chip pays for its border twice: \fcolorbox puts \fboxrule OUTSIDE
+% \fboxsep, so at the same padding it comes out 2px taller than the filled chip
+% next to it.  The model has them identical, so the outline chips spend one
+% hairline of their padding on the rule.
+\newcommand{\suri@chippadout}{\dimexpr\suripx{7}-\suri@hair\relax}
 
 % \chip{texto} — outline chip: white ground, hairline border.  CVEs, instance
 % counts, host:port pairs.
 \newcommand{\chip}[1]{{%
-  \setlength{\fboxsep}{\suripx{7}}\setlength{\fboxrule}{\suri@hair}%
+  \setlength{\fboxsep}{\suri@chippadout}\setlength{\fboxrule}{\suri@hair}%
   \fcolorbox{hairline}{card}{\color{body}\suri@chipbody{#1}}\suri@chipsep}}
 
 % \chipfill{sev}{texto} — chip filled with the severity colour, white text.
@@ -271,17 +284,23 @@
 
 % \chipsev{sev}{cvss} — the filled chip a finding card leads with:
 % white square + "ALTO · CVSS 8.6" on the severity colour.
-% Filled chips carry their text in bold, outline chips do not — that is what the
-% model measures, and it is why \bfseries lives here and not in \suri@chipbody.
 \newcommand{\chipsev}[2]{\chipfill{#1}{%
   \sevsquare{white}\kern\suripx{5}\bfseries
   \textls[\suri@trksev]{\MakeUppercase{\sevword{#1}%
     \suri@ifempty{#2}{}{~\textperiodcentered~\suriLblCvssText~#2}}}}}
 
+% \chiphost{texto} — the `host:porta' chip of SISTEMAS AFETADOS (pg-09).  Same
+% geometry and border as \chip, but the model fills it with `track' and sets the
+% address in ink bold: it is the datum the reader carries out of the card, so it
+% is not the same weight as a CVE label sitting next to it in an outline chip.
+\newcommand{\chiphost}[1]{{%
+  \setlength{\fboxsep}{\suri@chippadout}\setlength{\fboxrule}{\suri@hair}%
+  \fcolorbox{hairline}{track}{\color{ink}\suri@chipbody{#1}}\suri@chipsep}}
+
 % \chipwarn{texto} — the amber "low confidence" chip (warnbg / warnborder).
 \newcommand{\chipwarn}[1]{{%
-  \setlength{\fboxsep}{\suripx{7}}\setlength{\fboxrule}{\suri@hair}%
-  \fcolorbox{warnborder}{warnbg}{\color{warnfg}\bfseries\suri@chipbody{#1}}\suri@chipsep}}
+  \setlength{\fboxsep}{\suri@chippadout}\setlength{\fboxrule}{\suri@hair}%
+  \fcolorbox{warnborder}{warnbg}{\color{warnfg}\suri@chipbody{#1}}\suri@chipsep}}
 
 % \chiprow{chips} — a wrapping line of chips.  Feed it \chip/\chipfill/\chipwarn
 % calls; it supplies the horizontal gap and the line spacing between wrapped rows.
@@ -295,27 +314,66 @@
 
 % \tagbox{texto} — the black slab that titles a summary ("ACHADOS CONFIRMADOS").
 \newcommand{\tagbox}[1]{\tagboxc{ink}{#1}}
+% Slab tracking and measure.  Solved against the model rather than borrowed: its
+% two page slabs run 170px (19 characters) and 186px (21), which fixes the
+% advance at 8.0px/char and the side air at ~10px.  At 10px Mono that advance is
+% 168/1000 em of tracking — NOT \suri@trkslab (220), which is the figure
+% \blocklabel needs and which the model reproduces there exactly.  Reading the
+% slab at 9px/220 lands the same total width by two errors that cancel: letters
+% a step too small inside padding a step too wide.
+\newcommand{\suri@trktag}{168}
+% \suri@tagslab{cor}{corpo-px}{strut-h}{strut-d}{texto} — one slab.
+\newcommand{\suri@tagslab}[5]{{%
+  \setlength{\fboxsep}{\suripx{6}}%
+  \colorbox{#1}{\hspace{\suripx{4}}%
+    \suri@lblx{\suri@trktag}{white}{#2}{#5}\suri@strut{#3}{#4}%
+    \hspace{\suripx{4}}}}}
 % \tagboxc{cor}{texto} — same slab in another colour ("INDICADORES A VALIDAR").
 % The colour is a token name, e.g. `medio'.
-\newcommand{\tagboxc}[2]{{%
-  \setlength{\fboxsep}{\suripx{6}}%
-  \colorbox{#1}{\hspace{\suripx{7}}%
-    \suri@lblx{\suri@trkslab}{white}{9}{#2}\suri@strut{9}{2}%
-    \hspace{\suripx{7}}}}}
+\newcommand{\tagboxc}[2]{\suri@tagslab{#1}{10}{9}{2}{#2}}
+% \tagboxcard{cor}{texto} — the smaller seal a CARD wears (CONSOLIDADO, pg-08).
+% Not a mistake in the page slab: the model really sets it a step down, 95x20
+% against the 170x22 of the section tag, and centres the word in the box instead
+% of hanging it from the top.
+\newcommand{\tagboxcard}[2]{\suri@tagslab{#1}{8.5}{7.5}{0.75}{#2}}
+
+% \findingorig{texto} — o nome ORIGINAL do NVT, sob o titulo traduzido.
+%
+% O relatorio em pt-BR traduz o nome da vulnerabilidade, mas o nome em ingles e
+% a chave que o analista usa para achar o NVT no Greenbone ou numa busca. Entao
+% ele fica: menor, em `muted', na linha de baixo. Nao e subtitulo -- e
+% identificador, e por isso nao leva ponto final nem capitulacao.
+\newcommand{\findingorig}[1]{%
+  \par\nointerlineskip\vskip\suripx{3}%
+  {\suriFS{9}{12}\color{muted}#1\par}}
 
 % \fieldlabel{texto} — the small carmine Mono label over a block (pg-09).
 % \nopagebreak: a label is the heading of the block under it, and a page that
 % ends with the label alone sends the reader to the next page to find out what
-% it was labelling.  The penalty forbids the break at the 3px gap, so the label
-% travels with the first line of its own copy.
+% it was labelling.  The penalty forbids the break at the gap below it, so the
+% label travels with the first line of its own copy.
+% As in \blocklabel below, NOTHING may follow that \vskip: a trailing penalty
+% leaves \lastskip at zero and the entry air of the block underneath (the
+% tcolorbox `before skip' of \cvssvector, of termbox, of \solbox) then stacked on
+% top of this gap instead of taking the maximum with it — 8px too much between
+% every field label and the block it announces.
 \newcommand{\fieldlabel}[1]{\par\nointerlineskip
   {\parindent=0pt\suri@lblx{\suri@trkfield}{critico}{8.5}{#1}\par}%
-  \nopagebreak\vskip\suripx{3}\nopagebreak}
+  \nopagebreak\vskip\suripx{3}}
 
 % \blocklabel{texto} — the same label in muted grey, for chart and table titles.
+% The closing \nopagebreak of \fieldlabel is deliberately NOT repeated after the
+% \vskip here.  A penalty is the last item on the vertical list, so \lastskip
+% reads zero, and the \addvspace that suricatoos-report installs on the block
+% below — \porttable, \sevbars, \timelinestrip — could not take the maximum with
+% this 9px: it stacked on top of it instead, and the table of pg-04 opened 26px
+% under its heading where the model has 17 (and the bars of pg-02, 25 where the
+% model has 16).  The protection is not lost: glue that follows a penalty is not
+% a legal breakpoint, so the \nopagebreak BEFORE the \vskip already keeps the
+% label with the block it titles.
 \newcommand{\blocklabel}[1]{\par\nointerlineskip
   {\parindent=0pt\suri@lblx{\suri@trkslab}{muted}{9}{#1}\par}%
-  \nopagebreak\vskip\suripx{9}\nopagebreak}
+  \nopagebreak\vskip\suripx{9}}
 
 % Table column headers, left and right aligned.  Zero-width boxes: a long label
 % such as "CVSS MAX" then hangs over its neighbour instead of breaking in two,
@@ -352,8 +410,11 @@
   \else \usebox\suri@valbox \fi}
 
 % \suri@kpibox{ground}{labelcolour}{valuecolour}{frame}{width}{label}{value}
-% Fixed 112px tall: the label hangs from the top, the value sits on the bottom,
-% so a one-line and a two-line label still share the same value baseline.
+% Fixed 112px tall: the label hangs from the top and the value is the NEXT LINE
+% of it, not a block flushed to the bottom.  The model puts the value's baseline
+% a fixed 45px under the label's LAST baseline, so a one-line label carries its
+% number up with it — VULNS UNICAS sits 10px higher than the two-line tiles
+% beside it, and the tile is not left bottom-heavy.  The slack goes below.
 \newcommand{\suri@kpibox}[7]{%
   \begin{tcolorbox}[nobeforeafter,enhanced,sharp corners,arc=0pt,outer arc=0pt,
       colback=#1,colframe=#4,boxrule=\suri@hair,
@@ -365,9 +426,11 @@
       % lines with the \baselineskip in force OUTSIDE \suri@lblx's own group.
       {\parindent=0pt\raggedright\suriFS{8.5}{11}%
         \suri@lblx{\suri@trkslab}{#2}{8.5}{#6}\par}%
-      \vfill
-      {\parindent=0pt\color{#3}\suriFS{34}{34}\bfseries\suri@fitvalue{#7}\par}%
-      \vskip\suripx{28}}%
+      % 45px of leading, not a \vfill: TeX sets the interline glue from
+      % \prevdepth, so the value lands one fixed baseline step under the label
+      % whether the label ran to one line or to two.
+      {\parindent=0pt\color{#3}\suriFS{34}{45}\bfseries\suri@fitvalue{#7}\par}%
+      \vfill}%
   \end{tcolorbox}}
 
 % \kpibox{rotulo}{valor} — one white KPI tile on its own (hairline border,
@@ -438,11 +501,18 @@
 % plus a 15px inset, so the three text blocks land on exact thirds of the measure.
 \newcommand{\suri@tlcell}[3]{%
   \makebox[\suri@tlcol][l]{%
-    \if r#1{\color{hairline}\rule[-\suripx{37}]{\suri@hair}{\suripx{60}}}\hspace{\suripx{14}}\fi
+    % The rule is what fixes the line's ascent, so its lift also fixes where the
+    % cell CONTENT sits: at -37 the column started 8px under the 2pt rule and the
+    % second value line then fell out of the bottom of the 60px hairline.  In the
+    % model the hairline begins flush against the 2pt rule, i.e. 15px above the
+    % first baseline.
+    \if r#1{\color{hairline}\rule[-\suripx{45}]{\suri@hair}{\suripx{60}}}\hspace{\suripx{14}}\fi
     \begin{minipage}[t][\suripx{60}][t]{\dimexpr\suri@tlcol-\if r#1\suripx{15}\else\z@\fi\relax}%
       \parindent=0pt\raggedright
-      \suri@lblx{\suri@trkfield}{critico}{8.5}{#2}\par\vskip\suripx{9}%
-      {\suriMono\bfseries\suriFS{11}{14}\color{ink}#3\par}%
+      % Mono REGULAR: the carmine label above is the bold half of this pair, and
+      % setting the value bold as well flattens the contrast the model builds.
+      \suri@lblx{\suri@trkfield}{critico}{8.5}{#2}\par\vskip\suripx{4}%
+      {\suriMono\suriFS{11}{14}\color{ink}#3\par}%
     \end{minipage}}}
 % \timelinestrip{r1}{v1}{r2}{v2}{r3}{v3} — three columns under a 2px ink rule,
 % separated by full-height hairlines.  A value may carry a \\ to break its second
@@ -503,14 +573,18 @@
 % and whether the row gets the alto ground.
 \newcommand{\portrow}[8]{%
   \rowcolor{\suri@bghigh{#5}{paper}}%
+  % The mark travels with the number, so it takes the number's weight: the
+  % \dat group has already closed, so \bfseries has to be asked for again.
   {\dat{\suriFS{9.5}{9.5}\bfseries\color{ink}#1}%
-    \suri@ifempty{#2}{}{\kern\suripx{3}{\color{ink}\suriFS{9.5}{9.5}#2}}}&
+    \suri@ifempty{#2}{}{\kern\suripx{6}{\color{ink}\suriFS{9.5}{9.5}\bfseries#2}}}&
   {\dat{\suriFS{9.5}{9.5}\color{muted}#3}}&
   {\suriFS{11}{12}\color{ink}#4}&
   {\sevstate{#5}}&
   {\dat{\suriFS{10}{10}\bfseries\color{ink}#6}}&
   {\dat{\suriFS{10}{10}\color{ink}#7}\suri@ptgut}&
-  {\dat{\suriFS{9.5}{12}\color{muted}#8}}\suri@rowfill{26}\\
+  % `body', not `muted': the widest column of the table is data, and the model
+  % sets it a full step darker than the PROTO cell beside it.
+  {\dat{\suriFS{9.5}{12}\color{body}#8}}\suri@rowfill{26}\\
   \suri@rowhair}
 
 % \portnote{simbolo}{texto} — one footnote line under the table.
@@ -609,9 +683,14 @@
        {\suriFS{11}{11}\color{onnavy}#2}\hspace{\suripx{13}}%
        % The OS chip is wider than it is tall: \fboxsep is symmetric and cannot
        % give 9px of side air on a 15px-high box, so the sides get their own kern.
+       % The WORD is white and the icon stays `onnavy': in the model the badge
+       % reads label-first, the glyph deliberately a step quieter.  Both in
+       % `onnavy' is what made the chip look switched off.  Its tracking is its
+       % own (140, not the 220 of a page label) — the model's chip is 98px wide
+       % and \suri@trkslab runs it to 105.
        {\setlength{\fboxsep}{\suripx{3}}%
         \colorbox{navychip}{\kern\suripx{6}\color{onnavy}\icoterm[onnavy]\hspace{\suripx{5}}%
-          \suri@lblx{\suri@trkslab}{onnavy}{8.5}{#3}\suri@strut{8}{1}\kern\suripx{6}}}%
+          \suri@lblx{140}{white}{8.5}{#3}\suri@strut{8}{0}\kern\suripx{6}}}%
        \hfill
        {\suri@lblx{\suri@trkband}{onnavy}{8.5}{#4\ \suriLblPortsWith}}\hspace*{\suripx{20}}%
        \par\vspace*{\suripx{14}}%
@@ -623,7 +702,7 @@
     \noindent\hspace{\suripx{20}}%
     \begin{minipage}{\dimexpr\linewidth-\suripx{40}\relax}#5\end{minipage}%
     \hspace{\suripx{20}}%
-    \par\vspace*{\suripx{20}}%
+    \par\vspace*{\suripx{18}}%
   \end{tcolorbox}}
 
 % ===========================================================================
@@ -633,11 +712,22 @@
 %     \findingrow{1}{ISC BIND --- Atualiza\c{c}\~ao pendente}{22}{alto}{8.6}
 %     \findingrow{10}{SSL/TLS: ...}{60}{logsev}{}
 %   \end{findingsummary}
+%
+%   \begin{findingsummary}[trunc]{confirmados}   % list cut short below
+%     ...
+%   \end{findingsummary}
 %   \findingtrunc{\ldots\ + 35 achados informativos (Log)}
 %
 % `modo' selects the last column header and whether a critical row is highlighted:
 % in the "indicadores" table (QoD < 70%) the severity is a ceiling, and the
 % critical line is called out with the soft carmine ground.
+%
+% The optional `trunc' says the list does NOT end here.  A complete table closes
+% on a 2px ink rule, exactly like the port table of pg-04 — that is the model of
+% pg-07, and without it the last row bleeds into the paper.  A truncated one does
+% not: the \findingtrunc line underneath is what closes it, and the model of
+% pg-06 leaves the pale hairline of the last row standing.  The environment
+% cannot see what follows it, so the caller has to say.
 % ===========================================================================
 \newlength{\suri@fsw}
 % the gutter before SEVERIDADE, owned by the INST. cell (see the port table)
@@ -648,8 +738,10 @@
   \suri@hlbl{\#}&\suri@hlbl{\suriLblVuln}&
   \suri@hlblr{\suriLblInst}\suri@fsgut&\suri@hlbl{\suri@fssevlbl}\suri@rowfill{25}\\
   \suri@rowthick}
-\newenvironment{findingsummary}[1]{%
-  \def\suri@fsmode{#1}%
+\newcommand{\suri@fsfoot}{\suri@rowclose}
+\newcommand{\suri@fstrunc}{trunc}
+\newenvironment{findingsummary}[2][]{%
+  \def\suri@fsmode{#2}%
   \def\suri@fsmodeind{indicadores}%
   \ifx\suri@fsmode\suri@fsmodeind
     \renewcommand{\suri@fsbg}[1]{\suri@bgcrit{##1}{paper}}%
@@ -657,6 +749,12 @@
   \else
     \renewcommand{\suri@fsbg}[1]{paper}%
     \renewcommand{\suri@fssevlbl}{\suriLblSev}%
+  \fi
+  \def\suri@fscut{#1}%
+  \ifx\suri@fscut\suri@fstrunc
+    \renewcommand{\suri@fsfoot}{}%
+  \else
+    \renewcommand{\suri@fsfoot}{\suri@rowclose}%
   \fi
   \setlength{\suri@fsw}{\linewidth}%
   \suri@rowbase{17}%
@@ -670,7 +768,7 @@
     >{\raggedright\arraybackslash}p{0.2465\suri@fsw}@{}}
   \suri@fshead\endfirsthead
   \suri@fshead\endhead
-  \endlastfoot
+  \suri@fsfoot\endlastfoot
 }{\endlongtable}
 
 % \findingrow{n}{nome}{instancias}{sev}{cvss} — one summary line.  A Log finding
@@ -867,8 +965,8 @@
     \parindent=0pt\dat{\suriFS{10}{14}\color{ink}#1}%
   \end{tcolorbox}}
 
-% \affectedchips{chips} — the wrapping run of `host:porta' chips.  Feed it \chip
-% calls; it only supplies the spacing.
+% \affectedchips{chips} — the wrapping run of `host:porta' chips.  Feed it
+% \chiphost calls; it only supplies the spacing.
 \newcommand{\affectedchips}[1]{\chiprow{#1}}
 
 % termbox — the detection-result terminal: navy ground, green Mono, one output

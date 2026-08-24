@@ -27,7 +27,7 @@ import os
 HERE = os.path.dirname(os.path.abspath(__file__))
 BUNDLE = os.path.join(HERE, "suricatoos-premium-pdf")
 
-VERSION = "20260822a"
+VERSION = "20260824a"
 
 # (lang code passed to xsltproc, report_format UUID, dropdown name).
 # EN keeps the original UUID so the already-deployed object is updated in place
@@ -93,6 +93,9 @@ STATIC_SHARED_FILES = [
     # the bundle: the gvmd container ships no Plex, and without this pdflatex
     # falls back to Latin Modern without saying a word.
     "plex-min.tar.gz",
+    # Catalogo de traducao dos NVTs (um por idioma). Sem ele o relatorio em
+    # pt-BR sai com metade da prosa em ingles, porque o texto de
+    # vulnerabilidade do feed do Greenbone so existe nesse idioma.
     "suricatoos-wordmark-navy.pdf",
     "suricatoos-wordmark-white.pdf",
     "suricatoos-mark-navy.pdf",
@@ -100,8 +103,13 @@ STATIC_SHARED_FILES = [
 ]
 
 
-def shared_files():
-    """The shared bundle members, design-system .sty modules included."""
+def shared_files(lang=None):
+    """The bundle members of one object, design-system .sty modules included.
+
+    O catalogo de traducao dos NVTs e' POR IDIOMA e pesa ~425 KB: mandar os tres
+    em cada objeto triplicaria o peso sem que nenhum dos dois extras chegasse a
+    ser lido (o latex.xsl carrega exatamente `nvt-i18n-<lang>.xml`). Entao cada
+    objeto leva so' o seu."""
     styles = sorted(n for n in os.listdir(BUNDLE) if n.endswith(".sty"))
     if "suricatoos-tokens.sty" not in styles:
         raise SystemExit(
@@ -112,12 +120,16 @@ def shared_files():
                if not os.path.exists(os.path.join(BUNDLE, n))]
     if missing:
         raise SystemExit("bundle is missing: %s" % ", ".join(missing))
-    return STATIC_SHARED_FILES[:1] + styles + STATIC_SHARED_FILES[1:]
+    cat = ["nvt-i18n-%s.xml" % lang] if lang else []
+    for n in cat:
+        if not os.path.exists(os.path.join(BUNDLE, n)):
+            raise SystemExit("bundle is missing: %s" % n)
+    return STATIC_SHARED_FILES[:1] + styles + cat + STATIC_SHARED_FILES[1:]
 
 
-def object_file_names():
+def object_file_names(lang=None):
     """Every <file> the object carries, in the order it is written."""
-    return ["generate", "report_format.xml"] + shared_files()
+    return ["generate", "report_format.xml"] + shared_files(lang)
 
 
 # Canonical generate script, read once and rewritten per language. It carries the
@@ -153,7 +165,7 @@ def report_format_xml_for(fmt_id: str, name: str, lang: str) -> bytes:
     """A per-language report_format.xml embedded as the object's own descriptor.
     gvmd uses the outer feed element for identity, but we keep this consistent so
     the delivered descriptor never contradicts the object it ships in."""
-    files = "\n".join('  <file name="%s"/>' % n for n in object_file_names())
+    files = "\n".join('  <file name="%s"/>' % n for n in object_file_names(lang))
     xml = (
         "<!-- Copyright (C) 2026 Suricatoos -->\n"
         '<report_format id="%s">\n'
@@ -185,8 +197,9 @@ def build_feed_object(lang: str, fmt_id: str, name: str) -> str:
     parts.append('  <file name="generate">%s</file>' % b64_bytes(generate_for(lang)))
     parts.append('  <file name="report_format.xml">%s</file>'
                  % b64_bytes(report_format_xml_for(fmt_id, name, lang)))
-    # Shared files (identical bytes across languages), all read in binary.
-    for n in shared_files():
+    # Bundle members, all read in binary. Quase todos sao identicos entre os
+    # idiomas; a excecao e' o catalogo de traducao, que e' o do idioma do objeto.
+    for n in shared_files(lang):
         parts.append('  <file name="%s">%s</file>' % (n, b64_file(os.path.join(BUNDLE, n))))
     parts.append("</report_format>")
     parts.append("")
@@ -195,7 +208,7 @@ def build_feed_object(lang: str, fmt_id: str, name: str) -> str:
 
 def main():
     print("bundle manifest (%s):" % VERSION)
-    for n in object_file_names():
+    for n in object_file_names(LANGS[0][0]):
         src = os.path.join(BUNDLE, n)
         size = os.path.getsize(src) if os.path.exists(src) else 0
         print("  %-32s %9s bytes%s" % (n, size or "synth", "" if size else " (synthesised)"))
