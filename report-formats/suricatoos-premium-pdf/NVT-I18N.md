@@ -88,6 +88,12 @@ os cards.
 **Não traduzimos `detection`** (RESULTADO DA DETECÇÃO): é saída literal da
 ferramenta. É a maior parte do inglês que sobra no PDF, e sobra de propósito.
 
+## Espanhol
+
+Catálogo próprio (`nvt-i18n-es.xml`), 666/666 OIDs, glossário em `NVT-I18N-ES.md`.
+Resultado medido: **36% → 15%** de linhas em inglês. Mesmos gates: zero
+divergência de identificador, tortura de 666 entradas limpa (123 páginas).
+
 ## Dívida conhecida
 
 Sete termos de alta recorrência não têm entrada acima e convergiram por acaso,
