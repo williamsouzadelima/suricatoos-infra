@@ -2603,10 +2603,21 @@ SPDX-License-Identifier: GPL-2.0-or-later
             <xsl:otherwise>logsev</xsl:otherwise>
           </xsl:choose>
         </xsl:variable>
+        <!-- O nome sai TRADUZIDO aqui tambem: o sumario e a pagina mais lida do
+             relatorio, e ter o titulo em ingles nela e em portugues no card do
+             §5 e pior que ter os dois em ingles. Sem o nome original ao lado,
+             porem: numa tabela de 60 linhas isso dobraria a altura. O original
+             fica no card, que e onde o analista vai procurar a chave de busca. -->
+        <xsl:variable name="row-name">
+          <xsl:call-template name="nvt-i18n">
+            <xsl:with-param name="field" select="'name'"/>
+            <xsl:with-param name="orig" select="string(nvt/name)"/>
+          </xsl:call-template>
+        </xsl:variable>
         <xsl:text>\findingrow{</xsl:text><xsl:value-of select="position() + number($ngroups)"/><xsl:text>}{</xsl:text>
         <xsl:text>\hyperlink{</xsl:text><xsl:value-of select="$anchor"/><xsl:text>}{</xsl:text>
         <xsl:call-template name="escape_name">
-          <xsl:with-param name="string" select="nvt/name"/>
+          <xsl:with-param name="string" select="string($row-name)"/>
         </xsl:call-template>
         <xsl:text>}}{</xsl:text><xsl:value-of select="$instances"/><xsl:text>}{</xsl:text>
         <xsl:value-of select="$sevk"/><xsl:text>}{</xsl:text>
@@ -3430,9 +3441,17 @@ SPDX-License-Identifier: GPL-2.0-or-later
                 <xsl:with-param name="severity" select="severity"/>
               </xsl:call-template>
             </xsl:variable>
+            <!-- Traduzido tambem: a lista de advisories do card consolidado e
+                 prosa lida, nao identificador. -->
+            <xsl:variable name="adv-name">
+              <xsl:call-template name="nvt-i18n">
+                <xsl:with-param name="field" select="'name'"/>
+                <xsl:with-param name="orig" select="string(nvt/name)"/>
+              </xsl:call-template>
+            </xsl:variable>
             <xsl:text>  \advisoryrow{</xsl:text>
             <xsl:call-template name="escape_name">
-              <xsl:with-param name="string" select="nvt/name"/>
+              <xsl:with-param name="string" select="string($adv-name)"/>
             </xsl:call-template>
             <xsl:text>}{</xsl:text><xsl:value-of select="$asev"/><xsl:text>}{</xsl:text>
             <xsl:if test="$asev != 'logsev' and $asev != 'falsepos'">
