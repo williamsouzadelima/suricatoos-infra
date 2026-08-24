@@ -128,3 +128,20 @@ no LaTeX. Resultado da primeira rodada pt-BR: 666 entradas, 184 páginas, **0 er
 
 Gate obrigatório, e não é opcional: `pdflatex` em `batchmode` **produz PDF mesmo
 com erro**. Contar `^! ` no log é o que vale; "saiu PDF" não prova nada.
+
+## Pipeline de geração do catálogo
+
+Três ferramentas, nesta ordem:
+
+1. **traduzir** em lotes (agentes paralelos, sobre o glossário do idioma) →
+   `traduzido-<lang>/*.json`;
+2. `tools/canonicalize-catalog.py catalogo.json nvts-source.json` — **uniformiza
+   o boilerplate**: centenas de NVTs compartilham frases idênticas, e cada lote as
+   traduz do seu jeito. No pt-BR uma frase saiu com **dez** redações; no espanhol,
+   sete. Critério: mais frequente → mesma contagem de quebras da fonte →
+   lexicográfico (determinístico e idempotente);
+3. `tools/build-nvt-catalog.py catalogo.json <lang>` — JSON → XML, desescapando a
+   quebra de linha.
+
+Depois: verificar identificadores por script (CVE/CWE/advisory/CVSS/URL/versão,
+conjunto a conjunto contra a origem) e rodar `tools/build-torture-fixture.py`.
