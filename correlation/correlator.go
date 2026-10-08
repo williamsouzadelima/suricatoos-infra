@@ -22,7 +22,13 @@ type AgentInfo struct {
 type OSInfo struct {
 	Family  string `json:"family"`  // "linux" | "darwin" | "windows"
 	Distro  string `json:"distro"`  // e.g. "debian", "ubuntu"
-	Release string `json:"release"` // e.g. "12", "22.04"
+	Release string `json:"release"` // e.g. "12", "22.04", "22H2"
+	// Build and UBR are the Windows build number and Update Build Revision
+	// (e.g. "19045" + "4291" → 10.0.19045.4291). Together they are the precise
+	// patch level the MSRC correlator compares against each CSAF fixed version.
+	// Empty on non-Windows.
+	Build string `json:"build,omitempty"`
+	UBR   string `json:"ubr,omitempty"`
 }
 
 // Package mirrors schema/inventory.schema.json#/properties/packages/items.
