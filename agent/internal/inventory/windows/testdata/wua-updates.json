@@ -1,0 +1,4 @@
+[
+  {"kb":"5036892","title":"2024-04 Cumulative Update for Windows 10 Version 22H2 (KB5036892)","msrc_severity":"Important","reboot_required":true,"categories":["Security Updates"],"update_id":"aaaaaaaa-1111-2222-3333-444444444444"},
+  {"kb":"5037768","title":"Servicing Stack Update","msrc_severity":"Critical","reboot_required":false,"categories":["Security Updates","Critical Updates"],"update_id":"bbbbbbbb-5555-6666-7777-888888888888"}
+]
