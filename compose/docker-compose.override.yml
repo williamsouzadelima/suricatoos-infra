@@ -191,6 +191,10 @@ services:
     environment:
       INGEST_ADDR: ":9090"
       NOTUS_DIR: /notus
+      # Correlação Windows MSRC (ADR-0008): espelho CSAF que o feed-updater preenche
+      # quando MSRC_FEED_ENABLED=true. Enquanto vazio/ausente, o correlator Windows
+      # não acha nada (inerte) — NewMSRCCorrelator tolera o dir inexistente.
+      MSRC_DIR: /msrc/advisories
       GMP_SOCKET: /run/gvmd/gvmd.sock
       GMP_USERNAME: admin
       GMP_TASK_NAME: suricatoos-agent
@@ -233,6 +237,7 @@ services:
       # short-name; já declarados no compose.yaml base, não redeclarar aqui.
       - gvmd_socket_vol:/run/gvmd          # socket do gvmd (import_report)
       - notus_data_vol:/notus:ro           # *.notus do feed (WalkDir recursivo)
+      - msrc_data_vol:/msrc:ro             # espelho MSRC CSAF (feed-updater grava; aqui :ro)
       - ingest_state:/data                 # persiste lastSeen (online/offline) entre recreates
       # ADR-0007: registro de tenants (control-plane grava) + secrets gvmd por-tenant,
       # read-only. O control-plane grava tenants.json em /var/lib/suricatoos-cp.

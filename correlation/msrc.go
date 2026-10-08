@@ -30,6 +30,13 @@ type MSRCCorrelator struct {
 // entries is what matters.
 func NewMSRCCorrelator(dir string) (*MSRCCorrelator, error) {
 	idx := map[string][]msrcEntry{}
+	// The mirror directory may not exist yet (feed dark, or the first sync is
+	// still pending): that is NOT an error — an empty index means a Windows host
+	// simply gets no findings until the mirror fills. Only a real read failure
+	// of an existing tree propagates.
+	if _, serr := os.Stat(dir); os.IsNotExist(serr) {
+		return &MSRCCorrelator{byBuild: idx}, nil
+	}
 	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err

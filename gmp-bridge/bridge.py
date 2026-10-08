@@ -205,13 +205,22 @@ def finding_report_to_xml(
         evidence = finding.get("evidence", {})
         advisory = evidence.get("matched_advisory", "")
         source = evidence.get("source", "")
-        desc = (
-            f"Package {pkg_obs!r} is installed and vulnerable.\n"
-            f"Fixed version: {pkg_fix}\n"
-            f"Product: {product}\n"
-            f"Advisory: {advisory} (source: {source})\n"
-            f"Agent: {report.get('agent_id', '')}"
-        )
+        if source == "msrc":
+            desc = (
+                f"Host build {pkg_obs} is below the fixed build for this update.\n"
+                f"Fixed by: {pkg_fix}\n"
+                f"Product: {product}\n"
+                f"Advisory: {advisory} (source: {source})\n"
+                f"Agent: {report.get('agent_id', '')}"
+            )
+        else:
+            desc = (
+                f"Package {pkg_obs!r} is installed and vulnerable.\n"
+                f"Fixed version: {pkg_fix}\n"
+                f"Product: {product}\n"
+                f"Advisory: {advisory} (source: {source})\n"
+                f"Agent: {report.get('agent_id', '')}"
+            )
         ET.SubElement(r, "description").text = desc
 
         # GMP result host: the IP is the TEXT content of <host> (optionally with
@@ -223,6 +232,7 @@ def finding_report_to_xml(
 
         oid = finding.get("oid", "")
         meta = nvt_meta.get(oid)
+        sev_origin = finding.get("severity_origin", "")
 
         # Severity and CVEs come from FEED EVIDENCE ONLY (non-fabrication). When
         # the OID has feed metadata we use its score — even 0.0, since an
@@ -230,7 +240,18 @@ def finding_report_to_xml(
         # (meta is None: OID absent or lookup failed) we emit 0.0/Log and no CVE
         # refs; we never substitute the caller-supplied finding.severity/finding.cve,
         # which would present unverified, client-controlled values as feed-attested.
-        if meta is not None:
+        #
+        # EXCEPTION — MSRC Windows findings (ADR-0008, severity_origin "msrc-csaf"):
+        # these are attested SERVER-SIDE by the MSRC correlator from Microsoft's
+        # CSAF feed (the agent only reports build/ubr — it does NOT set severity or
+        # this origin marker). Their OID is a Suricatoos private-arc id with no
+        # Greenbone VT, so nvt_meta can't enrich them; use the correlator's
+        # feed-attested values. The marker is server-set, so this does not relax
+        # the rule for Notus or sensor findings.
+        if sev_origin == "msrc-csaf":
+            severity = _safe_cvss(finding.get("severity"))
+            cves = [str(c) for c in (finding.get("cve") or []) if c]
+        elif meta is not None:
             severity = meta.cvss_base
             cves = meta.cves
         else:
@@ -239,7 +260,11 @@ def finding_report_to_xml(
 
         nvt_el = ET.SubElement(r, "nvt", oid=oid)
         ET.SubElement(nvt_el, "type").text = "nvt"
-        ET.SubElement(nvt_el, "name").text = f"Package vulnerability: {pkg_obs}"
+        nvt_name = (
+            f"Missing Microsoft security update: {product}"
+            if source == "msrc" else f"Package vulnerability: {pkg_obs}"
+        )
+        ET.SubElement(nvt_el, "name").text = nvt_name
         ET.SubElement(nvt_el, "family").text = "General"
         ET.SubElement(nvt_el, "cvss_base").text = str(severity)
         ET.SubElement(nvt_el, "tags").text = ""
@@ -370,6 +395,17 @@ def _safe_qod(value) -> int:
     except (TypeError, ValueError):
         return 80
     return q if 0 <= q <= 100 else 80
+
+
+def _safe_cvss(value) -> float:
+    """Clamp a CVSS base score to [0.0, 10.0]; a missing/garbage value → 0.0.
+    Used for MSRC findings whose score is attested server-side (not via the OID
+    feed), so it must still be bounded before it reaches gvmd."""
+    try:
+        v = float(value)
+    except (TypeError, ValueError):
+        return 0.0
+    return min(10.0, max(0.0, v))
 
 
 def reattest_findings(findings: list[dict], nvt_meta: dict[str, "NVTMeta | None"] | None) -> list[dict]:

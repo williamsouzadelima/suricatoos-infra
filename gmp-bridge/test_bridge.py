@@ -437,3 +437,58 @@ class TestReattestFindings(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+MSRC_REPORT = {
+    "schema_version": "1.0.0",
+    "agent_id": "win-abc",
+    "host": "win-abc",
+    "collected_at": "2026-10-08T00:00:00Z",
+    "findings": [
+        {
+            "oid": "1.3.6.1.4.1.55683.2.2024.38063",
+            "cve": ["CVE-2024-38063"],
+            "severity": 9.8,
+            "severity_origin": "msrc-csaf",
+            "package_observed": "10.0.19045.4291",
+            "package_fixed": "10.0.19045.4780 (KB5041580)",
+            "specifier": ">=",
+            "product": "Windows 10 Version 22H2 for x64-based Systems",
+            "evidence": {"source": "msrc", "matched_advisory": "CVE-2024-38063"},
+            "detected_at": "2026-10-08T00:00:00Z",
+        }
+    ],
+}
+
+
+class TestMSRCFindings(unittest.TestCase):
+    def _result(self, report, meta=None):
+        xml = finding_report_to_xml(report, nvt_meta=meta or {})
+        return ET.fromstring(xml).find(".//results/result")
+
+    def test_msrc_uses_server_attested_severity_without_feed(self):
+        # Private-arc OID has no Greenbone VT (empty nvt_meta): severity/CVE must
+        # come from the server-side CSAF attestation, NOT collapse to Log.
+        res = self._result(MSRC_REPORT)
+        self.assertEqual(float(res.find("severity").text), 9.8)
+        self.assertNotEqual(res.find("threat").text, "Log")
+        cves = [r.get("id") for r in res.findall("nvt/refs/ref") if r.get("type") == "cve"]
+        self.assertEqual(cves, ["CVE-2024-38063"])
+        self.assertIn("Microsoft", res.find("nvt/name").text)
+
+    def test_msrc_severity_clamped(self):
+        bad = json.loads(json.dumps(MSRC_REPORT))
+        bad["findings"][0]["severity"] = 99.0  # out of range → clamp to 10.0
+        res = self._result(bad)
+        self.assertEqual(float(res.find("severity").text), 10.0)
+
+    def test_non_msrc_origin_still_requires_feed(self):
+        # The msrc-csaf gate must be specific: a finding claiming severity under a
+        # DIFFERENT origin, with no feed meta, must still be Log (non-fabrication).
+        notmsrc = json.loads(json.dumps(MSRC_REPORT))
+        notmsrc["findings"][0]["severity_origin"] = "feed-vt-metadata"
+        notmsrc["findings"][0]["evidence"]["source"] = "dpkg"
+        res = self._result(notmsrc)
+        self.assertEqual(float(res.find("severity").text), 0.0)
+        cves = [r.get("id") for r in res.findall("nvt/refs/ref") if r.get("type") == "cve"]
+        self.assertEqual(cves, [])

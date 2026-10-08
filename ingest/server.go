@@ -64,6 +64,9 @@ type Inventory struct {
 		Family  string `json:"family"`
 		Distro  string `json:"distro"`
 		Release string `json:"release"`
+		// Build/UBR carry the Windows patch level to the MSRC correlator (ADR-0008).
+		Build string `json:"build"`
+		UBR   string `json:"ubr"`
 	} `json:"os"`
 	Packages  []json.RawMessage `json:"packages"`
 	CycleHash string            `json:"cycle_hash"`

@@ -39,6 +39,7 @@ type PipelineSink struct {
 // PipelineConfig configures a PipelineSink.
 type PipelineConfig struct {
 	NotusDir     string // path to directory of *.notus advisory files (required)
+	MSRCDir      string // path to MSRC CSAF advisories (optional; enables Windows correlation)
 	BridgeScript string // path to bridge.py (optional; skips GMP import if empty)
 	BridgePython string // python3 binary (default: "python3")
 	GmpSocket    string // gvmd socket (default: /run/gvmd/gvmd.sock)
@@ -61,6 +62,20 @@ func NewPipelineSink(cfg PipelineConfig) (*PipelineSink, error) {
 			len(unclassified), unclassified)
 	}
 
+	// Dispatch por família de SO: linux→Notus (inalterado), windows→MSRC quando
+	// MSRCDir está setado (ADR-0008). Sem MSRCDir só existe o caminho Notus, e um
+	// host Windows gera relatório vazio — exatamente como antes.
+	byFamily := map[string]correlation.Correlator{"linux": corr}
+	if cfg.MSRCDir != "" {
+		msrc, merr := correlation.NewMSRCCorrelator(cfg.MSRCDir)
+		if merr != nil {
+			return nil, fmt.Errorf("carregar advisories MSRC de %s: %w", cfg.MSRCDir, merr)
+		}
+		byFamily["windows"] = msrc
+		log.Printf("pipeline: correlação Windows MSRC habilitada (MSRC_DIR=%s)", cfg.MSRCDir)
+	}
+	dispatcher := correlation.NewDispatcher(byFamily)
+
 	python := cfg.BridgePython
 	if python == "" {
 		python = "python3"
@@ -79,7 +94,7 @@ func NewPipelineSink(cfg PipelineConfig) (*PipelineSink, error) {
 	}
 
 	return &PipelineSink{
-		correlator:   corr,
+		correlator:   dispatcher,
 		bridgeScript: cfg.BridgeScript,
 		bridgePython: python,
 		gmpSocket:    socket,
@@ -226,6 +241,8 @@ func toCorrelationInventory(inv Inventory) correlation.Inventory {
 			Family:  inv.OS.Family,
 			Distro:  inv.OS.Distro,
 			Release: inv.OS.Release,
+			Build:   inv.OS.Build,
+			UBR:     inv.OS.UBR,
 		},
 	}
 	for _, raw := range inv.Packages {
