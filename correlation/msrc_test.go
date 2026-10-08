@@ -235,3 +235,17 @@ func TestNewMSRCCorrelator_LoadsDir(t *testing.T) {
 		t.Fatalf("dir-loaded correlator should find the CVE, got %+v", rep.Findings)
 	}
 }
+
+func TestNewMSRCCorrelator_MissingDirIsEmptyNotError(t *testing.T) {
+	// The mirror may not exist yet (feed dark / first sync pending). The ingest
+	// constructs the correlator at boot, so this MUST NOT error — it would make
+	// the whole ingest fatal. An empty index yields no findings.
+	c, err := NewMSRCCorrelator(filepath.Join(t.TempDir(), "nope", "advisories"))
+	if err != nil {
+		t.Fatalf("missing mirror dir must not error: %v", err)
+	}
+	rep, _ := c.Correlate(winInv("19045", "4291"))
+	if len(rep.Findings) != 0 {
+		t.Fatalf("empty mirror must yield 0 findings, got %d", len(rep.Findings))
+	}
+}

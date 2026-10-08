@@ -9,6 +9,7 @@
 //	TLS_KEY          server TLS private key PEM (optional)
 //	CA_CERT_FILE     CA cert PEM for verifying agent mTLS (optional)
 //	NOTUS_DIR        path to *.notus advisory files (required for correlation)
+//	MSRC_DIR         path to MSRC CSAF advisories (optional; enables Windows correlation)
 //	BRIDGE_SCRIPT    path to gmp-bridge/bridge.py  (optional; skips GMP import if absent)
 //	BRIDGE_PYTHON    python3 binary               (default: python3)
 //	GMP_SOCKET       gvmd Unix socket             (default: /run/gvmd/gvmd.sock)
@@ -38,6 +39,7 @@ func main() {
 	tlsKeyFile := os.Getenv("TLS_KEY")
 	caCertFile := os.Getenv("CA_CERT_FILE")
 	notusDir := os.Getenv("NOTUS_DIR")
+	msrcDir := os.Getenv("MSRC_DIR")
 	bridgeScript := os.Getenv("BRIDGE_SCRIPT")
 
 	// Select sink.
@@ -45,6 +47,7 @@ func main() {
 	if notusDir != "" {
 		ps, err := ingest.NewPipelineSink(ingest.PipelineConfig{
 			NotusDir:     notusDir,
+			MSRCDir:      msrcDir,
 			BridgeScript: bridgeScript,
 			BridgePython: envOr("BRIDGE_PYTHON", "python3"),
 			GmpSocket:    envOr("GMP_SOCKET", "/run/gvmd/gvmd.sock"),

@@ -17,7 +17,9 @@ func TestToCorrelationInventory_Conversion(t *testing.T) {
 			Family  string `json:"family"`
 			Distro  string `json:"distro"`
 			Release string `json:"release"`
-		}{Family: "linux", Distro: "debian", Release: "11"},
+			Build   string `json:"build"`
+			UBR     string `json:"ubr"`
+		}{Family: "windows", Distro: "windows", Release: "22H2", Build: "19045", UBR: "4291"},
 		Packages: []json.RawMessage{rawPkg},
 	}
 
@@ -25,8 +27,12 @@ func TestToCorrelationInventory_Conversion(t *testing.T) {
 	if ci.Agent.AgentID != "a1" {
 		t.Errorf("AgentID = %q", ci.Agent.AgentID)
 	}
-	if ci.OS.Family != "linux" || ci.OS.Distro != "debian" {
+	if ci.OS.Family != "windows" || ci.OS.Distro != "windows" {
 		t.Errorf("OS = %+v", ci.OS)
+	}
+	// build/ubr must reach the correlation inventory for MSRC (ADR-0008).
+	if ci.OS.Build != "19045" || ci.OS.UBR != "4291" {
+		t.Errorf("build/ubr lost in conversion: %+v", ci.OS)
 	}
 	if len(ci.Packages) != 1 {
 		t.Fatalf("want 1 package, got %d", len(ci.Packages))
@@ -71,6 +77,8 @@ func TestPipelineSink_Put_NoBridge(t *testing.T) {
 			Family  string `json:"family"`
 			Distro  string `json:"distro"`
 			Release string `json:"release"`
+			Build   string `json:"build"`
+			UBR     string `json:"ubr"`
 		}{Family: "linux", Distro: "debian", Release: "12"},
 		Packages: []json.RawMessage{rawPkg},
 	}
@@ -101,6 +109,8 @@ func TestPipelineSink_Put_NoFindings(t *testing.T) {
 			Family  string `json:"family"`
 			Distro  string `json:"distro"`
 			Release string `json:"release"`
+			Build   string `json:"build"`
+			UBR     string `json:"ubr"`
 		}{Family: "linux", Distro: "debian", Release: "12"},
 		Packages: []json.RawMessage{rawPkg},
 	}
@@ -158,6 +168,8 @@ func TestPipelineSink_Force_BypassesDedup(t *testing.T) {
 			Family  string `json:"family"`
 			Distro  string `json:"distro"`
 			Release string `json:"release"`
+			Build   string `json:"build"`
+			UBR     string `json:"ubr"`
 		}{Family: "linux", Distro: "debian", Release: "12"},
 		CycleHash: "h1",
 	}
