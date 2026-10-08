@@ -12,19 +12,31 @@
 package windows
 
 import (
+	"context"
+	"os"
 	"runtime"
 	"time"
-
-	"os"
 
 	"github.com/williamsouzadelima/suricatoos-infra/agent/internal/inventory"
 	"github.com/williamsouzadelima/suricatoos-infra/agent/internal/version"
 )
 
+// postureTimeout caps the PowerShell/WUA posture collection so a slow or stuck
+// Windows Update Agent can never hang the collection loop. On timeout the
+// posture is simply omitted (non-fatal); see the note in winposture.go.
+const postureTimeout = 120 * time.Second
+
 // Collector is the Windows inventory Collector. Use New to create.
 type Collector struct {
 	enumKeys func() ([]winEntry, error)
 	osInfo   func() (release, arch string, err error)
+	// osBuild returns the build number + UBR (precise patch level for MSRC).
+	osBuild func() (build, ubr string)
+	// management returns the central-management posture (domain/WSUS/Intune).
+	management func(ctx context.Context) (*inventory.Management, error)
+	// missingUpdates returns WUA applicable-but-not-installed updates; source is
+	// the WUA origin label ("microsoft-update" | "wsus").
+	missingUpdates func(ctx context.Context, source string) ([]inventory.MissingUpdate, error)
 }
 
 // winEntry is one raw entry read from an Uninstall registry subkey.
@@ -34,11 +46,19 @@ type winEntry struct {
 	arch    string // "x86_64" (64-bit key) or "x86" (WOW6432Node)
 }
 
-// New returns a Collector reading the Windows Uninstall registry keys.
+// New returns a Collector reading the Windows Uninstall registry keys, the OS
+// build/UBR, and the WUA/management posture.
 func New() *Collector {
 	return &Collector{
 		enumKeys: defaultEnumKeys,
 		osInfo:   defaultOSInfo,
+		osBuild:  defaultOSBuild,
+		management: func(ctx context.Context) (*inventory.Management, error) {
+			return collectManagement(ctx, execRunner)
+		},
+		missingUpdates: func(ctx context.Context, source string) ([]inventory.MissingUpdate, error) {
+			return collectMissingUpdates(ctx, execRunner, source)
+		},
 	}
 }
 
@@ -86,6 +106,31 @@ func (c *Collector) Collect() (*inventory.Inventory, error) {
 			Source:  inventory.SourceRegistry,
 		})
 	}
+
+	// Precise patch level for MSRC correlation (ADR-0008).
+	if c.osBuild != nil {
+		inv.OS.Build, inv.OS.UBR = c.osBuild()
+	}
+
+	// Central-management posture + WUA missing updates. Both are best-effort and
+	// NON-FATAL: a slow/unavailable WUA must never block or fail the inventory,
+	// and absence of missing_updates means "not collected", NEVER "clean" — the
+	// authoritative Windows detection is server-side MSRC correlation (ADR-0008).
+	ctx, cancel := context.WithTimeout(context.Background(), postureTimeout)
+	defer cancel()
+	var mgmt *inventory.Management
+	if c.management != nil {
+		if m, err := c.management(ctx); err == nil {
+			mgmt = m
+			inv.Facts.Management = m
+		}
+	}
+	if c.missingUpdates != nil {
+		if ups, err := c.missingUpdates(ctx, sourceFor(mgmt)); err == nil {
+			inv.Facts.MissingUpdates = ups
+		}
+	}
+
 	inv.CycleHash = inv.ComputeCycleHash()
 	return inv, nil
 }
