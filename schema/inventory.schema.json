@@ -7,7 +7,7 @@
   "required": ["schema_version", "agent", "collected_at", "os", "packages"],
   "additionalProperties": false,
   "properties": {
-    "schema_version": { "type": "string", "const": "1.0.0" },
+    "schema_version": { "type": "string", "pattern": "^1\\.[0-9]+\\.[0-9]+$", "description": "inventory contract; any 1.x is accepted (minor bumps add optional fields). Current: 1.1.0." },
     "agent": {
       "type": "object",
       "required": ["agent_id", "agent_version", "hostname"],
@@ -29,7 +29,9 @@
         "distro": { "type": "string" },
         "release": { "type": "string" },
         "arch": { "type": "string" },
-        "kernel": { "type": "string" }
+        "kernel": { "type": "string" },
+        "build": { "type": "string", "description": "Windows build number, e.g. 19045" },
+        "ubr": { "type": "string", "description": "Windows Update Build Revision, e.g. 4291; with build = precise patch level for MSRC" }
       }
     },
     "packages": {
@@ -64,7 +66,41 @@
             }
           }
         },
-        "services": { "type": "array", "items": { "type": "string" } }
+        "services": { "type": "array", "items": { "type": "string" } },
+        "installed_kbs": {
+          "type": "array",
+          "description": "Windows KB identifiers already installed (MSRC supersedence evidence).",
+          "items": { "type": "string" }
+        },
+        "missing_updates": {
+          "type": "array",
+          "description": "Updates the host reports as applicable-but-not-installed (Windows Update Agent). Severity/CVE are carried verbatim from the source; the agent never judges them.",
+          "items": {
+            "type": "object",
+            "required": ["kb"],
+            "additionalProperties": false,
+            "properties": {
+              "kb": { "type": "string" },
+              "title": { "type": "string" },
+              "msrc_severity": { "type": "string" },
+              "reboot_required": { "type": "boolean" },
+              "categories": { "type": "array", "items": { "type": "string" } },
+              "update_id": { "type": "string" },
+              "source": { "type": "string", "description": "e.g. microsoft-update, wsus" }
+            }
+          }
+        },
+        "management": {
+          "type": "object",
+          "description": "Central-management posture (Windows), so the cloud avoids proposing a local fix a GPO/MDM would revert.",
+          "additionalProperties": false,
+          "properties": {
+            "domain_joined": { "type": "boolean" },
+            "wsus_configured": { "type": "boolean" },
+            "wsus_url": { "type": "string" },
+            "intune_enrolled": { "type": "boolean" }
+          }
+        }
       }
     },
     "cycle_hash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },

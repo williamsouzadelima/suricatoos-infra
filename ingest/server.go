@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"strings"
 	"sync"
 	"time"
 
@@ -17,9 +18,39 @@ import (
 	"github.com/williamsouzadelima/suricatoos-infra/ingest/sensorreport"
 )
 
-// SchemaVersion is the inventory contract version this stub accepts (kept in
-// lockstep with schema/inventory.schema.json and the agent).
-const SchemaVersion = "1.0.0"
+// SchemaVersion is the inventory contract version this ingest understands (kept
+// in lockstep with schema/inventory.schema.json and the agent).
+const SchemaVersion = "1.1.0"
+
+// schemaCompatible reports whether a received inventory's schema_version is
+// accepted. It matches on MAJOR only: minor/patch bumps add optional fields and
+// stay backward-compatible, so a 1.0.0 fleet and a 1.1.0 agent coexist during a
+// staged rollout. A different major (or an unparseable version) is rejected.
+// Deploy a new ingest BEFORE bumping agents to a new minor.
+func schemaCompatible(got string) bool {
+	gm, ok := schemaMajor(got)
+	if !ok {
+		return false
+	}
+	wm, _ := schemaMajor(SchemaVersion)
+	return gm == wm
+}
+
+// schemaMajor returns the numeric major component of a dotted version ("1" from
+// "1.2.3") and whether it parsed as a non-empty run of digits.
+func schemaMajor(v string) (string, bool) {
+	i := strings.IndexByte(v, '.')
+	if i <= 0 {
+		return "", false
+	}
+	maj := v[:i]
+	for _, c := range maj {
+		if c < '0' || c > '9' {
+			return "", false
+		}
+	}
+	return maj, true
+}
 
 // Inventory is the minimal view the ingest needs; the full contract lives in
 // schema/inventory.schema.json (produced by the agent).
@@ -241,7 +272,7 @@ func (s *Server) Handler() http.Handler {
 			http.Error(w, "json inválido", http.StatusBadRequest)
 			return
 		}
-		if inv.SchemaVersion != SchemaVersion {
+		if !schemaCompatible(inv.SchemaVersion) {
 			http.Error(w, "schema_version não suportada", http.StatusBadRequest)
 			return
 		}

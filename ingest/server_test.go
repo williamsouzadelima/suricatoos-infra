@@ -172,3 +172,38 @@ func TestLastSeenPersistRoundTrip(t *testing.T) {
 		t.Fatalf("restored lastSeen = %v ok=%v, want %v", got, ok, now)
 	}
 }
+
+func TestSchemaCompatible(t *testing.T) {
+	cases := map[string]bool{
+		"1.0.0": true,  // the existing fleet
+		"1.1.0": true,  // this ingest's current contract
+		"1.4.2": true,  // any future 1.x minor/patch (additive)
+		"2.0.0": false, // a breaking major
+		"0.9.0": false, // pre-1.x
+		"1":     false, // not dotted
+		"x.y.z": false, // non-numeric major
+		"":      false,
+	}
+	for v, want := range cases {
+		if got := schemaCompatible(v); got != want {
+			t.Errorf("schemaCompatible(%q)=%v, want %v", v, got, want)
+		}
+	}
+}
+
+func TestIngestAcceptsNewerMinorSchema(t *testing.T) {
+	sink := &MemSink{}
+	srv := httptest.NewServer(NewServer(sink).Handler())
+	defer srv.Close()
+	// A 1.1.0 agent carrying the new Windows posture fields must be accepted by
+	// an ingest whose own contract is 1.1.0 — and would also be by a 1.x ingest.
+	body := `{"schema_version":"1.1.0","agent":{"agent_id":"w1","hostname":"w"},"os":{"family":"windows","release":"22H2","build":"19045","ubr":"4291"},"packages":[],"facts":{"missing_updates":[{"kb":"KB5036892","msrc_severity":"Important"}]},"cycle_hash":"abc"}`
+	resp := post(t, srv.URL, body)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusAccepted {
+		t.Fatalf("status=%d, want 202 for a 1.1.0 inventory", resp.StatusCode)
+	}
+	if sink.Count() != 1 {
+		t.Fatalf("count=%d, want 1", sink.Count())
+	}
+}

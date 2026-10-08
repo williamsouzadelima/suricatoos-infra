@@ -18,6 +18,16 @@ Coletamos apenas o mínimo necessário para **correlação de vulnerabilidade ba
 | Identidade do agente (machine-id derivado) | `agent.agent_id` | rastrear o host enrolado | média (pseudônimo) |
 | Versão do agente, hostname | `agent.agent_version`, `agent.hostname` | operação/suporte | baixa |
 | Escopo (tenant/policy) | `agent.scope` | multi-tenant / segmentação | baixa |
+| Build/UBR do Windows | `os.build`, `os.ubr` | nível exato de patch p/ correlação MSRC | baixa (estado técnico) |
+| KBs instalados (Windows) | `facts.installed_kbs[]` | evidência de supersedência de update | baixa (estado técnico) |
+| Updates faltantes (Windows) | `facts.missing_updates[]` | detecção de vulnerabilidade (fonte MSRC/WUA) | baixa (estado técnico) |
+| Postura de gestão central | `facts.management` | evitar propor correção que GPO/MDM reverteria | baixa (flags de configuração) |
+
+> **Windows (ADR-0008):** todos os campos acima são **estado técnico do SO**, não dado pessoal.
+> A severidade/CVE dos `missing_updates` vem **verbatim da fonte autoritativa** (Windows Update
+> Agent/MSRC); o agente nunca a julga. O coletor de postura CIS (Fase 1, ADR-0009) lerá
+> *user rights* via `secedit`, que enumera contas locais — esse coletor **redige para SIDs
+> well-known** e nunca envia nomes de usuário arbitrários (registrar aqui ao adicionar `cis_state`).
 
 ## Dados que **NÃO** coletamos (proibido)
 
