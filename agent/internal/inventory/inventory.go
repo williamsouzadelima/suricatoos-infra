@@ -18,7 +18,14 @@ import (
 )
 
 // SchemaVersion is the semantic version of the inventory contract.
-const SchemaVersion = "1.0.0"
+//
+// 1.1.0 adds optional Windows posture fields (OS build/UBR, installed KBs,
+// missing updates, central-management flags) used by the Windows MSRC
+// correlation path (ADR-0008). The bump is a MINOR, backward-compatible change:
+// every added field is optional/omitempty, so a 1.0.0 consumer ignores them and
+// the ingest accepts any 1.x (see ingest.schemaCompatible). Deploy the ingest
+// before rolling agents to 1.1.0.
+const SchemaVersion = "1.1.0"
 
 // OSFamily enumerates the supported operating-system families.
 type OSFamily string
@@ -60,6 +67,12 @@ type OS struct {
 	Release string   `json:"release"`
 	Arch    string   `json:"arch"`
 	Kernel  string   `json:"kernel,omitempty"`
+	// Build is the Windows build number, e.g. "19045"; empty on non-Windows.
+	Build string `json:"build,omitempty"`
+	// UBR is the Windows Update Build Revision, e.g. "4291". With Build it forms
+	// the precise patch level ("19045.4291") that MSRC correlation needs to tell
+	// a patched host from an unpatched one. Empty on non-Windows.
+	UBR string `json:"ubr,omitempty"`
 }
 
 // Port is a LOCAL listening port. The agent never scans remote ports.
@@ -69,10 +82,43 @@ type Port struct {
 	Process string `json:"process,omitempty"`
 }
 
+// MissingUpdate is one OS update reported applicable-but-not-installed. It is
+// populated ONLY from an authoritative source (the Windows Update Agent); the
+// agent never judges severity itself — MSRCSeverity is carried verbatim from
+// the source so correlation stays non-fabricating (ADR-0001 D1).
+type MissingUpdate struct {
+	KB             string   `json:"kb"`
+	Title          string   `json:"title,omitempty"`
+	MSRCSeverity   string   `json:"msrc_severity,omitempty"`
+	RebootRequired bool     `json:"reboot_required,omitempty"`
+	Categories     []string `json:"categories,omitempty"`
+	UpdateID       string   `json:"update_id,omitempty"`
+	// Source records where the update was offered from, e.g. "microsoft-update"
+	// or "wsus"; used downstream to avoid fighting a WSUS/Intune-managed host.
+	Source string `json:"source,omitempty"`
+}
+
+// Management records whether the host is centrally managed, so the cloud can
+// avoid proposing a local fix that a GPO/MDM would just revert. Evidence only;
+// nil when the posture is unknown or not applicable (non-Windows).
+type Management struct {
+	DomainJoined   bool   `json:"domain_joined,omitempty"`
+	WSUSConfigured bool   `json:"wsus_configured,omitempty"`
+	WSUSURL        string `json:"wsus_url,omitempty"`
+	IntuneEnrolled bool   `json:"intune_enrolled,omitempty"`
+}
+
 // Facts holds non-package system facts relevant to correlation.
 type Facts struct {
 	ListeningPortsLocal []Port   `json:"listening_ports_local,omitempty"`
 	Services            []string `json:"services,omitempty"`
+	// InstalledKBs lists Windows update KB identifiers already present, evidence
+	// for MSRC supersedence; empty on non-Windows.
+	InstalledKBs []string `json:"installed_kbs,omitempty"`
+	// MissingUpdates lists updates the host reports as missing (Windows/WUA).
+	MissingUpdates []MissingUpdate `json:"missing_updates,omitempty"`
+	// Management is the central-management posture (Windows); nil when unknown.
+	Management *Management `json:"management,omitempty"`
 }
 
 // Agent identifies the reporting agent and its enrolled scope.
@@ -104,19 +150,33 @@ type Collector interface {
 }
 
 // ComputeCycleHash returns a deterministic SHA-256 over the inventory's
-// identifying content (OS + packages), independent of the collection timestamp,
-// so an unchanged host yields a stable hash for idempotent dedupe at ingest.
+// identifying content (OS + packages + Windows missing updates), independent of
+// the collection timestamp, so an unchanged host yields a stable hash for
+// idempotent dedupe at ingest.
 //
 // The hash is order-independent: it sorts a canonical line per fact before
 // hashing, so collector iteration order does not affect the result.
+//
+// The "os" line carries build/UBR and missing-update lines are folded in, so a
+// Windows host that patches (build/UBR advances, a missing update disappears)
+// produces a new hash and re-imports — otherwise a fixed host would dedupe and
+// the finding would never clear. This changes the hash of EVERY host on upgrade
+// to 1.1.0 (the "os" line gained two fields), causing exactly one extra import
+// per host; that is benign and expected.
 func (inv *Inventory) ComputeCycleHash() string {
-	lines := make([]string, 0, len(inv.Packages)+1)
+	lines := make([]string, 0, len(inv.Packages)+len(inv.Facts.MissingUpdates)+1)
 	lines = append(lines, strings.Join([]string{
 		"os", string(inv.OS.Family), inv.OS.Distro, inv.OS.Release, inv.OS.Arch,
+		inv.OS.Build, inv.OS.UBR,
 	}, "|"))
 	for _, p := range inv.Packages {
 		lines = append(lines, strings.Join([]string{
 			"pkg", p.Name, p.Version, p.Arch, string(p.Source),
+		}, "|"))
+	}
+	for _, u := range inv.Facts.MissingUpdates {
+		lines = append(lines, strings.Join([]string{
+			"miss", u.KB, u.UpdateID,
 		}, "|"))
 	}
 	sort.Strings(lines)
