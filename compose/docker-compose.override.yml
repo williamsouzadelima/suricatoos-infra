@@ -80,6 +80,11 @@ services:
       TZ: America/Sao_Paulo
       COMPOSE_DIR: /compose
       DOCKER_HOST: tcp://docker-socket-proxy:2375
+      # Espelho MSRC CSAF (ADR-0008) — DARK por padrão. Ligar só quando a
+      # correlação Windows (0c-3) estiver fiada e após decidir o deploy.
+      MSRC_FEED_ENABLED: "${MSRC_FEED_ENABLED:-false}"
+      MSRC_DIR: /msrc/advisories
+      MSRC_SINCE_YEAR: "${MSRC_SINCE_YEAR:-2016}"
     volumes:
       # Diretório do compose COMO O DAEMON DO HOST o enxerga: o `docker compose`
       # roda dentro deste container, mas os binds são resolvidos pelo daemon.
@@ -88,6 +93,8 @@ services:
       # .env ao lado do compose.
       - ${COMPOSE_DIR_HOST:-/root/suricatoos/compose}:/compose:ro
       - feed_updater_state:/state
+      # Espelho MSRC CSAF (escrita). O ingest monta o MESMO volume :ro na 0c-3.
+      - msrc_data_vol:/msrc
       # SEM mount de credencial do Docker: o pacote report-formats é PÚBLICO no
       # GHCR, então os 8 feeds puxam anônimo. Antes disso, o `docker compose up
       # --pull always` que roda DENTRO deste container precisava da auth do CLI,
@@ -295,3 +302,6 @@ services:
 volumes:
   feed_updater_state:
   ingest_state:
+  # Espelho local do feed MSRC CSAF (ADR-0008); preenchido pelo feed-updater
+  # quando MSRC_FEED_ENABLED=true, lido pelo ingest na 0c-3.
+  msrc_data_vol:

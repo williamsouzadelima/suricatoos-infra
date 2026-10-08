@@ -16,6 +16,8 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+import msrc_feed
+
 STATE_DIR = '/state'
 SCHEDULE_FILE = os.path.join(STATE_DIR, 'schedule.json')
 STATUS_FILE = os.path.join(STATE_DIR, 'status.json')
@@ -31,7 +33,33 @@ DEFAULT_SCHEDULE = {
 }
 PROJECT = os.environ.get('COMPOSE_PROJECT_NAME', 'greenbone-community-edition')
 
+# MSRC CSAF mirror (ADR-0008): dark by default. When enabled, a feed sync also
+# mirrors Microsoft's Windows CVE advisories into MSRC_DIR (a volume the ingest's
+# MSRC correlator reads, wired in Fase 0c-3). Incremental via a persisted cursor.
+MSRC_DIR = os.environ.get('MSRC_DIR', '/msrc/advisories')
+MSRC_CURSOR_FILE = os.path.join(STATE_DIR, 'msrc-cursor.json')
+MSRC_SINCE_YEAR = int(os.environ.get('MSRC_SINCE_YEAR', '2016') or '2016')
+
 _sync_lock = threading.Lock()
+
+
+def msrc_enabled():
+    return os.environ.get('MSRC_FEED_ENABLED', 'false').strip().lower() == 'true'
+
+
+def run_msrc_sync():
+    """Mirror the MSRC CSAF advisories incrementally, persisting the new cursor.
+    Never raises: a failure is reported in the returned status, so it can't break
+    the GVM feed sync it runs alongside."""
+    cursor = load_json(MSRC_CURSOR_FILE, {'cursor': ''}).get('cursor', '')
+    try:
+        res = msrc_feed.sync_msrc(MSRC_DIR, cursor_iso=cursor, since_year=MSRC_SINCE_YEAR)
+    except Exception as e:
+        return {'ok': False, 'error': str(e), 'downloaded': 0, 'ran': _now_iso()}
+    if res.get('cursor') and res['cursor'] != cursor:
+        save_json(MSRC_CURSOR_FILE, {'cursor': res['cursor']})
+    res['ran'] = _now_iso()
+    return res
 
 
 def _feed_image_ids():
@@ -107,10 +135,13 @@ def run_sync(trigger='manual'):
         after = _feed_image_ids()
         # feeds cuja imagem mudou = feeds efetivamente atualizados
         updated = [f for f in FEEDS if after.get(f) and before.get(f) != after.get(f)]
+        # Espelho MSRC (dark por padrao): roda junto, mas o resultado e separado
+        # para que uma falha de mirror NAO marque o sync de feed GVM como erro.
+        msrc = run_msrc_sync() if msrc_enabled() else None
         set_status(state='idle', last_run=_now_iso(),
                    last_result='success' if ok else 'error',
-                   last_output=out[-3000:], trigger=trigger, updated=updated)
-        return {'ok': ok, 'updated': updated}
+                   last_output=out[-3000:], trigger=trigger, updated=updated, msrc=msrc)
+        return {'ok': ok, 'updated': updated, 'msrc': msrc}
     finally:
         _sync_lock.release()
 

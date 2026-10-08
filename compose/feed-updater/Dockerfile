@@ -5,5 +5,6 @@ ENV TZ=America/Sao_Paulo \
     COMPOSE_DIR=/compose \
     PORT=8008
 COPY feed_updater.py /feed_updater.py
+COPY msrc_feed.py /msrc_feed.py
 EXPOSE 8008
 CMD ["python3", "/feed_updater.py"]
