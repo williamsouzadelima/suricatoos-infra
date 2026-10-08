@@ -1,0 +1,32 @@
+name: feed-updater-ci
+
+on:
+  push:
+    branches: [main, "feat/**"]
+    paths: ["compose/feed-updater/**", ".github/workflows/feed-updater-ci.yml"]
+  pull_request:
+    paths: ["compose/feed-updater/**", ".github/workflows/feed-updater-ci.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: test (python ${{ matrix.python }})
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.12", "3.13"]
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: compose/feed-updater
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: install pytest
+        run: python -m pip install --upgrade pip pytest
+      - name: pytest
+        run: python -m pytest -q
