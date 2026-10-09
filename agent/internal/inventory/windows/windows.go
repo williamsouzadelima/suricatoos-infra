@@ -37,6 +37,12 @@ type Collector struct {
 	// missingUpdates returns WUA applicable-but-not-installed updates; source is
 	// the WUA origin label ("microsoft-update" | "wsus").
 	missingUpdates func(ctx context.Context, source string) ([]inventory.MissingUpdate, error)
+	// CIS L1 posture sources (ADR-0009): raw secedit/auditpol text + registry and
+	// service readings. Injected so tests feed golden text without a real host.
+	cisSecedit  func() (string, error)
+	cisAuditpol func() (string, error)
+	cisRegistry func() []inventory.CISState
+	cisService  func() []inventory.CISState
 }
 
 // winEntry is one raw entry read from an Uninstall registry subkey.
@@ -59,6 +65,10 @@ func New() *Collector {
 		missingUpdates: func(ctx context.Context, source string) ([]inventory.MissingUpdate, error) {
 			return collectMissingUpdates(ctx, execRunner, source)
 		},
+		cisSecedit:  defaultCISSecedit,
+		cisAuditpol: defaultCISAuditpol,
+		cisRegistry: defaultCISRegistry,
+		cisService:  defaultCISService,
 	}
 }
 
@@ -130,6 +140,27 @@ func (c *Collector) Collect() (*inventory.Inventory, error) {
 			inv.Facts.MissingUpdates = ups
 		}
 	}
+
+	// CIS L1 posture (ADR-0009): neutral readings from secedit, auditpol, the
+	// registry and service start-types. Each source is best-effort and non-fatal.
+	var cis []inventory.CISState
+	if c.cisSecedit != nil {
+		if inf, err := c.cisSecedit(); err == nil {
+			cis = append(cis, parseSeceditINF(inf)...)
+		}
+	}
+	if c.cisAuditpol != nil {
+		if csvTxt, err := c.cisAuditpol(); err == nil {
+			cis = append(cis, parseAuditpolCSV(csvTxt)...)
+		}
+	}
+	if c.cisRegistry != nil {
+		cis = append(cis, c.cisRegistry()...)
+	}
+	if c.cisService != nil {
+		cis = append(cis, c.cisService()...)
+	}
+	inv.Facts.CISState = cis
 
 	inv.CycleHash = inv.ComputeCycleHash()
 	return inv, nil
