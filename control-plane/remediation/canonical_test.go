@@ -1,0 +1,92 @@
+package remediation
+
+import (
+	"encoding/json"
+	"testing"
+	"time"
+
+	"github.com/williamsouzadelima/suricatoos-infra/control-plane/signkeys"
+)
+
+func goldenJob() *RemediationJob {
+	return &RemediationJob{
+		JobID:         "j1",
+		AgentID:       "win-abc",
+		Tenant:        "acme",
+		Type:          TypePackagePatch,
+		IssuedAt:      time.Date(2026, 10, 8, 12, 0, 0, 0, time.UTC),
+		ExpiresAt:     time.Date(2026, 10, 9, 12, 0, 0, 0, time.UTC),
+		Nonce:         "n1",
+		PayloadSHA256: "abc",
+	}
+}
+
+// TestCanonicalGolden pins the exact signed bytes. The agent re-derives these
+// independently; if this string changes, the agent copy MUST change in lockstep.
+func TestCanonicalGolden(t *testing.T) {
+	want := "suricatoos-remediation-v1\n" +
+		"job_id=2:j1\n" +
+		"agent_id=7:win-abc\n" +
+		"tenant=4:acme\n" +
+		"type=13:package_patch\n" +
+		"issued_at=20:2026-10-08T12:00:00Z\n" +
+		"expires_at=20:2026-10-09T12:00:00Z\n" +
+		"nonce=2:n1\n" +
+		"payload_sha256=3:abc\n"
+	if got := string(Canonical(goldenJob())); got != want {
+		t.Fatalf("canonical drift:\n got=%q\nwant=%q", got, want)
+	}
+}
+
+func TestCanonicalBindsEveryField(t *testing.T) {
+	base := string(Canonical(goldenJob()))
+	mut := map[string]func(*RemediationJob){
+		"job_id":         func(j *RemediationJob) { j.JobID = "j2" },
+		"agent_id":       func(j *RemediationJob) { j.AgentID = "other" },
+		"tenant":         func(j *RemediationJob) { j.Tenant = "evil" },
+		"type":           func(j *RemediationJob) { j.Type = TypeConfigHardening },
+		"issued_at":      func(j *RemediationJob) { j.IssuedAt = j.IssuedAt.Add(time.Second) },
+		"expires_at":     func(j *RemediationJob) { j.ExpiresAt = j.ExpiresAt.Add(time.Second) },
+		"nonce":          func(j *RemediationJob) { j.Nonce = "n2" },
+		"payload_sha256": func(j *RemediationJob) { j.PayloadSHA256 = "def" },
+	}
+	for name, f := range mut {
+		j := goldenJob()
+		f(j)
+		if string(Canonical(j)) == base {
+			t.Errorf("changing %s must change the canonical (replay/transplant guard)", name)
+		}
+	}
+}
+
+func TestSignVerifyRoundTrip(t *testing.T) {
+	key, err := signkeys.LoadOrCreate("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload := json.RawMessage(`{"kb":"KB5041580"}`)
+	j := goldenJob()
+	j.Payload = payload
+	j.PayloadSHA256 = ComputePayloadSHA256(payload)
+	j.Signature = Sign(j, key)
+
+	if !Verify(j, key.Public()) {
+		t.Fatal("valid signature must verify")
+	}
+	// A swapped payload (sha no longer matches) must fail even with a good sig.
+	tampered := j.clone()
+	tampered.Payload = json.RawMessage(`{"kb":"KB0000000"}`)
+	if Verify(tampered, key.Public()) {
+		t.Error("payload swap must fail verification (sha256 binding)")
+	}
+	// A different key must fail.
+	other, _ := signkeys.LoadOrCreate("")
+	if Verify(j, other.Public()) {
+		t.Error("wrong key must fail verification")
+	}
+	// An unsigned job must fail.
+	j.Signature = ""
+	if Verify(j, key.Public()) {
+		t.Error("unsigned job must fail verification")
+	}
+}
