@@ -182,8 +182,13 @@ func (s *Service) command(target, token string) string {
 			shq(token), shq(s.cfg.ServerURL), shq(s.cfg.CAPin), s.cfg.Image)
 	case "windows":
 		base := publicBase(s.cfg.ServerURL)
+		// NO '$' variables: a '$f'/'$env:TEMP' inside the double-quoted -Command
+		// gets expanded by the OUTER shell when the user pastes this at a
+		// PowerShell prompt (not nested), producing "=Join-Path ..." / empty
+		// -OutFile. A fixed, admin-writable temp path keeps the one-liner robust
+		// whether pasted in cmd.exe or PowerShell. The script requires admin.
 		return fmt.Sprintf(
-			`powershell -ExecutionPolicy Bypass -Command "$f=Join-Path $env:TEMP 'suricatoos-install.ps1'; iwr -useb %s/install.ps1 -OutFile $f; & $f -Server '%s' -Token '%s' -CaPin '%s'"`,
+			`powershell -ExecutionPolicy Bypass -Command "iwr -useb %s/install.ps1 -OutFile C:\Windows\Temp\suricatoos-install.ps1; & C:\Windows\Temp\suricatoos-install.ps1 -Server '%s' -Token '%s' -CaPin '%s'"`,
 			base, s.cfg.ServerURL, token, s.cfg.CAPin)
 	default: // linux (binary installer)
 		base := publicBase(s.cfg.ServerURL)
