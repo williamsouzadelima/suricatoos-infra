@@ -158,3 +158,35 @@ func TestLinuxTargetInstallScript(t *testing.T) {
 		t.Fatalf("linux deveria usar o install.sh no publicBase: %s", r.Command)
 	}
 }
+
+func TestWindowsCommandIsRobust(t *testing.T) {
+	s, _ := newSvc(knownAcme)
+	w := do(s, "GET", "/api/v1/tenants/acme/enroll-command?target=windows", "sekret")
+	if w.Code != http.StatusOK {
+		t.Fatalf("deveria 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var r response
+	if err := json.Unmarshal(w.Body.Bytes(), &r); err != nil {
+		t.Fatal(err)
+	}
+	if r.Target != "windows" {
+		t.Fatalf("target = %q", r.Target)
+	}
+	for _, want := range []string{
+		"install.ps1",
+		"-Server 'https://scanner.suricatoos.com/agent/v1'",
+		"-Token 'st_",
+		"-CaPin 'sha256:abc123'",
+		`C:\Windows\Temp\suricatoos-install.ps1`,
+	} {
+		if !strings.Contains(r.Command, want) {
+			t.Errorf("comando windows nao contem %q:\n%s", want, r.Command)
+		}
+	}
+	// REGRESSAO: nenhum '$' no comando. Um '$f'/'$env:TEMP' dentro do -Command e
+	// expandido pelo shell de FORA ao colar num prompt do PowerShell, quebrando o
+	// one-liner (=Join-Path..., -OutFile vazio). O comando robusto nao usa '$'.
+	if strings.Contains(r.Command, "$") {
+		t.Errorf("comando windows nao pode conter '$' (quebra ao colar no PowerShell):\n%s", r.Command)
+	}
+}

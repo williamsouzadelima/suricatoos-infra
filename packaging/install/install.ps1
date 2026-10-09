@@ -61,6 +61,15 @@ try {
   $dir = Join-Path $env:ProgramFiles "Suricatoos Agent"
   New-Item -ItemType Directory -Force -Path $dir | Out-Null
   $exe = Join-Path $dir "suricatoos-agent.exe"
+  # Se o agente ja esta instalado como servico, pare-o antes de sobrescrever o
+  # exe: um upgrade/reinstalacao por cima do servico em execucao travaria o
+  # Copy-Item ("arquivo em uso por outro processo").
+  $svc = Get-Service -Name "SuricatoosAgent" -ErrorAction SilentlyContinue
+  if ($svc -and $svc.Status -ne "Stopped") {
+    Write-Host ">> parando o servico existente para atualizar o binario"
+    Stop-Service -Name "SuricatoosAgent" -Force -ErrorAction SilentlyContinue
+    try { $svc.WaitForStatus("Stopped", [TimeSpan]::FromSeconds(20)) } catch {}
+  }
   Copy-Item $bin $exe -Force
   Write-Host ">> instalado em $exe"
 
@@ -77,10 +86,19 @@ try {
   # Servico. --state aponta p/ a identidade recem-enrolada; o install herda dela a
   # URL de ingest (persistida no enroll), evitando exigir --ingest manualmente.
   if (-not $NoService) {
-    Write-Host ">> registrando servico SCM"
-    & $exe install --state $state
-    if ($LASTEXITCODE -ne 0) { throw "registro do servico falhou ($LASTEXITCODE) - veja a mensagem acima" }
-    Write-Host ">> pronto - agente instalado, enrolado e servico registrado."
+    if (Get-Service -Name "SuricatoosAgent" -ErrorAction SilentlyContinue) {
+      # Ja registrado (upgrade): o exe no mesmo caminho foi atualizado acima;
+      # apenas religa o servico, sem re-registrar (CreateService falharia se o
+      # servico ja existe).
+      Write-Host ">> reiniciando o servico existente (upgrade)"
+      Start-Service -Name "SuricatoosAgent"
+      Write-Host ">> pronto - agente atualizado e servico reiniciado."
+    } else {
+      Write-Host ">> registrando servico SCM"
+      & $exe install --state $state
+      if ($LASTEXITCODE -ne 0) { throw "registro do servico falhou ($LASTEXITCODE) - veja a mensagem acima" }
+      Write-Host ">> pronto - agente instalado, enrolado e servico registrado."
+    }
     Write-Host ">> confira com: & '$exe' service-status"
   } else {
     Write-Host ">> pronto - agente instalado e enrolado (servico nao registrado)."
