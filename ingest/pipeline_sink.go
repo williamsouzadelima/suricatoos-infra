@@ -66,14 +66,19 @@ func NewPipelineSink(cfg PipelineConfig) (*PipelineSink, error) {
 	// MSRCDir está setado (ADR-0008). Sem MSRCDir só existe o caminho Notus, e um
 	// host Windows gera relatório vazio — exatamente como antes.
 	byFamily := map[string]correlation.Correlator{"linux": corr}
+	// Windows: CIS L1 hardening ALWAYS (ruleset is in-code, ADR-0009), plus MSRC
+	// CVE/patch correlation when a feed mirror dir is configured (ADR-0008).
+	var winCorrs []correlation.Correlator
 	if cfg.MSRCDir != "" {
 		msrc, merr := correlation.NewMSRCCorrelator(cfg.MSRCDir)
 		if merr != nil {
 			return nil, fmt.Errorf("carregar advisories MSRC de %s: %w", cfg.MSRCDir, merr)
 		}
-		byFamily["windows"] = msrc
+		winCorrs = append(winCorrs, msrc)
 		log.Printf("pipeline: correlação Windows MSRC habilitada (MSRC_DIR=%s)", cfg.MSRCDir)
 	}
+	winCorrs = append(winCorrs, correlation.NewHardeningCorrelator())
+	byFamily["windows"] = correlation.NewMultiCorrelator(winCorrs...)
 	dispatcher := correlation.NewDispatcher(byFamily)
 
 	python := cfg.BridgePython
@@ -250,6 +255,9 @@ func toCorrelationInventory(inv Inventory) correlation.Inventory {
 		if err := json.Unmarshal(raw, &p); err == nil {
 			ci.Packages = append(ci.Packages, p)
 		}
+	}
+	for _, c := range inv.Facts.CISState {
+		ci.CISState = append(ci.CISState, correlation.CISStateInfo{Source: c.Source, Key: c.Key, Value: c.Value})
 	}
 	return ci
 }

@@ -68,8 +68,17 @@ type Inventory struct {
 		Build string `json:"build"`
 		UBR   string `json:"ubr"`
 	} `json:"os"`
-	Packages  []json.RawMessage `json:"packages"`
-	CycleHash string            `json:"cycle_hash"`
+	Packages []json.RawMessage `json:"packages"`
+	// Facts carries the subset of facts the correlation needs. cis_state feeds the
+	// CIS L1 hardening correlator (ADR-0009); other facts stay untouched.
+	Facts struct {
+		CISState []struct {
+			Source string `json:"source"`
+			Key    string `json:"key"`
+			Value  string `json:"value"`
+		} `json:"cis_state"`
+	} `json:"facts"`
+	CycleHash string `json:"cycle_hash"`
 	// CollectedAt is the agent's collection time (RFC3339), kept as a raw string
 	// so a malformed/empty value can't hard-fail JSON decode and reject the whole
 	// inventory with 400 (a time.Time field would). It MUST be propagated to the

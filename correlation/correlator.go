@@ -10,6 +10,20 @@ type Inventory struct {
 	CollectedAt   time.Time `json:"collected_at"`
 	OS            OSInfo    `json:"os"`
 	Packages      []Package `json:"packages"`
+	// CISState carries the agent's neutral security-configuration readings
+	// (facts.cis_state) for the hardening correlator (ADR-0009). Empty on hosts
+	// that do not collect it.
+	CISState []CISStateInfo `json:"cis_state,omitempty"`
+}
+
+// CISStateInfo is one neutral security-configuration reading (registry value,
+// secedit entry, auditpol subcategory, or service start type). The hardening
+// correlator maps it to the server-side CIS L1 ruleset (ADR-0009); the agent
+// never judges compliance and the value is already SID-scrubbed at the source.
+type CISStateInfo struct {
+	Source string `json:"source"`
+	Key    string `json:"key"`
+	Value  string `json:"value"`
 }
 
 // AgentInfo holds identifying fields from the agent section of an inventory.

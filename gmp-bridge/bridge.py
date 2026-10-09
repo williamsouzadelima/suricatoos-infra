@@ -213,6 +213,13 @@ def finding_report_to_xml(
                 f"Advisory: {advisory} (source: {source})\n"
                 f"Agent: {report.get('agent_id', '')}"
             )
+        elif source == "cis-hardening":
+            desc = (
+                f"Setting {pkg_obs} does not meet the hardening baseline.\n"
+                f"Expected: {pkg_fix}\n"
+                f"Rule: {advisory}\n"
+                f"Agent: {report.get('agent_id', '')}"
+            )
         else:
             desc = (
                 f"Package {pkg_obs!r} is installed and vulnerable.\n"
@@ -241,14 +248,14 @@ def finding_report_to_xml(
         # refs; we never substitute the caller-supplied finding.severity/finding.cve,
         # which would present unverified, client-controlled values as feed-attested.
         #
-        # EXCEPTION — MSRC Windows findings (ADR-0008, severity_origin "msrc-csaf"):
-        # these are attested SERVER-SIDE by the MSRC correlator from Microsoft's
-        # CSAF feed (the agent only reports build/ubr — it does NOT set severity or
-        # this origin marker). Their OID is a Suricatoos private-arc id with no
-        # Greenbone VT, so nvt_meta can't enrich them; use the correlator's
-        # feed-attested values. The marker is server-set, so this does not relax
-        # the rule for Notus or sensor findings.
-        if sev_origin == "msrc-csaf":
+        # EXCEPTION — server-attested Windows findings whose OID is a Suricatoos
+        # private-arc id with no Greenbone VT to enrich (ADR-0008 MSRC "msrc-csaf";
+        # ADR-0009 CIS hardening "suricatoos-hardening-baseline"). Both severities
+        # are set SERVER-SIDE by our correlators (from the MSRC CSAF feed, or as a
+        # fixed property of the authored hardening rule) — never by the agent, never
+        # by an LLM. These origin markers are server-set, so trusting them here does
+        # NOT relax the feed-evidence rule for Notus or sensor findings.
+        if sev_origin in ("msrc-csaf", "suricatoos-hardening-baseline"):
             severity = _safe_cvss(finding.get("severity"))
             cves = [str(c) for c in (finding.get("cve") or []) if c]
         elif meta is not None:
@@ -260,10 +267,12 @@ def finding_report_to_xml(
 
         nvt_el = ET.SubElement(r, "nvt", oid=oid)
         ET.SubElement(nvt_el, "type").text = "nvt"
-        nvt_name = (
-            f"Missing Microsoft security update: {product}"
-            if source == "msrc" else f"Package vulnerability: {pkg_obs}"
-        )
+        if source == "msrc":
+            nvt_name = f"Missing Microsoft security update: {product}"
+        elif source == "cis-hardening":
+            nvt_name = f"Hardening: {product}"
+        else:
+            nvt_name = f"Package vulnerability: {pkg_obs}"
         ET.SubElement(nvt_el, "name").text = nvt_name
         ET.SubElement(nvt_el, "family").text = "General"
         ET.SubElement(nvt_el, "cvss_base").text = str(severity)

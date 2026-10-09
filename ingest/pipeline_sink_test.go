@@ -197,3 +197,15 @@ func TestPipelineSink_Force_BypassesDedup(t *testing.T) {
 		t.Fatal("a periodic report after a forced scan must still process (not pre-deduped)")
 	}
 }
+
+func TestToCorrelationInventory_CISStatePassthrough(t *testing.T) {
+	var inv Inventory
+	js := `{"schema_version":"1.2.0","agent":{"agent_id":"w"},"os":{"family":"windows"},"packages":[],"facts":{"cis_state":[{"source":"secedit","key":"MinimumPasswordLength","value":"8"}]}}`
+	if err := json.Unmarshal([]byte(js), &inv); err != nil {
+		t.Fatal(err)
+	}
+	ci := toCorrelationInventory(inv)
+	if len(ci.CISState) != 1 || ci.CISState[0].Key != "MinimumPasswordLength" || ci.CISState[0].Value != "8" {
+		t.Fatalf("cis_state not passed through: %+v", ci.CISState)
+	}
+}

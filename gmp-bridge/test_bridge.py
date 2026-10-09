@@ -492,3 +492,38 @@ class TestMSRCFindings(unittest.TestCase):
         self.assertEqual(float(res.find("severity").text), 0.0)
         cves = [r.get("id") for r in res.findall("nvt/refs/ref") if r.get("type") == "cve"]
         self.assertEqual(cves, [])
+
+
+HARDENING_REPORT = {
+    "schema_version": "1.0.0",
+    "agent_id": "win-abc",
+    "host": "win-abc",
+    "collected_at": "2026-10-08T00:00:00Z",
+    "findings": [
+        {
+            "oid": "1.3.6.1.4.1.55683.3.123456",
+            "cve": [],
+            "severity": 6.0,
+            "severity_origin": "suricatoos-hardening-baseline",
+            "package_observed": "MinimumPasswordLength=8",
+            "package_fixed": "14 or more",
+            "specifier": "==",
+            "product": "Password shorter than 14 characters",
+            "evidence": {"source": "cis-hardening", "matched_advisory": "CIS 1.1.4"},
+            "detected_at": "2026-10-08T00:00:00Z",
+        }
+    ],
+}
+
+
+class TestHardeningFindings(unittest.TestCase):
+    def _result(self, report):
+        xml = finding_report_to_xml(report, nvt_meta={})
+        return ET.fromstring(xml).find(".//results/result")
+
+    def test_hardening_uses_rule_severity_without_feed(self):
+        res = self._result(HARDENING_REPORT)
+        self.assertEqual(float(res.find("severity").text), 6.0)
+        self.assertNotEqual(res.find("threat").text, "Log")
+        self.assertIn("Hardening", res.find("nvt/name").text)
+        self.assertIn("Expected", res.find("description").text)
