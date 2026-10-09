@@ -113,6 +113,15 @@ func TestComputeCycleHashMissingUpdatesOrderIndependent(t *testing.T) {
 	}
 }
 
+func TestComputeCycleHashChangesOnCISState(t *testing.T) {
+	h1 := windowsInventory().ComputeCycleHash()
+	drift := windowsInventory()
+	drift.Facts.CISState = []CISState{{Source: "secedit", Key: "MinimumPasswordLength", Value: "8"}}
+	if got := drift.ComputeCycleHash(); got == h1 {
+		t.Fatal("hash must change when CIS posture changes (hardening re-import depends on it)")
+	}
+}
+
 func TestWindowsInventoryJSONRoundTrip(t *testing.T) {
 	inv := windowsInventory()
 	inv.Facts.InstalledKBs = []string{"KB5034441"}

@@ -22,12 +22,15 @@ Coletamos apenas o mínimo necessário para **correlação de vulnerabilidade ba
 | KBs instalados (Windows) | `facts.installed_kbs[]` | evidência de supersedência de update | baixa (estado técnico) |
 | Updates faltantes (Windows) | `facts.missing_updates[]` | detecção de vulnerabilidade (fonte MSRC/WUA) | baixa (estado técnico) |
 | Postura de gestão central | `facts.management` | evitar propor correção que GPO/MDM reverteria | baixa (flags de configuração) |
+| Postura CIS L1 (registro/secedit/auditpol/serviço) | `facts.cis_state[]` | avaliação de hardening (ADR-0009) | baixa (config técnica; contas → SIDs well-known) |
 
-> **Windows (ADR-0008):** todos os campos acima são **estado técnico do SO**, não dado pessoal.
+> **Windows (ADR-0008/0009):** todos os campos acima são **estado técnico do SO**, não dado pessoal.
 > A severidade/CVE dos `missing_updates` vem **verbatim da fonte autoritativa** (Windows Update
-> Agent/MSRC); o agente nunca a julga. O coletor de postura CIS (Fase 1, ADR-0009) lerá
-> *user rights* via `secedit`, que enumera contas locais — esse coletor **redige para SIDs
-> well-known** e nunca envia nomes de usuário arbitrários (registrar aqui ao adicionar `cis_state`).
+> Agent/MSRC); o agente nunca a julga. O coletor de postura CIS (`cis_state`) reporta **só o valor
+> medido** (sem pass/fail e sem mapeamento de regra CIS — o servidor é dono do ruleset, ADR-0009), e
+> as contas em *Privilege Rights* (`secedit`) são **redigidas para SIDs well-known** (`Administrators`,
+> `Guests`, …): um SID específico do host vira `custom-sid` e um nome de conta vira `custom-account` —
+> nenhum nome de usuário/SID arbitrário deixa a máquina.
 
 ## Dados que **NÃO** coletamos (proibido)
 

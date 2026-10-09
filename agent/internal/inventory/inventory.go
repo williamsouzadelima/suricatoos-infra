@@ -21,11 +21,12 @@ import (
 //
 // 1.1.0 adds optional Windows posture fields (OS build/UBR, installed KBs,
 // missing updates, central-management flags) used by the Windows MSRC
-// correlation path (ADR-0008). The bump is a MINOR, backward-compatible change:
-// every added field is optional/omitempty, so a 1.0.0 consumer ignores them and
-// the ingest accepts any 1.x (see ingest.schemaCompatible). Deploy the ingest
-// before rolling agents to 1.1.0.
-const SchemaVersion = "1.1.0"
+// correlation path (ADR-0008). 1.2.0 adds facts.cis_state (neutral
+// security-configuration readings for CIS L1 hardening, ADR-0009). Every bump is
+// a MINOR, backward-compatible change: every added field is optional/omitempty,
+// so an older consumer ignores them and the ingest accepts any 1.x (see
+// ingest.schemaCompatible). Deploy the ingest before rolling agents to a new minor.
+const SchemaVersion = "1.2.0"
 
 // OSFamily enumerates the supported operating-system families.
 type OSFamily string
@@ -108,6 +109,19 @@ type Management struct {
 	IntuneEnrolled bool   `json:"intune_enrolled,omitempty"`
 }
 
+// CISState is one measured security-configuration reading — a registry value, a
+// secedit System Access / Privilege Rights entry, an auditpol subcategory, or a
+// service start type. It is NEUTRAL evidence: the current value only, with NO
+// pass/fail and NO CIS rule mapping. The server owns the benchmark ruleset and
+// decides compliance (ADR-0009); the agent never judges. Account references in
+// Privilege Rights are scrubbed to well-known SIDs so no arbitrary username or
+// SID ever leaves the host (LGPD minimization).
+type CISState struct {
+	Source string `json:"source"` // "registry" | "secedit" | "auditpol" | "service"
+	Key    string `json:"key"`
+	Value  string `json:"value"`
+}
+
 // Facts holds non-package system facts relevant to correlation.
 type Facts struct {
 	ListeningPortsLocal []Port   `json:"listening_ports_local,omitempty"`
@@ -119,6 +133,9 @@ type Facts struct {
 	MissingUpdates []MissingUpdate `json:"missing_updates,omitempty"`
 	// Management is the central-management posture (Windows); nil when unknown.
 	Management *Management `json:"management,omitempty"`
+	// CISState holds neutral security-configuration readings (Windows); the
+	// server maps them to a CIS L1 ruleset (ADR-0009). Empty on non-Windows.
+	CISState []CISState `json:"cis_state,omitempty"`
 }
 
 // Agent identifies the reporting agent and its enrolled scope.
@@ -177,6 +194,13 @@ func (inv *Inventory) ComputeCycleHash() string {
 	for _, u := range inv.Facts.MissingUpdates {
 		lines = append(lines, strings.Join([]string{
 			"miss", u.KB, u.UpdateID,
+		}, "|"))
+	}
+	// cis_state folds in too, so a hardening change (a setting drifts or is fixed)
+	// produces a new hash and re-imports — otherwise the finding would never clear.
+	for _, c := range inv.Facts.CISState {
+		lines = append(lines, strings.Join([]string{
+			"cis", c.Source, c.Key, c.Value,
 		}, "|"))
 	}
 	sort.Strings(lines)

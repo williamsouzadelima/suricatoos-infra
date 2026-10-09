@@ -100,6 +100,20 @@
             "wsus_url": { "type": "string" },
             "intune_enrolled": { "type": "boolean" }
           }
+        },
+        "cis_state": {
+          "type": "array",
+          "description": "Neutral security-configuration readings (Windows) for CIS L1 hardening (ADR-0009). Current value only; the server owns the benchmark ruleset and decides compliance. Privilege-rights accounts are scrubbed to well-known SIDs (LGPD).",
+          "items": {
+            "type": "object",
+            "required": ["source", "key", "value"],
+            "additionalProperties": false,
+            "properties": {
+              "source": { "enum": ["registry", "secedit", "auditpol", "service"] },
+              "key": { "type": "string" },
+              "value": { "type": "string" }
+            }
+          }
         }
       }
     },
