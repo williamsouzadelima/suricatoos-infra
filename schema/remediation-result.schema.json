@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://suricatoos.dev/schema/remediation-result.schema.json",
+  "title": "Suricatoos — Remediation Result",
+  "description": "The agent's report of applying a remediation job (ADR-0010). The agent only ever reports applied/failed plus the prior/resulting state for rollback and audit — it never declares the job VERIFIED (the server does that after a re-scan).",
+  "type": "object",
+  "required": ["status"],
+  "additionalProperties": false,
+  "properties": {
+    "status": { "enum": ["applied", "failed"] },
+    "detail": { "type": "string" },
+    "before": { "type": "string", "description": "prior state captured for rollback/audit" },
+    "after": { "type": "string", "description": "resulting state after apply" },
+    "rollback_token": { "type": "string", "description": "opaque handle the agent kept to revert" },
+    "reboot_pending": { "type": "boolean" },
+    "reported_at": { "type": "string", "format": "date-time" }
+  }
+}

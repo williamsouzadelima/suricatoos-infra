@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://suricatoos.dev/schema/remediation-job.schema.json",
+  "title": "Suricatoos — Remediation Job",
+  "description": "A human-approved, signed remediation the cloud dispatches to ONE endpoint agent (ADR-0010). The cloud assigns every identity field; the agent acts only on a job carrying a valid signature (canonical: suricatoos-remediation-v1), bound to its own agent_id + tenant + a single-use nonce + an expiry. Born PENDING_APPROVAL and signed only on approval.",
+  "type": "object",
+  "required": ["schema_version", "job_id", "tenant", "agent_id", "type", "payload", "payload_sha256", "nonce", "state", "created_at"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "type": "string", "const": "1.0.0" },
+    "job_id": { "type": "string", "description": "cloud-assigned, unguessable" },
+    "correlation_id": { "type": "string", "description": "job → finding → ticket" },
+    "tenant": { "type": "string", "description": "= cert O; server-set" },
+    "agent_id": { "type": "string", "description": "= cert CN; the single host this job targets" },
+    "type": { "enum": ["package_patch", "config_hardening"] },
+    "payload": { "description": "opaque to the queue; the executor interprets it (compacted JSON)" },
+    "payload_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "nonce": { "type": "string", "description": "single-use; consumed on ack (anti-replay)" },
+    "state": { "enum": ["PENDING_APPROVAL", "APPROVED", "DELIVERED", "ACKED", "APPLIED", "FAILED", "VERIFIED", "EXPIRED", "REJECTED"] },
+    "issued_at": { "type": "string", "format": "date-time" },
+    "not_before": { "type": "string", "format": "date-time" },
+    "not_after": { "type": "string", "format": "date-time" },
+    "expires_at": { "type": "string", "format": "date-time" },
+    "approved_by": { "type": "string" },
+    "approved_at": { "type": "string", "format": "date-time" },
+    "signature": { "type": "string", "description": "base64 Ed25519 over the canonical; present once APPROVED" },
+    "created_at": { "type": "string", "format": "date-time" },
+    "delivered_at": { "type": "string", "format": "date-time" },
+    "acked_at": { "type": "string", "format": "date-time" },
+    "result": { "$ref": "remediation-result.schema.json" }
+  }
+}
