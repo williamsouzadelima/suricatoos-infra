@@ -105,9 +105,10 @@ func signedEnrollServer(t *testing.T, signer *testCA, caPEM []byte) *httptest.Se
 			return
 		}
 		_ = json.NewEncoder(w).Encode(response{
-			Certificate: string(signer.signClient(t, csr)),
-			CACert:      string(caPEM),
-			IngestURL:   testIngestURL,
+			Certificate:       string(signer.signClient(t, csr)),
+			CACert:            string(caPEM),
+			IngestURL:         testIngestURL,
+			RemediationPubKey: testRemediationPubPEM(t),
 		})
 	}))
 }
@@ -159,6 +160,13 @@ func TestEnrollAndMTLSEndToEnd(t *testing.T) {
 	}
 	if id.IngestURL != testIngestURL {
 		t.Errorf("ingest_url não propagado do enroll: got %q, want %q", id.IngestURL, testIngestURL)
+	}
+	// remediation_pubkey (ADR-0010) must propagate from the enroll response into
+	// the Identity and parse into an Ed25519 key.
+	if id.RemediationPubKey == "" {
+		t.Error("remediation_pubkey não propagado do enroll")
+	} else if _, err := id.RemediationPublicKey(); err != nil {
+		t.Errorf("remediation pubkey não parseável: %v", err)
 	}
 
 	cfg, err := id.TLSClientConfig()
@@ -345,5 +353,70 @@ func TestSaveLoadIngestURL(t *testing.T) {
 	}
 	if loaded2.IngestURL != "" {
 		t.Errorf("ingest url = %q, want vazio", loaded2.IngestURL)
+	}
+}
+
+// testRemediationPubPEM returns a valid PKIX PEM Ed25519 public key (the shape
+// the control-plane distributes as remediation_pubkey).
+func testRemediationPubPEM(t *testing.T) string {
+	t.Helper()
+	pub, _, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	der, err := x509.MarshalPKIXPublicKey(pub)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: der}))
+}
+
+func TestSaveLoadRemediationPubKey(t *testing.T) {
+	authority := newTestCA(t)
+	csrPEM, key, err := GenerateCSR("agent-rem")
+	if err != nil {
+		t.Fatal(err)
+	}
+	block, _ := pem.Decode(csrPEM)
+	csr, _ := x509.ParseCertificateRequest(block.Bytes)
+	base := &Identity{PrivateKey: key, CertPEM: authority.signClient(t, csr), CACertPEM: authority.pem}
+
+	// With a remediation pubkey → persisted to remediation.pub, reloaded, and
+	// parseable into an Ed25519 key.
+	withKey := *base
+	withKey.RemediationPubKey = testRemediationPubPEM(t)
+	dir := t.TempDir()
+	if err := Save(dir, &withKey); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.RemediationPubKey != strings.TrimSpace(withKey.RemediationPubKey) {
+		t.Errorf("remediation pubkey não round-tripou")
+	}
+	if _, err := loaded.RemediationPublicKey(); err != nil {
+		t.Errorf("RemediationPublicKey() devia parsear a chave persistida: %v", err)
+	}
+
+	// Without one → no file written; Load leaves it empty and the helper errors
+	// (feature inert — backward compatible with pre-remediation enrollments).
+	dir2 := t.TempDir()
+	if err := Save(dir2, base); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(dir2, "remediation.pub")); !os.IsNotExist(err) {
+		t.Errorf("remediation.pub não deve existir quando a chave é vazia (err=%v)", err)
+	}
+	loaded2, err := Load(dir2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded2.RemediationPubKey != "" {
+		t.Errorf("remediation pubkey = %q, want vazio", loaded2.RemediationPubKey)
+	}
+	if _, err := loaded2.RemediationPublicKey(); err == nil {
+		t.Error("RemediationPublicKey() deve falhar quando nenhuma chave foi provisionada")
 	}
 }

@@ -35,6 +35,11 @@ type Identity struct {
 	// ending in /v1). Persisted so the daemon can poll for signed update
 	// manifests without a separate flag. Empty for pre-update enrollments.
 	ServerURL string
+	// RemediationPubKey is the PKIX PEM of the key that signs remediation jobs
+	// (ADR-0010), handed back at enroll/renew. A signed job is verified against
+	// THIS key — separate from the CA, so a leaked CA key cannot forge jobs.
+	// Empty for enrollments before remediation existed (the feature stays inert).
+	RemediationPubKey string
 }
 
 // AgentID returns the agent's logical identity — the CommonName of its enrolled
@@ -71,6 +76,30 @@ func (id *Identity) CAPublicKey() (ed25519.PublicKey, error) {
 	return pub, nil
 }
 
+// RemediationPublicKey parses the stored remediation-signing public key (PKIX
+// PEM, ADR-0010) into an Ed25519 key. The agent verifies a signed remediation
+// job against THIS key — distinct from the CA, so compromise of one does not
+// grant the other. Returns an error when no key was provisioned (the feature is
+// then inert: no job can verify).
+func (id *Identity) RemediationPublicKey() (ed25519.PublicKey, error) {
+	if id.RemediationPubKey == "" {
+		return nil, errors.New("nenhuma chave de remediação provisionada")
+	}
+	block, _ := pem.Decode([]byte(id.RemediationPubKey))
+	if block == nil {
+		return nil, errors.New("PEM da chave de remediação inválido")
+	}
+	pub, err := x509.ParsePKIXPublicKey(block.Bytes)
+	if err != nil {
+		return nil, err
+	}
+	ed, ok := pub.(ed25519.PublicKey)
+	if !ok {
+		return nil, errors.New("chave de remediação não é Ed25519")
+	}
+	return ed, nil
+}
+
 // GenerateCSR creates a fresh Ed25519 keypair and a CSR for agentID. It returns
 // the CSR PEM and the private key (kept by the caller; never transmitted).
 func GenerateCSR(agentID string) (csrPEM []byte, key ed25519.PrivateKey, err error) {
@@ -96,9 +125,10 @@ type request struct {
 }
 
 type response struct {
-	Certificate string `json:"certificate"`
-	CACert      string `json:"ca_cert"`
-	IngestURL   string `json:"ingest_url"`
+	Certificate       string `json:"certificate"`
+	CACert            string `json:"ca_cert"`
+	IngestURL         string `json:"ingest_url"`
+	RemediationPubKey string `json:"remediation_pubkey,omitempty"`
 }
 
 // Enroll runs the full flow: generate key+CSR, POST to baseURL/enroll with the
@@ -154,11 +184,12 @@ func Enroll(ctx context.Context, hc *http.Client, baseURL, token, agentID, caFin
 		return nil, fmt.Errorf("resposta de enrollment inválida: %w", err)
 	}
 	id := &Identity{
-		PrivateKey: key,
-		CertPEM:    []byte(er.Certificate),
-		CACertPEM:  []byte(er.CACert),
-		IngestURL:  er.IngestURL,
-		ServerURL:  strings.TrimSuffix(baseURL, "/"),
+		PrivateKey:        key,
+		CertPEM:           []byte(er.Certificate),
+		CACertPEM:         []byte(er.CACert),
+		IngestURL:         er.IngestURL,
+		ServerURL:         strings.TrimSuffix(baseURL, "/"),
+		RemediationPubKey: er.RemediationPubKey,
 	}
 	if err := id.verify(caFingerprint); err != nil {
 		return nil, fmt.Errorf("identidade recebida inválida: %w", err)
@@ -289,6 +320,14 @@ func Save(dir string, id *Identity) error {
 			return err
 		}
 	}
+	// remediation.pub is the PKIX PEM of the remediation-signing key (ADR-0010),
+	// used to verify signed jobs. Optional (absent before the feature existed; the
+	// agent then simply has no job it can verify).
+	if id.RemediationPubKey != "" {
+		if err := os.WriteFile(filepath.Join(dir, "remediation.pub"), []byte(id.RemediationPubKey), 0o644); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -326,6 +365,10 @@ func Load(dir string) (*Identity, error) {
 	// server.url is optional (absent for pre-update enrollments).
 	if b, err := os.ReadFile(filepath.Join(dir, "server.url")); err == nil {
 		id.ServerURL = strings.TrimSpace(string(b))
+	}
+	// remediation.pub is optional (absent before remediation existed).
+	if b, err := os.ReadFile(filepath.Join(dir, "remediation.pub")); err == nil {
+		id.RemediationPubKey = strings.TrimSpace(string(b))
 	}
 	return id, nil
 }
