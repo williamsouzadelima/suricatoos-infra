@@ -87,7 +87,7 @@ type RemediationJob struct {
 	Type          Type            `json:"type"`
 	Payload       json.RawMessage `json:"payload"`        // opaque to the queue; the executor reads it
 	PayloadSHA256 string          `json:"payload_sha256"` // binds the payload into the signature
-	Nonce         string          `json:"nonce"`          // single-use; consumed on ack (anti-replay)
+	Nonce         string          `json:"nonce"`          // per-job entropy folded into the signature; replay defense (dedup by job_id + VerifyAt expiry) is enforced by the agent executor in Fase 3, not consumed here
 	State         JobState        `json:"state"`
 	IssuedAt      time.Time       `json:"issued_at,omitempty"`  // when it was signed (= approval time)
 	NotBefore     time.Time       `json:"not_before,omitempty"` // maintenance window start

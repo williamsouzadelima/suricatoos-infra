@@ -15,7 +15,7 @@
     "type": { "enum": ["package_patch", "config_hardening"] },
     "payload": { "description": "opaque to the queue; the executor interprets it (compacted JSON)" },
     "payload_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
-    "nonce": { "type": "string", "description": "single-use; consumed on ack (anti-replay)" },
+    "nonce": { "type": "string", "description": "per-job entropy folded into the signature; replay defense (agent-side dedup by job_id + expiry via VerifyAt) is enforced by the agent executor" },
     "state": { "enum": ["PENDING_APPROVAL", "APPROVED", "DELIVERED", "ACKED", "APPLIED", "FAILED", "VERIFIED", "EXPIRED", "REJECTED"] },
     "issued_at": { "type": "string", "format": "date-time" },
     "not_before": { "type": "string", "format": "date-time" },

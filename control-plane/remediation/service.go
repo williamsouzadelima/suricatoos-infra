@@ -1,6 +1,7 @@
 package remediation
 
 import (
+	"crypto/subtle"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -32,6 +33,15 @@ func NewService(reg *Registry, known TenantKnown, revoked RevokedFunc, adminSecr
 
 // auth validates the forwarded mTLS identity + CRL (fail-closed). On failure it
 // writes 403 and returns ok=false.
+//
+// WIRING-CRITICAL (F2c): this TRUSTS X-Client-Cert-* (and the operator routes
+// trust X-Operator) as set by nginx. It is ONLY safe when (a) a dedicated nginx
+// location terminates mTLS and forwards verify/DN/serial for these exact paths
+// (the generic /agent/ location CLEARS X-Client-Cert-*, so without it the agent
+// routes fail closed), (b) nginx STRIPS any client-supplied X-Operator and sets
+// it from the gsad session, and (c) the control-plane's :8080 is reachable only
+// from nginx (not other compose neighbors). Mounting this service without those
+// lets a direct caller forge identity. Do not enable REMEDIATION before F2c.
 func (s *Service) auth(w http.ResponseWriter, r *http.Request) (Identity, bool) {
 	id, err := Authorize(
 		r.Header.Get("X-Client-Cert-Verify"),
@@ -53,7 +63,8 @@ func (s *Service) auth(w http.ResponseWriter, r *http.Request) (Identity, bool) 
 }
 
 func (s *Service) adminOK(w http.ResponseWriter, r *http.Request) bool {
-	if s.admin == "" || r.Header.Get("Authorization") != "Bearer "+s.admin {
+	want := "Bearer " + s.admin
+	if s.admin == "" || subtle.ConstantTimeCompare([]byte(r.Header.Get("Authorization")), []byte(want)) != 1 {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return false
 	}
@@ -236,6 +247,10 @@ func (s *Service) RejectHandler() http.HandlerFunc {
 			return
 		}
 		approver := r.Header.Get("X-Operator")
+		if approver == "" {
+			http.Error(w, "aprovador obrigatório (X-Operator)", http.StatusBadRequest)
+			return
+		}
 		if err := s.reg.Reject(jobID, approver); err != nil {
 			if err == ErrNotFound {
 				http.Error(w, "not found", http.StatusNotFound)

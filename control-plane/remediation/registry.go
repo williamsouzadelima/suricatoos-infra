@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"sort"
 	"sync"
@@ -63,9 +64,63 @@ func NewRegistry(cfg Config) (*Registry, error) {
 		return nil, fmt.Errorf("remediation registry %s corrompido: %w", cfg.Path, err)
 	}
 	for _, j := range list {
+		// Defense-in-depth against a tampered/corrupt state file: a job in a
+		// post-approval state MUST carry a signature (Approve set it). One that
+		// doesn't is incoherent — drop it rather than let a future server-side
+		// consumer that trusts State skip the approval gate. (The agent already
+		// rejects an unsigned job, so this never weakens the agent path.)
+		if requiresSignature(j.State) && j.Signature == "" {
+			log.Printf("remediation: job %s em %s sem assinatura no load — descartado (estado incoerente)", j.JobID, j.State)
+			continue
+		}
 		r.jobs[j.JobID] = j
 	}
 	return r, nil
+}
+
+// requiresSignature reports whether a job state can only have been reached via
+// Approve (which signs); such a state with an empty signature is incoherent.
+func requiresSignature(s JobState) bool {
+	switch s {
+	case StateApproved, StateDelivered, StateAcked, StateApplied, StateVerified:
+		return true
+	}
+	return false
+}
+
+// defaultReapRetention is how long terminal jobs are kept before Reap drops them.
+const defaultReapRetention = 7 * 24 * time.Hour
+
+// Reap removes terminal jobs older than retention (by CreatedAt), bounding the
+// queue file's growth, and returns the count removed. Called opportunistically
+// from Enqueue; the wiring may also call it on a timer.
+func (r *Registry) Reap(retention time.Duration) int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	n := r.reapLocked(retention)
+	if n > 0 {
+		if err := r.saveLocked(); err != nil {
+			log.Printf("remediation: saveLocked após reap: %v", err)
+		}
+	}
+	return n
+}
+
+// reapLocked deletes terminal jobs older than retention (caller holds the lock,
+// caller persists). Returns the count removed.
+func (r *Registry) reapLocked(retention time.Duration) int {
+	if retention <= 0 {
+		retention = defaultReapRetention
+	}
+	cutoff := r.now().Add(-retention)
+	n := 0
+	for id, j := range r.jobs {
+		if j.State.terminal() && j.CreatedAt.Before(cutoff) {
+			delete(r.jobs, id)
+			n++
+		}
+	}
+	return n
 }
 
 // Enqueue creates a PENDING_APPROVAL job. It is NOT signed and NOT deliverable
@@ -124,6 +179,7 @@ func (r *Registry) Enqueue(req EnqueueRequest) (*RemediationJob, error) {
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	r.reapLocked(defaultReapRetention) // bound growth: drop old terminal jobs
 	r.jobs[jid] = j
 	if err := r.saveLocked(); err != nil {
 		delete(r.jobs, jid)
@@ -224,14 +280,24 @@ func (r *Registry) Poll(agentID, tenant string) (*RemediationJob, bool) {
 
 	if len(eligible) == 0 {
 		if changed {
-			_ = r.saveLocked()
+			if err := r.saveLocked(); err != nil {
+				log.Printf("remediation: saveLocked após sweep de expiração: %v", err)
+			}
 		}
 		return nil, false
 	}
 	next := eligible[0]
+	prevState, prevDelivered := next.State, next.DeliveredAt
 	next.State = StateDelivered
 	next.DeliveredAt = now
-	_ = r.saveLocked()
+	if err := r.saveLocked(); err != nil {
+		// Não conseguimos persistir a entrega: reverte para memória e disco
+		// concordarem e NUNCA entregar um job que não ficou durável como DELIVERED
+		// (ele re-entregaria no restart). O agente não recebe nada neste poll e tenta de novo.
+		next.State, next.DeliveredAt = prevState, prevDelivered
+		log.Printf("remediation: saveLocked após poll job=%s (revertido): %v", next.JobID, err)
+		return nil, false
+	}
 	return next.clone(), true
 }
 
@@ -247,7 +313,9 @@ func (r *Registry) Ack(jobID, agentID, tenant string) bool {
 	if j.State == StateDelivered {
 		j.State = StateAcked
 		j.AckedAt = r.now().UTC()
-		_ = r.saveLocked()
+		if err := r.saveLocked(); err != nil {
+			log.Printf("remediation: saveLocked após ack job=%s: %v", jobID, err)
+		}
 	}
 	return true
 }
@@ -263,8 +331,17 @@ func (r *Registry) Report(jobID, agentID, tenant string, res *Result) bool {
 	if !ok || j.AgentID != agentID || j.Tenant != tenant {
 		return false
 	}
-	if j.State.terminal() {
+	// Idempotent / no-clobber: once a result is in (APPLIED) or the job is final,
+	// a repeated report must NOT overwrite the recorded Result (incl. before/
+	// rollback_token) nor flip the state.
+	if j.State == StateApplied || j.State.terminal() {
 		return true
+	}
+	// A report is only valid AFTER delivery: the agent must have actually received
+	// the job (DELIVERED, or ACKED). APPROVED/PENDING_APPROVAL were never handed
+	// out, so a report from those states is rejected (404) rather than trusted.
+	if j.State != StateDelivered && j.State != StateAcked {
+		return false
 	}
 	if res == nil {
 		res = &Result{Status: "failed", Detail: "relatório vazio"}
@@ -276,7 +353,9 @@ func (r *Registry) Report(jobID, agentID, tenant string, res *Result) bool {
 	} else {
 		j.State = StateFailed
 	}
-	_ = r.saveLocked()
+	if err := r.saveLocked(); err != nil {
+		log.Printf("remediation: saveLocked após report job=%s: %v", jobID, err)
+	}
 	return true
 }
 
@@ -292,7 +371,9 @@ func (r *Registry) MarkVerified(jobID string) bool {
 	}
 	if j.State == StateApplied {
 		j.State = StateVerified
-		_ = r.saveLocked()
+		if err := r.saveLocked(); err != nil {
+			log.Printf("remediation: saveLocked após verify job=%s: %v", jobID, err)
+		}
 	}
 	return true
 }
@@ -316,15 +397,21 @@ func (r *Registry) saveLocked() error {
 	for _, j := range r.jobs {
 		list = append(list, j)
 	}
-	// json.Marshal (NOT MarshalIndent): Indent re-formats the embedded payload
-	// RawMessage, which would change its bytes and break payload_sha256 (and thus
-	// the signature) on reload. Compact output keeps the payload byte-stable.
-	b, err := json.Marshal(list)
-	if err != nil {
+	// Persist WITHOUT HTML-escaping and WITHOUT indenting: both would rewrite the
+	// embedded payload RawMessage's bytes (indent reflows it; the default
+	// json.Marshal escapes <,>,& to </>/&) and diverge them from the
+	// json.Compact bytes that payload_sha256 — and thus the signature — was computed
+	// over. A config_hardening payload full of <,>,& (XML, rules) would then fail to
+	// verify after a control-plane restart (silent, fail-closed, but real). Encoding
+	// with SetEscapeHTML(false) keeps the payload byte-stable across the round-trip.
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(list); err != nil {
 		return err
 	}
 	tmp := r.path + ".tmp"
-	if err := os.WriteFile(tmp, b, 0o600); err != nil {
+	if err := os.WriteFile(tmp, buf.Bytes(), 0o600); err != nil {
 		return err
 	}
 	return os.Rename(tmp, r.path)
