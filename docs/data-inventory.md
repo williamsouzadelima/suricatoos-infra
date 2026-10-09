@@ -40,6 +40,24 @@ Coletamos apenas o mínimo necessário para **correlação de vulnerabilidade ba
 - Teclas digitadas, telemetria comportamental, screenshots.
 - Dados pessoais (nome, e-mail, documentos) — exceto a identidade técnica do host (hostname/agent_id).
 
+## Canal de remediação (ADR-0010)
+
+> Fluxo **inverso** (nuvem→agente) mais o relatório de volta (agente→nuvem), separado da coleta acima.
+> Nasce **DARK**: só existe dado aqui quando o recurso é ligado por tenant e um humano aprova o job.
+
+| Dado | Campo (schema) | Direção | Finalidade | Sensibilidade |
+|---|---|---|---|---|
+| Job assinado (id/correlação/tenant/agent, janela, nonce, assinatura) | `remediation-job.schema.json` | nuvem→agente | aplicar UMA correção aprovada | baixa (metadado operacional) |
+| Payload `package_patch` (engine, id do update, KB, versão) | `remediation-payload-package-patch.schema.json` | nuvem→agente | qual update instalar | baixa (estado técnico) |
+| Payload `config_hardening` (nº da regra CIS, source, chave, valor) | `remediation-payload-config-hardening.schema.json` | nuvem→agente | qual setting aplicar | baixa (config técnica) |
+| Resultado (status, detalhe, before/after técnico, rollback_token) | `remediation-result.schema.json` | agente→nuvem | atestar aplicação + permitir rollback | baixa (estado técnico) |
+
+> **Nenhum dado pessoal** trafega no canal de remediação: o job carrega identificadores opacos
+> (`job_id`/`nonce`) e o alvo técnico (KB/UpdateID/regra/chave); o resultado carrega **estado técnico
+> do SO** (ex.: valor de registro antes/depois), nunca conteúdo de usuário ou identidade de conta. A
+> redação de SID da coleta CIS (ADR-0009) continua valendo para o achado que origina o job. A IA de
+> planejamento (Fase 4) recebe dado **pseudonimizado** e **nunca decide/aprova** (ADR-0010).
+
 ## Base legal e finalidade
 
 - **Finalidade única:** gestão de vulnerabilidade do parque (segurança da informação).
