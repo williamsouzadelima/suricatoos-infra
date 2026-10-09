@@ -49,6 +49,9 @@ type Response struct {
 	// the CA public key). PKIX PEM.
 	FeedPubKey   string `json:"feed_pubkey,omitempty"`
 	UpdatePubKey string `json:"update_pubkey,omitempty"`
+	// RemediationPubKey verifies signed remediation jobs (ADR-0010), a 4th
+	// purpose-scoped key distinct from feed/update/CA. Empty when not configured.
+	RemediationPubKey string `json:"remediation_pubkey,omitempty"`
 }
 
 // Signer issues a client certificate from a verified CSR. *ca.CA satisfies it;
@@ -61,15 +64,16 @@ type Signer interface {
 
 // Service ties the token manager and the CA into the enrollment flow.
 type Service struct {
-	tokens    *tokens.Manager
-	signer    Signer
-	now       func() time.Time
-	certTTL   time.Duration
-	renewTTL  time.Duration // TTL for renewed certs (default: certTTL); shorter = safer
-	ingestURL string
-	feedPub   string      // PKIX PEM of the feed-signing pubkey (ADR-0007); empty = omit
-	updatePub string      // PKIX PEM of the update-signing pubkey; empty = omit
-	revoked   RevokedFunc // CRL check for Renew (nil = fail-closed)
+	tokens         *tokens.Manager
+	signer         Signer
+	now            func() time.Time
+	certTTL        time.Duration
+	renewTTL       time.Duration // TTL for renewed certs (default: certTTL); shorter = safer
+	ingestURL      string
+	feedPub        string      // PKIX PEM of the feed-signing pubkey (ADR-0007); empty = omit
+	updatePub      string      // PKIX PEM of the update-signing pubkey; empty = omit
+	remediationPub string      // PKIX PEM of the remediation-signing pubkey (ADR-0010); empty = omit
+	revoked        RevokedFunc // CRL check for Renew (nil = fail-closed)
 }
 
 // Option configures a Service.
@@ -95,6 +99,13 @@ func WithIngestURL(u string) Option { return func(s *Service) { s.ingestURL = u 
 // a key separate from the CA (ADR-0007 risk #3). Empty values are omitted.
 func WithVerificationKeys(feedPubPEM, updatePubPEM string) Option {
 	return func(s *Service) { s.feedPub, s.updatePub = feedPubPEM, updatePubPEM }
+}
+
+// WithRemediationKey distributes the remediation-job verification public key
+// (PKIX PEM) to agents at enroll (ADR-0010), so the agent verifies a signed
+// remediation job with a key separate from the CA/feed/update. Empty = omitted.
+func WithRemediationKey(pubPEM string) Option {
+	return func(s *Service) { s.remediationPub = pubPEM }
 }
 
 // WithRevocationCheck wires the CRL check Renew enforces (ADR-0007 risk #6): a
@@ -177,11 +188,12 @@ func (s *Service) Enroll(req Request) (Response, error) {
 		return Response{}, err
 	}
 	return Response{
-		Certificate:  string(issued.PEM),
-		CACert:       string(s.signer.CertPEM()),
-		IngestURL:    s.ingestURL,
-		FeedPubKey:   s.feedPub,   // fresh sensors need these to verify feed/update
-		UpdatePubKey: s.updatePub, // manifests (ADR-0007 risk #3) — Renew already returns them
+		Certificate:       string(issued.PEM),
+		CACert:            string(s.signer.CertPEM()),
+		IngestURL:         s.ingestURL,
+		FeedPubKey:        s.feedPub,   // fresh sensors need these to verify feed/update
+		UpdatePubKey:      s.updatePub, // manifests (ADR-0007 risk #3) — Renew already returns them
+		RemediationPubKey: s.remediationPub,
 	}, nil
 }
 
@@ -252,11 +264,12 @@ func (s *Service) Renew(certVerify, certDN, certSerial string, req RenewRequest)
 		return Response{}, err
 	}
 	return Response{
-		Certificate:  string(issued.PEM),
-		CACert:       string(s.signer.CertPEM()),
-		IngestURL:    s.ingestURL,
-		FeedPubKey:   s.feedPub,
-		UpdatePubKey: s.updatePub,
+		Certificate:       string(issued.PEM),
+		CACert:            string(s.signer.CertPEM()),
+		IngestURL:         s.ingestURL,
+		FeedPubKey:        s.feedPub,
+		UpdatePubKey:      s.updatePub,
+		RemediationPubKey: s.remediationPub,
 	}, nil
 }
 

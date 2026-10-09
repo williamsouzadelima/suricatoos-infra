@@ -25,6 +25,15 @@
 //	UPDATE_MANIFEST_FILE  path to the JSON auto-update manifest (version + per
 //	                      os/arch url+sha256). When set, /v1/update/check serves a
 //	                      CA-signed answer; unset → endpoint returns 204 (disabled)
+//	REMEDIATION_ENABLED   "true" mounts the remediation job routes (ADR-0010).
+//	                      DARK by default — only safe behind the dedicated nginx
+//	                      mTLS location that forwards X-Client-Cert-* and strips
+//	                      client X-Operator (F2c). Leave unset until then.
+//	REMEDIATION_SIGN_KEY_FILE  path to the Ed25519 key that signs approved jobs
+//	                      (4th purpose-scoped key); its pubkey is handed to agents
+//	                      at enroll. Absent → ephemeral (dev only).
+//	REMEDIATION_JOBS_FILE path to the JSON file persisting the job queue (0600,
+//	                      atomic). Absent → in-memory (lost on restart).
 //
 // When CA_CERT_FILE/CA_KEY_FILE are set the CA survives restarts (agents keep
 // their mTLS certificates). Without them a new ephemeral CA is generated on
@@ -49,6 +58,7 @@ import (
 	cpenrollcmd "github.com/williamsouzadelima/suricatoos-infra/control-plane/enrollcmd"
 	cpfeed "github.com/williamsouzadelima/suricatoos-infra/control-plane/feed"
 	cpprovision "github.com/williamsouzadelima/suricatoos-infra/control-plane/provision"
+	cpremediation "github.com/williamsouzadelima/suricatoos-infra/control-plane/remediation"
 	cpsensorjobs "github.com/williamsouzadelima/suricatoos-infra/control-plane/sensorjobs"
 	cpsignkeys "github.com/williamsouzadelima/suricatoos-infra/control-plane/signkeys"
 	cptenants "github.com/williamsouzadelima/suricatoos-infra/control-plane/tenants"
@@ -133,10 +143,17 @@ func main() {
 	if err != nil {
 		log.Fatalf("update sign key: %v", err)
 	}
+	// 4th purpose-scoped key: signs remediation jobs (ADR-0010). Its pubkey is
+	// distributed to agents at enroll so they verify a signed job independently.
+	remediationKey, err := cpsignkeys.LoadOrCreate(os.Getenv("REMEDIATION_SIGN_KEY_FILE"))
+	if err != nil {
+		log.Fatalf("remediation sign key: %v", err)
+	}
 
 	enrollOpts := []enroll.Option{
 		enroll.WithIngestURL(ingestURL),
 		enroll.WithVerificationKeys(feedKey.PublicPEM(), updateKey.PublicPEM()),
+		enroll.WithRemediationKey(remediationKey.PublicPEM()),
 		// CRL enforcement on /renew (ADR-0007 risk #6): a revoked cert cannot renew
 		// itself into a fresh serial. authority.IsRevoked is authoritative + in-memory.
 		enroll.WithRevocationCheck(authority.IsRevoked),
@@ -197,6 +214,22 @@ func main() {
 	// authority.IsRevoked is authoritative + in-memory → CRL enforced without staleness.
 	sensorJobSvc := cpsensorjobs.NewService(sensorJobReg, tenantReg.Known, authority.IsRevoked)
 	sensorJobsEnabled := os.Getenv("SENSOR_JOBS_ENABLED") == "true"
+
+	// Remediation backbone (ADR-0010) — the signed/approved job queue. Mounted ONLY
+	// when REMEDIATION_ENABLED (dark by default): until F2c lands the dedicated nginx
+	// mTLS location (forwarding X-Client-Cert-* for these exact paths) and strips any
+	// client-supplied X-Operator, these routes MUST NOT be reachable (see the
+	// WIRING-CRITICAL note in remediation/service.go). The signer is the 4th
+	// purpose-scoped key; a job is signed only on human approval.
+	remReg, err := cpremediation.NewRegistry(cpremediation.Config{
+		Path:   os.Getenv("REMEDIATION_JOBS_FILE"),
+		Signer: remediationKey,
+	})
+	if err != nil {
+		log.Fatalf("remediation: %v", err)
+	}
+	remSvc := cpremediation.NewService(remReg, tenantReg.Known, authority.IsRevoked, adminSecret)
+	remediationEnabled := os.Getenv("REMEDIATION_ENABLED") == "true"
 
 	mux := http.NewServeMux()
 	mux.Handle("/v1/", http.StripPrefix("/v1", enrollSvc.Handler()))
@@ -270,6 +303,15 @@ func main() {
 		log.Printf("sensor: dispatch de scan-jobs HABILITADO")
 	} else {
 		log.Printf("sensor: dispatch de scan-jobs desabilitado (SENSOR_JOBS_ENABLED != true)")
+	}
+	if remediationEnabled {
+		// Agent routes (poll/ack/report) are nginx mTLS-gated + CRL fail-closed in the
+		// service; operator routes (enqueue/approve/reject) are admin-bearer gated.
+		// DANGER: safe only behind the F2c nginx wiring — see service.go auth() note.
+		remSvc.Register(mux)
+		log.Printf("remediation: fila de jobs HABILITADA (ADR-0010)")
+	} else {
+		log.Printf("remediation: fila de jobs desabilitada (REMEDIATION_ENABLED != true)")
 	}
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("ok"))
