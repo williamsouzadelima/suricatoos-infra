@@ -258,3 +258,21 @@ func TestReportValidatesStatus(t *testing.T) {
 	}
 	rep.Body.Close()
 }
+
+func TestRejectRequiresOperator(t *testing.T) {
+	srv, _, _ := testService(t)
+	defer srv.Close()
+	resp := adminReq(t, "POST", srv.URL+"/api/v1/remediation/jobs", `{"tenant":"acme","agent_id":"win1","type":"package_patch","payload":{"kb":"x"}}`, "")
+	job := decodeJob(t, resp)
+	resp.Body.Close()
+	r1 := adminReq(t, "POST", srv.URL+"/api/v1/remediation/jobs/"+job.JobID+"/reject", "", "")
+	if r1.StatusCode != http.StatusBadRequest {
+		t.Errorf("reject sem operador = %d, want 400", r1.StatusCode)
+	}
+	r1.Body.Close()
+	r2 := adminReq(t, "POST", srv.URL+"/api/v1/remediation/jobs/"+job.JobID+"/reject", "", "op")
+	if r2.StatusCode != http.StatusNoContent {
+		t.Errorf("reject com operador = %d, want 204", r2.StatusCode)
+	}
+	r2.Body.Close()
+}

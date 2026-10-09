@@ -32,11 +32,21 @@ func Canonical(j *RemediationJob) []byte {
 	var b bytes.Buffer
 	b.WriteString(canonicalDomain)
 	b.WriteByte('\n')
+	// Every field the agent or an auditor acts on is signed. Besides identity
+	// and payload, this includes the MAINTENANCE WINDOW (not_before/not_after) —
+	// so a MITM cannot move the approved window of a validly-signed job — and the
+	// APPROVER (approved_by) — so the approval carries non-repudiation, not just
+	// "the control-plane key signed something".
+	field(&b, "schema_version", j.SchemaVersion)
 	field(&b, "job_id", j.JobID)
-	field(&b, "agent_id", j.AgentID)
+	field(&b, "correlation_id", j.CorrelationID)
 	field(&b, "tenant", j.Tenant)
+	field(&b, "agent_id", j.AgentID)
 	field(&b, "type", string(j.Type))
+	field(&b, "approved_by", j.ApprovedBy)
 	field(&b, "issued_at", rfc3339(j.IssuedAt))
+	field(&b, "not_before", rfc3339(j.NotBefore))
+	field(&b, "not_after", rfc3339(j.NotAfter))
 	field(&b, "expires_at", rfc3339(j.ExpiresAt))
 	field(&b, "nonce", j.Nonce)
 	field(&b, "payload_sha256", j.PayloadSHA256)
@@ -91,4 +101,21 @@ func Verify(j *RemediationJob, pub ed25519.PublicKey) bool {
 		return false
 	}
 	return ed25519.Verify(pub, Canonical(j), sig)
+}
+
+// VerifyAt is Verify plus a freshness check against now: the job must fall within
+// [issued_at - skew, expires_at + skew]. The signature is valid regardless of
+// time, so without this a captured-but-expired job could be replayed; the agent
+// MUST use VerifyAt (not bare Verify) before acting. skew absorbs clock drift.
+func VerifyAt(j *RemediationJob, pub ed25519.PublicKey, now time.Time, skew time.Duration) bool {
+	if !Verify(j, pub) {
+		return false
+	}
+	if !j.IssuedAt.IsZero() && now.Before(j.IssuedAt.Add(-skew)) {
+		return false
+	}
+	if !j.ExpiresAt.IsZero() && now.After(j.ExpiresAt.Add(skew)) {
+		return false
+	}
+	return true
 }

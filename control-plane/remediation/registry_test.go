@@ -2,6 +2,7 @@ package remediation
 
 import (
 	"encoding/json"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -201,5 +202,94 @@ func TestPersistRoundTrip(t *testing.T) {
 	}
 	if !Verify(got, key.Public()) {
 		t.Error("restored signature must still verify")
+	}
+}
+
+func TestPersistRoundTripHTMLPayload(t *testing.T) {
+	// A config_hardening payload with <,>,& must still verify after a reload.
+	// (json.Marshal escapes them to </>/&; the sha was over the
+	// json.Compact bytes → the signature would break. saveLocked uses
+	// SetEscapeHTML(false) to keep the payload byte-stable.)
+	key, _ := signkeys.LoadOrCreate("")
+	path := filepath.Join(t.TempDir(), "rem.json")
+	r1, _ := NewRegistry(Config{Path: path, Signer: key})
+	j, err := r1.Enqueue(EnqueueRequest{
+		Tenant: "acme", AgentID: "win1", Type: TypeConfigHardening,
+		Payload: json.RawMessage(`{"rule":"a<b && c>d","amp":"x&y"}`),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r1.Approve(j.JobID, "op"); err != nil {
+		t.Fatal(err)
+	}
+	r2, err := NewRegistry(Config{Path: path, Signer: key})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, ok := r2.Get(j.JobID, "win1", "acme")
+	if !ok {
+		t.Fatal("job not restored")
+	}
+	if !Verify(got, key.Public()) {
+		t.Fatal("payload with <,>,& must still verify after reload")
+	}
+}
+
+func TestReportRequiresDeliveryAndNoClobber(t *testing.T) {
+	r, _ := testReg(t)
+	j := enq(t, r, "win1", "acme")
+	r.Approve(j.JobID, "op")
+	// Report before delivery (still APPROVED) → rejected (never handed out).
+	if r.Report(j.JobID, "win1", "acme", &Result{Status: "applied"}) {
+		t.Error("report before delivery must be rejected")
+	}
+	r.Poll("win1", "acme") // → DELIVERED (ACK is optional for Report)
+	if !r.Report(j.JobID, "win1", "acme", &Result{Status: "applied", After: "patched"}) {
+		t.Fatal("report after delivery must succeed")
+	}
+	got, _ := r.Get(j.JobID, "win1", "acme")
+	if got.State != StateApplied || got.Result == nil || got.Result.After != "patched" {
+		t.Fatalf("state/result wrong: %+v", got)
+	}
+	// Re-report must NOT clobber the recorded result nor flip the state.
+	r.Report(j.JobID, "win1", "acme", &Result{Status: "failed", After: "WIPED"})
+	g2, _ := r.Get(j.JobID, "win1", "acme")
+	if g2.State != StateApplied || g2.Result.After != "patched" {
+		t.Errorf("re-report clobbered the result: %+v", g2)
+	}
+}
+
+func TestReapDropsOldTerminal(t *testing.T) {
+	r, _ := testReg(t)
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	r.now = func() time.Time { return base }
+	j := enq(t, r, "win1", "acme")
+	r.Reject(j.JobID, "op") // terminal
+	if n := r.Reap(time.Hour); n != 0 {
+		t.Errorf("reap too early removed %d", n)
+	}
+	r.now = func() time.Time { return base.Add(48 * time.Hour) }
+	if n := r.Reap(24 * time.Hour); n != 1 {
+		t.Errorf("reap should drop 1 old terminal, got %d", n)
+	}
+	if _, ok := r.Get(j.JobID, "win1", "acme"); ok {
+		t.Error("reaped job still present")
+	}
+}
+
+func TestLoadDropsIncoherentSignedState(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "rem.json")
+	// A DELIVERED job with NO signature is incoherent (tampered/corrupt) → dropped.
+	bad := `[{"schema_version":"1.0.0","job_id":"x","tenant":"acme","agent_id":"win1","type":"package_patch","payload":{},"payload_sha256":"z","nonce":"n","state":"DELIVERED","created_at":"2026-10-08T00:00:00Z"}]`
+	if err := os.WriteFile(path, []byte(bad), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	r, err := NewRegistry(Config{Path: path})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := r.Get("x", "win1", "acme"); ok {
+		t.Error("a post-approval-state job with no signature must be dropped on load")
 	}
 }
