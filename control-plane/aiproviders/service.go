@@ -26,6 +26,8 @@ func (s *Service) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/ai/providers", s.upsertHandler())
 	mux.HandleFunc("GET /api/v1/ai/providers", s.listHandler())
 	mux.HandleFunc("DELETE /api/v1/ai/providers/{id}", s.deleteHandler())
+	// Private admin page (inert HTML; the API above is the security boundary).
+	mux.HandleFunc("GET /admin/ai-providers", s.AdminPageHandler())
 }
 
 func (s *Service) adminOK(w http.ResponseWriter, r *http.Request) bool {
