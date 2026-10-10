@@ -40,6 +40,13 @@
 //	                      at rest (0600). Absent → ephemeral (keys lost on restart).
 //	AI_PROVIDERS_FILE     path to the JSON file persisting providers (0600, atomic;
 //	                      keys stored ENCRYPTED). Absent → in-memory.
+//	AI_PLANNER_ENABLED    "true" mounts POST /api/v1/remediation/plan (operator-
+//	                      triggered AI draft). DARK by default; admin-bearer.
+//	AI_PLANNER_CONSENT    "true" grants per-purpose consent. DEFAULT off → no model
+//	                      call ever happens without it.
+//	AI_PLANNER_BUDGET_USD monthly spend ceiling (estimate); <=0/unset → no ceiling.
+//	AI_PLANNER_USD_PER_1K cost estimate per 1k tokens, for the budget gate.
+//	AI_PLANNER_PROVIDER_ID provider id to use; unset → the first enabled provider.
 //
 // When CA_CERT_FILE/CA_KEY_FILE are set the CA survives restarts (agents keep
 // their mTLS certificates). Without them a new ephemeral CA is generated on
@@ -55,6 +62,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"time"
 
 	cpaiproviders "github.com/williamsouzadelima/suricatoos-infra/control-plane/aiproviders"
@@ -64,6 +72,7 @@ import (
 	"github.com/williamsouzadelima/suricatoos-infra/control-plane/enroll"
 	cpenrollcmd "github.com/williamsouzadelima/suricatoos-infra/control-plane/enrollcmd"
 	cpfeed "github.com/williamsouzadelima/suricatoos-infra/control-plane/feed"
+	cpplanner "github.com/williamsouzadelima/suricatoos-infra/control-plane/planner"
 	cpprovision "github.com/williamsouzadelima/suricatoos-infra/control-plane/provision"
 	cpremediation "github.com/williamsouzadelima/suricatoos-infra/control-plane/remediation"
 	cpsensorjobs "github.com/williamsouzadelima/suricatoos-infra/control-plane/sensorjobs"
@@ -253,6 +262,24 @@ func main() {
 	aiSvc := cpaiproviders.NewService(aiReg, adminSecret)
 	aiConfigEnabled := os.Getenv("AI_CONFIG_ENABLED") == "true"
 
+	// Remediation planner (Fase 4) — operator-triggered AI draft. Consent is OFF by
+	// default and the budget caps spend, so a drafting call only happens on an
+	// explicit admin request with consent granted and an enabled provider. The real
+	// OpenAI-compatible client reads the key from aiproviders server-side.
+	plannerSvc := cpplanner.NewService(
+		cpplanner.New(
+			cpplanner.NewHTTPLLM(),
+			cpplanner.NewRegistryResolver(aiReg, os.Getenv("AI_PLANNER_PROVIDER_ID")),
+			cpplanner.Config{
+				ConsentGranted:   os.Getenv("AI_PLANNER_CONSENT") == "true",
+				MonthlyBudgetUSD: envFloat("AI_PLANNER_BUDGET_USD"),
+				USDPer1kTokens:   envFloat("AI_PLANNER_USD_PER_1K"),
+			},
+		),
+		adminSecret,
+	)
+	plannerEnabled := os.Getenv("AI_PLANNER_ENABLED") == "true"
+
 	mux := http.NewServeMux()
 	mux.Handle("/v1/", http.StripPrefix("/v1", enrollSvc.Handler()))
 	mux.HandleFunc("GET /v1/crl.der", func(w http.ResponseWriter, r *http.Request) {
@@ -341,6 +368,12 @@ func main() {
 	} else {
 		log.Printf("ai-providers: config de provedores desabilitada (AI_CONFIG_ENABLED != true)")
 	}
+	if plannerEnabled {
+		plannerSvc.Register(mux)
+		log.Printf("remediation-planner: rascunho de IA HABILITADO (advisory; consentimento=%v)", os.Getenv("AI_PLANNER_CONSENT") == "true")
+	} else {
+		log.Printf("remediation-planner: desabilitado (AI_PLANNER_ENABLED != true)")
+	}
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("ok"))
 	})
@@ -380,4 +413,14 @@ func mustEnv(key string) string {
 		log.Fatalf("required environment variable %s is not set", key)
 	}
 	return v
+}
+
+// envFloat parses a float env var, returning 0 when unset or unparseable.
+func envFloat(key string) float64 {
+	if v := os.Getenv(key); v != "" {
+		if f, err := strconv.ParseFloat(v, 64); err == nil {
+			return f
+		}
+	}
+	return 0
 }
