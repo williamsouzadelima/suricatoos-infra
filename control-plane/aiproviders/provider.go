@@ -25,10 +25,26 @@ const kekSize = 32
 // HTTP client serves OpenRouter and any compatible router/gateway.
 const (
 	KindOpenRouter       = "openrouter"
+	KindUnoRouter        = "unorouter"
 	KindOpenAICompatible = "openai_compatible"
 )
 
-func validKind(k string) bool { return k == KindOpenRouter || k == KindOpenAICompatible }
+func validKind(k string) bool {
+	return k == KindOpenRouter || k == KindUnoRouter || k == KindOpenAICompatible
+}
+
+// defaultBaseURL is the preset endpoint for a named router kind (empty for the
+// generic openai_compatible, which requires an explicit base URL).
+func defaultBaseURL(kind string) string {
+	switch kind {
+	case KindOpenRouter:
+		return "https://openrouter.ai/api/v1"
+	case KindUnoRouter:
+		return "https://api.unorouter.com/v1"
+	default:
+		return ""
+	}
+}
 
 // Provider is one configured provider as persisted on disk. KeyCipher holds the
 // AES-GCM (nonce||ciphertext) of the API key; it persists but is stripped from
