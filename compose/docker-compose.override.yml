@@ -163,6 +163,19 @@ services:
       # arquivo não existir, é gerado no 1º boot (0600).
       FEED_SIGN_KEY_FILE: /data/feed-sign.key
       UPDATE_SIGN_KEY_FILE: /data/update-sign.key
+      # --- Remediação (ADR-0010) — nasce DARK ---
+      # enabled=false → as rotas /v1/remediation-jobs* (agente) e
+      # /api/v1/remediation/* (operador) NÃO são montadas no control-plane. Ligar
+      # exige, ALÉM desta flag: a location nginx dedicada já aplicada (mTLS +
+      # encaminha X-Client-Cert-* + remove X-Operator do cliente) e decisão
+      # explícita do dono no .env. Habilitar sem a location = rotas inalcançáveis.
+      REMEDIATION_ENABLED: "${REMEDIATION_ENABLED:-false}"
+      # 4ª chave de assinatura por-propósito (separada de feed/update/CA). A pubkey
+      # vai p/ o agente no enroll (remediation_pubkey). Gerada no 1º boot (0600).
+      REMEDIATION_SIGN_KEY_FILE: /data/remediation-sign.key
+      # Fila durável de jobs (0600, escrita atômica). Trocar o nome num deploy que
+      # já opera = perder jobs pendentes (mesma semântica de SENSOR_JOBS_FILE).
+      REMEDIATION_JOBS_FILE: "${REMEDIATION_JOBS_FILE:-/data/remediation-jobs.json}"
       # TTL curto p/ certs renovados (limita latência de revogação de cert vazado).
       RENEW_CERT_TTL: 720h
     volumes:
