@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://suricatoos.dev/schema/remediation-payload-package-patch.schema.json",
+  "title": "Suricatoos — Remediation Payload: package_patch",
+  "description": "The payload of a remediation job whose type is package_patch (ADR-0010): ONE vendor update to apply on a Windows endpoint, via the Windows Update Agent (wua) or winget. The job queue treats the payload as opaque; only the agent-side executor handler interprets it. Non-fabrication (ADR-0001): source/id/kb originate from the attested MSRC/WUA finding, never from AI.",
+  "type": "object",
+  "required": ["source", "id"],
+  "additionalProperties": false,
+  "properties": {
+    "source": {
+      "enum": ["wua", "winget"],
+      "description": "engine that applies the update: Windows Update Agent or winget"
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "WUA UpdateID (GUID) or winget package id — the thing the handler installs"
+    },
+    "kb": {
+      "type": "string",
+      "description": "e.g. KB5041580 — the KB the update delivers; validation/audit (WUA)"
+    },
+    "version": {
+      "type": "string",
+      "description": "winget target version (exact), when source=winget"
+    }
+  }
+}

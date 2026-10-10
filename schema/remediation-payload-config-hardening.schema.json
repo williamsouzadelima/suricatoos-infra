@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://suricatoos.dev/schema/remediation-payload-config-hardening.schema.json",
+  "title": "Suricatoos — Remediation Payload: config_hardening",
+  "description": "The payload of a remediation job whose type is config_hardening (ADR-0010): ONE security setting to enforce on a Windows endpoint, keyed by the CIS rule it satisfies (cite only the rule NUMBER — ADR-0009). source selects how the handler reads and writes it. The job queue treats the payload as opaque; only the executor handler interprets it. Non-fabrication: rule_ref/key/value originate from the attested hardening finding, never from AI.",
+  "type": "object",
+  "required": ["rule_ref", "source", "key"],
+  "additionalProperties": false,
+  "properties": {
+    "rule_ref": {
+      "type": "string",
+      "minLength": 1,
+      "description": "CIS rule number only, e.g. 18.9.x (a number is fact, not copyrightable prose)"
+    },
+    "source": {
+      "enum": ["registry", "secedit", "auditpol"],
+      "description": "how the setting is read/written on the endpoint"
+    },
+    "key": {
+      "type": "string",
+      "minLength": 1,
+      "description": "registry path / policy name the setting lives under"
+    },
+    "value": {
+      "type": "string",
+      "description": "desired value to enforce"
+    }
+  }
+}
