@@ -22,6 +22,7 @@ import (
 	"github.com/williamsouzadelima/suricatoos-infra/agent/internal/command"
 	"github.com/williamsouzadelima/suricatoos-infra/agent/internal/enroll"
 	"github.com/williamsouzadelima/suricatoos-infra/agent/internal/inventory"
+	"github.com/williamsouzadelima/suricatoos-infra/agent/internal/remediate"
 	"github.com/williamsouzadelima/suricatoos-infra/agent/internal/transport"
 	"github.com/williamsouzadelima/suricatoos-infra/agent/internal/update"
 )
@@ -33,6 +34,9 @@ const (
 	// the staged update is committed (backup dropped). A crash inside this window
 	// leaves the stage marker so BeginBoot's counter trips rollback.
 	commitWindow = 2 * time.Minute
+	// remediationSkew is the clock-skew tolerance applied when verifying a signed
+	// remediation job's freshness window (not_before/expires_at).
+	remediationSkew = 2 * time.Minute
 )
 
 // ErrRolledBack signals that New detected a crash-looping staged update and rolled
@@ -59,6 +63,12 @@ type Config struct {
 	// command (e.g. "scan_now" → an immediate re-collect). Enabled when > 0 and the
 	// enrolled identity carries a ServerURL. 0 = disabled.
 	CommandInterval time.Duration
+
+	// RemediationInterval is how often the agent polls for an approved, signed
+	// remediation job (ADR-0010). Enabled when > 0 and the enrolled identity carries
+	// a ServerURL AND a remediation public key (pre-remediation enrollments lack it,
+	// so the feature stays inert). 0 = disabled (the default — born dark).
+	RemediationInterval time.Duration
 }
 
 // Agent ties a collector, an offline queue and a sender into a loop, plus an
@@ -94,6 +104,13 @@ type Agent struct {
 	commandInterval time.Duration
 	cmdClient       *http.Client
 	serverURL       string
+
+	// Remediation (optional, ADR-0010). When remediationInterval > 0 the agent polls
+	// serverURL+"/remediation-jobs", VERIFIES each job, and runs it through the
+	// isolated executor. nil runner = disabled (born dark / enrollment without a
+	// remediation key).
+	remediationInterval time.Duration
+	remRunner           *remediate.Runner
 }
 
 // New builds an Agent from cfg: loads the enrolled identity, builds an mTLS
@@ -141,6 +158,20 @@ func New(cfg Config) (*Agent, error) {
 		a.commandInterval = cfg.CommandInterval
 		a.cmdClient = client
 		a.serverURL = id.ServerURL
+	}
+	// Remediation channel (ADR-0010), born dark. Needs the ServerURL AND the
+	// remediation public key pinned at enroll; an enrollment from before remediation
+	// existed lacks the key, so the feature stays inert (logged, not fatal). The
+	// executor's handlers ship with PENDING OS engines, so until the LAB-gated real
+	// engines land a job runs the full chain and reports FAILED without writing.
+	if cfg.RemediationInterval > 0 && id.ServerURL != "" {
+		if pub, perr := id.RemediationPublicKey(); perr != nil {
+			log.Printf("remediação desligada: %v", perr)
+		} else {
+			exec := remediate.NewExecutor(cfg.StateDir, remediate.NewPackagePatchHandler(), remediate.NewConfigHardeningHandler())
+			a.remRunner = remediate.NewRunner(client, id.ServerURL, pub, exec, remediationSkew)
+			a.remediationInterval = cfg.RemediationInterval
+		}
 	}
 	if u := buildUpdater(cfg, id); u != nil {
 		a.updateInterval = cfg.UpdateInterval
@@ -228,6 +259,9 @@ func (a *Agent) Run(ctx context.Context) error {
 	}
 	if a.commandInterval > 0 && a.cmdClient != nil {
 		go a.commandLoop(ctx)
+	}
+	if a.remRunner != nil && a.remediationInterval > 0 {
+		go a.remRunner.Loop(ctx, a.remediationInterval)
 	}
 	attempt := 0
 	for {
