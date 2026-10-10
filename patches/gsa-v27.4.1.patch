@@ -5349,11 +5349,33 @@ index eaff647..d6e39ef 100644
 \ No newline at end of file
 diff --git a/public/locales/gsa-es.json b/public/locales/gsa-es.json
 new file mode 100644
-index 0000000..db36c54
+index 0000000..59ce949
 --- /dev/null
 +++ b/public/locales/gsa-es.json
-@@ -0,0 +1,2412 @@
+@@ -0,0 +1,2434 @@
 +{
++  "AI Providers": "Proveedores de IA",
++  "Configure LLM providers (OpenRouter, UnoRouter and others) used to draft remediation plans. Keys are stored encrypted and never shown.": "Configure los proveedores de LLM (OpenRouter, UnoRouter y otros) usados para redactar planes de remediación. Las claves se guardan cifradas y nunca se muestran.",
++  "No providers configured.": "Ningún proveedor configurado.",
++  "Add provider": "Agregar proveedor",
++  "Edit provider": "Editar proveedor",
++  "Base URL": "URL base",
++  "API key (leave blank to keep the current one)": "Clave de API (dejar en blanco para mantener la actual)",
++  "EU region": "Región UE",
++  "Zero data retention (ZDR)": "Sin retención de datos (ZDR)",
++  "A provider can be enabled only if it is EU region and ZDR.": "Un proveedor solo puede habilitarse si es región UE y ZDR.",
++  "Cannot enable: a provider must be EU region and ZDR.": "No se puede habilitar: el proveedor debe ser región UE y ZDR.",
++  "Provider saved.": "Proveedor guardado.",
++  "Provider deleted.": "Proveedor eliminado.",
++  "Could not save the provider.": "No se pudo guardar el proveedor.",
++  "Could not delete the provider.": "No se pudo eliminar el proveedor.",
++  "Session expired. Sign in again to manage AI providers.": "Sesión expirada. Inicie sesión de nuevo para gestionar los proveedores de IA.",
++  "No permission to manage AI providers.": "Sin permiso para gestionar proveedores de IA.",
++  "Could not reach the server.": "No se pudo contactar el servidor.",
++  "Error loading AI providers.": "Error al cargar los proveedores de IA.",
++  "enabled": "habilitado",
++  "disabled": "deshabilitado",
++  "no key": "sin clave",
 +  "\nThis could have the following reasons:\n1. The CPE might not be included in the official NVD CPE dictionary yet, and no additional information is available.\n2. You might have followed an incorrect link and the CPE does not exist.": "\nEsto podría deberse a las siguientes razones:\n1. Es posible que el CPE aún no esté incluido en el diccionario CPE oficial del NVD y no haya información adicional disponible.\n2. Es posible que haya seguido un enlace incorrecto y que el CPE no exista.",
 +  "\nThis could have the following reasons:\n1. The CVE might not be included in the SCAP database yet. For new CVEs it can take a month or more until they become available.\n2. You might have followed an incorrect link and the CVE does not exist.": "\nEsto podría deberse a las siguientes razones:\n1. Es posible que el CVE aún no esté incluido en la base de datos SCAP. Para los CVE nuevos puede pasar un mes o más hasta que estén disponibles.\n2. Es posible que haya seguido un enlace incorrecto y que el CVE no exista.",
 +  "\nYou might have followed an incorrect link and the {{entity}} does not exist.": "\nEs posible que haya seguido un enlace incorrecto y que el {{entity}} no exista.",
@@ -7767,10 +7789,10 @@ index 0000000..db36c54
 +}
 \ No newline at end of file
 diff --git a/public/locales/gsa-pt_BR.json b/public/locales/gsa-pt_BR.json
-index 10e592f..a9354c3 100644
+index 10e592f..e466a56 100644
 --- a/public/locales/gsa-pt_BR.json
 +++ b/public/locales/gsa-pt_BR.json
-@@ -1,216 +1,2412 @@
+@@ -1,216 +1,2434 @@
  {
 -  "# of OVAL Definitions": "OVAL defini\u00e7\u00e3o",
 -  "# of Operating Systems": "Sistema Operacional",
@@ -7805,6 +7827,28 @@ index 10e592f..a9354c3 100644
 -  "Clone Filter": "Atualizar filtro",
 -  "Condition": "Cancelar edi\u00e7\u00e3o",
 -  "Could not load dashboard settings. Reason: {{error}}": "N\u00e3o foi poss\u00edvel carregar gr\u00e1fico {{chart}}",
++  "AI Providers": "Provedores de IA",
++  "Configure LLM providers (OpenRouter, UnoRouter and others) used to draft remediation plans. Keys are stored encrypted and never shown.": "Configure os provedores de LLM (OpenRouter, UnoRouter e outros) usados para redigir planos de remediação. As chaves ficam cifradas e nunca são exibidas.",
++  "No providers configured.": "Nenhum provedor configurado.",
++  "Add provider": "Adicionar provedor",
++  "Edit provider": "Editar provedor",
++  "Base URL": "URL base",
++  "API key (leave blank to keep the current one)": "Chave de API (deixe em branco para manter a atual)",
++  "EU region": "Região UE",
++  "Zero data retention (ZDR)": "Sem retenção de dados (ZDR)",
++  "A provider can be enabled only if it is EU region and ZDR.": "Um provedor só pode ser habilitado se for região UE e ZDR.",
++  "Cannot enable: a provider must be EU region and ZDR.": "Não dá para habilitar: o provedor precisa ser região UE e ZDR.",
++  "Provider saved.": "Provedor salvo.",
++  "Provider deleted.": "Provedor excluído.",
++  "Could not save the provider.": "Não foi possível salvar o provedor.",
++  "Could not delete the provider.": "Não foi possível excluir o provedor.",
++  "Session expired. Sign in again to manage AI providers.": "Sessão expirada. Entre novamente para gerenciar os provedores de IA.",
++  "No permission to manage AI providers.": "Sem permissão para gerenciar provedores de IA.",
++  "Could not reach the server.": "Não foi possível contatar o servidor.",
++  "Error loading AI providers.": "Erro ao carregar os provedores de IA.",
++  "enabled": "habilitado",
++  "disabled": "desabilitado",
++  "no key": "sem chave",
 +  "\nThis could have the following reasons:\n1. The CPE might not be included in the official NVD CPE dictionary yet, and no additional information is available.\n2. You might have followed an incorrect link and the CPE does not exist.": "\nIsto pode ter os seguintes motivos:\n1. O CPE pode ainda nao estar incluido no dicionario oficial de CPE do NVD, e nenhuma informação adicional esta disponível.\n2. Voce pode ter seguido um link incorreto e o CPE nao existe.",
 +  "\nThis could have the following reasons:\n1. The CVE might not be included in the SCAP database yet. For new CVEs it can take a month or more until they become available.\n2. You might have followed an incorrect link and the CVE does not exist.": "\nIsto pode ter os seguintes motivos:\n1. O CVE pode ainda nao estar incluido no banco de dados SCAP. Para novos CVEs, pode levar um mes ou mais ate que se tornem disponíveis.\n2. Voce pode ter seguido um link incorreto e o CVE nao existe.",
 +  "\nYou might have followed an incorrect link and the {{entity}} does not exist.": "\nVoce pode ter seguido um link incorreto e o {{entity}} nao existe.",
@@ -10759,10 +10803,10 @@ index ebc06a0..af63477 100644
          <ErrorBoundary message={_('An error occurred on this page')}>
            <GmpContext.Provider value={gmp}>
 diff --git a/src/web/Routes.tsx b/src/web/Routes.tsx
-index e81757d..53f7554 100644
+index e81757d..b5e4810 100644
 --- a/src/web/Routes.tsx
 +++ b/src/web/Routes.tsx
-@@ -75,6 +75,22 @@ const loggedInRoutes = [
+@@ -75,6 +75,30 @@ const loggedInRoutes = [
          }),
        },
  
@@ -10779,6 +10823,14 @@ index e81757d..53f7554 100644
 +        path: 'downloads',
 +        lazy: async () => ({
 +          Component: (await import('web/pages/downloads/DownloadsPage')).default,
++        }),
++      },
++      // Suricatoos: AI provider configuration (native SPA page, session-gated).
++      {
++        path: 'ai-providers',
++        lazy: async () => ({
++          Component: (await import('web/pages/ai-providers/AiProvidersPage'))
++            .default,
 +        }),
 +      },
 +
@@ -11222,18 +11274,20 @@ index d68da89..2bbd0cb 100644
    return (
      <StyledImage
 diff --git a/src/web/components/menu/Menu.tsx b/src/web/components/menu/Menu.tsx
-index 13fca0c..5f44a5a 100644
+index 13fca0c..0fcbbe9 100644
 --- a/src/web/components/menu/Menu.tsx
 +++ b/src/web/components/menu/Menu.tsx
-@@ -7,6 +7,7 @@ import {AppNavigation} from '@greenbone/ui-lib';
+@@ -6,7 +6,9 @@
+ import {AppNavigation} from '@greenbone/ui-lib';
  import {
    BarChart3,
++  Bot,
    CircleHelp,
 +  Download,
    FileCheck,
    Server,
    ShieldCheck,
-@@ -647,6 +648,19 @@ const Menu = () => {
+@@ -647,6 +649,25 @@ const Menu = () => {
          to: '/asset-management',
          isExternal: true,
        },
@@ -11249,6 +11303,12 @@ index 13fca0c..5f44a5a 100644
 +        icon: Server,
 +        label: _('Agentes de Endpoint'),
 +        to: '/endpoint-agents',
++      },
++      // Suricatoos: AI provider configuration (native SPA page).
++      {
++        icon: Bot,
++        label: _('AI Providers'),
++        to: '/ai-providers',
 +      },
      ].filter(Boolean),
    ];
@@ -12635,3 +12695,323 @@ index dd0b390..9316ed8 100644
    darkGreenTransparent: 'rgba(7, 67, 32, 0.8)', // corresponds to darkGreen
  
    Layers: {
+diff --git a/src/web/pages/ai-providers/AiProvidersPage.tsx b/src/web/pages/ai-providers/AiProvidersPage.tsx
+new file mode 100644
+index 0000000..1bdc57c
+--- /dev/null
++++ b/src/web/pages/ai-providers/AiProvidersPage.tsx
+@@ -0,0 +1,314 @@
++/* SPDX-FileCopyrightText: 2026 Suricatoos
++ *
++ * SPDX-License-Identifier: AGPL-3.0-or-later
++ */
++
++import React, {useCallback, useEffect, useState} from 'react';
++import {
++  Button,
++  Group,
++  Loader,
++  Select,
++  Stack,
++  Switch,
++  Text,
++  TextInput,
++} from '@mantine/core';
++import useGmp from 'web/hooks/useGmp';
++import useTranslation from 'web/hooks/useTranslation';
++
++const API = '/ai-providers/api';
++const ERRO_REDE = -1;
++
++interface Provider {
++  id: string;
++  name: string;
++  kind: string;
++  base_url: string;
++  model?: string;
++  eu_region: boolean;
++  zdr: boolean;
++  enabled: boolean;
++  has_key: boolean;
++  key_last4?: string;
++}
++
++interface FormState {
++  id: string;
++  name: string;
++  kind: string;
++  base_url: string;
++  model: string;
++  eu_region: boolean;
++  zdr: boolean;
++  enabled: boolean;
++  api_key: string;
++}
++
++const EMPTY: FormState = {
++  id: '',
++  name: '',
++  kind: 'openrouter',
++  base_url: '',
++  model: '',
++  eu_region: false,
++  zdr: false,
++  enabled: false,
++  api_key: '',
++};
++
++// Base URLs preset for the named routers (mirrors the control-plane defaults).
++const KIND_DEFAULT_URL: Record<string, string> = {
++  openrouter: 'https://openrouter.ai/api/v1',
++  unorouter: 'https://api.unorouter.com/v1',
++};
++
++// Carries the HTTP status so 401/403/422 are handled, not swallowed (same idiom
++// as FeedUpdateSection). The token goes on every call so nginx can validate the
++// gsad session by subrequest.
++class ErroHttp extends Error {
++  status: number;
++
++  constructor(status: number) {
++    super('HTTP ' + String(status));
++    this.status = status;
++  }
++}
++
++const pedir = async (p: string, token: string, init?: RequestInit) => {
++  const sep = p.includes('?') ? '&' : '?';
++  const url = API + p + sep + 'token=' + encodeURIComponent(token);
++  const r = await fetch(url, {credentials: 'same-origin', ...init});
++  if (!r.ok) {
++    throw new ErroHttp(r.status);
++  }
++  if (r.status === 204) {
++    return null;
++  }
++  return r.json();
++};
++
++const AiProvidersPage: React.FC = () => {
++  const [_] = useTranslation();
++  const gmp = useGmp();
++  const token: string = gmp?.session?.token ?? '';
++
++  const [providers, setProviders] = useState<Provider[]>([]);
++  const [loading, setLoading] = useState<boolean>(true);
++  const [erro, setErro] = useState<number>(0);
++  const [msg, setMsg] = useState<string>('');
++  const [form, setForm] = useState<FormState>({...EMPTY});
++
++  const load = useCallback(async () => {
++    setLoading(true);
++    setErro(0);
++    try {
++      const data = await pedir('/providers', token);
++      setProviders((data && data.providers) || []);
++    } catch (e) {
++      setErro(e instanceof ErroHttp ? e.status : ERRO_REDE);
++    } finally {
++      setLoading(false);
++    }
++  }, [token]);
++
++  useEffect(() => {
++    load();
++  }, [load]);
++
++  const onKind = (k: string) => {
++    setForm(f => ({...f, kind: k, base_url: f.base_url || KIND_DEFAULT_URL[k] || ''}));
++  };
++
++  const save = async () => {
++    setMsg('');
++    const body: Record<string, unknown> = {
++      id: form.id || undefined,
++      name: form.name.trim(),
++      kind: form.kind,
++      base_url: form.base_url.trim(),
++      model: form.model.trim(),
++      eu_region: form.eu_region,
++      zdr: form.zdr,
++      enabled: form.enabled,
++    };
++    if (form.api_key) {
++      body.api_key = form.api_key;
++    }
++    try {
++      await pedir('/providers', token, {
++        method: 'POST',
++        headers: {'Content-Type': 'application/json'},
++        body: JSON.stringify(body),
++      });
++      setForm({...EMPTY});
++      setMsg(_('Provider saved.'));
++      await load();
++    } catch (e) {
++      if (e instanceof ErroHttp && e.status === 422) {
++        setMsg(_('Cannot enable: a provider must be EU region and ZDR.'));
++      } else {
++        setMsg(_('Could not save the provider.'));
++      }
++    }
++  };
++
++  const edit = (p: Provider) => {
++    setForm({
++      id: p.id,
++      name: p.name,
++      kind: p.kind,
++      base_url: p.base_url,
++      model: p.model || '',
++      eu_region: p.eu_region,
++      zdr: p.zdr,
++      enabled: p.enabled,
++      api_key: '',
++    });
++  };
++
++  const del = async (id: string) => {
++    setMsg('');
++    try {
++      await pedir('/providers/' + encodeURIComponent(id), token, {method: 'DELETE'});
++      setMsg(_('Provider deleted.'));
++      await load();
++    } catch (e) {
++      setMsg(_('Could not delete the provider.'));
++    }
++  };
++
++  let erroMsg = '';
++  if (erro === 401) {
++    erroMsg = _('Session expired. Sign in again to manage AI providers.');
++  } else if (erro === 403) {
++    erroMsg = _('No permission to manage AI providers.');
++  } else if (erro === ERRO_REDE) {
++    erroMsg = _('Could not reach the server.');
++  } else if (erro !== 0) {
++    erroMsg = _('Error loading AI providers.');
++  }
++
++  return (
++    <Stack gap="md" p="md">
++      <Text fw={700} size="lg">
++        {_('AI Providers')}
++      </Text>
++      <Text c="dimmed" size="sm">
++        {_(
++          'Configure LLM providers (OpenRouter, UnoRouter and others) used to draft remediation plans. Keys are stored encrypted and never shown.',
++        )}
++      </Text>
++
++      {erroMsg !== '' && <Text c="red">{erroMsg}</Text>}
++      {msg !== '' && <Text size="sm">{msg}</Text>}
++
++      {loading ? (
++        <Loader />
++      ) : providers.length === 0 ? (
++        <Text c="dimmed">{_('No providers configured.')}</Text>
++      ) : (
++        <Stack gap="xs">
++          {providers.map(p => (
++            <Group key={p.id} justify="space-between" wrap="nowrap">
++              <Stack gap={0}>
++                <Text fw={600}>
++                  {p.name}{' '}
++                  <Text span c="dimmed">
++                    ({p.kind})
++                  </Text>
++                </Text>
++                <Text size="xs" c="dimmed">
++                  {p.base_url}
++                  {p.model ? ' · ' + p.model : ''}
++                  {' · '}
++                  {p.eu_region ? 'UE' : '-'}/{p.zdr ? 'ZDR' : '-'}
++                  {' · '}
++                  {p.enabled ? _('enabled') : _('disabled')}
++                  {' · '}
++                  {p.has_key ? '····' + (p.key_last4 || '') : _('no key')}
++                </Text>
++              </Stack>
++              <Group gap="xs" wrap="nowrap">
++                <Button size="xs" variant="default" onClick={() => edit(p)}>
++                  {_('Edit')}
++                </Button>
++                <Button
++                  color="red"
++                  size="xs"
++                  variant="outline"
++                  onClick={() => del(p.id)}
++                >
++                  {_('Delete')}
++                </Button>
++              </Group>
++            </Group>
++          ))}
++        </Stack>
++      )}
++
++      <Text fw={600}>{form.id !== '' ? _('Edit provider') : _('Add provider')}</Text>
++      <Group grow>
++        <TextInput
++          label={_('Name')}
++          value={form.name}
++          onChange={e => setForm(f => ({...f, name: e.currentTarget.value}))}
++        />
++        <Select
++          data={['openrouter', 'unorouter', 'openai_compatible']}
++          label={_('Type')}
++          value={form.kind}
++          onChange={v => onKind(v ?? 'openrouter')}
++        />
++      </Group>
++      <Group grow>
++        <TextInput
++          label={_('Base URL')}
++          value={form.base_url}
++          onChange={e => setForm(f => ({...f, base_url: e.currentTarget.value}))}
++        />
++        <TextInput
++          label={_('Model')}
++          value={form.model}
++          onChange={e => setForm(f => ({...f, model: e.currentTarget.value}))}
++        />
++      </Group>
++      <TextInput
++        label={_('API key (leave blank to keep the current one)')}
++        type="password"
++        value={form.api_key}
++        onChange={e => setForm(f => ({...f, api_key: e.currentTarget.value}))}
++      />
++      <Group>
++        <Switch
++          checked={form.eu_region}
++          label={_('EU region')}
++          onChange={e => setForm(f => ({...f, eu_region: e.currentTarget.checked}))}
++        />
++        <Switch
++          checked={form.zdr}
++          label={_('Zero data retention (ZDR)')}
++          onChange={e => setForm(f => ({...f, zdr: e.currentTarget.checked}))}
++        />
++        <Switch
++          checked={form.enabled}
++          label={_('Enabled')}
++          onChange={e => setForm(f => ({...f, enabled: e.currentTarget.checked}))}
++        />
++      </Group>
++      <Text c="dimmed" size="xs">
++        {_('A provider can be enabled only if it is EU region and ZDR.')}
++      </Text>
++      <Group>
++        <Button onClick={save}>{_('Save')}</Button>
++        {form.id !== '' && (
++          <Button variant="default" onClick={() => setForm({...EMPTY})}>
++            {_('Cancel')}
++          </Button>
++        )}
++      </Group>
++    </Stack>
++  );
++};
++
++export default AiProvidersPage;
