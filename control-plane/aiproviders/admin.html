@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Provedores de IA — Suricatoos</title>
+<style>
+  :root { color-scheme: dark; --bg:#0f1115; --card:#171a21; --line:#272b34; --fg:#e6e8ec; --muted:#9aa3b2; --accent:#4f9cf9; --ok:#2ecc71; --warn:#e67e22; --err:#e74c3c; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:14px/1.5 system-ui,Segoe UI,Roboto,sans-serif; }
+  header { padding:16px 20px; border-bottom:1px solid var(--line); }
+  h1 { font-size:18px; margin:0; }
+  .sub { color:var(--muted); font-size:12px; margin-top:4px; }
+  main { max-width:960px; margin:0 auto; padding:20px 16px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px; margin-bottom:16px; }
+  label { display:block; font-size:12px; color:var(--muted); margin:8px 0 2px; }
+  input[type=text], input[type=password], select { width:100%; padding:8px; background:#0d0f14; color:var(--fg); border:1px solid var(--line); border-radius:6px; }
+  .row { display:flex; gap:12px; flex-wrap:wrap; }
+  .row > div { flex:1; min-width:180px; }
+  .checks { display:flex; gap:16px; align-items:center; margin-top:10px; flex-wrap:wrap; }
+  .checks label { display:inline-flex; align-items:center; gap:6px; margin:0; color:var(--fg); }
+  button { padding:8px 14px; border:1px solid var(--line); background:#222733; color:var(--fg); border-radius:6px; cursor:pointer; }
+  button.primary { background:var(--accent); border-color:var(--accent); color:#06101f; font-weight:600; }
+  button.danger { background:transparent; border-color:var(--err); color:var(--err); }
+  table { width:100%; border-collapse:collapse; margin-top:8px; }
+  th, td { text-align:left; padding:8px; border-bottom:1px solid var(--line); font-size:13px; vertical-align:top; }
+  th { color:var(--muted); font-weight:600; }
+  .badge { display:inline-block; padding:1px 7px; border-radius:999px; font-size:11px; border:1px solid var(--line); }
+  .badge.ok { color:var(--ok); border-color:var(--ok); }
+  .badge.off { color:var(--muted); }
+  .badge.warn { color:var(--warn); border-color:var(--warn); }
+  .msg { padding:10px 12px; border-radius:6px; margin:10px 0; display:none; }
+  .msg.show { display:block; }
+  .msg.err { background:#3a1b1b; color:#ffb4b4; }
+  .msg.ok { background:#16321f; color:#b6f0c8; }
+  code { color:var(--muted); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Provedores de IA</h1>
+  <div class="sub">Chaves cifradas em repouso · <b>write-only</b> (nunca exibidas) · só habilita provedor <b>UE + ZDR</b> (governança). Admin.</div>
+</header>
+<main>
+  <div class="card">
+    <label for="tok">Token de admin (fica só nesta aba; nunca é gravado)</label>
+    <div class="row">
+      <div><input id="tok" type="password" autocomplete="off" placeholder="Bearer admin (ADMIN_SECRET)"></div>
+      <div style="flex:0 0 auto"><button id="useTok" class="primary" type="button">Usar token</button></div>
+    </div>
+  </div>
+
+  <div id="msg" class="msg"></div>
+
+  <div class="card">
+    <h1 style="font-size:15px;margin:0 0 6px">Provedores</h1>
+    <table>
+      <thead><tr><th>Nome</th><th>Tipo</th><th>Base URL</th><th>Modelo</th><th>Gov.</th><th>Estado</th><th>Chave</th><th></th></tr></thead>
+      <tbody id="rows"><tr><td colspan="8" style="color:var(--muted)">Informe o token e clique em “Usar token”.</td></tr></tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h1 id="formTitle" style="font-size:15px;margin:0 0 6px">Novo provedor</h1>
+    <input id="pid" type="hidden">
+    <div class="row">
+      <div><label for="name">Nome</label><input id="name" type="text" placeholder="OpenRouter UE"></div>
+      <div><label for="kind">Tipo</label>
+        <select id="kind"><option value="openrouter">openrouter</option><option value="openai_compatible">openai_compatible</option></select>
+      </div>
+    </div>
+    <div class="row">
+      <div><label for="base">Base URL (https)</label><input id="base" type="text" placeholder="https://openrouter.ai/api/v1"></div>
+      <div><label for="model">Modelo (opcional)</label><input id="model" type="text" placeholder="ex.: anthropic/claude-..."></div>
+    </div>
+    <label for="key">Chave de API (deixe em branco p/ manter a atual)</label>
+    <input id="key" type="password" autocomplete="off" placeholder="sk-...">
+    <div class="checks">
+      <label><input id="eu" type="checkbox"> Região UE</label>
+      <label><input id="zdr" type="checkbox"> ZDR (zero retention)</label>
+      <label><input id="enabled" type="checkbox"> Habilitado</label>
+    </div>
+    <div style="margin-top:12px;display:flex;gap:8px">
+      <button id="save" class="primary" type="button">Salvar</button>
+      <button id="reset" type="button">Limpar</button>
+    </div>
+    <div class="sub" style="margin-top:8px">Só é possível <b>habilitar</b> um provedor marcado como UE + ZDR.</div>
+  </div>
+</main>
+
+<script>
+(function () {
+  "use strict";
+  var API = "/api/v1/ai/providers";
+  var $ = function (id) { return document.getElementById(id); };
+
+  function token() { try { return sessionStorage.getItem("ai_admin_tok") || ""; } catch (e) { return ""; } }
+  function setToken(v) { try { sessionStorage.setItem("ai_admin_tok", v); } catch (e) {} }
+
+  function msg(text, kind) {
+    var m = $("msg");
+    m.textContent = text;
+    m.className = "msg show " + (kind || "");
+    if (kind === "ok") setTimeout(function () { m.className = "msg"; }, 3000);
+  }
+
+  function api(method, path, body) {
+    return fetch(path, {
+      method: method,
+      headers: { "Authorization": "Bearer " + token(), "Content-Type": "application/json" },
+      body: body ? JSON.stringify(body) : undefined
+    }).then(function (r) {
+      if (r.status === 401 || r.status === 403) { throw new Error("Token inválido ou sem permissão."); }
+      if (r.status === 204) { return null; }
+      return r.text().then(function (t) {
+        var data = t ? JSON.parse(t) : null;
+        if (!r.ok) { throw new Error((data && data.error) ? data.error : ("Erro " + r.status)); }
+        return data;
+      });
+    });
+  }
+
+  function badge(txt, cls) { var s = document.createElement("span"); s.className = "badge " + (cls || ""); s.textContent = txt; return s; }
+
+  function cell(text) { var td = document.createElement("td"); td.textContent = text == null ? "" : String(text); return td; }
+
+  function render(list) {
+    var tb = $("rows");
+    tb.textContent = "";
+    if (!list || !list.length) {
+      var tr = document.createElement("tr"), td = cell("Nenhum provedor cadastrado.");
+      td.colSpan = 8; td.style.color = "var(--muted)"; tr.appendChild(td); tb.appendChild(tr);
+      return;
+    }
+    list.forEach(function (p) {
+      var tr = document.createElement("tr");
+      tr.appendChild(cell(p.name));
+      tr.appendChild(cell(p.kind));
+      tr.appendChild(cell(p.base_url));
+      tr.appendChild(cell(p.model || "—"));
+      var gov = document.createElement("td");
+      gov.appendChild(badge("UE", p.eu_region ? "ok" : "off"));
+      gov.appendChild(document.createTextNode(" "));
+      gov.appendChild(badge("ZDR", p.zdr ? "ok" : "off"));
+      tr.appendChild(gov);
+      var st = document.createElement("td");
+      st.appendChild(badge(p.enabled ? "habilitado" : "desabilitado", p.enabled ? "ok" : "off"));
+      tr.appendChild(st);
+      tr.appendChild(cell(p.has_key ? ("····" + (p.key_last4 || "")) : "(sem chave)"));
+      var act = document.createElement("td");
+      var edit = document.createElement("button"); edit.type = "button"; edit.textContent = "Editar";
+      edit.addEventListener("click", function () { fill(p); });
+      var del = document.createElement("button"); del.type = "button"; del.className = "danger"; del.textContent = "Excluir";
+      del.style.marginLeft = "6px";
+      del.addEventListener("click", function () { removeProvider(p); });
+      act.appendChild(edit); act.appendChild(del);
+      tr.appendChild(act);
+      tb.appendChild(tr);
+    });
+  }
+
+  function fill(p) {
+    $("pid").value = p.id || "";
+    $("name").value = p.name || "";
+    $("kind").value = p.kind || "openrouter";
+    $("base").value = p.base_url || "";
+    $("model").value = p.model || "";
+    $("key").value = "";
+    $("eu").checked = !!p.eu_region;
+    $("zdr").checked = !!p.zdr;
+    $("enabled").checked = !!p.enabled;
+    $("formTitle").textContent = "Editar: " + (p.name || "");
+    window.scrollTo(0, document.body.scrollHeight);
+  }
+
+  function resetForm() {
+    $("pid").value = ""; $("name").value = ""; $("kind").value = "openrouter";
+    $("base").value = ""; $("model").value = ""; $("key").value = "";
+    $("eu").checked = false; $("zdr").checked = false; $("enabled").checked = false;
+    $("formTitle").textContent = "Novo provedor";
+  }
+
+  function load() {
+    if (!token()) { return; }
+    api("GET", API).then(function (d) { render(d && d.providers); }).catch(function (e) { msg(e.message, "err"); });
+  }
+
+  function save() {
+    var body = {
+      name: $("name").value.trim(), kind: $("kind").value, base_url: $("base").value.trim(),
+      model: $("model").value.trim(), eu_region: $("eu").checked, zdr: $("zdr").checked, enabled: $("enabled").checked
+    };
+    var id = $("pid").value;
+    if (id) { body.id = id; }
+    var key = $("key").value;
+    if (key) { body.api_key = key; }
+    api("POST", API, body).then(function () {
+      msg("Provedor salvo.", "ok"); resetForm(); load();
+    }).catch(function (e) { msg(e.message, "err"); });
+  }
+
+  function removeProvider(p) {
+    api("DELETE", API + "/" + encodeURIComponent(p.id)).then(function () {
+      msg("Provedor excluído.", "ok"); load();
+    }).catch(function (e) { msg(e.message, "err"); });
+  }
+
+  $("useTok").addEventListener("click", function () {
+    setToken($("tok").value.trim()); $("tok").value = "";
+    msg("Token aplicado nesta aba.", "ok"); load();
+  });
+  $("save").addEventListener("click", save);
+  $("reset").addEventListener("click", resetForm);
+  if (token()) { load(); }
+})();
+</script>
+</body>
+</html>

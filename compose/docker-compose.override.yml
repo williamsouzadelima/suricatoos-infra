@@ -176,6 +176,13 @@ services:
       # Fila durável de jobs (0600, escrita atômica). Trocar o nome num deploy que
       # já opera = perder jobs pendentes (mesma semântica de SENSOR_JOBS_FILE).
       REMEDIATION_JOBS_FILE: "${REMEDIATION_JOBS_FILE:-/data/remediation-jobs.json}"
+      # Config de provedores de IA (chaves de LLM router). DARK por padrão; admin-bearer.
+      # As chaves são write-only pela API e cifradas em repouso com a KEK do host.
+      AI_CONFIG_ENABLED: "${AI_CONFIG_ENABLED:-false}"
+      # KEK de 32 bytes que cifra as chaves de API em repouso (0600, gerada no 1º boot).
+      AI_CONFIG_KEK_FILE: /data/ai-config-kek.bin
+      # Store de provedores (0600, escrita atômica; chaves CIFRADAS).
+      AI_PROVIDERS_FILE: "${AI_PROVIDERS_FILE:-/data/ai-providers.json}"
       # TTL curto p/ certs renovados (limita latência de revogação de cert vazado).
       RENEW_CERT_TTL: 720h
     volumes:

@@ -34,6 +34,12 @@
 //	                      at enroll. Absent → ephemeral (dev only).
 //	REMEDIATION_JOBS_FILE path to the JSON file persisting the job queue (0600,
 //	                      atomic). Absent → in-memory (lost on restart).
+//	AI_CONFIG_ENABLED     "true" mounts the AI-provider admin routes (LLM router
+//	                      keys). DARK by default; admin-bearer gated.
+//	AI_CONFIG_KEK_FILE    path to the 32-byte key that encrypts provider API keys
+//	                      at rest (0600). Absent → ephemeral (keys lost on restart).
+//	AI_PROVIDERS_FILE     path to the JSON file persisting providers (0600, atomic;
+//	                      keys stored ENCRYPTED). Absent → in-memory.
 //
 // When CA_CERT_FILE/CA_KEY_FILE are set the CA survives restarts (agents keep
 // their mTLS certificates). Without them a new ephemeral CA is generated on
@@ -51,6 +57,7 @@ import (
 	"os"
 	"time"
 
+	cpaiproviders "github.com/williamsouzadelima/suricatoos-infra/control-plane/aiproviders"
 	cpapi "github.com/williamsouzadelima/suricatoos-infra/control-plane/api"
 	"github.com/williamsouzadelima/suricatoos-infra/control-plane/ca"
 	cpcommands "github.com/williamsouzadelima/suricatoos-infra/control-plane/commands"
@@ -231,6 +238,21 @@ func main() {
 	remSvc := cpremediation.NewService(remReg, tenantReg.Known, authority.IsRevoked, adminSecret)
 	remediationEnabled := os.Getenv("REMEDIATION_ENABLED") == "true"
 
+	// AI provider config (LLM router keys). Mounted ONLY when AI_CONFIG_ENABLED
+	// (dark by default). API keys are WRITE-ONLY over the admin API and encrypted at
+	// rest with a host KEK; a provider is enabled only if it meets the governance
+	// bar (EU + ZDR). The plaintext key is read server-side only (by the planner).
+	aiKEK, err := cpaiproviders.LoadOrCreateKEK(os.Getenv("AI_CONFIG_KEK_FILE"))
+	if err != nil {
+		log.Fatalf("ai-providers KEK: %v", err)
+	}
+	aiReg, err := cpaiproviders.NewRegistry(os.Getenv("AI_PROVIDERS_FILE"), aiKEK)
+	if err != nil {
+		log.Fatalf("ai-providers: %v", err)
+	}
+	aiSvc := cpaiproviders.NewService(aiReg, adminSecret)
+	aiConfigEnabled := os.Getenv("AI_CONFIG_ENABLED") == "true"
+
 	mux := http.NewServeMux()
 	mux.Handle("/v1/", http.StripPrefix("/v1", enrollSvc.Handler()))
 	mux.HandleFunc("GET /v1/crl.der", func(w http.ResponseWriter, r *http.Request) {
@@ -312,6 +334,12 @@ func main() {
 		log.Printf("remediation: fila de jobs HABILITADA (ADR-0010)")
 	} else {
 		log.Printf("remediation: fila de jobs desabilitada (REMEDIATION_ENABLED != true)")
+	}
+	if aiConfigEnabled {
+		aiSvc.Register(mux)
+		log.Printf("ai-providers: config de provedores HABILITADA (chaves cifradas, admin-bearer)")
+	} else {
+		log.Printf("ai-providers: config de provedores desabilitada (AI_CONFIG_ENABLED != true)")
 	}
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("ok"))
