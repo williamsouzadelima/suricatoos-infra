@@ -66,7 +66,7 @@
     <div class="row">
       <div><label for="name">Nome</label><input id="name" type="text" placeholder="OpenRouter UE"></div>
       <div><label for="kind">Tipo</label>
-        <select id="kind"><option value="openrouter">openrouter</option><option value="openai_compatible">openai_compatible</option></select>
+        <select id="kind"><option value="openrouter">openrouter</option><option value="unorouter">unorouter</option><option value="openai_compatible">openai_compatible</option></select>
       </div>
     </div>
     <div class="row">
@@ -204,6 +204,12 @@
       msg("Provedor excluído.", "ok"); load();
     }).catch(function (e) { msg(e.message, "err"); });
   }
+
+  var KIND_DEFAULTS = { openrouter: "https://openrouter.ai/api/v1", unorouter: "https://api.unorouter.com/v1" };
+  $("kind").addEventListener("change", function () {
+    var def = KIND_DEFAULTS[$("kind").value] || "";
+    if (def && !$("base").value.trim()) { $("base").value = def; }
+  });
 
   $("useTok").addEventListener("click", function () {
     setToken($("tok").value.trim()); $("tok").value = "";

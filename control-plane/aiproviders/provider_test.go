@@ -64,6 +64,24 @@ func TestLoadOrCreateKEK(t *testing.T) {
 	}
 }
 
+func TestKindDefaults(t *testing.T) {
+	if !validKind(KindUnoRouter) || !validKind(KindOpenRouter) || !validKind(KindOpenAICompatible) {
+		t.Fatal("os três kinds deveriam ser válidos")
+	}
+	if validKind("bogus") {
+		t.Fatal("kind desconhecido não deveria validar")
+	}
+	if defaultBaseURL(KindUnoRouter) != "https://api.unorouter.com/v1" {
+		t.Fatalf("preset unorouter errado: %q", defaultBaseURL(KindUnoRouter))
+	}
+	if defaultBaseURL(KindOpenRouter) != "https://openrouter.ai/api/v1" {
+		t.Fatalf("preset openrouter errado: %q", defaultBaseURL(KindOpenRouter))
+	}
+	if defaultBaseURL(KindOpenAICompatible) != "" {
+		t.Fatal("openai_compatible não deveria ter preset")
+	}
+}
+
 func TestPublicOmitsKeyMaterial(t *testing.T) {
 	p := &Provider{ID: "p1", Name: "x", KeyCipher: []byte{1, 2, 3}, KeyLast4: "cafe"}
 	pub := p.Public()

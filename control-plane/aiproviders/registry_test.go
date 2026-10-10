@@ -140,6 +140,19 @@ func TestValidationRejectsBadKindAndURL(t *testing.T) {
 	}
 }
 
+func TestUnoRouterPresetBaseURL(t *testing.T) {
+	r := newReg(t)
+	pub, err := r.Upsert(UpsertInput{
+		Name: "UnoRouter", Kind: KindUnoRouter, EURegion: true, ZDR: true, Enabled: true, APIKey: testKey,
+	}, "op")
+	if err != nil {
+		t.Fatalf("Upsert unorouter: %v", err)
+	}
+	if pub.Kind != KindUnoRouter || pub.BaseURL != "https://api.unorouter.com/v1" {
+		t.Fatalf("esperava preset unorouter: kind=%q base=%q", pub.Kind, pub.BaseURL)
+	}
+}
+
 func TestPersistenceRoundTrip(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "providers.json")

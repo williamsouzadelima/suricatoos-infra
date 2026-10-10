@@ -92,8 +92,8 @@ func (r *Registry) Upsert(in UpsertInput, by string) (PublicProvider, error) {
 	if !validKind(in.Kind) {
 		return PublicProvider{}, fmt.Errorf("%w: kind %q (esperado openrouter|openai_compatible)", ErrValidation, in.Kind)
 	}
-	if in.Kind == KindOpenRouter && in.BaseURL == "" {
-		in.BaseURL = "https://openrouter.ai/api/v1"
+	if in.BaseURL == "" {
+		in.BaseURL = defaultBaseURL(in.Kind) // preset for named routers; "" for openai_compatible
 	}
 	if err := validateBaseURL(in.BaseURL); err != nil {
 		return PublicProvider{}, fmt.Errorf("%w: %v", ErrValidation, err)
