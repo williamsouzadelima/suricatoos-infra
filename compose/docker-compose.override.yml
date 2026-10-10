@@ -183,6 +183,15 @@ services:
       AI_CONFIG_KEK_FILE: /data/ai-config-kek.bin
       # Store de provedores (0600, escrita atômica; chaves CIFRADAS).
       AI_PROVIDERS_FILE: "${AI_PROVIDERS_FILE:-/data/ai-providers.json}"
+      # Remediation planner (IA advisory). Gatilho por operador (admin). DARK por padrão.
+      AI_PLANNER_ENABLED: "${AI_PLANNER_ENABLED:-false}"
+      # Consentimento por finalidade — DEFAULT off: sem isto, nenhuma chamada ao modelo.
+      AI_PLANNER_CONSENT: "${AI_PLANNER_CONSENT:-false}"
+      # Teto de gasto mensal (estimado) e taxa p/ o portão de orçamento.
+      AI_PLANNER_BUDGET_USD: "${AI_PLANNER_BUDGET_USD:-50}"
+      AI_PLANNER_USD_PER_1K: "${AI_PLANNER_USD_PER_1K:-0.005}"
+      # Provedor a usar (id); vazio = primeiro habilitado.
+      AI_PLANNER_PROVIDER_ID: "${AI_PLANNER_PROVIDER_ID:-}"
       # TTL curto p/ certs renovados (limita latência de revogação de cert vazado).
       RENEW_CERT_TTL: 720h
     volumes:

@@ -18,23 +18,23 @@ package planner
 // facts (title/severity/cve/rule_ref/kb/evidence/os) are passed through verbatim;
 // the identifying fields (host/agent/tenant/ip) are pseudonymized before send.
 type PlanRequest struct {
-	FindingID      string
-	CorrelationID  string
-	Type           string   // "package_patch" | "config_hardening" (hint for the plan)
-	Title          string   // attested finding title (verbatim)
-	Severity       string   // attested severity (verbatim; the planner NEVER changes it)
-	SeverityOrigin string   // provenance, e.g. "msrc-cvrf" (audit)
-	CVEs           []string // verbatim
-	RuleRef        string   // CIS rule number (config_hardening)
-	KB             string   // Windows KB (package_patch)
-	Evidence       string   // e.g. "current=0 expected=1" or "missing KB5041580"
-	OS             string   // os family/version (kept; not identifying)
+	FindingID      string   `json:"finding_id"`
+	CorrelationID  string   `json:"correlation_id"`
+	Type           string   `json:"type"`            // "package_patch" | "config_hardening" (hint)
+	Title          string   `json:"title"`           // attested finding title (verbatim)
+	Severity       string   `json:"severity"`        // attested (verbatim; the planner NEVER changes it)
+	SeverityOrigin string   `json:"severity_origin"` // provenance, e.g. "msrc-cvrf" (audit)
+	CVEs           []string `json:"cves"`            // verbatim
+	RuleRef        string   `json:"rule_ref"`        // CIS rule number (config_hardening)
+	KB             string   `json:"kb"`              // Windows KB (package_patch)
+	Evidence       string   `json:"evidence"`        // e.g. "current=0 expected=1" or "missing KB5041580"
+	OS             string   `json:"os"`              // os family/version (kept; not identifying)
 
 	// Identifying context — PSEUDONYMIZED before anything is sent to the model.
-	Host    string
-	AgentID string
-	Tenant  string
-	IP      string
+	Host    string `json:"host"`
+	AgentID string `json:"agent_id"`
+	Tenant  string `json:"tenant"`
+	IP      string `json:"ip"`
 }
 
 // PlanStep is one ordered action in the drafted plan.
