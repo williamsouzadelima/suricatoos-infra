@@ -30,7 +30,7 @@ func cfgJob(payload string) *Job {
 
 func TestConfigHardening_WritesWhenDrifted(t *testing.T) {
 	eng := &fakeSettingEngine{current: "0"}
-	h := newConfigHardeningHandler(map[string]settingEngine{"registry": eng})
+	h := newConfigHardeningHandler(map[string]settingEngine{"registry": eng}, false)
 	res, err := h.Apply(context.Background(), cfgJob(`{"rule_ref":"2.3.1.1","source":"registry","key":"HKLM\\SOFTWARE\\X\\Enabled","value":"1"}`))
 	if err != nil {
 		t.Fatalf("err = %v", err)
@@ -45,7 +45,7 @@ func TestConfigHardening_WritesWhenDrifted(t *testing.T) {
 
 func TestConfigHardening_NoOpWhenCompliant(t *testing.T) {
 	eng := &fakeSettingEngine{current: "1"}
-	h := newConfigHardeningHandler(map[string]settingEngine{"registry": eng})
+	h := newConfigHardeningHandler(map[string]settingEngine{"registry": eng}, false)
 	res, err := h.Apply(context.Background(), cfgJob(`{"rule_ref":"2.3.1.1","source":"registry","key":"HKLM\\SOFTWARE\\X\\Enabled","value":"1"}`))
 	if err != nil {
 		t.Fatalf("err = %v", err)
@@ -60,7 +60,7 @@ func TestConfigHardening_NoOpWhenCompliant(t *testing.T) {
 
 func TestConfigHardening_RefusesPolicyManaged(t *testing.T) {
 	eng := &fakeSettingEngine{current: "0"}
-	h := newConfigHardeningHandler(map[string]settingEngine{"registry": eng})
+	h := newConfigHardeningHandler(map[string]settingEngine{"registry": eng}, false)
 	_, err := h.Apply(context.Background(), cfgJob(`{"rule_ref":"18.9","source":"registry","key":"HKLM\\SOFTWARE\\Policies\\Microsoft\\X","value":"1"}`))
 	if err == nil {
 		t.Fatal(`chave sob \SOFTWARE\Policies\ deveria ser recusada (gerida por GPO)`)
@@ -70,9 +70,34 @@ func TestConfigHardening_RefusesPolicyManaged(t *testing.T) {
 	}
 }
 
+func TestConfigHardening_RefusesHighImpactByDefault(t *testing.T) {
+	eng := &fakeSettingEngine{current: "1"}
+	h := newConfigHardeningHandler(map[string]settingEngine{"registry": eng}, false)
+	// SMBv1 toggle: alto raio. Sem opt-in → recusa, sem ler/escrever.
+	_, err := h.Apply(context.Background(), cfgJob(`{"rule_ref":"2.3.x","source":"registry","key":"HKLM\\SYSTEM\\CurrentControlSet\\Services\\LanmanServer\\Parameters\\SMB1","value":"0"}`))
+	if err == nil {
+		t.Fatal("config de alto raio deveria ser recusada sem opt-in")
+	}
+	if eng.writeCalled {
+		t.Fatal("alto raio NÃO pode escrever sem opt-in explícito")
+	}
+}
+
+func TestConfigHardening_AllowsHighImpactWhenOptedIn(t *testing.T) {
+	eng := &fakeSettingEngine{current: "1"}
+	h := newConfigHardeningHandler(map[string]settingEngine{"registry": eng}, true)
+	res, err := h.Apply(context.Background(), cfgJob(`{"rule_ref":"2.3.x","source":"registry","key":"HKLM\\SYSTEM\\CurrentControlSet\\Services\\LanmanServer\\Parameters\\SMB1","value":"0"}`))
+	if err != nil {
+		t.Fatalf("com opt-in deveria aplicar: %v", err)
+	}
+	if !eng.writeCalled || res.After != "0" {
+		t.Fatalf("opt-in deveria escrever: write=%v after=%q", eng.writeCalled, res.After)
+	}
+}
+
 func TestConfigHardening_ReadErrorFails(t *testing.T) {
 	eng := &fakeSettingEngine{readErr: errors.New("acesso negado")}
-	h := newConfigHardeningHandler(map[string]settingEngine{"registry": eng})
+	h := newConfigHardeningHandler(map[string]settingEngine{"registry": eng}, false)
 	if _, err := h.Apply(context.Background(), cfgJob(`{"rule_ref":"r","source":"registry","key":"HKLM\\SOFTWARE\\X","value":"1"}`)); err == nil {
 		t.Fatal("erro de leitura deveria falhar (FAILED)")
 	}
@@ -81,7 +106,7 @@ func TestConfigHardening_ReadErrorFails(t *testing.T) {
 func TestConfigHardening_DispatchesBySource(t *testing.T) {
 	reg := &fakeSettingEngine{current: "x"}
 	aud := &fakeSettingEngine{current: "y"}
-	h := newConfigHardeningHandler(map[string]settingEngine{"registry": reg, "auditpol": aud})
+	h := newConfigHardeningHandler(map[string]settingEngine{"registry": reg, "auditpol": aud}, false)
 	if _, err := h.Apply(context.Background(), cfgJob(`{"rule_ref":"r","source":"auditpol","key":"Logon","value":"Success and Failure"}`)); err != nil {
 		t.Fatalf("err = %v", err)
 	}
@@ -112,6 +137,23 @@ func TestConfigHardening_PolicyDetector(t *testing.T) {
 	for k, want := range cases {
 		if got := isPolicyManaged(k); got != want {
 			t.Errorf("isPolicyManaged(%q) = %v, want %v", k, got, want)
+		}
+	}
+}
+
+func TestConfigHardening_HighImpactDetector(t *testing.T) {
+	cases := map[string]bool{
+		`HKLM\SYSTEM\CurrentControlSet\Services\LanmanServer\Parameters\SMB1`:      true,
+		`HKLM\SYSTEM\CurrentControlSet\Control\Lsa\LmCompatibilityLevel`:           true,
+		`HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System\EnableLUA`: true,
+		`SeDenyNetworkLogonRight`:                      true,
+		`HKLM\SOFTWARE\Microsoft\Windows\X\SomeBenign`: false,
+		`AuditLogonEvents`:                             false,
+	}
+	for k, want := range cases {
+		p := &ConfigHardeningPayload{Key: k}
+		if got := isHighImpact(p); got != want {
+			t.Errorf("isHighImpact(%q) = %v, want %v", k, got, want)
 		}
 	}
 }
