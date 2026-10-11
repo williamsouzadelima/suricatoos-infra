@@ -70,7 +70,7 @@ Coletamos apenas o mínimo necessário para **correlação de vulnerabilidade ba
 |---|---|---|---|---|
 | Identidade do nó (`node_id`, `node_kind`, CSR, `schema_versions`; certificado `CN=<node_id> O=<org> OU=fleet-node`, CA da frota, chave pública de comando) | `fleet-enroll.schema.json` | nó→hub (enroll/renew); hub→nó (certificado e chaves públicas) | autenticar o nó (mTLS) e fixar a chave que assina comandos | baixa (identificador técnico) |
 | Token de enroll da frota (`ft_…`) | `fleet-enroll.schema.json#/$defs/enroll_request` (`token`) | nó→hub, uma vez | autorizar a entrada do nó | alta enquanto válido (segredo de uso único; descartado após o enroll, nunca logado) |
-| Heartbeat (versão do conector, hashes de estado, contadores de fila) | `fleet-heartbeat.schema.json` | nó→hub (resposta hub→nó) | vivacidade e sincronização | baixa |
+| Heartbeat (versão do conector, versões do contrato anunciadas, hashes de estado, contadores de fila; o corpo do `426` traz só as versões do hub) | `fleet-heartbeat.schema.json` | nó→hub (resposta hub→nó) | vivacidade, sincronização e negociação de versão | baixa |
 | Estado `node` (versões, feeds e idade, saúde, capacidades, política local) | `fleet-state.schema.json#/$defs/data_node` | nó→hub | operar a frota | baixa |
 | Estado `tasks`, `schedules`, `reports` (ids, nomes, status, agendas, contagens por severidade) | `fleet-state.schema.json#/$defs/data_tasks`, `data_schedules`, `data_reports` | nó→hub | gerenciar varreduras | baixa (metadado operacional; **sem achados**) |
 | Estado `targets` e `scope` (entradas IP/CIDR literais dos alvos, CIDRs autorizados por tenant) | `fleet-state.schema.json#/$defs/data_targets`, `data_scope` | nó→hub | gerenciar alvos dentro do escopo | média (topologia da rede do cliente) |

@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://suricatoos.dev/schema/fleet-enroll.schema.json",
   "title": "Suricatoos — Fleet Node Enrollment and Renewal",
-  "description": "Identity lifecycle of a fleet node (ADR-0011). POST /fleet/v1/enroll: the node presents a single-use hub token ('ft_<id>.<secret>', opaque as in ADR-0004) plus a CSR whose CN is its node_id, over TLS that authenticates the HUB (no client certificate yet); the hub answers with a certificate CN=<node_id>, O=<org>, OU=fleet-node issued by the FLEET CA — a trust domain separate from the scanner's enrollment CA — the fleet CA certificate and the Ed25519 command public key. Three pins come out-of-band with the token and are all mandatory: FLEET_HUB_PIN (SPKI of the hub's TLS server certificate or of a CA in its chain) is checked on EVERY handshake, enroll included — client networks may run an interception CA; the node refuses the enroll response unless sha256(fleet CA DER) == FLEET_CA_PIN and sha256(command key SPKI DER) == FLEET_COMMAND_KEY_PIN, then pins both. Both sides announce schema_versions (MAJOR.MINOR) here and in the heartbeat. POST /fleet/v1/renew: authenticated by the CURRENT node certificate (mTLS); the CSR must keep CN == node_id; the response has the same shape; the node installs the new certificate ONLY if command_pubkey equals the pinned one and ca_cert equals the pinned fleet CA — otherwise it keeps the current certificate, refuses the response and audits it (no rotation in v1). After the certificate expires, re-enrolling the SAME node_id needs a token the hub bound to that node_id (else 409); the local store is reused and the pins are re-applied from the environment. The root accepts any of the three messages; implementations validate the specific $defs entry.",
+  "description": "Identity lifecycle of a fleet node (ADR-0011). POST /fleet/v1/enroll: the node presents a single-use hub token ('ft_<id>.<secret>', opaque as in ADR-0004) plus a CSR whose CN is its node_id, over TLS that authenticates the HUB (no client certificate yet); the hub answers with a certificate CN=<node_id>, O=<org>, OU=fleet-node issued by the FLEET CA — a trust domain separate from the scanner's enrollment CA — the fleet CA certificate and the Ed25519 command public key. Three pins come out-of-band with the token and are all mandatory: FLEET_HUB_PIN (SPKI of the hub's TLS server certificate or of a CA in its chain) is checked on EVERY handshake, enroll included — client networks may run an interception CA; the node refuses the enroll response unless sha256(fleet CA DER) == FLEET_CA_PIN and sha256(command key SPKI DER) == FLEET_COMMAND_KEY_PIN, then pins both. The node announces schema_versions (MAJOR.MINOR) in the enroll and renew requests, the hub in the enroll/renew response (and both in every heartbeat); enroll and renew go out in the node's HIGHEST version, and a hub that does not support it answers 426 with fleet-heartbeat.schema.json#/$defs/version_unsupported (the token is not consumed) so the node retries in the highest common version. POST /fleet/v1/renew: authenticated by the CURRENT node certificate (mTLS); the CSR must keep CN == node_id; the response has the same shape; the node installs the new certificate ONLY if command_pubkey equals the pinned one and ca_cert equals the pinned fleet CA — otherwise it keeps the current certificate, refuses the response and audits it (no rotation in v1). After the certificate expires, re-enrolling the SAME node_id needs a token the hub bound to that node_id (else 409); the local store is reused and the pins are re-applied from the environment. The root accepts any of the three messages; implementations validate the specific $defs entry.",
   "oneOf": [
     { "$ref": "#/$defs/enroll_request" },
     { "$ref": "#/$defs/renew_request" },
@@ -25,12 +25,13 @@
     },
     "renew_request": {
       "type": "object",
-      "required": ["schema_version", "node_id", "csr"],
+      "required": ["schema_version", "node_id", "csr", "schema_versions"],
       "additionalProperties": false,
       "properties": {
         "schema_version": { "type": "string", "const": "1.0.0" },
         "node_id": { "$ref": "fleet-command.schema.json#/$defs/node_id", "description": "cross-check only: identity comes from the presented certificate (CN)" },
-        "csr": { "$ref": "#/$defs/csr_pem" }
+        "csr": { "$ref": "#/$defs/csr_pem" },
+        "schema_versions": { "$ref": "fleet-command.schema.json#/$defs/schema_versions", "description": "versions the NODE supports (may have changed since the enroll, after an upgrade)" }
       }
     },
     "enroll_response": {

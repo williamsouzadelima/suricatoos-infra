@@ -2,10 +2,11 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://suricatoos.dev/schema/fleet-heartbeat.schema.json",
   "title": "Suricatoos — Fleet Node Heartbeat",
-  "description": "POST /fleet/v1/heartbeat (ADR-0011), outbound mTLS, every heartbeat_interval_s (default 60). The request carries the current content_sha256 of every state kind the node has; the hub compares them with the snapshots it holds and lists in 'resync' the kinds it wants re-sent in full (PUT /fleet/v1/state/{kind}). server_time is used ONLY to report clock_offset_s and raise an alert: the node never adjusts the clock it verifies command windows with to the hub's. node_id must equal the CN of the client certificate. The root accepts either message; implementations validate the specific $defs entry.",
+  "description": "POST /fleet/v1/heartbeat (ADR-0011), outbound mTLS, every heartbeat_interval_s (default 60). The request carries the current content_sha256 of every state kind the node has; the hub compares them with the snapshots it holds and lists in 'resync' the kinds it wants re-sent in full (PUT /fleet/v1/state/{kind}). Both sides announce schema_versions in EVERY heartbeat and EVERY heartbeat response, and each speaks the highest version common to the other side's latest announcement. A JSON body whose schema_version the hub does not support (on any route) gets 426 with $defs/version_unsupported, the hub's announcement; that shape and the schema_versions member are version-invariant. server_time is used ONLY to report clock_offset_s and raise an alert: the node never adjusts the clock it verifies command windows with to the hub's. node_id must equal the CN of the client certificate. The root accepts any of the three messages; implementations validate the specific $defs entry.",
   "oneOf": [
     { "$ref": "#/$defs/heartbeat_request" },
-    { "$ref": "#/$defs/heartbeat_response" }
+    { "$ref": "#/$defs/heartbeat_response" },
+    { "$ref": "#/$defs/version_unsupported" }
   ],
   "$defs": {
     "heartbeat_request": {
@@ -38,9 +39,18 @@
       "properties": {
         "schema_version": { "type": "string", "const": "1.0.0" },
         "server_time": { "$ref": "fleet-command.schema.json#/$defs/utc_time" },
-        "resync": { "type": "array", "maxItems": 12, "uniqueItems": true, "items": { "$ref": "fleet-state.schema.json#/$defs/state_kind" }, "description": "kinds to re-send in full; empty = nothing to do" },
+        "resync": { "type": "array", "maxItems": 12, "uniqueItems": true, "items": { "$ref": "fleet-state.schema.json#/$defs/state_kind_any" }, "description": "kinds to re-send in full; empty = nothing to do. Items only match the kind PATTERN, not the enum: the node ignores (and alerts on) a kind it does not know instead of failing the whole response — the one exception to strict validation" },
         "heartbeat_interval_s": { "type": "integer", "minimum": 15, "maximum": 600 },
         "poll_wait_s": { "type": "integer", "minimum": 5, "maximum": 30, "description": "long-poll wait; the node also never polls more often than once per 5 s and backs off when a poll brings only rejections" },
+        "schema_versions": { "$ref": "fleet-command.schema.json#/$defs/schema_versions", "description": "versions the HUB supports" }
+      }
+    },
+    "version_unsupported": {
+      "description": "JSON body of a 426 (Upgrade Required) on any route with a JSON body (enroll, renew, heartbeat, state, events, ack, result): the request's schema_version is not one the hub supports. It carries ONLY the hub's announcement and is VERSION-INVARIANT (this shape never changes, not even in a new MAJOR), so every node can read it; a 426 never consumes an enroll token. The node recomputes the highest common version: if there is one, it adopts it and re-sends the same item re-serialized (once per item); if there is none, or the re-send gets 426 again, it enters blocked_version: no poll, only a heartbeat every 10 min in its highest version with its announcement, audit line version_mismatch, until a heartbeat shows a common version.",
+      "type": "object",
+      "required": ["schema_versions"],
+      "additionalProperties": false,
+      "properties": {
         "schema_versions": { "$ref": "fleet-command.schema.json#/$defs/schema_versions", "description": "versions the HUB supports" }
       }
     }

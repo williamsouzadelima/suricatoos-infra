@@ -244,7 +244,7 @@ NÓ (só SAÍDA :443 mTLS)                                        HUB (commandce
 11. resultado ── POST /fleet/v1/commands/{id}/result {status, output|error, artifacts[], contains_secret} ─▶ ◀── 204
         auditoria: result
 12. eventos ── POST /fleet/v1/events {events:[task.status_changed, report.completed, …]} (outbox, ≥ 1 vez) ─▶ ◀── 204
-13. renew ── POST /fleet/v1/renew {node_id, csr} com o cert ATUAL, 7 dias antes de expirar ─▶
+13. renew ── POST /fleet/v1/renew {node_id, csr, schema_versions} com o cert ATUAL, 7 dias antes de expirar ─▶
         ◀── 200 (mesmo formato; command_pubkey tem de ser IDÊNTICA à pinada)
 ```
 
@@ -263,17 +263,41 @@ exemplo trabalhado deste ADR byte a byte.
 
 ### Versões e evolução
 
-- **Semântica MAJOR.MINOR.** O `schema_version` dos corpos é `MAJOR.MINOR.PATCH`, e o PATCH é só editorial
-  (descrição, exemplo): nunca muda o que vai no fio. MINOR acrescenta campo, valor de enum ou tipo; MAJOR quebra.
-- **Negociação.** O nó anuncia as versões que suporta (`schema_versions`, `MAJOR.MINOR`) no enroll e em todo
-  heartbeat; o hub anuncia as dele nas respostas. **Nenhum lado envia corpo acima da maior versão que os dois
-  suportam** — um nó novo fala `1.0` com um hub `1.0`, e vice-versa.
+- **Semântica MAJOR.MINOR.** MINOR acrescenta campo, valor de enum ou tipo; MAJOR quebra. O PATCH é só
+  editorial (descrição, exemplo) e **nunca vai ao fio**: o `schema_version` de todo corpo e de todo envelope é
+  sempre `MAJOR.MINOR.0` — no v1, `1.0.0`, o valor que entra na forma canônica assinada.
+- **Anúncio em todo contato.** O nó manda `schema_versions` (lista de `MAJOR.MINOR`) no enroll, no renew e em
+  **todo** heartbeat; o hub manda as dele na resposta do enroll e do renew e em **toda** resposta de heartbeat.
+  **Nenhum lado envia corpo acima da maior versão comum** ao último anúncio do outro — um nó novo fala `1.0`
+  com um hub `1.0`, e vice-versa.
+- **Serializa no envio.** O nó guarda os itens da fila (ack, resultado, estado, eventos) em forma interna e só
+  os serializa **ao enviar**: cada envio sai na versão negociada mais recente, e um item que esperava na fila
+  sai na versão nova. O hash de estado é sempre o da serialização na versão do envio. A idempotência do hub
+  (`204` × `409`) compara valores, não bytes, para que re-serializar não vire conflito.
+- **Enroll e renew** saem na **maior** versão do nó, com o anúncio; o hub responde na maior versão comum.
+- **Versão não suportada ⇒ `426`.** O hub lê o `schema_version` do topo de todo corpo antes da validação
+  estrita. Se ele está fora das versões que o hub suporta, a resposta é `426` com o corpo
+  `fleet-heartbeat.schema.json#/$defs/version_unsupported` (`{"schema_versions": [...]}`, as do hub), sem
+  consumir o token do enroll. Essa forma e o membro `schema_versions` dos corpos de enroll, renew e heartbeat são
+  **invariantes**: nunca mudam, nem num MAJOR novo. Reação do nó:
+  - recalcula a maior versão comum com esse anúncio; se existir, adota-a e reenvia o mesmo item
+    re-serializado, no máximo uma vez por item;
+  - se não existir, ou se o reenvio também receber `426`, entra em **`blocked_version`**. Para de enviar o tipo
+    de mensagem recusado (a versão vale para o contrato inteiro, então na prática todos) e de fazer poll, e
+    mantém só o heartbeat a cada 10 min, na sua maior versão e com o anúncio. Audita `version_mismatch` (fluxo
+    `reject`) e sai sozinho quando um heartbeat mostra versão comum.
+- **Rollback do hub.** O anúncio cobre esse caso: o hub rebaixado responde `426` ao primeiro corpo acima das
+  versões dele, ou anuncia a lista nova na resposta do heartbeat. O nó rebaixa na hora, e os itens da fila saem
+  na versão nova no próximo envio. O hub só entrega comando cuja versão está no último anúncio do nó; um
+  comando pendente que ficou fora dele não é entregue nem re-assinado, e vence no hub sem ack.
 - **Estrito na mesma versão.** O envelope de comando é sempre estrito, e todo corpo numa versão (MAJOR.MINOR)
-  que o receptor suporta também é validado estrito: campo desconhecido é erro, não é ignorado.
+  que o receptor suporta também é validado estrito: campo desconhecido é erro, não é ignorado. A **única
+  exceção** é o `resync` da resposta do heartbeat. Os itens dele só casam o padrão de kind
+  (`fleet-state.schema.json#/$defs/state_kind_any`), e o nó ignora o kind que não conhece (com alerta local)
+  sem descartar a resposta.
 - **Valor de enum desconhecido** só aparece se alguém violar a negociação; o destino é fixo. Tipo de comando
   desconhecido no nó ⇒ `unsupported` (final). No hub, motivo, código de erro, tipo de evento ou kind
-  desconhecido ⇒ `400` + alerta, e o nó guarda o item como não entregável, visível ao operador local. Kind
-  desconhecido no `resync` da resposta do heartbeat ⇒ o nó ignora e alerta.
+  desconhecido ⇒ `400` + alerta, e o nó guarda o item como não entregável, visível ao operador local.
 - Os schemas deste ADR são a versão `1.0` (`schema_version` `1.0.0`).
 
 ### Codificação JSON (normativo)
@@ -360,7 +384,8 @@ Regras (copiadas da disciplina de `control-plane/remediation/canonical.go`):
 - `issued_at` e `not_after` em RFC 3339 **UTC, segundos inteiros, sufixo `Z`** (`2026-10-11T12:00:00Z`). O
   envelope JSON carrega **exatamente** essa forma (o schema exige 20 caracteres); fração de segundo ou offset
   ⇒ `bad_envelope`. Diferente da remediação, os dois são **obrigatórios** (vazio ⇒ `bad_envelope`).
-- `schema_version` = `1.0.0`; `command_id` = UUID minúsculo; `nonce` = 32 bytes de CSPRNG em hex minúsculo
+- `schema_version` = `MAJOR.MINOR.0` de uma versão que o nó suporta (`1.0.0` no v1; o PATCH nunca vai ao fio);
+  `command_id` = UUID minúsculo; `nonce` = 32 bytes de CSPRNG em hex minúsculo
   (64 caracteres); `issued_by` = identificador do operador do hub (recomendado **pseudônimo**, ex.
   `op-7f3a`; ver LGPD).
 - `payload_sha256` = sha256 hex minúsculo dos **bytes exatos do valor `payload` como transmitidos**. O hub DEVE
@@ -400,7 +425,7 @@ O nó para na **primeira** falha. Os motivos são `fleet-result.schema.json#/$de
 
 | # | Checagem | Motivo se falhar | Decisão |
 |---|---|---|---|
-| 0 | forma (`#/$defs/envelope`): JSON estrito (ver "Codificação JSON"), `schema_version` numa versão negociada, formatos exatos (tempos, nonce, assinatura), tamanhos | `bad_envelope` | sem ack (só contado) |
+| 0 | forma (`#/$defs/envelope`): JSON estrito (ver "Codificação JSON"), `schema_version` = `MAJOR.MINOR.0` de uma versão que o nó suporta, formatos exatos (tempos, nonce, assinatura), tamanhos | `bad_envelope` | sem ack (só contado) |
 | 1 | `sha256(bytes crus de payload) == payload_sha256` | `payload_mismatch` | sem ack (só contado) |
 | 2 | Ed25519 sobre a forma canônica com a chave **pinada** (1 + 2 = `Verify`) | `bad_signature` | sem ack (só contado) |
 | 3 | `issued_at < not_after ≤ issued_at + 24 h` | `bad_window` | `rejected`, final |
@@ -517,7 +542,7 @@ chave; mensagem assinada com o domínio da remediação); `not_yet_valid`/`expir
 skew` e `not_after + skew` aceitos; ±1 s rejeitado); `bad_window` (`not_after ≤ issued_at`; janela > 24 h);
 `wrong_node`; `replay` (mesmo `command_id` — ou mesmo nonce — com outra forma canônica: o hub re-assinou; o
 vetor traz em `seen` as formas canônicas já gravadas); `bad_envelope` (fração de segundo, offset, nonce maiúsculo, campo faltando, campo
-desconhecido, `schema_version` 1.1.0); payload com UTF-8 (acentos) hasheado sobre os bytes crus. Vetores
+desconhecido, `schema_version` que o nó não suporta — `1.1.0` num nó só `1.0` — ou com PATCH, `1.0.1`); payload com UTF-8 (acentos) hasheado sobre os bytes crus. Vetores
 **só-canonical** com valores contendo `\n`, `=` e `:` (que o envelope v1 recusa por formato) provam que o
 framing é injetivo mesmo assim — e que um *join* ingênuo colidiria. Da "Codificação JSON": payload com `<`, `>`, `&`
 e U+2028 literais (`accept`) e o mesmo payload re-escapado em HTML depois do hash (`payload_mismatch`); chave
@@ -528,7 +553,8 @@ fração (`bad_envelope`).
 
 Todas iniciadas pelo nó. JSON com `Content-Type: application/json`; `User-Agent:
 suricatoos-fleet-connector/<versão>`. O corpo de **erro** é `text/plain` curto e **não-contratual** (≤ 2 KiB, só
-para log, como os `http.Error` do repo): o nó decide **só pelo status**.
+para log, como os `http.Error` do repo): o nó decide **só pelo status**. A exceção é o `426`, cujo corpo é JSON
+contratual (`fleet-heartbeat.schema.json#/$defs/version_unsupported`).
 
 | Rota | Autenticação | Pedido | Sucesso | Erros esperados |
 |---|---|---|---|---|
@@ -543,8 +569,9 @@ para log, como os `http.Error` do repo): o nó decide **só pelo status**.
 | `PUT /fleet/v1/artifacts/{command_id}/{name}` | mTLS | corpo **binário gzip** + cabeçalhos abaixo | `201` sem corpo (reenvio idêntico também) | `400` sha256 do corpo ≠ cabeçalho, cabeçalho faltando ou `name` inválido; `403`; `404` comando inexistente, de outro nó ou de tipo ≠ `report.export`; `409` outro conteúdo com o mesmo nome; `411` sem `Content-Length`; `413` > 64 MiB; `415` `Content-Type` ≠ `application/gzip`; `429` |
 
 Em todas: `5xx`/`503` = falha transitória — inclusive `503` quando o backend de revogação do hub está
-indisponível. O hub responde ao long-poll em até `wait + 5` s; o cliente usa
-timeout maior que isso.
+indisponível. Em todas as rotas com corpo JSON (enroll, renew, heartbeat, estado, eventos, ack, resultado): `426`
+quando o `schema_version` do corpo está fora das versões que o hub suporta, com o anúncio do hub no corpo (ver
+"Versões e evolução"). O hub responde ao long-poll em até `wait + 5` s; o cliente usa timeout maior que isso.
 
 **Cabeçalhos do artefato:** `Content-Type: application/gzip`, `Content-Length`, `X-Fleet-Content-SHA256` (hex do
 corpo gzip), `X-Fleet-Original-Content-Type` (`application/pdf` | `application/xml` | `text/csv`),
@@ -561,11 +588,16 @@ streaming abortando em min(`original_size`, teto) e só então confere o tamanho
 | `200`/`201`/`204` | sucesso; retira o item da fila local |
 | `400` | não reenvia o mesmo corpo (é bug de contrato); audita; o item fica "não entregável", visível ao operador local |
 | `403` | identidade recusada: para de enviar; só tenta heartbeat a cada 10 min; estado local `blocked`; certificado vencido exige novo enroll |
+| `426` | versão do corpo fora das do hub: recalcula a maior versão comum com o anúncio do corpo; se existe, adota-a e reenvia o item re-serializado (uma vez por item); se não existe, ou se vier outro `426`, estado local `blocked_version` — só heartbeat a cada 10 min (na maior versão do nó, com o anúncio), sem poll; audita `version_mismatch`; sai sozinho quando um heartbeat mostra versão comum |
 | `404` | ack/resultado/artefato de comando que o hub não reconhece: descarta e audita; kind desconhecido: deixa de enviar esse kind |
 | `409` | conflito de idempotência: não reenvia; audita |
 | `413` | estado: corta no teto e marca `truncated`; demais: não reenvia e audita (o nó já confere os tetos antes de enviar) |
 | `429`/`503` | respeita `Retry-After`; sem ele, backoff exponencial com jitter (1 s → 5 min) |
 | outros `5xx`, erro de rede/TLS | backoff exponencial com jitter (1 s → 5 min); as filas duráveis preservam a ordem |
+
+Resposta de enroll, renew ou heartbeat que não valida — inclusive numa versão que o nó não anunciou — é erro de
+contrato do hub: o nó a descarta, audita e trata como falha transitória (backoff). Os comandos do long-poll não
+seguem essa regra: cada um passa pelas linhas 0–9.
 
 ### Limites
 
@@ -582,7 +614,7 @@ streaming abortando em min(`original_size`, teto) e só então confere o tamanho
 | artefato | ≤ 64 MiB (67 108 864 bytes) de gzip e ≤ 1 GiB (1 073 741 824 bytes) descomprimido; ≤ 4 por comando (v1: exatamente 1, só `report.export`) |
 | outbox de eventos | 10 000 eventos; cheio ⇒ descarta os mais antigos e conta em `outbox_dropped` |
 | intervalo de poll | ≥ 5 s entre dois polls (piso do nó, qualquer que seja o `poll_wait_s`); backoff exponencial até 5 min quando um poll só traz rejeições |
-| auditoria local | fluxo `exec` 32 MiB × 8 arquivos; fluxo `reject` 32 MiB × 4; linha ≤ 8 KiB; ≤ 1 linha `unauthenticated` por minuto |
+| auditoria local | fluxo `exec` 32 MiB × 8 arquivos; fluxo `reject` 32 MiB × 4; linha ≤ 8 KiB; ≤ 1 linha `unauthenticated` por minuto; ≤ 1 linha `version_mismatch` a cada 10 min |
 | orçamento local de comandos sensíveis | 30/h por nó (`policy.json` `sensitive_per_hour`), somando opt-in, `report.export` e `report.summary` |
 
 ## Catálogo de comandos v1
@@ -740,7 +772,8 @@ Eventos de escopo **nó** não levam `tenant`; os de escopo **tenant** levam sem
 - **Dois fluxos append-only**, uma linha JSON por evento (`fleet-state.schema.json#/$defs/audit_entry`):
   `FLEET_STATE_DIR/audit-exec.jsonl` (fluxo `exec`: `connector_started`, `identity_changed`, `policy_changed`
   e, para cada comando **aceito**, `received` → `executed` → `result`) e `FLEET_STATE_DIR/audit-reject.jsonl`
-  (fluxo `reject`: `rejected` + motivo, `deferred` + motivo e as contagens periódicas `unauthenticated`).
+  (fluxo `reject`: `rejected` + motivo, `deferred` + motivo, as contagens periódicas `unauthenticated` e
+  `version_mismatch`, a entrada em `blocked_version` com as versões dos dois lados).
 - **Encadeados por hash, cada um com o seu `seq`:** `seq` monotônico (+1 por linha, atravessa a rotação) e
   `prev_sha256` = sha256 dos bytes exatos da linha anterior do mesmo fluxo (sem o `\n`); a 1ª linha de cada
   fluxo usa 64 zeros. **Orçamentos de rotação separados** — `exec` 32 MiB × 8 arquivos, `reject` 32 MiB × 4 —,
@@ -752,6 +785,7 @@ Eventos de escopo **nó** não levam `tenant`; os de escopo **tenant** levam sem
   sumário); e, no `result` do `report.export`, `artifact` (sha256 e tamanho do que saiu). **Sem segredo:** o
   único segredo do contrato é a **saída** do `enroll_token.create`, que nunca é escrita.
 - **Anti-enchente:** linhas 0–2 só como contagem periódica (no máximo uma linha `unauthenticated` por minuto);
+  no máximo uma linha `version_mismatch` a cada 10 min;
   o nó nunca faz poll mais de uma vez a cada 5 s, qualquer que seja o `poll_wait_s`, e entra em backoff
   exponencial (até 5 min) quando um poll só traz rejeições.
 - Cada linha é gravada (`O_APPEND` + `fsync`) **antes** do efeito que registra (`rejected` antes do ack,
@@ -863,8 +897,9 @@ sensibilidade por dado: [docs/data-inventory.md — Canal de gestão da frota (A
   4. **`target.create` em tenant de TESTE** (opt-in só desse tipo): alvo dentro do escopo aceito; fora dele
      ⇒ `scope_denied` + evento; `alive_test_effective` registrado.
 - **Rollback:** `FLEET_ENABLED=false` (instantâneo) ou parar o profile `fleet`; revogar o nó no hub; imagem
-  anterior com `--no-deps`. Mudança de schema segue "Versões e evolução": acréscimo é versão MINOR negociada,
-  e um rollback de imagem volta a anunciar só as versões que aquela imagem suporta.
+  anterior com `--no-deps`. Mudança de schema segue "Versões e evolução": acréscimo é versão MINOR negociada.
+  Um rollback da imagem do nó volta a anunciar só as versões que ela suporta; um rollback do hub é coberto pelo
+  `426` e pelo anúncio em toda resposta de heartbeat.
 
 ## Consequências
 

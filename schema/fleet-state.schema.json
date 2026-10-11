@@ -33,6 +33,7 @@
       "description": "agents, tokens, sensors, scan_requests and remediation exist only on the central node; the others on every node kind.",
       "enum": ["node", "tasks", "targets", "schedules", "reports", "agents", "tokens", "sensors", "scan_requests", "remediation", "scope", "audit_tail"]
     },
+    "state_kind_any": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-z][a-z_]*$", "description": "a state kind AS RECEIVED in the resync of a heartbeat response (v1 values are state_kind): the node ignores, and alerts on, a kind it does not know instead of failing the whole response — the one exception to strict validation (ADR-0011 'Versões e evolução')" },
     "feed_type": { "enum": ["nvt", "scap", "cert", "gvmd_data"] },
     "gvm_status": { "type": "string", "minLength": 1, "maxLength": 32, "pattern": "^[A-Za-z][A-Za-z ]*$", "allOf": [ { "$ref": "fleet-command.schema.json#/$defs/no_control" } ], "description": "gvmd task/report status verbatim (New, Requested, Queued, Running, Stop Requested, Stopped, Done, Interrupted, Delete Requested, Processing, ...); a string, not an enum, so a new gvmd status does not break the contract" },
     "severity_counts": {
@@ -431,7 +432,7 @@
     },
 
     "data_audit_tail": {
-      "description": "The last lines of BOTH local audit streams (JSONL, append-only, each its own hash chain and seq), VERBATIM, so the hub can witness them: sha256(line_n bytes) must equal prev_sha256 inside line_n+1, and head_sha256 is the SHA-256 of the last line. exec = what was accepted and executed; reject = rejections, deferrals and unauthenticated counts. Each line parses as $defs/audit_entry. Gap rule (hub): first_seq > last seq seen + 1 => alert (flood or tampering — not proof).",
+      "description": "The last lines of BOTH local audit streams (JSONL, append-only, each its own hash chain and seq), VERBATIM, so the hub can witness them: sha256(line_n bytes) must equal prev_sha256 inside line_n+1, and head_sha256 is the SHA-256 of the last line. exec = what was accepted and executed; reject = rejections, deferrals, unauthenticated counts and version mismatches. Each line parses as $defs/audit_entry. Gap rule (hub): first_seq > last seq seen + 1 => alert (flood or tampering — not proof).",
       "type": "object",
       "required": ["exec", "reject"],
       "additionalProperties": false,
@@ -456,7 +457,7 @@
     },
 
     "audit_entry": {
-      "description": "One line of a local audit stream: FLEET_STATE_DIR/audit-exec.jsonl (stream exec: connector/identity/policy events and the accepted commands' received -> executed -> result) or FLEET_STATE_DIR/audit-reject.jsonl (stream reject: rejected, deferred, and periodic unauthenticated counts). Each stream has its own monotonic seq (+1 per line, across rotation), its own hash chain (prev_sha256 = SHA-256 of the previous line's exact bytes without the newline; 64 zeros for the first line ever) and its own rotation budget, so a flood of rejections can never rotate away the record of what was executed. Lines carry the bounded WHAT of a command (object ids, up to 64 hosts + their total count, the report parameters, the artifact hash and size) and never a secret: no token, password or key; the only secret of the contract (the token in the OUTPUT of enroll_token.create) is never written.",
+      "description": "One line of a local audit stream: FLEET_STATE_DIR/audit-exec.jsonl (stream exec: connector/identity/policy events and the accepted commands' received -> executed -> result) or FLEET_STATE_DIR/audit-reject.jsonl (stream reject: rejected, deferred, periodic unauthenticated counts, and version_mismatch when the node enters blocked_version). Each stream has its own monotonic seq (+1 per line, across rotation), its own hash chain (prev_sha256 = SHA-256 of the previous line's exact bytes without the newline; 64 zeros for the first line ever) and its own rotation budget, so a flood of rejections can never rotate away the record of what was executed. Lines carry the bounded WHAT of a command (object ids, up to 64 hosts + their total count, the report parameters, the artifact hash and size) and never a secret: no token, password or key; the only secret of the contract (the token in the OUTPUT of enroll_token.create) is never written.",
       "type": "object",
       "required": ["stream", "seq", "at", "event", "prev_sha256"],
       "additionalProperties": false,
@@ -464,7 +465,7 @@
         "stream": { "enum": ["exec", "reject"] },
         "seq": { "type": "integer", "minimum": 1 },
         "at": { "$ref": "fleet-command.schema.json#/$defs/utc_time" },
-        "event": { "enum": ["connector_started", "identity_changed", "policy_changed", "received", "executed", "result", "rejected", "deferred", "unauthenticated"] },
+        "event": { "enum": ["connector_started", "identity_changed", "policy_changed", "received", "executed", "result", "rejected", "deferred", "unauthenticated", "version_mismatch"] },
         "command_id": { "$ref": "fleet-command.schema.json#/$defs/uuid" },
         "type": { "$ref": "fleet-command.schema.json#/$defs/command_type_any" },
         "tenant": { "$ref": "fleet-command.schema.json#/$defs/tenant" },
@@ -515,13 +516,24 @@
             "bad_signature": { "type": "integer", "minimum": 0 }
           }
         },
+        "versions": {
+          "description": "version_mismatch line (stream reject, at most one per 10 min): the node found no version in common with the hub's 426 announcement and entered blocked_version",
+          "type": "object",
+          "required": ["node", "hub"],
+          "additionalProperties": false,
+          "properties": {
+            "node": { "$ref": "fleet-command.schema.json#/$defs/schema_versions" },
+            "hub": { "$ref": "fleet-command.schema.json#/$defs/schema_versions" }
+          }
+        },
         "detail": { "type": "string", "maxLength": 256, "allOf": [ { "$ref": "fleet-command.schema.json#/$defs/no_control" } ] },
         "prev_sha256": { "$ref": "fleet-command.schema.json#/$defs/sha256_hex" }
       },
       "allOf": [
         { "if": { "properties": { "event": { "enum": ["connector_started", "identity_changed", "policy_changed", "received", "executed", "result"] } }, "required": ["event"] }, "then": { "properties": { "stream": { "const": "exec" } } }, "else": { "properties": { "stream": { "const": "reject" } } } },
         { "if": { "properties": { "event": { "enum": ["rejected", "deferred"] } }, "required": ["event"] }, "then": { "required": ["reason"] } },
-        { "if": { "properties": { "event": { "const": "unauthenticated" } }, "required": ["event"] }, "then": { "required": ["unauthenticated"] } }
+        { "if": { "properties": { "event": { "const": "unauthenticated" } }, "required": ["event"] }, "then": { "required": ["unauthenticated"] } },
+        { "if": { "properties": { "event": { "const": "version_mismatch" } }, "required": ["event"] }, "then": { "required": ["versions"] } }
       ]
     }
   }

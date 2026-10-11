@@ -482,6 +482,15 @@
       }
     },
     {
+      "file": "invalid/enroll/renew_request--without-schema-versions.json",
+      "target": "fleet-enroll.schema.json#/$defs/renew_request",
+      "description": "N1: the node announces its versions in the renew too",
+      "expect": {
+        "keyword": "required",
+        "path": ""
+      }
+    },
+    {
       "file": "invalid/event/batch-over-100.json",
       "target": "fleet-event.schema.json",
       "description": "a batch has at most 100 events",
@@ -599,12 +608,39 @@
       }
     },
     {
+      "file": "invalid/heartbeat/heartbeat_response--resync-kind-not-a-kind.json",
+      "target": "fleet-heartbeat.schema.json#/$defs/heartbeat_response",
+      "description": "resync items still match the kind pattern",
+      "expect": {
+        "keyword": "pattern",
+        "path": "/resync/0"
+      }
+    },
+    {
       "file": "invalid/heartbeat/heartbeat_response--without-schema-versions.json",
       "target": "fleet-heartbeat.schema.json#/$defs/heartbeat_response",
       "description": "I8: the hub announces its versions in every heartbeat response",
       "expect": {
         "keyword": "required",
         "path": ""
+      }
+    },
+    {
+      "file": "invalid/heartbeat/version_unsupported--carries-schema-version.json",
+      "target": "fleet-heartbeat.schema.json#/$defs/version_unsupported",
+      "description": "N1: the 426 body is version-invariant: it carries no schema_version, only the announcement",
+      "expect": {
+        "keyword": "additionalProperties",
+        "path": ""
+      }
+    },
+    {
+      "file": "invalid/heartbeat/version_unsupported--patch-version.json",
+      "target": "fleet-heartbeat.schema.json#/$defs/version_unsupported",
+      "description": "N1: versions are announced as MAJOR.MINOR (the PATCH never travels)",
+      "expect": {
+        "keyword": "pattern",
+        "path": "/schema_versions/0"
       }
     },
     {
@@ -863,6 +899,15 @@
       "file": "invalid/state/audit_entry--unauthenticated-without-counts.json",
       "target": "fleet-state.schema.json#/$defs/audit_entry",
       "description": "an unauthenticated line carries the counts",
+      "expect": {
+        "keyword": "required",
+        "path": ""
+      }
+    },
+    {
+      "file": "invalid/state/audit_entry--version-mismatch-without-versions.json",
+      "target": "fleet-state.schema.json#/$defs/audit_entry",
+      "description": "N1: a version_mismatch line carries both announcements",
       "expect": {
         "keyword": "required",
         "path": ""
@@ -1239,6 +1284,11 @@
       "description": "nothing to resync"
     },
     {
+      "file": "valid/heartbeat/heartbeat_response--resync-unknown-kind.json",
+      "target": "fleet-heartbeat.schema.json#/$defs/heartbeat_response",
+      "description": "N1: a kind this node does not know (e.g. added in a later MINOR) is VALID here; the node ignores it, alerts, and re-sends the rest"
+    },
+    {
       "file": "valid/heartbeat/request.json",
       "target": "fleet-heartbeat.schema.json",
       "description": "heartbeat request, validated through the root oneOf"
@@ -1247,6 +1297,16 @@
       "file": "valid/heartbeat/response.json",
       "target": "fleet-heartbeat.schema.json",
       "description": "heartbeat response asking for a tasks resync, validated through the root oneOf"
+    },
+    {
+      "file": "valid/heartbeat/version-unsupported.json",
+      "target": "fleet-heartbeat.schema.json",
+      "description": "426 body, validated through the root oneOf: only the hub's announcement (version-invariant shape); a 1.0-only node finds no common version and enters blocked_version"
+    },
+    {
+      "file": "valid/heartbeat/version_unsupported--hub-rolled-back.json",
+      "target": "fleet-heartbeat.schema.json#/$defs/version_unsupported",
+      "description": "426 after a hub rollback to 1.0: the node adopts 1.0 and re-sends the same item re-serialized"
     },
     {
       "file": "valid/result/ack--accepted.json",
@@ -1462,6 +1522,11 @@
       "file": "valid/state/audit_entry--unauthenticated-counts.json",
       "target": "fleet-state.schema.json#/$defs/audit_entry",
       "description": "reject stream: periodic count of lines 0-2 (no individual line, no ack)"
+    },
+    {
+      "file": "valid/state/audit_entry--version-mismatch.json",
+      "target": "fleet-state.schema.json#/$defs/audit_entry",
+      "description": "reject stream: N1, no version in common with the hub's 426 announcement; the node enters blocked_version"
     },
     {
       "file": "valid/state/node-post-r5-editions.json",
