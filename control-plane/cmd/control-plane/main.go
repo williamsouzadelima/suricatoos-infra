@@ -253,7 +253,12 @@ func main() {
 	} else {
 		log.Printf("commands: 'Escanear agora' SEM checagem de agente enrolado — TOKEN_DB_PATH vazio (o store em memória esquece os enrollments a cada restart)")
 	}
-	cmdSvc := cpcommands.NewService(cmdQueue, knownAgent)
+	// Revocation on the agent's poll/ack: a revoked certificate gets 403 (no log-only
+	// mode — the CA is in this process, so the check is deterministic and never touches
+	// an agent that was not revoked). Needs nginx to forward X-Client-Cert-Serial on
+	// /agent/v1/commands; without it a request is accepted and logged once per agent.
+	cmdSvc := cpcommands.NewService(cmdQueue, knownAgent).WithRevocationCheck(authority.IsRevoked)
+	log.Printf("commands: poll/ack conferem revogação do certificado do agente (CA em processo; certificado revogado → 403)")
 
 	// Sensor dispatch + tenant registry (ADR-0007). The tenant admin API is always
 	// available (bearer-gated); the sensor-facing scan-job routes are mounted only

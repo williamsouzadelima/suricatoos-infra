@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"sync"
 
 	"github.com/williamsouzadelima/suricatoos-infra/control-plane/sessiongate"
 )
@@ -16,6 +17,33 @@ type Service struct {
 	q           *Queue
 	allowedType map[string]bool
 	known       func(agentID string) bool
+	isRevoked   func(serialHex string) bool // nil: revocation not checked
+	noSerial    onceSet                     // agents already logged for coming without a serial
+	logf        func(format string, args ...any)
+}
+
+// onceSet remembers the keys already logged, so a condition that lasts a whole deploy
+// transition logs one line per agent instead of one per poll (agents poll every
+// minute). Bounded: when full it starts over, and an agent may be logged once more.
+type onceSet struct {
+	mu   sync.Mutex
+	seen map[string]struct{}
+}
+
+const onceSetMax = 10000
+
+// first reports whether key is new, and records it.
+func (o *onceSet) first(key string) bool {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	if _, ok := o.seen[key]; ok {
+		return false
+	}
+	if o.seen == nil || len(o.seen) >= onceSetMax {
+		o.seen = make(map[string]struct{})
+	}
+	o.seen[key] = struct{}{}
+	return true
 }
 
 // NewService returns a Service over q. known, when set, says whether an agent id is
@@ -23,7 +51,44 @@ type Service struct {
 // not recognize. nil means no check (use it when there is no durable enrollment
 // record to ask). The admin-bearer route never consults it.
 func NewService(q *Queue, known func(agentID string) bool) *Service {
-	return &Service{q: q, allowedType: map[string]bool{CmdScanNow: true}, known: known}
+	return &Service{q: q, allowedType: map[string]bool{CmdScanNow: true}, known: known, logf: log.Printf}
+}
+
+// WithRevocationCheck makes Poll and Ack refuse (403) a client certificate whose
+// serial — forwarded by nginx as X-Client-Cert-Serial — isRevoked reports revoked:
+// a revoked agent neither receives its command nor acks it. Wire the in-process CA's
+// IsRevoked.
+//
+// Unlike the ingest's inventory check there is no log-only mode here, on purpose: the
+// CA lives in this process, so its revoked set is authoritative, always loaded and
+// deterministic — there is no "CRL unavailable" state to fail open on, and a
+// certificate that was not revoked is never affected. The only transition case is an
+// nginx that does not forward the serial yet: that request is accepted and logged
+// once per agent, so deploying this before the nginx change cannot cut the fleet off.
+func (s *Service) WithRevocationCheck(isRevoked func(serialHex string) bool) *Service {
+	s.isRevoked = isRevoked
+	return s
+}
+
+// certAllowed applies the revocation check to the agent identified by cn. It writes
+// the 403 and returns false for a revoked certificate.
+func (s *Service) certAllowed(w http.ResponseWriter, r *http.Request, cn string) bool {
+	if s.isRevoked == nil {
+		return true
+	}
+	serial := strings.TrimSpace(r.Header.Get("X-Client-Cert-Serial"))
+	if serial == "" {
+		if s.noSerial.first(cn) {
+			s.logf("commands: agente %q sem X-Client-Cert-Serial (nginx ainda não encaminha o serial) — revogação não conferida; aceito (logado uma vez por agente)", cn)
+		}
+		return true
+	}
+	if s.isRevoked(serial) {
+		s.logf("commands: certificado revogado no canal de comandos (cn=%q serial=%s) — 403", cn, serial)
+		http.Error(w, "certificate revoked", http.StatusForbidden)
+		return false
+	}
+	return true
 }
 
 // adminOK reports whether r carries "Authorization: Bearer <secret>". The compare is
@@ -55,12 +120,16 @@ func agentCN(r *http.Request) string {
 // identified by its mTLS client cert (204 when none) and marks it DELIVERED. The
 // body is the bare Command ({id,type,created_at}) — the lifecycle state is for the
 // operator's history route, never part of the agent contract. The route MUST be
-// gated by nginx mTLS so X-Client-Cert-DN is trustworthy.
+// gated by nginx mTLS so X-Client-Cert-DN (identity) and X-Client-Cert-Serial
+// (revocation, see WithRevocationCheck) are trustworthy.
 func (s *Service) PollHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		cn := agentCN(r)
 		if cn == "" {
 			http.Error(w, "client certificate required", http.StatusForbidden)
+			return
+		}
+		if !s.certAllowed(w, r, cn) {
 			return
 		}
 		c, ok := s.q.Poll(cn)
@@ -74,12 +143,16 @@ func (s *Service) PollHandler() http.HandlerFunc {
 }
 
 // AckHandler serves POST /commands/ack {"id": "..."}: marks the agent's command
-// ACKED once it has been processed. Identity comes from the client cert.
+// ACKED once it has been processed. Identity comes from the client cert, and a
+// revoked cert is refused as in PollHandler.
 func (s *Service) AckHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		cn := agentCN(r)
 		if cn == "" {
 			http.Error(w, "client certificate required", http.StatusForbidden)
+			return
+		}
+		if !s.certAllowed(w, r, cn) {
 			return
 		}
 		var body struct {

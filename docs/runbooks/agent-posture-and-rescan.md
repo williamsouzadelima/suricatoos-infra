@@ -121,6 +121,13 @@ todo poll do agente, e o boot carrega tudo):
 Se um agente enrolado antes de o `TOKEN_DB_PATH` existir recebe `404` no botão, ele
 não está no store persistente: use a rota com Bearer ou reenrole o agente.
 
+Um agente cujo certificado foi revogado (`DELETE /agent/api/v1/tokens/<id>`) recebe
+`403` no poll e no ack: o comando não lhe é entregue e fica `PENDING` até `EXPIRED`.
+O control-plane confere o serial que o nginx repassa (`X-Client-Cert-Serial`) contra a
+CA em processo, sem modo só-log — um agente não revogado nunca é afetado. Enquanto o
+nginx não repassa o serial, o poll é aceito e o control-plane loga uma vez por agente
+`commands: agente "<id>" sem X-Client-Cert-Serial`.
+
 ## Referências
 
 - Deploy do control-plane/nginx: [`deploy-pipeline.md`](./deploy-pipeline.md)
