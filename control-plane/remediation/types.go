@@ -43,6 +43,12 @@ func (t Type) valid() bool {
 // APPROVED) precedes any delivery, and APPLIED is NOT terminal — the server
 // still has to confirm the fix (→ VERIFIED) by re-scanning.
 //
+// An operator can take a job out of the queue in two ways, and which one depends on
+// whether the agent has it: REJECTED is for a job NOT delivered yet (PENDING_APPROVAL
+// or APPROVED) — nothing happened on any host; CLOSED is for one the agent already
+// received (DELIVERED, ACKED, APPLIED or FAILED), where a change may have reached the
+// host and the record of it (approver, result, rollback_token) has to be kept.
+//
 // ExpiresAt only bounds the states BEFORE the agent has effectively taken the job
 // (see expirable): once a job is ACKED or APPLIED the deadline no longer applies.
 type JobState string
@@ -57,12 +63,13 @@ const (
 	StateVerified        JobState = "VERIFIED"
 	StateExpired         JobState = "EXPIRED"
 	StateRejected        JobState = "REJECTED"
+	StateClosed          JobState = "CLOSED"
 )
 
 // terminal reports whether a job is in a final state (never delivered again).
 func (s JobState) terminal() bool {
 	switch s {
-	case StateVerified, StateFailed, StateExpired, StateRejected:
+	case StateVerified, StateFailed, StateExpired, StateRejected, StateClosed:
 		return true
 	}
 	return false
@@ -94,7 +101,7 @@ func (s JobState) expirable() bool {
 // allStates lists every lifecycle state (the listing filter accepts exactly these).
 var allStates = []JobState{
 	StatePendingApproval, StateApproved, StateDelivered, StateAcked, StateApplied,
-	StateFailed, StateVerified, StateExpired, StateRejected,
+	StateFailed, StateVerified, StateExpired, StateRejected, StateClosed,
 }
 
 // valid reports whether s is one of the lifecycle states.
@@ -137,6 +144,11 @@ type RemediationJob struct {
 	ExpiresAt     time.Time       `json:"expires_at,omitempty"`
 	ApprovedBy    string          `json:"approved_by,omitempty"` // operator identity (audit)
 	ApprovedAt    time.Time       `json:"approved_at,omitempty"`
+	RejectedBy    string          `json:"rejected_by,omitempty"` // who rejected the job (REJECTED); ApprovedBy is never overwritten by it
+	RejectedAt    time.Time       `json:"rejected_at,omitzero"`
+	ClosedBy      string          `json:"closed_by,omitempty"` // who took a delivered job out of the queue (CLOSED)
+	ClosedAt      time.Time       `json:"closed_at,omitzero"`
+	ClosedReason  string          `json:"closed_reason,omitempty"`
 	Signature     string          `json:"signature,omitempty"` // base64 Ed25519 over the canonical; set on Approve
 	CreatedAt     time.Time       `json:"created_at"`
 	DeliveredAt   time.Time       `json:"delivered_at,omitempty"`

@@ -345,8 +345,8 @@ func TestRejectAcceptsOperatorInBody(t *testing.T) {
 				t.Fatalf("reject = %d, want 204", code)
 			}
 			got := stored(t, j.JobID)
-			if got.State != StateRejected || got.ApprovedBy != tc.wantBy {
-				t.Errorf("state=%s operator=%q, want REJECTED by %q", got.State, got.ApprovedBy, tc.wantBy)
+			if got.State != StateRejected || got.RejectedBy != tc.wantBy {
+				t.Errorf("state=%s rejected_by=%q, want REJECTED by %q", got.State, got.RejectedBy, tc.wantBy)
 			}
 		})
 	}
@@ -461,12 +461,17 @@ func TestVerifiedRoute(t *testing.T) {
 
 // listedJob / listBody mirror the listing response (only what the tests read).
 type listedJob struct {
-	JobID   string   `json:"job_id"`
-	Tenant  string   `json:"tenant"`
-	AgentID string   `json:"agent_id"`
-	State   JobState `json:"state"`
-	Result  *struct {
-		Status string `json:"status"`
+	JobID        string   `json:"job_id"`
+	Tenant       string   `json:"tenant"`
+	AgentID      string   `json:"agent_id"`
+	State        JobState `json:"state"`
+	ApprovedBy   string   `json:"approved_by"`
+	RejectedBy   string   `json:"rejected_by"`
+	ClosedBy     string   `json:"closed_by"`
+	ClosedReason string   `json:"closed_reason"`
+	Result       *struct {
+		Status        string `json:"status"`
+		RollbackToken string `json:"rollback_token"`
 	} `json:"result"`
 }
 
@@ -677,17 +682,19 @@ func TestOperatorIDTrimsAndNeverReturnsBlank(t *testing.T) {
 	}
 }
 
-// All three audit-bearing operator routes refuse a blank operator (400, nothing
-// changes) and record a padded one trimmed.
+// The audit-bearing operator routes (approve, reject, close, verified) refuse a blank
+// operator (400, nothing changes) and record a padded one trimmed.
 func TestOperatorRoutesRefuseBlankOperatorAndRecordItTrimmed(t *testing.T) {
 	for _, rt := range []struct {
 		action, field string
 		fresh, after  JobState // state of the job the route acts on, before and after a successful call
 		okCode        int
+		recorded      func(*RemediationJob) string // where the job keeps the operator; nil = only the audit log does
 	}{
-		{"approve", "approved_by", StatePendingApproval, StateApproved, http.StatusOK},
-		{"reject", "rejected_by", StatePendingApproval, StateRejected, http.StatusNoContent},
-		{"verified", "verified_by", StateApplied, StateVerified, http.StatusOK},
+		{"approve", "approved_by", StatePendingApproval, StateApproved, http.StatusOK, func(j *RemediationJob) string { return j.ApprovedBy }},
+		{"reject", "rejected_by", StatePendingApproval, StateRejected, http.StatusNoContent, func(j *RemediationJob) string { return j.RejectedBy }},
+		{"close", "closed_by", StateAcked, StateClosed, http.StatusOK, func(j *RemediationJob) string { return j.ClosedBy }},
+		{"verified", "verified_by", StateApplied, StateVerified, http.StatusOK, nil},
 	} {
 		t.Run(rt.action, func(t *testing.T) {
 			srv, reg, _ := testService(t)
@@ -719,10 +726,10 @@ func TestOperatorRoutesRefuseBlankOperatorAndRecordItTrimmed(t *testing.T) {
 			if got := stateOf(t, reg, j.JobID); got != rt.after {
 				t.Fatalf("state after %s = %s, want %s", rt.action, got, rt.after)
 			}
-			if rt.action != "verified" { // verified keeps no field: its record is the audit log
+			if rt.recorded != nil { // verified keeps no field: its record is the audit log
 				got, _ := reg.Get(j.JobID, "win1", "acme")
-				if got.ApprovedBy != "alice" {
-					t.Errorf("%s recorded the operator as %q, want %q", rt.action, got.ApprovedBy, "alice")
+				if who := rt.recorded(got); who != "alice" {
+					t.Errorf("%s recorded the operator as %q, want %q", rt.action, who, "alice")
 				}
 			}
 			out := logs.String()
@@ -733,5 +740,417 @@ func TestOperatorRoutesRefuseBlankOperatorAndRecordItTrimmed(t *testing.T) {
 				t.Errorf("the audit log should name the trimmed verifier: %s", out)
 			}
 		})
+	}
+}
+
+// The close route is an operator route like the others: it answers 401 to anyone
+// without the admin bearer (none, empty or wrong), and to everyone when the server has
+// no admin secret configured at all (an empty secret closes the route, it does not
+// open it to an empty bearer).
+func TestCloseRouteRequiresBearer(t *testing.T) {
+	srv, reg, _ := testService(t)
+	defer srv.Close()
+	j := jobIn(t, reg, StateAcked)
+
+	noSecret := httptest.NewServer(func() http.Handler {
+		mux := http.NewServeMux()
+		NewService(reg, nil, func(string) bool { return false }, "").Register(mux)
+		return mux
+	}())
+	defer noSecret.Close()
+
+	for _, tc := range []struct {
+		name, base, auth string
+	}{
+		{"sem Authorization", srv.URL, ""},
+		{"bearer vazio", srv.URL, "Bearer "},
+		{"bearer errado", srv.URL, "Bearer errado"},
+		{"servidor sem secret e bearer vazio", noSecret.URL, "Bearer "},
+		{"servidor sem secret e sem Authorization", noSecret.URL, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req, _ := http.NewRequest("POST", tc.base+"/api/v1/remediation/jobs/"+j.JobID+"/close", strings.NewReader(`{"closed_by":"alice"}`))
+			if tc.auth != "" {
+				req.Header.Set("Authorization", tc.auth)
+			}
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			resp.Body.Close()
+			if resp.StatusCode != http.StatusUnauthorized {
+				t.Errorf("close = %d, want 401", resp.StatusCode)
+			}
+		})
+	}
+	if got := stateOf(t, reg, j.JobID); got != StateAcked {
+		t.Errorf("a refused close changed the job to %s", got)
+	}
+}
+
+// Closing is an intervention by a person: the operator is required (X-Operator, or
+// closed_by in the body since nginx clears the header on /agent/api/) and a missing or
+// blank one is a 400 that leaves the job alone. Another route's field does not count.
+func TestCloseRouteNeedsTheOperator(t *testing.T) {
+	srv, reg, _ := testService(t)
+	defer srv.Close()
+	j := jobIn(t, reg, StateAcked)
+	for _, tc := range []struct{ name, body string }{
+		{"corpo vazio", ""},
+		{"objeto vazio", `{}`},
+		{"campo vazio", `{"closed_by":""}`},
+		{"campo em branco", `{"closed_by":"   "}`},
+		{"json inválido", `{"closed_by":`},
+		{"tipo errado", `{"closed_by":42}`},
+		{"só o motivo", `{"reason":"sem dono"}`},
+		{"campo de outra rota não vale", `{"rejected_by":"carol","verified_by":"carol","approved_by":"carol"}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			resp := adminReq(t, "POST", srv.URL+"/api/v1/remediation/jobs/"+j.JobID+"/close", tc.body, "")
+			resp.Body.Close()
+			if resp.StatusCode != http.StatusBadRequest {
+				t.Errorf("close = %d, want 400", resp.StatusCode)
+			}
+			if got := stateOf(t, reg, j.JobID); got != StateAcked {
+				t.Errorf("a refused close changed the job to %s", got)
+			}
+		})
+	}
+}
+
+func TestCloseRoute(t *testing.T) {
+	srv, reg, key := testService(t)
+	defer srv.Close()
+	logs := captureLog(t)
+	post := func(id, body, operator string) (int, string) {
+		t.Helper()
+		resp := adminReq(t, "POST", srv.URL+"/api/v1/remediation/jobs/"+id+"/close", body, operator)
+		defer resp.Body.Close()
+		raw, err := io.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return resp.StatusCode, string(raw)
+	}
+	view := func(raw string) listedJob {
+		t.Helper()
+		var w struct {
+			Job listedJob `json:"job"`
+		}
+		if err := json.Unmarshal([]byte(raw), &w); err != nil {
+			t.Fatalf("response is not {\"job\":...}: %v: %s", err, raw)
+		}
+		return w.Job
+	}
+
+	// The jobs the agent holds first (the poll hands out the OLDEST approved one),
+	// the never-delivered one last.
+	applied := reportedJob(t, reg, appliedRun)
+	withHeader := jobIn(t, reg, StateDelivered)
+	noReason := jobIn(t, reg, StateDelivered)
+	approved := jobIn(t, reg, StateApproved)
+
+	// Unknown id → 404.
+	if code, _ := post("nao-existe", `{"closed_by":"alice"}`, ""); code != http.StatusNotFound {
+		t.Errorf("close of an unknown id = %d, want 404", code)
+	}
+
+	// A job nobody delivered has Reject, not Close → 409, and it is left alone.
+	code, raw := post(approved.JobID, `{"closed_by":"alice"}`, "")
+	if code != http.StatusConflict {
+		t.Errorf("close of an APPROVED job = %d, want 409", code)
+	}
+	var refusal struct {
+		Error string `json:"error"`
+	}
+	if err := json.Unmarshal([]byte(raw), &refusal); err != nil || !strings.Contains(refusal.Error, "APPROVED") {
+		t.Errorf("the 409 should explain the state in an {\"error\":...} body, got %q", raw)
+	}
+	if got := stateOf(t, reg, approved.JobID); got != StateApproved {
+		t.Errorf("a refused close changed the job to %s", got)
+	}
+
+	// closed_by in the body (the nginx clears X-Operator); the reason is trimmed. The
+	// answer is the closed job: who, why, the preserved approver and the agent's
+	// result with its rollback_token — what the operator needs to revert by hand.
+	code, raw = post(applied.JobID, `{"closed_by":"alice","reason":"  revertido a mão no host  "}`, "")
+	if code != http.StatusOK {
+		t.Fatalf("close = %d, want 200 (%s)", code, raw)
+	}
+	got := view(raw)
+	if got.JobID != applied.JobID || got.State != StateClosed || got.ClosedBy != "alice" || got.ClosedReason != "revertido a mão no host" ||
+		got.ApprovedBy != "op" || got.Result == nil || got.Result.Status != "applied" || got.Result.RollbackToken != "rb-0123" {
+		t.Errorf("the response should be the CLOSED job with its approver and result: %+v", got)
+	}
+	stored, _ := reg.Get(applied.JobID, "win1", "acme")
+	if stored.State != StateClosed || stored.ClosedBy != "alice" || stored.ClosedReason != "revertido a mão no host" || !Verify(stored, key.Public()) {
+		t.Errorf("stored job wrong: state=%s by=%q reason=%q", stored.State, stored.ClosedBy, stored.ClosedReason)
+	}
+	if lines := linesWith(logs, `fechado por "alice"`); len(lines) != 1 || !strings.Contains(lines[0], applied.JobID) {
+		t.Errorf("want one audit line naming the job and who closed it, got %q", lines)
+	}
+
+	// Closing again → 409 (nobody rewrites a closure).
+	if code, _ := post(applied.JobID, `{"closed_by":"mallory"}`, ""); code != http.StatusConflict {
+		t.Errorf("second close = %d, want 409", code)
+	}
+	if again, _ := reg.Get(applied.JobID, "win1", "acme"); again.ClosedBy != "alice" {
+		t.Errorf("a second close rewrote the closure: closed_by = %q", again.ClosedBy)
+	}
+
+	// The header (gsad session, in the UI) wins over closed_by, and the reason still
+	// comes from the body.
+	if code, raw := post(withHeader.JobID, `{"closed_by":"alice","reason":"manutenção"}`, "operator@example.com"); code != http.StatusOK {
+		t.Fatalf("close with X-Operator = %d, want 200 (%s)", code, raw)
+	}
+	hs, _ := reg.Get(withHeader.JobID, "win1", "acme")
+	if hs.ClosedBy != "operator@example.com" || hs.ClosedReason != "manutenção" {
+		t.Errorf("X-Operator should win and the body reason be kept: by=%q reason=%q", hs.ClosedBy, hs.ClosedReason)
+	}
+
+	// The reason is optional.
+	if code, raw := post(noReason.JobID, `{"closed_by":"alice"}`, ""); code != http.StatusOK {
+		t.Fatalf("close without a reason = %d, want 200 (%s)", code, raw)
+	}
+	if nr, _ := reg.Get(noReason.JobID, "win1", "acme"); nr.State != StateClosed || nr.ClosedReason != "" {
+		t.Errorf("close without a reason: state=%s reason=%q", nr.State, nr.ClosedReason)
+	}
+}
+
+// Reject answers 409 — not 500 — for a job it may not reject, naming the state, and
+// leaves that job alone; it still answers 204 for one nobody has received, and keeps
+// that job's approver.
+func TestRejectRouteRefusesAJobTheAgentHasReceived(t *testing.T) {
+	for _, st := range []JobState{StateDelivered, StateAcked, StateApplied, StateFailed, StateVerified, StateExpired, StateRejected, StateClosed} {
+		t.Run(string(st), func(t *testing.T) {
+			srv, reg, _ := testService(t)
+			defer srv.Close()
+			j := jobIn(t, reg, st)
+			before, _ := reg.Get(j.JobID, "win1", "acme")
+			resp := adminReq(t, "POST", srv.URL+"/api/v1/remediation/jobs/"+j.JobID+"/reject", `{"rejected_by":"alice"}`, "")
+			defer resp.Body.Close()
+			if resp.StatusCode != http.StatusConflict {
+				t.Errorf("reject of a %s job = %d, want 409", st, resp.StatusCode)
+			}
+			var body struct {
+				Error string `json:"error"`
+			}
+			if err := json.NewDecoder(resp.Body).Decode(&body); err != nil || !strings.Contains(body.Error, string(st)) {
+				t.Errorf("the 409 should explain the state in an {\"error\":...} body: %+v (%v)", body, err)
+			}
+			after, _ := reg.Get(j.JobID, "win1", "acme")
+			if after.State != st || after.ApprovedBy != before.ApprovedBy || after.RejectedBy != before.RejectedBy {
+				t.Errorf("a refused reject changed the job: %+v -> %+v", before, after)
+			}
+		})
+	}
+	t.Run("APPROVED keeps its approver", func(t *testing.T) {
+		srv, reg, _ := testService(t)
+		defer srv.Close()
+		j := jobIn(t, reg, StateApproved)
+		resp := adminReq(t, "POST", srv.URL+"/api/v1/remediation/jobs/"+j.JobID+"/reject", `{"rejected_by":"alice"}`, "")
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusNoContent {
+			t.Fatalf("reject of an APPROVED job = %d, want 204", resp.StatusCode)
+		}
+		got, _ := reg.Get(j.JobID, "win1", "acme")
+		if got.State != StateRejected || got.RejectedBy != "alice" || got.ApprovedBy != "op" {
+			t.Errorf("state=%s rejected_by=%q approved_by=%q, want REJECTED by alice, approved by op", got.State, got.RejectedBy, got.ApprovedBy)
+		}
+	})
+}
+
+// A write that fails is the server's problem, not the operator's: 500, and the job is
+// back to what it was (close and reject undo their change before answering).
+func TestOperatorWritesThatFailAreServerErrors(t *testing.T) {
+	for _, tc := range []struct {
+		action, body string
+		fresh        JobState
+	}{
+		{"close", `{"closed_by":"alice"}`, StateAcked},
+		{"reject", `{"rejected_by":"alice"}`, StateApproved},
+	} {
+		t.Run(tc.action, func(t *testing.T) {
+			srv, reg, _ := testService(t)
+			defer srv.Close()
+			j := jobIn(t, reg, tc.fresh)
+			failSaves(t, reg)
+			resp := adminReq(t, "POST", srv.URL+"/api/v1/remediation/jobs/"+j.JobID+"/"+tc.action, tc.body, "")
+			resp.Body.Close()
+			if resp.StatusCode != http.StatusInternalServerError {
+				t.Errorf("%s with a failing write = %d, want 500", tc.action, resp.StatusCode)
+			}
+			if got := stateOf(t, reg, j.JobID); got != tc.fresh {
+				t.Errorf("the failed %s left the job in %s, want %s", tc.action, got, tc.fresh)
+			}
+		})
+	}
+}
+
+// What the agent hears about a report that comes after the queue gave up on the job:
+// a final job it never reported on, or a report that differs from the one on record,
+// is a 409 (and one audit line for the operator); an exact retry is a quiet 204; a
+// job nobody delivered, or someone else's, is a 404.
+func TestReportRouteAnswersALateReportHonestly(t *testing.T) {
+	srv, reg, _ := testService(t)
+	defer srv.Close()
+	logs := captureLog(t)
+	report := func(agent, id, body string) (int, string) {
+		t.Helper()
+		resp := agentReq(t, "POST", srv.URL+"/v1/remediation-jobs/"+id+"/report", agent, "acme", body)
+		defer resp.Body.Close()
+		raw, err := io.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return resp.StatusCode, string(raw)
+	}
+
+	// Delivered jobs first (the poll hands out the OLDEST approved one).
+	failed := jobIn(t, reg, StateFailed) // result: {"status":"failed","after":"patched"}
+	closed := closedFrom(t, reg, StateDelivered)
+	rejected := jobIn(t, reg, StateRejected)
+	approved := jobIn(t, reg, StateApproved)
+
+	// The agent applied a job the operator had already rejected (or closed).
+	for name, j := range map[string]*RemediationJob{"REJECTED": rejected, "CLOSED": closed} {
+		before := len(linesWith(logs, "relatório tardio"))
+		code, raw := report("win1", j.JobID, `{"status":"applied","after":"patched","rollback_token":"rb-77"}`)
+		if code != http.StatusConflict {
+			t.Errorf("late report on a %s job = %d, want 409 (%s)", name, code, raw)
+		}
+		if strings.Contains(raw, "rb-77") {
+			t.Errorf("the answer must not echo the agent's rollback handle: %s", raw)
+		}
+		lines := linesWith(logs, "relatório tardio")
+		if len(lines) != before+1 || !strings.Contains(lines[len(lines)-1], j.JobID) {
+			t.Errorf("a late report on a %s job should leave one audit line naming it, got %q", name, lines)
+		}
+		if got, _ := reg.Get(j.JobID, "win1", "acme"); got.Result != nil {
+			t.Errorf("a refused report stored a result on the %s job: %+v", name, got.Result)
+		}
+	}
+
+	// An exact retry of what is on record is a quiet 204; a different report is a 409.
+	logged := logs.String()
+	if code, raw := report("win1", failed.JobID, `{"status":"failed","after":"patched"}`); code != http.StatusNoContent {
+		t.Errorf("identical retry = %d, want 204 (%s)", code, raw)
+	}
+	if got := logs.String(); got != logged {
+		t.Errorf("an identical retry must not log: %q", got[len(logged):])
+	}
+	if code, raw := report("win1", failed.JobID, `{"status":"applied","after":"patched"}`); code != http.StatusConflict {
+		t.Errorf("contradicting report = %d, want 409 (%s)", code, raw)
+	}
+	if got, _ := reg.Get(failed.JobID, "win1", "acme"); got.State != StateFailed || got.Result.Status != "failed" {
+		t.Errorf("the contradicting report rewrote the job: state=%s result=%+v", got.State, got.Result)
+	}
+
+	// Never delivered, or somebody else's → 404, nothing audited.
+	logged = logs.String()
+	if code, _ := report("win1", approved.JobID, `{"status":"applied"}`); code != http.StatusNotFound {
+		t.Errorf("report of a never-delivered job = %d, want 404", code)
+	}
+	if code, _ := report("winB", rejected.JobID, `{"status":"applied"}`); code != http.StatusNotFound {
+		t.Errorf("report by another agent = %d, want 404", code)
+	}
+	if got := logs.String(); got != logged {
+		t.Errorf("a report that found no job must not log: %q", got[len(logged):])
+	}
+}
+
+// The listing shows the new state and who rejected/closed — next to the approver the
+// job keeps — and the closed job's result (rollback_token included); a job that was
+// neither carries none of those keys.
+func TestListShowsRejectedAndClosedJobs(t *testing.T) {
+	srv, reg, _ := testService(t)
+	defer srv.Close()
+
+	applied := reportedJob(t, reg, appliedRun)
+	if _, err := reg.Close(applied.JobID, "bob", "revertido a mão"); err != nil {
+		t.Fatal(err)
+	}
+	rejected := jobIn(t, reg, StateApproved)
+	if err := reg.Reject(rejected.JobID, "alice"); err != nil {
+		t.Fatal(err)
+	}
+	plain := jobIn(t, reg, StateApproved)
+
+	code, raw, lb := getList(t, srv, "")
+	if code != http.StatusOK {
+		t.Fatalf("list = %d, want 200 (%s)", code, raw)
+	}
+	byID := map[string]listedJob{}
+	for _, j := range lb.Jobs {
+		byID[j.JobID] = j
+	}
+	if c := byID[applied.JobID]; c.State != StateClosed || c.ClosedBy != "bob" || c.ClosedReason != "revertido a mão" || c.ApprovedBy != "op" ||
+		c.Result == nil || c.Result.Status != "applied" || c.Result.RollbackToken != "rb-0123" {
+		t.Errorf("closed job in the listing: %+v", c)
+	}
+	if rj := byID[rejected.JobID]; rj.State != StateRejected || rj.RejectedBy != "alice" || rj.ApprovedBy != "op" || rj.ClosedBy != "" {
+		t.Errorf("rejected job in the listing: %+v", rj)
+	}
+
+	var keys struct {
+		Jobs []map[string]json.RawMessage `json:"jobs"`
+	}
+	if err := json.Unmarshal([]byte(raw), &keys); err != nil {
+		t.Fatal(err)
+	}
+	for _, j := range keys.Jobs {
+		var id string
+		_ = json.Unmarshal(j["job_id"], &id)
+		if id != plain.JobID {
+			continue
+		}
+		for _, k := range []string{"rejected_by", "rejected_at", "closed_by", "closed_at", "closed_reason"} {
+			if _, present := j[k]; present {
+				t.Errorf("a job that was neither rejected nor closed should not carry %q: %s", k, raw)
+			}
+		}
+	}
+
+	for _, tc := range []struct{ query, want string }{
+		{"?state=CLOSED", applied.JobID},
+		{"?state=closed", applied.JobID},
+		{"?state=REJECTED", rejected.JobID},
+	} {
+		code, raw, got := getList(t, srv, tc.query)
+		if code != http.StatusOK {
+			t.Errorf("list%s = %d, want 200 (%s)", tc.query, code, raw)
+			continue
+		}
+		sameIDs(t, "list"+tc.query, got, tc.want)
+	}
+	// A bad state is a 400 that names CLOSED among the valid ones.
+	resp := adminReq(t, "GET", srv.URL+"/api/v1/remediation/jobs?state=FECHADO", "", "")
+	defer resp.Body.Close()
+	msg, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusBadRequest || !strings.Contains(string(msg), "CLOSED") {
+		t.Errorf("list?state=FECHADO = %d %q, want 400 naming CLOSED", resp.StatusCode, msg)
+	}
+}
+
+// The job the agent polls is the wire contract (schema/remediation-job.schema.json,
+// additionalProperties false): the fields of a rejection or a closure that never
+// happened stay off it instead of showing up as year-1 timestamps.
+func TestPollBodyOmitsTheRejectAndCloseFieldsOfALiveJob(t *testing.T) {
+	srv, reg, _ := testService(t)
+	defer srv.Close()
+	jobIn(t, reg, StateApproved)
+	resp := agentReq(t, "GET", srv.URL+"/v1/remediation-jobs", "win1", "acme", "")
+	defer resp.Body.Close()
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != http.StatusOK || !strings.Contains(string(raw), `"approved_by":"op"`) {
+		t.Fatalf("poll = %d, want 200 with the approved job: %s", resp.StatusCode, raw)
+	}
+	for _, key := range []string{`"rejected_`, `"closed_`} {
+		if strings.Contains(string(raw), key) {
+			t.Errorf("the polled job should not carry %s... fields: %s", key, raw)
+		}
 	}
 }

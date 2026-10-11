@@ -19,7 +19,7 @@ type RevokedFunc func(serialHex string) bool
 
 // Service serves the remediation routes. Agent routes (poll/ack/report) are mTLS
 // + CRL gated and scoped to the agent's own CN+O; the operator routes
-// (enqueue/approve/reject/verified/list) are bearer gated.
+// (enqueue/approve/reject/close/verified/list) are bearer gated.
 type Service struct {
 	reg     *Registry
 	known   TenantKnown
@@ -115,8 +115,10 @@ func (s *Service) AckHandler() http.HandlerFunc {
 
 // ReportHandler serves POST /v1/remediation-jobs/{id}/report: the agent reports
 // its apply result (applied/failed + before/after/rollback_token). Scoped to
-// CN+O; foreign/unknown id → 404. APPLIED is not terminal — the server verifies
-// later by re-scan.
+// CN+O; foreign/unknown id (or a job never handed out) → 404. APPLIED is not
+// terminal — the server verifies later by re-scan. A report that arrives after the
+// job went final (rejected, expired, closed, ...) is a 409 unless it repeats the
+// result already on record (204): see Registry.Report.
 func (s *Service) ReportHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id, ok := s.auth(w, r)
@@ -137,11 +139,18 @@ func (s *Service) ReportHandler() http.HandlerFunc {
 			http.Error(w, "status deve ser applied|failed", http.StatusBadRequest)
 			return
 		}
-		if !s.reg.Report(jobID, id.CN, id.O, &res) {
+		err := s.reg.Report(jobID, id.CN, id.O, &res)
+		switch {
+		case err == nil:
+			w.WriteHeader(http.StatusNoContent)
+		case errors.Is(err, ErrNotFound):
 			http.Error(w, "not found", http.StatusNotFound)
-			return
+		case errors.Is(err, ErrInvalidState):
+			writeJSON(w, http.StatusConflict, map[string]any{"error": err.Error()})
+		default:
+			log.Printf("remediation: report job=%s: %v", jobID, err)
+			http.Error(w, "erro interno", http.StatusInternalServerError)
 		}
-		w.WriteHeader(http.StatusNoContent)
 	}
 }
 
@@ -231,11 +240,14 @@ func (s *Service) ApproveHandler() http.HandlerFunc {
 	}
 }
 
-// RejectHandler serves POST /api/v1/remediation/jobs/{id}/reject (admin bearer).
-// The operator is REQUIRED and recorded: X-Operator, or — because nginx clears that
-// header on /agent/api/ — rejected_by in the body (approved_by is still accepted
-// for compatibility with the older runbook). See Registry.Reject for what a
-// rejection overwrites (the approver) and what it does not do (recall a delivered job).
+// RejectHandler serves POST /api/v1/remediation/jobs/{id}/reject (admin bearer): the
+// way to drop a job BEFORE the agent has it (PENDING_APPROVAL or APPROVED). The
+// operator is REQUIRED and recorded as rejected_by: X-Operator, or — because nginx
+// clears that header on /agent/api/ — rejected_by in the body (approved_by is still
+// accepted for compatibility with the older runbook); the job's approver is left
+// untouched. 404 when the job does not exist; 409 when it is in any other state —
+// a job already handed to the agent is taken out of the queue with close instead.
+// See Registry.Reject.
 func (s *Service) RejectHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if !s.adminOK(w, r) {
@@ -256,15 +268,61 @@ func (s *Service) RejectHandler() http.HandlerFunc {
 			http.Error(w, "operador obrigatório (X-Operator ou rejected_by)", http.StatusBadRequest)
 			return
 		}
-		if err := s.reg.Reject(jobID, rejecter); err != nil {
-			if err == ErrNotFound {
-				http.Error(w, "not found", http.StatusNotFound)
-				return
-			}
+		err := s.reg.Reject(jobID, rejecter)
+		switch {
+		case err == nil:
+			w.WriteHeader(http.StatusNoContent)
+		case errors.Is(err, ErrNotFound):
+			http.Error(w, "not found", http.StatusNotFound)
+		case errors.Is(err, ErrInvalidState):
+			writeJSON(w, http.StatusConflict, map[string]any{"error": err.Error()})
+		default:
+			log.Printf("remediation: reject job=%s: %v", jobID, err)
 			http.Error(w, "erro interno", http.StatusInternalServerError)
+		}
+	}
+}
+
+// CloseHandler serves POST /api/v1/remediation/jobs/{id}/close (admin bearer): the way
+// out of the queue for a job the agent has already received (DELIVERED, ACKED, APPLIED
+// or FAILED), which reject refuses. The job becomes CLOSED — final — with who, when and
+// why recorded; its approver and the agent's result stay as they were. The operator is
+// REQUIRED (X-Operator, or closed_by in the body since nginx clears the header on
+// /agent/api/); the reason (reason in the body) is optional. 200 with the closed job
+// (its result and rollback_token included, for the manual revert); 400 without an
+// operator; 404 when the job does not exist; 409 when it is in any other state.
+// See Registry.Close.
+func (s *Service) CloseHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !s.adminOK(w, r) {
 			return
 		}
-		w.WriteHeader(http.StatusNoContent)
+		jobID := r.PathValue("id")
+		if jobID == "" {
+			http.Error(w, "job id obrigatório", http.StatusBadRequest)
+			return
+		}
+		body := readOperatorBody(w, r)
+		closer := headerOperator(r)
+		if closer == "" {
+			closer = strings.TrimSpace(body.ClosedBy)
+		}
+		if closer == "" {
+			http.Error(w, "operador obrigatório (X-Operator ou closed_by)", http.StatusBadRequest)
+			return
+		}
+		job, err := s.reg.Close(jobID, closer, strings.TrimSpace(body.Reason))
+		switch {
+		case err == nil:
+			writeJSON(w, http.StatusOK, map[string]any{"job": newJobView(job)})
+		case errors.Is(err, ErrNotFound):
+			http.Error(w, "not found", http.StatusNotFound)
+		case errors.Is(err, ErrInvalidState):
+			writeJSON(w, http.StatusConflict, map[string]any{"error": err.Error()})
+		default:
+			log.Printf("remediation: close job=%s: %v", jobID, err)
+			http.Error(w, "erro interno", http.StatusInternalServerError)
+		}
 	}
 }
 
@@ -363,8 +421,13 @@ type jobView struct {
 	State         JobState  `json:"state"`
 	PayloadSHA256 string    `json:"payload_sha256"`
 	Signature     string    `json:"signature,omitempty"`
-	ApprovedBy    string    `json:"approved_by,omitempty"` // who approved — or, for a REJECTED job, who rejected it
+	ApprovedBy    string    `json:"approved_by,omitempty"` // who approved; reject and close leave it as it was (empty if the job never was)
 	ApprovedAt    time.Time `json:"approved_at,omitzero"`
+	RejectedBy    string    `json:"rejected_by,omitempty"` // REJECTED jobs: who rejected it, and when
+	RejectedAt    time.Time `json:"rejected_at,omitzero"`
+	ClosedBy      string    `json:"closed_by,omitempty"` // CLOSED jobs: who closed it, when and why
+	ClosedAt      time.Time `json:"closed_at,omitzero"`
+	ClosedReason  string    `json:"closed_reason,omitempty"`
 	NotBefore     time.Time `json:"not_before,omitzero"`
 	NotAfter      time.Time `json:"not_after,omitzero"`
 	ExpiresAt     time.Time `json:"expires_at,omitzero"`
@@ -379,7 +442,9 @@ func newJobView(j *RemediationJob) jobView {
 	return jobView{
 		JobID: j.JobID, CorrelationID: j.CorrelationID, Tenant: j.Tenant, AgentID: j.AgentID,
 		Type: j.Type, State: j.State, PayloadSHA256: j.PayloadSHA256, Signature: j.Signature,
-		ApprovedBy: j.ApprovedBy, ApprovedAt: j.ApprovedAt, NotBefore: j.NotBefore, NotAfter: j.NotAfter,
+		ApprovedBy: j.ApprovedBy, ApprovedAt: j.ApprovedAt, RejectedBy: j.RejectedBy, RejectedAt: j.RejectedAt,
+		ClosedBy: j.ClosedBy, ClosedAt: j.ClosedAt, ClosedReason: j.ClosedReason,
+		NotBefore: j.NotBefore, NotAfter: j.NotAfter,
 		ExpiresAt: j.ExpiresAt, CreatedAt: j.CreatedAt, DeliveredAt: j.DeliveredAt, AckedAt: j.AckedAt,
 		Result: j.Result,
 	}
@@ -393,6 +458,22 @@ type operatorBody struct {
 	ApprovedBy string `json:"approved_by"`
 	RejectedBy string `json:"rejected_by"`
 	VerifiedBy string `json:"verified_by"`
+	ClosedBy   string `json:"closed_by"`
+	Reason     string `json:"reason"` // close only: why the job leaves the queue (optional)
+}
+
+// headerOperator is the identity nginx sets in X-Operator from the gsad session,
+// trimmed; "" means the header carried none.
+func headerOperator(r *http.Request) string {
+	return strings.TrimSpace(r.Header.Get("X-Operator"))
+}
+
+// readOperatorBody decodes the JSON body of an operator route. It is capped, and a
+// malformed one simply yields the zero value (the caller then finds no operator in it).
+func readOperatorBody(w http.ResponseWriter, r *http.Request) operatorBody {
+	var b operatorBody
+	_ = json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&b)
+	return b
 }
 
 // operatorID returns the identity acting on an operator route: the X-Operator
@@ -401,12 +482,10 @@ type operatorBody struct {
 // one (empty or only whitespace) counts as none: "" means no operator was given —
 // the caller answers 400. The body is capped and a malformed one simply yields "".
 func operatorID(w http.ResponseWriter, r *http.Request, pick func(operatorBody) string) string {
-	if op := strings.TrimSpace(r.Header.Get("X-Operator")); op != "" {
+	if op := headerOperator(r); op != "" {
 		return op
 	}
-	var b operatorBody
-	_ = json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&b)
-	return strings.TrimSpace(pick(b))
+	return strings.TrimSpace(pick(readOperatorBody(w, r)))
 }
 
 // Register wires all remediation routes onto mux. Intended to be mounted DARK
@@ -421,6 +500,7 @@ func (s *Service) Register(mux *http.ServeMux) {
 	mux.Handle("GET /api/v1/remediation/jobs", s.ListHandler())
 	mux.Handle("POST /api/v1/remediation/jobs/{id}/approve", s.ApproveHandler())
 	mux.Handle("POST /api/v1/remediation/jobs/{id}/reject", s.RejectHandler())
+	mux.Handle("POST /api/v1/remediation/jobs/{id}/close", s.CloseHandler())
 	mux.Handle("POST /api/v1/remediation/jobs/{id}/verified", s.VerifiedHandler())
 }
 

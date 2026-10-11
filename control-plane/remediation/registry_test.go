@@ -122,8 +122,8 @@ func TestApplyThenServerVerifies(t *testing.T) {
 	if !r.Ack(j.JobID, "win1", "acme") {
 		t.Fatal("ack failed")
 	}
-	if !r.Report(j.JobID, "win1", "acme", &Result{Status: "applied", After: "patched"}) {
-		t.Fatal("report failed")
+	if err := r.Report(j.JobID, "win1", "acme", &Result{Status: "applied", After: "patched"}); err != nil {
+		t.Fatalf("report failed: %v", err)
 	}
 	if got, _ := r.Get(j.JobID, "win1", "acme"); got.State != StateApplied {
 		t.Fatalf("state = %s, want APPLIED", got.State)
@@ -251,12 +251,12 @@ func TestReportRequiresDeliveryAndNoClobber(t *testing.T) {
 	j := enq(t, r, "win1", "acme")
 	r.Approve(j.JobID, "op")
 	// Report before delivery (still APPROVED) → rejected (never handed out).
-	if r.Report(j.JobID, "win1", "acme", &Result{Status: "applied"}) {
-		t.Error("report before delivery must be rejected")
+	if err := r.Report(j.JobID, "win1", "acme", &Result{Status: "applied"}); !errors.Is(err, ErrNotFound) {
+		t.Errorf("report before delivery: err = %v, want ErrNotFound", err)
 	}
 	r.Poll("win1", "acme") // → DELIVERED (ACK is optional for Report)
-	if !r.Report(j.JobID, "win1", "acme", &Result{Status: "applied", After: "patched"}) {
-		t.Fatal("report after delivery must succeed")
+	if err := r.Report(j.JobID, "win1", "acme", &Result{Status: "applied", After: "patched"}); err != nil {
+		t.Fatalf("report after delivery must succeed: %v", err)
 	}
 	got, _ := r.Get(j.JobID, "win1", "acme")
 	if got.State != StateApplied || got.Result == nil || got.Result.After != "patched" {
@@ -311,10 +311,23 @@ func at(t time.Time) func() time.Time { return func() time.Time { return t } }
 // 1h TTL, so clockBase+2h is past ExpiresAt (and past the redeliver window).
 var clockBase = time.Date(2026, 10, 8, 0, 0, 0, 0, time.UTC)
 
+// lifecycle lists every state a job can be in. It is written out here rather than
+// taken from the package, so a state added to the lifecycle shows up as a missing
+// row (jobIn refuses it) instead of as a silently untested one.
+var lifecycle = []JobState{
+	StatePendingApproval, StateApproved, StateDelivered, StateAcked, StateApplied,
+	StateFailed, StateVerified, StateExpired, StateRejected, StateClosed,
+}
+
 // jobIn enqueues a win1/acme job (1h TTL, at the registry's current clock) and
-// drives it to st through the real transitions — Approve, Poll, Ack, Report — never
-// by poking State, so the tests exercise the production path. st is one of
-// PENDING_APPROVAL, APPROVED, DELIVERED, ACKED, APPLIED, FAILED.
+// drives it to st through the real transitions — Approve, Poll, Ack, Report,
+// MarkVerified, Reject, Close — never by poking State, so the tests exercise the
+// production path. Any state of the lifecycle works. REJECTED is a PENDING_APPROVAL
+// job that was rejected and CLOSED an ACKED one that an operator closed (closedFrom
+// builds the others); EXPIRED moves the registry clock 2h forward, past the 1h TTL,
+// and polls so the lapsed APPROVED job is swept. The poll hands out the OLDEST
+// deliverable job, so in a registry that holds several jobs build the ones the agent
+// receives before the ones that stay undelivered.
 func jobIn(t *testing.T, r *Registry, st JobState) *RemediationJob {
 	t.Helper()
 	j, err := r.Enqueue(EnqueueRequest{
@@ -327,10 +340,21 @@ func jobIn(t *testing.T, r *Registry, st JobState) *RemediationJob {
 	if st == StatePendingApproval {
 		return j
 	}
+	if st == StateRejected {
+		if err := r.Reject(j.JobID, "op"); err != nil {
+			t.Fatal(err)
+		}
+		return j
+	}
 	if _, err := r.Approve(j.JobID, "op"); err != nil {
 		t.Fatal(err)
 	}
 	if st == StateApproved {
+		return j
+	}
+	if st == StateExpired {
+		r.now = at(r.now().Add(2 * time.Hour))
+		r.Poll("win1", "acme")
 		return j
 	}
 	if _, ok := r.Poll("win1", "acme"); !ok {
@@ -345,14 +369,86 @@ func jobIn(t *testing.T, r *Registry, st JobState) *RemediationJob {
 	if st == StateAcked {
 		return j
 	}
+	if st == StateClosed {
+		if _, err := r.Close(j.JobID, "op", ""); err != nil {
+			t.Fatal(err)
+		}
+		return j
+	}
 	status := "applied"
 	if st == StateFailed {
 		status = "failed"
 	}
-	if !r.Report(j.JobID, "win1", "acme", &Result{Status: status, After: "patched"}) {
-		t.Fatal("report failed")
+	if err := r.Report(j.JobID, "win1", "acme", &Result{Status: status, After: "patched"}); err != nil {
+		t.Fatalf("report failed: %v", err)
+	}
+	if st == StateVerified {
+		if _, err := r.MarkVerified(j.JobID); err != nil {
+			t.Fatal(err)
+		}
 	}
 	return j
+}
+
+// reportedJob drives a fresh job to ACKED and has the agent report res, so a test
+// controls every field of the stored Result (before, rollback_token, ...).
+func reportedJob(t *testing.T, r *Registry, res Result) *RemediationJob {
+	t.Helper()
+	j := jobIn(t, r, StateAcked)
+	if err := r.Report(j.JobID, "win1", "acme", &res); err != nil {
+		t.Fatalf("report failed: %v", err)
+	}
+	return j
+}
+
+// failSaves makes every later persist of r fail while the file on disk stays as it
+// is: the temp file the registry writes before the rename becomes a directory.
+func failSaves(t *testing.T, r *Registry) {
+	t.Helper()
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.path == "" {
+		t.Fatal("a registry without a file never fails to save")
+	}
+	if err := os.Mkdir(r.path+".tmp", 0o700); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// onDisk loads what r last persisted: a second registry over the same file.
+func onDisk(t *testing.T, r *Registry) *Registry {
+	t.Helper()
+	d, err := NewRegistry(Config{Path: r.path})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return d
+}
+
+// linesWith returns the lines of the captured log that contain sub.
+func linesWith(buf *lockedBuf, sub string) []string {
+	var out []string
+	for _, l := range strings.Split(buf.String(), "\n") {
+		if strings.Contains(l, sub) {
+			out = append(out, l)
+		}
+	}
+	return out
+}
+
+// sameResult fails the test unless got carries exactly want's agent-supplied
+// fields; reported_at is the server's own stamp and is checked separately.
+func sameResult(t *testing.T, where string, got *Result, want Result) {
+	t.Helper()
+	if got == nil {
+		t.Errorf("%s: result = nil, want %+v", where, want)
+		return
+	}
+	g := *got
+	g.ReportedAt = time.Time{}
+	if g != want {
+		t.Errorf("%s: result = %+v, want %+v", where, g, want)
+	}
 }
 
 func stateOf(t *testing.T, r *Registry, id string) JobState {
@@ -412,8 +508,8 @@ func TestReportAfterExpiryOfAckedJobIsAccepted(t *testing.T) {
 	r.now = at(clockBase.Add(2 * time.Hour))
 	r.Poll("win1", "acme")
 
-	if !r.Report(j.JobID, "win1", "acme", &Result{Status: "applied", After: "patched"}) {
-		t.Fatal("a report for an ACKED job past ExpiresAt must be accepted")
+	if err := r.Report(j.JobID, "win1", "acme", &Result{Status: "applied", After: "patched"}); err != nil {
+		t.Fatalf("a report for an ACKED job past ExpiresAt must be accepted: %v", err)
 	}
 	got, _ := r.Get(j.JobID, "win1", "acme")
 	if got.State != StateApplied || got.Result == nil || got.Result.After != "patched" {
@@ -493,63 +589,201 @@ func TestMarkVerifiedAfterLapsedExpiry(t *testing.T) {
 	}
 }
 
-// Reject overwrites ApprovedBy/ApprovedAt with whoever rejected, which would erase
-// the approver of a signed (possibly applied) change. The audit log line is where
-// the previous approver survives: exactly one line per EFFECTIVE rejection, none for
-// a no-op.
-func TestRejectLogsThePreviousApprover(t *testing.T) {
-	logs := captureLog(t)
-	rejectLines := func() []string {
-		var out []string
-		for _, l := range strings.Split(logs.String(), "\n") {
-			if strings.Contains(l, "rejeitado por") {
-				out = append(out, l)
+// Reject is for a job nobody has received: PENDING_APPROVAL and APPROVED. Once the
+// agent has it (DELIVERED, ACKED, APPLIED, FAILED) — or it is final already — there
+// is no rejecting it: Close is the honest way out of the queue for a delivered one.
+// A refused Reject changes nothing, not even for a job that was already REJECTED.
+func TestRejectOnlyBeforeDelivery(t *testing.T) {
+	rejectable := map[JobState]bool{StatePendingApproval: true, StateApproved: true}
+	for _, st := range lifecycle {
+		t.Run(string(st), func(t *testing.T) {
+			r, _ := testReg(t)
+			j := jobIn(t, r, st)
+			before, _ := r.Get(j.JobID, "win1", "acme")
+			err := r.Reject(j.JobID, "bob")
+			after, _ := r.Get(j.JobID, "win1", "acme")
+			if rejectable[st] {
+				if err != nil {
+					t.Fatalf("Reject from %s: %v", st, err)
+				}
+				if after.State != StateRejected {
+					t.Errorf("Reject from %s left the job in %s, want REJECTED", st, after.State)
+				}
+				return
 			}
-		}
-		return out
+			if !errors.Is(err, ErrInvalidState) {
+				t.Errorf("Reject from %s: err = %v, want ErrInvalidState", st, err)
+			}
+			if after.State != st || after.ApprovedBy != before.ApprovedBy || !after.ApprovedAt.Equal(before.ApprovedAt) ||
+				after.RejectedBy != before.RejectedBy || !after.RejectedAt.Equal(before.RejectedAt) {
+				t.Errorf("a refused Reject changed the %s job: %+v -> %+v", st, before, after)
+			}
+		})
 	}
+	t.Run("unknown id", func(t *testing.T) {
+		r, _ := testReg(t)
+		if err := r.Reject("nao-existe", "bob"); !errors.Is(err, ErrNotFound) {
+			t.Errorf("err = %v, want ErrNotFound", err)
+		}
+	})
+}
 
+// Rejecting records WHO rejected in its own fields and leaves the approval alone: the
+// approver of an APPROVED job (which the job's signature covers, so it must still
+// verify) and, for a job nobody approved, no approver at all. The same holds for
+// what was persisted, not only for memory.
+func TestRejectKeepsTheApproverAndRecordsTheRejecter(t *testing.T) {
+	for _, st := range []JobState{StatePendingApproval, StateApproved} {
+		t.Run(string(st), func(t *testing.T) {
+			r, key := testReg(t)
+			r.now = at(clockBase)
+			j := jobIn(t, r, st) // APPROVED: approved by "op" at clockBase
+			before, _ := r.Get(j.JobID, "win1", "acme")
+			rejectedAt := clockBase.Add(5 * time.Minute)
+			r.now = at(rejectedAt)
+			if err := r.Reject(j.JobID, "bob"); err != nil {
+				t.Fatal(err)
+			}
+
+			check := func(where string, got *RemediationJob) {
+				t.Helper()
+				if got.State != StateRejected || got.RejectedBy != "bob" || !got.RejectedAt.Equal(rejectedAt) {
+					t.Errorf("%s: rejection record wrong: state=%s by=%q at=%v", where, got.State, got.RejectedBy, got.RejectedAt)
+				}
+				if got.ApprovedBy != before.ApprovedBy || !got.ApprovedAt.Equal(before.ApprovedAt) || got.Signature != before.Signature {
+					t.Errorf("%s: the approval was overwritten: approved_by=%q approved_at=%v", where, got.ApprovedBy, got.ApprovedAt)
+				}
+				if st == StateApproved && !Verify(got, key.Public()) {
+					t.Errorf("%s: the signature of the approved change no longer verifies", where)
+				}
+			}
+			got, _ := r.Get(j.JobID, "win1", "acme")
+			check("memory", got)
+			disk, ok := onDisk(t, r).Get(j.JobID, "win1", "acme")
+			if !ok {
+				t.Fatal("the rejected job is missing from the file")
+			}
+			check("disk", disk)
+		})
+	}
+}
+
+// A write that fails leaves the job as it was (as Approve does): same state, no
+// rejecter recorded, memory agreeing with the file, the error returned and nothing
+// audited. Once the write is fixed the same reject goes through.
+func TestRejectRevertsWhenTheWriteFails(t *testing.T) {
+	for _, st := range []JobState{StatePendingApproval, StateApproved} {
+		t.Run(string(st), func(t *testing.T) {
+			logs := captureLog(t)
+			r, _ := testReg(t)
+			j := jobIn(t, r, st)
+			failSaves(t, r)
+			err := r.Reject(j.JobID, "bob")
+			if err == nil {
+				t.Fatal("Reject must report the failed write")
+			}
+			if errors.Is(err, ErrInvalidState) || errors.Is(err, ErrNotFound) {
+				t.Errorf("a failed write is neither a state nor a not-found error: %v", err)
+			}
+			mem, _ := r.Get(j.JobID, "win1", "acme")
+			if mem.State != st || mem.RejectedBy != "" || !mem.RejectedAt.IsZero() {
+				t.Errorf("memory was not reverted to %s: %+v", st, mem)
+			}
+			if disk, _ := onDisk(t, r).Get(j.JobID, "win1", "acme"); disk.State != st {
+				t.Errorf("memory (%s) and file (%s) disagree", mem.State, disk.State)
+			}
+			if lines := linesWith(logs, "rejeitado por"); len(lines) != 0 {
+				t.Errorf("a rejection that did not happen was audited: %q", lines)
+			}
+
+			if err := os.Remove(r.path + ".tmp"); err != nil {
+				t.Fatal(err)
+			}
+			if err := r.Reject(j.JobID, "bob"); err != nil {
+				t.Fatalf("after the write is fixed the same reject must go through: %v", err)
+			}
+			if got := stateOf(t, r, j.JobID); got != StateRejected {
+				t.Errorf("state after the retry = %s, want REJECTED", got)
+			}
+		})
+	}
+}
+
+// Every effective rejection writes ONE audit line — who, the state it was in, the
+// approver kept on the job, the tenant and the agent. A reject that changed nothing
+// (refused state, unknown id) writes none.
+func TestRejectLogsOneAuditLinePerEffectiveRejection(t *testing.T) {
+	logs := captureLog(t)
 	r, _ := testReg(t)
-	j := jobIn(t, r, StateApplied) // approved by "op" (jobIn), then delivered, acked and applied
+	j := jobIn(t, r, StateApproved) // approved by "op"
 	if err := r.Reject(j.JobID, "bob"); err != nil {
 		t.Fatal(err)
 	}
-	lines := rejectLines()
+	lines := linesWith(logs, "rejeitado por")
 	if len(lines) != 1 {
 		t.Fatalf("want exactly 1 audit line for the rejection, got %d: %q", len(lines), lines)
 	}
 	for _, want := range []string{
-		j.JobID, `rejeitado por "bob"`, `aprovador anterior "op"`, "estado anterior APPLIED", "tenant=acme", "agent=win1",
+		j.JobID, `rejeitado por "bob"`, "estado anterior APPROVED", `aprovador "op"`, `tenant="acme"`, `agent="win1"`,
 	} {
 		if !strings.Contains(lines[0], want) {
 			t.Errorf("the audit line should contain %q: %s", want, lines[0])
 		}
 	}
 
-	// A no-op (already terminal) and an unknown id change nothing, so log nothing.
-	if err := r.Reject(j.JobID, "mallory"); err != nil {
-		t.Fatal(err)
-	}
-	if err := r.Reject("nao-existe", "mallory"); !errors.Is(err, ErrNotFound) {
-		t.Fatalf("unknown id: err = %v, want ErrNotFound", err)
-	}
-	if n := len(rejectLines()); n != 1 {
-		t.Errorf("a reject that changed nothing must not log (%d lines): %q", n, rejectLines())
-	}
-
-	// A job nobody approved has no previous approver: it is logged as "".
+	// A job nobody approved has no approver: it is logged as "".
 	p := jobIn(t, r, StatePendingApproval)
 	if err := r.Reject(p.JobID, "alice"); err != nil {
 		t.Fatal(err)
 	}
-	lines = rejectLines()
+	lines = linesWith(logs, "rejeitado por")
 	if len(lines) != 2 {
 		t.Fatalf("want 2 audit lines in total, got %d: %q", len(lines), lines)
 	}
-	for _, want := range []string{p.JobID, `rejeitado por "alice"`, `aprovador anterior ""`, "estado anterior PENDING_APPROVAL"} {
+	for _, want := range []string{p.JobID, `rejeitado por "alice"`, `aprovador ""`, "estado anterior PENDING_APPROVAL"} {
 		if !strings.Contains(lines[1], want) {
 			t.Errorf("the audit line should contain %q: %s", want, lines[1])
 		}
+	}
+
+	// A reject that is refused (already REJECTED, a delivered job) or targets an
+	// unknown id changes nothing, so it logs nothing.
+	if err := r.Reject(j.JobID, "mallory"); !errors.Is(err, ErrInvalidState) {
+		t.Fatalf("second reject: err = %v, want ErrInvalidState", err)
+	}
+	d := jobIn(t, r, StateDelivered)
+	if err := r.Reject(d.JobID, "mallory"); !errors.Is(err, ErrInvalidState) {
+		t.Fatalf("reject of a DELIVERED job: err = %v, want ErrInvalidState", err)
+	}
+	if err := r.Reject("nao-existe", "mallory"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("unknown id: err = %v, want ErrNotFound", err)
+	}
+	if n := len(linesWith(logs, "rejeitado por")); n != 2 {
+		t.Errorf("a reject that changed nothing must not log (%d lines): %q", n, linesWith(logs, "rejeitado por"))
+	}
+}
+
+// The rejecter, the approver, the tenant and the agent come from outside (request
+// bodies): they are logged quoted, so none of them can start a line of its own.
+func TestRejectAuditLineQuotesTheValuesItLogs(t *testing.T) {
+	logs := captureLog(t)
+	r, _ := testReg(t)
+	evil := "x\nremediation: job fake aprovado por \"mallory\""
+	j, err := r.Enqueue(EnqueueRequest{
+		Tenant: evil, AgentID: evil, Type: TypePackagePatch, Payload: json.RawMessage(`{}`), TTL: time.Hour,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.Approve(j.JobID, evil); err != nil {
+		t.Fatal(err)
+	}
+	start := len(logs.String())
+	if err := r.Reject(j.JobID, evil); err != nil {
+		t.Fatal(err)
+	}
+	if out := logs.String()[start:]; strings.Count(out, "\n") != 1 {
+		t.Errorf("the audit entry must be ONE line, got: %q", out)
 	}
 }
 
@@ -663,5 +897,545 @@ func TestClampLimit(t *testing.T) {
 		if got := clampLimit(in); got != want {
 			t.Errorf("clampLimit(%d) = %d, want %d", in, got, want)
 		}
+	}
+}
+
+// Close takes a job the agent has already received out of the queue. DELIVERED,
+// ACKED, APPLIED and FAILED are closable; a job nobody delivered has Reject, and one
+// that is already final has nothing left to close. A refused Close changes nothing.
+func TestCloseOnlyAfterDelivery(t *testing.T) {
+	closable := map[JobState]bool{StateDelivered: true, StateAcked: true, StateApplied: true, StateFailed: true}
+	for _, st := range lifecycle {
+		t.Run(string(st), func(t *testing.T) {
+			r, _ := testReg(t)
+			j := jobIn(t, r, st)
+			before, _ := r.Get(j.JobID, "win1", "acme")
+			got, err := r.Close(j.JobID, "bob", "agente fora do ar")
+			after, _ := r.Get(j.JobID, "win1", "acme")
+			if closable[st] {
+				if err != nil {
+					t.Fatalf("Close from %s: %v", st, err)
+				}
+				if got.State != StateClosed || after.State != StateClosed {
+					t.Errorf("Close from %s: returned %s, stored %s, want CLOSED", st, got.State, after.State)
+				}
+				return
+			}
+			if !errors.Is(err, ErrInvalidState) {
+				t.Errorf("Close from %s: err = %v, want ErrInvalidState", st, err)
+			}
+			if got != nil {
+				t.Errorf("a refused Close returned a job: %+v", got)
+			}
+			if after.State != st || after.ClosedBy != before.ClosedBy || !after.ClosedAt.Equal(before.ClosedAt) || after.ClosedReason != before.ClosedReason {
+				t.Errorf("a refused Close changed the %s job: %+v -> %+v", st, before, after)
+			}
+		})
+	}
+	t.Run("unknown id", func(t *testing.T) {
+		r, _ := testReg(t)
+		if _, err := r.Close("nao-existe", "bob", ""); !errors.Is(err, ErrNotFound) {
+			t.Errorf("err = %v, want ErrNotFound", err)
+		}
+	})
+}
+
+// A close with no one to blame is refused: the audit trail of a manual intervention
+// must always say who did it.
+func TestCloseNeedsAnOperator(t *testing.T) {
+	r, _ := testReg(t)
+	j := jobIn(t, r, StateAcked)
+	if _, err := r.Close(j.JobID, "", "sem dono"); err == nil || errors.Is(err, ErrNotFound) || errors.Is(err, ErrInvalidState) {
+		t.Errorf("Close without an operator: err = %v, want a plain refusal", err)
+	}
+	if got := stateOf(t, r, j.JobID); got != StateAcked {
+		t.Errorf("a refused Close changed ACKED to %s", got)
+	}
+	// Nothing was half-done: with an operator the same job closes normally.
+	closed, err := r.Close(j.JobID, "bob", "com dono")
+	if err != nil {
+		t.Fatalf("Close with an operator after the refusal: %v", err)
+	}
+	if closed.ClosedBy != "bob" || closed.ClosedReason != "com dono" {
+		t.Errorf("closed record wrong: by=%q reason=%q", closed.ClosedBy, closed.ClosedReason)
+	}
+}
+
+// Close must leave the record of the change intact — the approver (which the job's
+// signature covers, so it must still verify), the delivery times and the agent's
+// Result with its before/rollback_token — and add who/when/why it was closed. The
+// same holds for what was persisted, not only for memory.
+func TestClosePreservesTheApprovalAndTheResult(t *testing.T) {
+	applied := Result{Status: "applied", Detail: "KB instalado", Before: "KB5040000", After: "KB5041580", RollbackToken: "rb-0123", RebootPending: true}
+	failed := Result{Status: "failed", Detail: "reboot loop", Before: "KB5040000", After: "KB5040000", RollbackToken: "rb-0456"}
+	for _, tc := range []struct {
+		name  string
+		build func(*testing.T, *Registry) *RemediationJob
+		want  *Result // the job's Result before the close; nil = none yet
+	}{
+		{"DELIVERED", func(t *testing.T, r *Registry) *RemediationJob { return jobIn(t, r, StateDelivered) }, nil},
+		{"ACKED", func(t *testing.T, r *Registry) *RemediationJob { return jobIn(t, r, StateAcked) }, nil},
+		{"APPLIED", func(t *testing.T, r *Registry) *RemediationJob { return reportedJob(t, r, applied) }, &applied},
+		{"FAILED", func(t *testing.T, r *Registry) *RemediationJob { return reportedJob(t, r, failed) }, &failed},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r, key := testReg(t)
+			r.now = at(clockBase)
+			j := tc.build(t, r)
+			before, _ := r.Get(j.JobID, "win1", "acme")
+			closedAt := clockBase.Add(10 * time.Minute)
+			r.now = at(closedAt)
+			if _, err := r.Close(j.JobID, "bob", "agente fora do ar"); err != nil {
+				t.Fatal(err)
+			}
+
+			check := func(where string, got *RemediationJob) {
+				t.Helper()
+				if got.State != StateClosed || got.ClosedBy != "bob" || got.ClosedReason != "agente fora do ar" || !got.ClosedAt.Equal(closedAt) {
+					t.Errorf("%s: closed record wrong: state=%s by=%q reason=%q at=%v", where, got.State, got.ClosedBy, got.ClosedReason, got.ClosedAt)
+				}
+				if got.ApprovedBy != "op" || !got.ApprovedAt.Equal(before.ApprovedAt) || got.Signature != before.Signature {
+					t.Errorf("%s: the approval was not preserved: by=%q at=%v", where, got.ApprovedBy, got.ApprovedAt)
+				}
+				if !Verify(got, key.Public()) {
+					t.Errorf("%s: the signature of the approved change no longer verifies", where)
+				}
+				if !got.DeliveredAt.Equal(before.DeliveredAt) || !got.AckedAt.Equal(before.AckedAt) {
+					t.Errorf("%s: delivery/ack times changed", where)
+				}
+				if tc.want == nil {
+					if got.Result != nil {
+						t.Errorf("%s: Close invented a result: %+v", where, got.Result)
+					}
+					return
+				}
+				sameResult(t, where, got.Result, *tc.want)
+				if got.Result != nil && !got.Result.ReportedAt.Equal(before.Result.ReportedAt) {
+					t.Errorf("%s: reported_at changed", where)
+				}
+			}
+			got, _ := r.Get(j.JobID, "win1", "acme")
+			check("memory", got)
+			disk, ok := onDisk(t, r).Get(j.JobID, "win1", "acme")
+			if !ok {
+				t.Fatal("the closed job is missing from the file")
+			}
+			check("disk", disk)
+		})
+	}
+}
+
+// A write that fails leaves nothing half-done: the job goes back to the state it was
+// in (not to a fixed one), memory agrees with the file, the caller gets the error,
+// and since nothing changed nothing is audited. The failure was the write's alone:
+// once it is fixed the very same close goes through.
+func TestCloseRevertsWhenTheWriteFails(t *testing.T) {
+	for _, st := range []JobState{StateDelivered, StateAcked, StateApplied, StateFailed} {
+		t.Run(string(st), func(t *testing.T) {
+			logs := captureLog(t)
+			r, _ := testReg(t)
+			j := jobIn(t, r, st)
+			failSaves(t, r)
+			got, err := r.Close(j.JobID, "bob", "agente fora do ar")
+			if err == nil {
+				t.Fatal("Close must report the failed write")
+			}
+			if errors.Is(err, ErrInvalidState) || errors.Is(err, ErrNotFound) {
+				t.Errorf("a failed write is neither a state nor a not-found error: %v", err)
+			}
+			if got != nil {
+				t.Errorf("a failed Close returned a job: %+v", got)
+			}
+			mem, _ := r.Get(j.JobID, "win1", "acme")
+			if mem.State != st || mem.ClosedBy != "" || !mem.ClosedAt.IsZero() || mem.ClosedReason != "" {
+				t.Errorf("memory was not reverted to %s: %+v", st, mem)
+			}
+			if disk, _ := onDisk(t, r).Get(j.JobID, "win1", "acme"); disk.State != st {
+				t.Errorf("memory (%s) and file (%s) disagree", mem.State, disk.State)
+			}
+			if lines := linesWith(logs, "fechado por"); len(lines) != 0 {
+				t.Errorf("a close that did not happen was audited: %q", lines)
+			}
+
+			if err := os.Remove(r.path + ".tmp"); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := r.Close(j.JobID, "bob", "agente fora do ar"); err != nil {
+				t.Fatalf("after the write is fixed the same close must go through: %v", err)
+			}
+			if got := stateOf(t, r, j.JobID); got != StateClosed {
+				t.Errorf("state after the retry = %s, want CLOSED", got)
+			}
+		})
+	}
+}
+
+// Every effective close writes ONE audit line — who, why, the state it was in, the
+// approver of the change, the tenant and the agent. A close that changed nothing
+// (refused state, unknown id) writes none.
+func TestCloseLogsOneAuditLinePerEffectiveClose(t *testing.T) {
+	logs := captureLog(t)
+	r, _ := testReg(t)
+	j := jobIn(t, r, StateAcked) // approved by "op"
+	if _, err := r.Close(j.JobID, "bob", "agente fora do ar"); err != nil {
+		t.Fatal(err)
+	}
+	lines := linesWith(logs, "fechado por")
+	if len(lines) != 1 {
+		t.Fatalf("want exactly 1 audit line for the close, got %d: %q", len(lines), lines)
+	}
+	for _, want := range []string{
+		j.JobID, `fechado por "bob"`, "estado anterior ACKED", `aprovador "op"`, `motivo "agente fora do ar"`, `tenant="acme"`, `agent="win1"`,
+	} {
+		if !strings.Contains(lines[0], want) {
+			t.Errorf("the audit line should contain %q: %s", want, lines[0])
+		}
+	}
+
+	if _, err := r.Close(j.JobID, "mallory", ""); !errors.Is(err, ErrInvalidState) { // already CLOSED
+		t.Fatalf("second close: err = %v, want ErrInvalidState", err)
+	}
+	if _, err := r.Close("nao-existe", "mallory", ""); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("unknown id: err = %v, want ErrNotFound", err)
+	}
+	approved := jobIn(t, r, StateApproved) // never delivered: Reject's job, not Close's
+	if _, err := r.Close(approved.JobID, "mallory", ""); !errors.Is(err, ErrInvalidState) {
+		t.Fatalf("close of an APPROVED job: err = %v, want ErrInvalidState", err)
+	}
+	if n := len(linesWith(logs, "fechado por")); n != 1 {
+		t.Errorf("a close that changed nothing must not log (%d lines): %q", n, linesWith(logs, "fechado por"))
+	}
+}
+
+// The operator, the reason, the tenant and the agent come from outside (the request
+// body, the enqueue request): they are logged quoted, so none of them can start a
+// line of its own in the audit trail.
+func TestCloseAuditLineQuotesTheValuesItLogs(t *testing.T) {
+	logs := captureLog(t)
+	r, _ := testReg(t)
+	evil := "x\nremediation: job fake aprovado por \"mallory\""
+	j, err := r.Enqueue(EnqueueRequest{
+		Tenant: evil, AgentID: evil, Type: TypePackagePatch, Payload: json.RawMessage(`{}`), TTL: time.Hour,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.Approve(j.JobID, evil); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := r.Poll(evil, evil); !ok {
+		t.Fatal("poll must deliver the approved job")
+	}
+	start := len(logs.String())
+	if _, err := r.Close(j.JobID, evil, evil); err != nil {
+		t.Fatal(err)
+	}
+	if out := logs.String()[start:]; strings.Count(out, "\n") != 1 {
+		t.Errorf("the audit entry must be ONE line, got: %q", out)
+	}
+}
+
+// reports the late-report tests use: the agent's Result for an applied and a failed run.
+var (
+	appliedRun = Result{Status: "applied", Detail: "KB instalado", Before: "KB5040000", After: "KB5041580", RollbackToken: "rb-0123", RebootPending: true}
+	failedRun  = Result{Status: "failed", Detail: "reboot loop", Before: "KB5040000", After: "KB5040000", RollbackToken: "rb-0456"}
+)
+
+// closedFrom drives a fresh job to st and has an operator close it.
+func closedFrom(t *testing.T, r *Registry, st JobState) *RemediationJob {
+	t.Helper()
+	j := jobIn(t, r, st)
+	if _, err := r.Close(j.JobID, "bob", "teste"); err != nil {
+		t.Fatal(err)
+	}
+	return j
+}
+
+// finalWithResult builds the final jobs that hold the agent's Result, each with the
+// Result it holds.
+var finalWithResult = []struct {
+	name  string
+	res   Result
+	build func(*testing.T, *Registry, Result) *RemediationJob
+}{
+	{"FAILED", failedRun, func(t *testing.T, r *Registry, res Result) *RemediationJob { return reportedJob(t, r, res) }},
+	{"VERIFIED", appliedRun, func(t *testing.T, r *Registry, res Result) *RemediationJob {
+		j := reportedJob(t, r, res)
+		if _, err := r.MarkVerified(j.JobID); err != nil {
+			t.Fatal(err)
+		}
+		return j
+	}},
+	{"CLOSED after APPLIED", appliedRun, func(t *testing.T, r *Registry, res Result) *RemediationJob {
+		j := reportedJob(t, r, res)
+		if _, err := r.Close(j.JobID, "bob", "teste"); err != nil {
+			t.Fatal(err)
+		}
+		return j
+	}},
+	{"CLOSED after FAILED", failedRun, func(t *testing.T, r *Registry, res Result) *RemediationJob {
+		j := reportedJob(t, r, res)
+		if _, err := r.Close(j.JobID, "bob", "teste"); err != nil {
+			t.Fatal(err)
+		}
+		return j
+	}},
+}
+
+// finalWithoutResult builds the final jobs that never got a Result: the agent's
+// report, if one comes now, is the first and only word on what happened to the host.
+var finalWithoutResult = []struct {
+	name  string
+	build func(*testing.T, *Registry) *RemediationJob
+}{
+	{"REJECTED", func(t *testing.T, r *Registry) *RemediationJob { return jobIn(t, r, StateRejected) }},
+	{"EXPIRED", func(t *testing.T, r *Registry) *RemediationJob { return jobIn(t, r, StateExpired) }},
+	{"CLOSED after DELIVERED", func(t *testing.T, r *Registry) *RemediationJob { return closedFrom(t, r, StateDelivered) }},
+	{"CLOSED after ACKED", func(t *testing.T, r *Registry) *RemediationJob { return closedFrom(t, r, StateAcked) }},
+}
+
+// The agent may deliver the same report twice (a retry after a lost answer). On a
+// final job that already holds exactly that result it is an idempotent success: no
+// error, no log, nothing rewritten. The agent's own reported_at does not count — the
+// stored one is the server's stamp.
+func TestLateReportIdenticalToTheStoredOneIsIdempotent(t *testing.T) {
+	for _, tc := range finalWithResult {
+		t.Run(tc.name, func(t *testing.T) {
+			logs := captureLog(t)
+			r, _ := testReg(t)
+			r.now = at(clockBase)
+			j := tc.build(t, r, tc.res)
+			before, _ := r.Get(j.JobID, "win1", "acme")
+			logged := logs.String()
+
+			retry := tc.res
+			retry.ReportedAt = clockBase.Add(time.Hour)
+			r.now = at(clockBase.Add(2 * time.Hour))
+			if err := r.Report(j.JobID, "win1", "acme", &retry); err != nil {
+				t.Fatalf("identical late report: %v", err)
+			}
+			after, _ := r.Get(j.JobID, "win1", "acme")
+			if after.State != before.State {
+				t.Errorf("state %s -> %s", before.State, after.State)
+			}
+			sameResult(t, "stored result", after.Result, tc.res)
+			if !after.Result.ReportedAt.Equal(before.Result.ReportedAt) {
+				t.Errorf("reported_at rewritten: %v -> %v", before.Result.ReportedAt, after.Result.ReportedAt)
+			}
+			if got := logs.String(); got != logged {
+				t.Errorf("an idempotent retry must not log: %q", got[len(logged):])
+			}
+		})
+	}
+}
+
+// Anything else reported on a final job is NOT a retry: the agent says it did
+// something the queue no longer expects (applied a rejected/expired/closed job, or
+// contradicts what it reported before). It is refused (ErrInvalidState), the recorded
+// Result is never overwritten, and ONE audit line tells the operator which job, in
+// which state, got which report. "Else" includes a report that matches the stored one
+// in status and detail but differs in anything else the agent supplied.
+func TestLateReportDifferentFromTheStoredOneIsRefusedAndAudited(t *testing.T) {
+	flip := func(s string) string {
+		if s == "applied" {
+			return "failed"
+		}
+		return "applied"
+	}
+	for _, tc := range finalWithResult {
+		for _, v := range []struct {
+			name string
+			edit func(*Result)
+		}{
+			{"status", func(x *Result) { x.Status = flip(x.Status) }},
+			{"detail", func(x *Result) { x.Detail = "outro-detalhe" }},
+			{"rollback_token", func(x *Result) { x.RollbackToken = "rb-outro" }},
+			{"after", func(x *Result) { x.After = "KB9999999" }},
+		} {
+			t.Run(tc.name+"/"+v.name, func(t *testing.T) {
+				logs := captureLog(t)
+				r, _ := testReg(t)
+				r.now = at(clockBase)
+				j := tc.build(t, r, tc.res)
+				before, _ := r.Get(j.JobID, "win1", "acme")
+				logged := logs.String()
+
+				late := tc.res
+				v.edit(&late)
+				err := r.Report(j.JobID, "win1", "acme", &late)
+				if !errors.Is(err, ErrInvalidState) {
+					t.Fatalf("different late report: err = %v, want ErrInvalidState", err)
+				}
+				after, _ := r.Get(j.JobID, "win1", "acme")
+				if after.State != before.State {
+					t.Errorf("state %s -> %s", before.State, after.State)
+				}
+				sameResult(t, "stored result", after.Result, tc.res)
+				if !after.Result.ReportedAt.Equal(before.Result.ReportedAt) {
+					t.Errorf("reported_at rewritten")
+				}
+
+				out := logs.String()[len(logged):]
+				if strings.Count(out, "\n") != 1 {
+					t.Fatalf("want exactly 1 audit line, got %q", out)
+				}
+				for _, want := range []string{j.JobID, "relatório tardio", string(before.State), `"` + late.Status + `"`, `tenant="acme"`, `agent="win1"`} {
+					if !strings.Contains(out, want) {
+						t.Errorf("the audit line should contain %q: %s", want, out)
+					}
+				}
+				// The agent's free text and the rollback handle stay out of the log.
+				for _, secret := range []string{late.Detail, late.RollbackToken, late.After} {
+					if secret != "" && strings.Contains(out, secret) {
+						t.Errorf("the audit line must not carry the agent's %q: %s", secret, out)
+					}
+				}
+			})
+		}
+	}
+}
+
+// A job that never got a Result and is final (rejected, expired or closed before the
+// agent reported) must not swallow a report: the agent applied — or tried — something
+// the queue had already dropped. Same answer and same single audit line, and the job
+// stays exactly as it was.
+func TestLateReportOnAFinalJobWithoutResultIsRefusedAndAudited(t *testing.T) {
+	for _, tc := range finalWithoutResult {
+		for _, status := range []string{"applied", "failed"} {
+			t.Run(tc.name+"/"+status, func(t *testing.T) {
+				logs := captureLog(t)
+				r, _ := testReg(t)
+				j := tc.build(t, r)
+				before, _ := r.Get(j.JobID, "win1", "acme")
+				logged := logs.String()
+
+				err := r.Report(j.JobID, "win1", "acme", &Result{Status: status, Detail: "x", After: "patched", RollbackToken: "rb-77"})
+				if !errors.Is(err, ErrInvalidState) {
+					t.Fatalf("late report: err = %v, want ErrInvalidState", err)
+				}
+				after, _ := r.Get(j.JobID, "win1", "acme")
+				if after.State != before.State || after.Result != nil {
+					t.Errorf("the refused report changed the job: state %s -> %s, result %+v", before.State, after.State, after.Result)
+				}
+				out := logs.String()[len(logged):]
+				if strings.Count(out, "\n") != 1 {
+					t.Fatalf("want exactly 1 audit line, got %q", out)
+				}
+				for _, want := range []string{j.JobID, "relatório tardio", string(before.State), `"` + status + `"`, `tenant="acme"`, `agent="win1"`} {
+					if !strings.Contains(out, want) {
+						t.Errorf("the audit line should contain %q: %s", want, out)
+					}
+				}
+				if strings.Contains(out, "rb-77") {
+					t.Errorf("the audit line must not carry the rollback handle: %s", out)
+				}
+			})
+		}
+	}
+}
+
+// What the audit line says comes from the agent (the reported status) and from the
+// enqueue request (tenant, agent): all logged quoted, so none starts a line of its own.
+func TestLateReportAuditLineQuotesTheValuesItLogs(t *testing.T) {
+	logs := captureLog(t)
+	r, _ := testReg(t)
+	evil := "x\nremediation: job fake aprovado por \"mallory\""
+	j, err := r.Enqueue(EnqueueRequest{
+		Tenant: evil, AgentID: evil, Type: TypePackagePatch, Payload: json.RawMessage(`{}`), TTL: time.Hour,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Reject(j.JobID, "op"); err != nil {
+		t.Fatal(err)
+	}
+	start := len(logs.String())
+	if err := r.Report(j.JobID, evil, evil, &Result{Status: evil}); !errors.Is(err, ErrInvalidState) {
+		t.Fatalf("err = %v, want ErrInvalidState", err)
+	}
+	if out := logs.String()[start:]; strings.Count(out, "\n") != 1 {
+		t.Errorf("the audit entry must be ONE line, got: %q", out)
+	}
+}
+
+// APPLIED is not final: it keeps the rules it always had. A repeated report is
+// accepted silently — even a contradictory one — and never rewrites the recorded
+// Result or the state.
+func TestReportOnAppliedJobKeepsTheCurrentRules(t *testing.T) {
+	logs := captureLog(t)
+	r, _ := testReg(t)
+	r.now = at(clockBase)
+	j := reportedJob(t, r, appliedRun)
+	logged := logs.String()
+
+	for _, late := range []Result{appliedRun, {Status: "failed", After: "WIPED"}} {
+		if err := r.Report(j.JobID, "win1", "acme", &late); err != nil {
+			t.Fatalf("repeated report on an APPLIED job: %v", err)
+		}
+	}
+	after, _ := r.Get(j.JobID, "win1", "acme")
+	if after.State != StateApplied {
+		t.Errorf("state = %s, want APPLIED", after.State)
+	}
+	sameResult(t, "stored result", after.Result, appliedRun)
+	if got := logs.String(); got != logged {
+		t.Errorf("a repeated report on an APPLIED job must not log: %q", got[len(logged):])
+	}
+}
+
+// A report is scoped to the job's own agent and tenant — whatever the state, the
+// answer to anyone else is "not found" and nothing is audited — and it is only valid
+// after delivery: a job nobody handed out has nothing to report.
+func TestReportOfAForeignOrUndeliveredJobIsNotFound(t *testing.T) {
+	for _, st := range lifecycle {
+		t.Run(string(st), func(t *testing.T) {
+			logs := captureLog(t)
+			r, _ := testReg(t)
+			j := jobIn(t, r, st)
+			before, _ := r.Get(j.JobID, "win1", "acme")
+			logged := logs.String()
+			for _, who := range [][2]string{{"winB", "acme"}, {"win1", "globex"}} {
+				if err := r.Report(j.JobID, who[0], who[1], &Result{Status: "applied"}); !errors.Is(err, ErrNotFound) {
+					t.Errorf("report by %v: err = %v, want ErrNotFound", who, err)
+				}
+			}
+			if st == StatePendingApproval || st == StateApproved {
+				if err := r.Report(j.JobID, "win1", "acme", &Result{Status: "applied"}); !errors.Is(err, ErrNotFound) {
+					t.Errorf("report of a never-delivered %s job: err = %v, want ErrNotFound", st, err)
+				}
+			}
+			after, _ := r.Get(j.JobID, "win1", "acme")
+			if after.State != before.State || (before.Result == nil) != (after.Result == nil) {
+				t.Errorf("a refused report changed the job: %s -> %s", before.State, after.State)
+			}
+			if got := logs.String(); got != logged {
+				t.Errorf("a report that found no job must not log: %q", got[len(logged):])
+			}
+		})
+	}
+}
+
+// CLOSED is final: it never comes back to the agent — a DELIVERED job past the
+// redeliver window would have — and the janitor reaps it like the other final states.
+func TestClosedJobIsFinal(t *testing.T) {
+	r, _ := testReg(t)
+	r.now = at(clockBase)
+	j := jobIn(t, r, StateDelivered)
+	if _, err := r.Close(j.JobID, "bob", ""); err != nil {
+		t.Fatal(err)
+	}
+	r.now = at(clockBase.Add(30 * time.Minute)) // past the redeliver window, inside the TTL
+	if _, ok := r.Poll("win1", "acme"); ok {
+		t.Error("a CLOSED job must not be delivered again")
+	}
+	if got := stateOf(t, r, j.JobID); got != StateClosed {
+		t.Errorf("state after the poll = %s, want CLOSED", got)
+	}
+	r.now = at(clockBase.Add(48 * time.Hour))
+	if n := r.Reap(24 * time.Hour); n != 1 {
+		t.Errorf("reap should drop the old CLOSED job, got %d", n)
+	}
+	if _, ok := r.Get(j.JobID, "win1", "acme"); ok {
+		t.Error("reaped job still present")
 	}
 }
