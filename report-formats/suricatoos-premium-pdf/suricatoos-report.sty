@@ -264,7 +264,19 @@
 % shipped it to a client.
 %
 % Italic sans, `muted', and the ellipsis is the text one — never math.
-\newcommand{\suriTruncMark}[1]{{\suriSans\itshape\color{muted}\textellipsis(+#1)}}
+%
+% The mark sets its WHOLE face, \mdseries included, instead of inheriting the
+% series around it.  In the executive narrative it closes a project name set
+% in \textbf, and with plex-sans loaded [semibold] that is the sb series:
+% italic on top of it asks for sb/it (plxSans-SmBldItalic), which is NOT in
+% plex-min.tar.gz -- the .fd files declare every Plex shape, the tarball ships
+% six faces (FONTS.md), so pdflatex stopped with "Font T1/plxSans-TLF/sb/it
+% ... not loadable: Metric (TFM) file not found".  The same would happen to the
+% mark escape_sliced appends to a field past its cap inside a card title
+% (\suriSB).  The mark is meta-text, not part of the value: it reads the same
+% -- regular italic, muted -- on the cover, the back cover and in the
+% narrative, and Sans regular italic is a face the bundle has.
+\newcommand{\suriTruncMark}[1]{{\suriSans\mdseries\itshape\color{muted}\textellipsis(+#1)}}
 
 % ===========================================================================
 % 3b. Strings that the two glue blocks below print.
