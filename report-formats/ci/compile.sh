@@ -14,8 +14,10 @@
 #            ingles: exercita o caminho do texto do FORNECEDOR com centenas de
 #            achados de nome acentuado.
 #   v*       report-formats/tests/fixtures/*.xml: uma fixture por defeito de
-#            veracidade ja' corrigido (numeracao, indicadores vazios, ...);
-#            o cabecalho de cada uma diz qual. Pequenas: segundos cada.
+#            veracidade ja' corrigido (numeracao, indicadores vazios, ...),
+#            mais a v10-navegacao (caminhos de navegacao que as outras nao
+#            percorrem); o cabecalho de cada uma diz qual. Pequenas: segundos
+#            cada.
 #
 # Para cada fixture:
 #   1. ponta a ponta: `sh ./generate <xml> > generate.pdf`, cwd = bundle montado

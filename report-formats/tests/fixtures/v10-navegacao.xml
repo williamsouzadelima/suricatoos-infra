@@ -1,0 +1,352 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+Fixture SINTETICA do CI de veracidade e de navegacao do Suricatoos Premium PDF
+(report-formats/ci/check-veracity.py e check-navigation.py rodam sobre o .tex
+desta fixture nos 3 idiomas). Enderecos RFC 5737, nomes genericos sob
+.example, OIDs da faixa sintetica 1.3.6.1.4.1.25623.1.0.99xxxx (nao existem no
+feed); nenhum dado de scan real.
+
+Navegacao (marcadores do PDF e pagina de sumario). Pina os caminhos que as
+outras fixtures nao percorrem:
+- a secao 3 em mais de uma pagina: 14 hosts, cada um com o seu marcador (e,
+  acima do limite de 12, o apendice por host sai como frase, sem tabuleiros);
+- um host com 55 portas (192.0.2.15) vira dois cards: so' o PRIMEIRO leva o
+  marcador, o de continuacao repete a faixa sem marcador;
+- um marcador acima do teto de 100 caracteres: o hostname de 198.51.100.21 tem
+  mais de 100 sozinho, e o marcador inteiro (IP, dois espacos, hostname) sai
+  cortado em 100 com reticencia. Rotulos curtos no hostname: na faixa do card
+  a linha quebra nos pontos e hifens, sem sair da margem.
+-->
+<report extension="pdf" content_type="application/pdf" id="00000000-0000-4000-8000-000000000040">
+  <task id="00000000-0000-4000-8000-000000000001">
+    <name>Example Multi-Host Navigation Review</name>
+  </task>
+  <timezone>Coordinated Universal Time</timezone>
+  <timezone_abbrev>UTC</timezone_abbrev>
+  <scan_start>2026-09-01T09:00:00Z</scan_start>
+  <scan_end>2026-09-01T11:00:00Z</scan_end>
+  <result_count>10<full>10</full><filtered>10</filtered><critical><full>0</full><filtered>0</filtered></critical><high><full>1</full><filtered>1</filtered></high><medium><full>5</full><filtered>5</filtered></medium><low><full>3</full><filtered>3</filtered></low><log><full>1</full><filtered>1</filtered></log><false_positive><full>0</full><filtered>0</filtered></false_positive></result_count>
+  <filters id="00000000-0000-4000-8000-000000000002">
+    <term>apply_overrides=0 levels=chmlgf rows=-1 min_qod=1</term>
+  </filters>
+  <ports start="1" max="-1">
+    <port>8000/tcp<host>192.0.2.15</host></port>
+    <port>8001/tcp<host>192.0.2.15</host></port>
+    <port>8002/tcp<host>192.0.2.15</host></port>
+    <port>8003/tcp<host>192.0.2.15</host></port>
+    <port>8004/tcp<host>192.0.2.15</host></port>
+    <port>8005/tcp<host>192.0.2.15</host></port>
+    <port>8006/tcp<host>192.0.2.15</host></port>
+    <port>8007/tcp<host>192.0.2.15</host></port>
+    <port>8008/tcp<host>192.0.2.15</host></port>
+    <port>8009/tcp<host>192.0.2.15</host></port>
+    <port>8010/tcp<host>192.0.2.15</host></port>
+    <port>8011/tcp<host>192.0.2.15</host></port>
+    <port>8012/tcp<host>192.0.2.15</host></port>
+    <port>8013/tcp<host>192.0.2.15</host></port>
+    <port>8014/tcp<host>192.0.2.15</host></port>
+    <port>8015/tcp<host>192.0.2.15</host></port>
+    <port>8016/tcp<host>192.0.2.15</host></port>
+    <port>8017/tcp<host>192.0.2.15</host></port>
+    <port>8018/tcp<host>192.0.2.15</host></port>
+    <port>8019/tcp<host>192.0.2.15</host></port>
+    <port>8020/tcp<host>192.0.2.15</host></port>
+    <port>8021/tcp<host>192.0.2.15</host></port>
+    <port>8022/tcp<host>192.0.2.15</host></port>
+    <port>8023/tcp<host>192.0.2.15</host></port>
+    <port>8024/tcp<host>192.0.2.15</host></port>
+    <port>8025/tcp<host>192.0.2.15</host></port>
+    <port>8026/tcp<host>192.0.2.15</host></port>
+    <port>8027/tcp<host>192.0.2.15</host></port>
+    <port>8028/tcp<host>192.0.2.15</host></port>
+    <port>8029/tcp<host>192.0.2.15</host></port>
+    <port>8030/tcp<host>192.0.2.15</host></port>
+    <port>8031/tcp<host>192.0.2.15</host></port>
+    <port>8032/tcp<host>192.0.2.15</host></port>
+    <port>8033/tcp<host>192.0.2.15</host></port>
+    <port>8034/tcp<host>192.0.2.15</host></port>
+    <port>8035/tcp<host>192.0.2.15</host></port>
+    <port>8036/tcp<host>192.0.2.15</host></port>
+    <port>8037/tcp<host>192.0.2.15</host></port>
+    <port>8038/tcp<host>192.0.2.15</host></port>
+    <port>8039/tcp<host>192.0.2.15</host></port>
+    <port>8040/tcp<host>192.0.2.15</host></port>
+    <port>8041/tcp<host>192.0.2.15</host></port>
+    <port>8042/tcp<host>192.0.2.15</host></port>
+    <port>8043/tcp<host>192.0.2.15</host></port>
+    <port>8044/tcp<host>192.0.2.15</host></port>
+    <port>8045/tcp<host>192.0.2.15</host></port>
+    <port>8046/tcp<host>192.0.2.15</host></port>
+    <port>8047/tcp<host>192.0.2.15</host></port>
+    <port>8048/tcp<host>192.0.2.15</host></port>
+    <port>8049/tcp<host>192.0.2.15</host></port>
+    <port>8050/tcp<host>192.0.2.15</host></port>
+    <port>8051/tcp<host>192.0.2.15</host></port>
+    <port>8052/tcp<host>192.0.2.15</host></port>
+    <port>8053/tcp<host>192.0.2.15</host></port>
+    <port>8054/tcp<host>192.0.2.15</host></port>
+    <port>80/tcp<host>203.0.113.30</host></port>
+  </ports>
+  <host>
+    <ip>192.0.2.10</ip>
+    <start>2026-09-01T09:01:00Z</start>
+    <end>2026-09-01T10:59:00Z</end>
+    <detail><name>hostname</name><value>web01.example.com</value></detail>
+    <detail><name>best_os_txt</name><value>Linux Kernel</value></detail>
+  </host>
+  <host>
+    <ip>192.0.2.11</ip>
+    <start>2026-09-01T09:01:00Z</start>
+    <end>2026-09-01T10:59:00Z</end>
+    <detail><name>hostname</name><value>web02.example.com</value></detail>
+    <detail><name>best_os_txt</name><value>Linux Kernel</value></detail>
+  </host>
+  <host>
+    <ip>192.0.2.12</ip>
+    <start>2026-09-01T09:01:00Z</start>
+    <end>2026-09-01T10:59:00Z</end>
+    <detail><name>hostname</name><value>web03.example.com</value></detail>
+  </host>
+  <host>
+    <ip>192.0.2.13</ip>
+    <start>2026-09-01T09:01:00Z</start>
+    <end>2026-09-01T10:59:00Z</end>
+    <detail><name>hostname</name><value>web04.example.com</value></detail>
+    <detail><name>best_os_txt</name><value>Linux Kernel</value></detail>
+  </host>
+  <host>
+    <ip>192.0.2.14</ip>
+    <start>2026-09-01T09:01:00Z</start>
+    <end>2026-09-01T10:59:00Z</end>
+    <detail><name>hostname</name><value>web05.example.com</value></detail>
+  </host>
+  <host>
+    <ip>192.0.2.15</ip>
+    <start>2026-09-01T09:01:00Z</start>
+    <end>2026-09-01T10:59:00Z</end>
+    <detail><name>hostname</name><value>build01.example.com</value></detail>
+    <detail><name>best_os_txt</name><value>Linux Kernel</value></detail>
+  </host>
+  <host>
+    <ip>192.0.2.16</ip>
+    <start>2026-09-01T09:01:00Z</start>
+    <end>2026-09-01T10:59:00Z</end>
+    <detail><name>hostname</name><value>ssh01.example.com</value></detail>
+  </host>
+  <host>
+    <ip>192.0.2.17</ip>
+    <start>2026-09-01T09:01:00Z</start>
+    <end>2026-09-01T10:59:00Z</end>
+    <detail><name>hostname</name><value>ssh02.example.com</value></detail>
+    <detail><name>best_os_txt</name><value>Linux Kernel</value></detail>
+  </host>
+  <host>
+    <ip>192.0.2.18</ip>
+    <start>2026-09-01T09:01:00Z</start>
+    <end>2026-09-01T10:59:00Z</end>
+    <detail><name>hostname</name><value>inv01.example.com</value></detail>
+  </host>
+  <host>
+    <ip>192.0.2.19</ip>
+    <start>2026-09-01T09:01:00Z</start>
+    <end>2026-09-01T10:59:00Z</end>
+    <detail><name>hostname</name><value>idle01.example.com</value></detail>
+  </host>
+  <host>
+    <ip>198.51.100.20</ip>
+    <start>2026-09-01T09:01:00Z</start>
+    <end>2026-09-01T10:59:00Z</end>
+    <detail><name>hostname</name><value>ssh03.example.com</value></detail>
+  </host>
+  <host>
+    <ip>198.51.100.21</ip>
+    <start>2026-09-01T09:01:00Z</start>
+    <end>2026-09-01T10:59:00Z</end>
+    <detail><name>hostname</name><value>srv-app07.fin-ctrl.orc-anual.legado-b.replica-2.leitura.zona-norte.dc-02.sala-3.rack-12.lamina-4.vm-31.example</value></detail>
+    <detail><name>best_os_txt</name><value>Linux Kernel</value></detail>
+  </host>
+  <host>
+    <ip>198.51.100.22</ip>
+    <start>2026-09-01T09:01:00Z</start>
+    <end>2026-09-01T10:59:00Z</end>
+    <detail><name>hostname</name><value>idle02.example.com</value></detail>
+  </host>
+  <host>
+    <ip>203.0.113.30</ip>
+    <start>2026-09-01T09:01:00Z</start>
+    <end>2026-09-01T10:59:00Z</end>
+    <detail><name>hostname</name><value>edge01.example.com</value></detail>
+  </host>
+  <results start="1" max="-1">
+    <result id="v-0001">
+      <host>192.0.2.10<hostname>web01.example.com</hostname></host>
+      <port>443/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.990100">
+        <type>nvt</type>
+        <name>Example Web Server Missing Security Headers</name>
+        <family>Synthetic</family>
+        <cvss_base>5.3</cvss_base>
+        <tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags>
+        <solution type="Mitigation">Apply the configuration change described by the vendor.</solution>
+        <refs></refs>
+      </nvt>
+      <threat>Medium</threat>
+      <severity>5.3</severity>
+      <qod><value>97</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Web Server Missing Security Headers.</description>
+    </result>
+    <result id="v-0002">
+      <host>192.0.2.11<hostname>web02.example.com</hostname></host>
+      <port>443/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.990100">
+        <type>nvt</type>
+        <name>Example Web Server Missing Security Headers</name>
+        <family>Synthetic</family>
+        <cvss_base>5.3</cvss_base>
+        <tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags>
+        <solution type="Mitigation">Apply the configuration change described by the vendor.</solution>
+        <refs></refs>
+      </nvt>
+      <threat>Medium</threat>
+      <severity>5.3</severity>
+      <qod><value>97</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Web Server Missing Security Headers.</description>
+    </result>
+    <result id="v-0003">
+      <host>192.0.2.12<hostname>web03.example.com</hostname></host>
+      <port>443/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.990100">
+        <type>nvt</type>
+        <name>Example Web Server Missing Security Headers</name>
+        <family>Synthetic</family>
+        <cvss_base>5.3</cvss_base>
+        <tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags>
+        <solution type="Mitigation">Apply the configuration change described by the vendor.</solution>
+        <refs></refs>
+      </nvt>
+      <threat>Medium</threat>
+      <severity>5.3</severity>
+      <qod><value>97</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Web Server Missing Security Headers.</description>
+    </result>
+    <result id="v-0004">
+      <host>192.0.2.13<hostname>web04.example.com</hostname></host>
+      <port>443/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.990100">
+        <type>nvt</type>
+        <name>Example Web Server Missing Security Headers</name>
+        <family>Synthetic</family>
+        <cvss_base>5.3</cvss_base>
+        <tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags>
+        <solution type="Mitigation">Apply the configuration change described by the vendor.</solution>
+        <refs></refs>
+      </nvt>
+      <threat>Medium</threat>
+      <severity>5.3</severity>
+      <qod><value>97</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Web Server Missing Security Headers.</description>
+    </result>
+    <result id="v-0005">
+      <host>192.0.2.14<hostname>web05.example.com</hostname></host>
+      <port>443/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.990100">
+        <type>nvt</type>
+        <name>Example Web Server Missing Security Headers</name>
+        <family>Synthetic</family>
+        <cvss_base>5.3</cvss_base>
+        <tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags>
+        <solution type="Mitigation">Apply the configuration change described by the vendor.</solution>
+        <refs></refs>
+      </nvt>
+      <threat>Medium</threat>
+      <severity>5.3</severity>
+      <qod><value>97</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Web Server Missing Security Headers.</description>
+    </result>
+    <result id="v-0006">
+      <host>192.0.2.16<hostname>ssh01.example.com</hostname></host>
+      <port>22/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.990101">
+        <type>nvt</type>
+        <name>Example SSH Server Banner Disclosure</name>
+        <family>Synthetic</family>
+        <cvss_base>2.6</cvss_base>
+        <tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags>
+        <solution type="Mitigation">Apply the configuration change described by the vendor.</solution>
+        <refs></refs>
+      </nvt>
+      <threat>Low</threat>
+      <severity>2.6</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example SSH Server Banner Disclosure.</description>
+    </result>
+    <result id="v-0007">
+      <host>192.0.2.17<hostname>ssh02.example.com</hostname></host>
+      <port>22/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.990101">
+        <type>nvt</type>
+        <name>Example SSH Server Banner Disclosure</name>
+        <family>Synthetic</family>
+        <cvss_base>2.6</cvss_base>
+        <tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags>
+        <solution type="Mitigation">Apply the configuration change described by the vendor.</solution>
+        <refs></refs>
+      </nvt>
+      <threat>Low</threat>
+      <severity>2.6</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example SSH Server Banner Disclosure.</description>
+    </result>
+    <result id="v-0008">
+      <host>198.51.100.20<hostname>ssh03.example.com</hostname></host>
+      <port>22/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.990101">
+        <type>nvt</type>
+        <name>Example SSH Server Banner Disclosure</name>
+        <family>Synthetic</family>
+        <cvss_base>2.6</cvss_base>
+        <tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags>
+        <solution type="Mitigation">Apply the configuration change described by the vendor.</solution>
+        <refs></refs>
+      </nvt>
+      <threat>Low</threat>
+      <severity>2.6</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example SSH Server Banner Disclosure.</description>
+    </result>
+    <result id="v-0009">
+      <host>198.51.100.21<hostname>srv-app07.fin-ctrl.orc-anual.legado-b.replica-2.leitura.zona-norte.dc-02.sala-3.rack-12.lamina-4.vm-31.example</hostname></host>
+      <port>8443/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.990102">
+        <type>nvt</type>
+        <name>Example Remote Management Interface Exposed</name>
+        <family>Synthetic</family>
+        <cvss_base>7.5</cvss_base>
+        <tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags>
+        <solution type="Mitigation">Apply the configuration change described by the vendor.</solution>
+        <refs></refs>
+      </nvt>
+      <threat>High</threat>
+      <severity>7.5</severity>
+      <qod><value>95</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Remote Management Interface Exposed.</description>
+    </result>
+    <result id="v-0010">
+      <host>192.0.2.18<hostname>inv01.example.com</hostname></host>
+      <port>general/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.990103">
+        <type>nvt</type>
+        <name>Example Operating System Inventory</name>
+        <family>Synthetic</family>
+        <cvss_base>0.0</cvss_base>
+        <tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags>
+        <solution type="Mitigation">Apply the configuration change described by the vendor.</solution>
+        <refs></refs>
+      </nvt>
+      <threat>Log</threat>
+      <severity>0.0</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Operating System Inventory.</description>
+    </result>
+  </results>
+</report>

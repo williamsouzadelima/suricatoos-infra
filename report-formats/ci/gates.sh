@@ -99,11 +99,12 @@ overfull_baseline() {
     pt_BR/tortura) echo 0 ;;
     es/tortura)    echo 0 ;;
     # Fixtures de veracidade (report-formats/tests/fixtures/), nos 3 idiomas:
-    # nascem com 0, a mesma regua das outras.
+    # nascem com 0, a mesma regua das outras. v10-navegacao (secao 3 em varias
+    # paginas, host em dois cards, marcador acima do teto) tambem.
     */v1-numeracao | */v2-indicadores-vazios | */v3-consolidado-qod | \
     */v4-instancias | */v5-acao-traduzida | */v6-vulns-unicas | \
     */v7a-faixas | */v7b-lowconf | */v7c-todos-lowconf | \
-    */v8-ancora | */v9-nome-capa) echo 0 ;;
+    */v8-ancora | */v9-nome-capa | */v10-navegacao) echo 0 ;;
     *) return 1 ;;
   esac
 }
