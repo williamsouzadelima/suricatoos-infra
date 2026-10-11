@@ -743,6 +743,86 @@ func TestOperatorRoutesRefuseBlankOperatorAndRecordItTrimmed(t *testing.T) {
 	}
 }
 
+// What the routes answer for a job that went final: the agent's ack is a quiet 204 that
+// changes nothing; the operator's approve of a REJECTED or CLOSED job and verify of a
+// CLOSED one are 409s that leave the job alone.
+func TestRoutesOnRejectedAndClosedJobs(t *testing.T) {
+	srv, reg, _ := testService(t)
+	defer srv.Close()
+	closed := closedFrom(t, reg, StateApplied)
+	rejected := jobIn(t, reg, StateRejected)
+
+	operator := func(action, id, body string) int {
+		t.Helper()
+		resp := adminReq(t, "POST", srv.URL+"/api/v1/remediation/jobs/"+id+"/"+action, body, "")
+		resp.Body.Close()
+		return resp.StatusCode
+	}
+	if code := operator("approve", closed.JobID, `{"approved_by":"mallory"}`); code != http.StatusConflict {
+		t.Errorf("approve of a CLOSED job = %d, want 409", code)
+	}
+	if code := operator("approve", rejected.JobID, `{"approved_by":"mallory"}`); code != http.StatusConflict {
+		t.Errorf("approve of a REJECTED job = %d, want 409", code)
+	}
+	if code := operator("verified", closed.JobID, `{"verified_by":"mallory"}`); code != http.StatusConflict {
+		t.Errorf("verified of a CLOSED job = %d, want 409", code)
+	}
+	resp := agentReq(t, "POST", srv.URL+"/v1/remediation-jobs/"+closed.JobID+"/ack", "win1", "acme", "")
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent {
+		t.Errorf("ack of a CLOSED job = %d, want 204", resp.StatusCode)
+	}
+
+	if got, _ := reg.Get(closed.JobID, "win1", "acme"); got.State != StateClosed || got.ApprovedBy != "op" {
+		t.Errorf("the CLOSED job changed: state=%s approved_by=%q", got.State, got.ApprovedBy)
+	}
+	if got, _ := reg.Get(rejected.JobID, "win1", "acme"); got.State != StateRejected || got.ApprovedBy != "" {
+		t.Errorf("the REJECTED job changed: state=%s approved_by=%q", got.State, got.ApprovedBy)
+	}
+}
+
+// Every audit line quotes what comes from outside, tenant and agent included — the
+// approve and verify lines too, which used to print them raw. A hostile tenant or agent
+// name (the operator sets both at enqueue) must not start a line of its own.
+func TestApproveAndVerifiedAuditLinesQuoteTenantAndAgent(t *testing.T) {
+	srv, reg, _ := testService(t)
+	defer srv.Close()
+	logs := captureLog(t)
+	evil := "x\nremediation: job fake aprovado por \"mallory\""
+	j, err := reg.Enqueue(EnqueueRequest{
+		Tenant: evil, AgentID: evil, Type: TypePackagePatch, Payload: json.RawMessage(`{}`), TTL: time.Hour,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	start := len(logs.String())
+	resp := adminReq(t, "POST", srv.URL+"/api/v1/remediation/jobs/"+j.JobID+"/approve", `{"approved_by":"alice"}`, "")
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("approve = %d, want 200", resp.StatusCode)
+	}
+	if out := logs.String()[start:]; strings.Count(out, "\n") != 1 || !strings.Contains(out, `aprovado por "alice"`) {
+		t.Errorf("the approve audit entry must be ONE line naming the approver, got: %q", out)
+	}
+
+	if _, ok := reg.Poll(evil, evil); !ok {
+		t.Fatal("poll must deliver the approved job")
+	}
+	if err := reg.Report(j.JobID, evil, evil, &Result{Status: "applied"}); err != nil {
+		t.Fatal(err)
+	}
+	start = len(logs.String())
+	resp = adminReq(t, "POST", srv.URL+"/api/v1/remediation/jobs/"+j.JobID+"/verified", `{"verified_by":"alice"}`, "")
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("verified = %d, want 200", resp.StatusCode)
+	}
+	if out := logs.String()[start:]; strings.Count(out, "\n") != 1 || !strings.Contains(out, `verificado por "alice"`) {
+		t.Errorf("the verified audit entry must be ONE line naming the verifier, got: %q", out)
+	}
+}
+
 // The close route is an operator route like the others: it answers 401 to anyone
 // without the admin bearer (none, empty or wrong), and to everyone when the server has
 // no admin secret configured at all (an empty secret closes the route, it does not
@@ -815,6 +895,45 @@ func TestCloseRouteNeedsTheOperator(t *testing.T) {
 				t.Errorf("a refused close changed the job to %s", got)
 			}
 		})
+	}
+}
+
+// The reason is capped at 1 KiB so the audit line stays sane: counted in bytes, after
+// trimming (padding does not count); a longer one is a 400 that leaves the job alone,
+// and exactly 1024 bytes goes through.
+func TestCloseRouteCapsTheReasonAtOneKiB(t *testing.T) {
+	srv, reg, _ := testService(t)
+	defer srv.Close()
+	j := jobIn(t, reg, StateAcked)
+	post := func(reason string) int {
+		t.Helper()
+		body, err := json.Marshal(map[string]string{"closed_by": "alice", "reason": reason})
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp := adminReq(t, "POST", srv.URL+"/api/v1/remediation/jobs/"+j.JobID+"/close", string(body), "")
+		resp.Body.Close()
+		return resp.StatusCode
+	}
+	for _, tc := range []struct{ name, reason string }{
+		{"1025 bytes", strings.Repeat("x", 1025)},
+		{"multibyte: 513 × 2 bytes", strings.Repeat("é", 513)},
+		{"huge", strings.Repeat("x", 50<<10)},
+	} {
+		if code := post(tc.reason); code != http.StatusBadRequest {
+			t.Errorf("close with a %s reason = %d, want 400", tc.name, code)
+		}
+		if got := stateOf(t, reg, j.JobID); got != StateAcked {
+			t.Fatalf("a refused close (%s) changed the job to %s", tc.name, got)
+		}
+	}
+	// Padding is trimmed before the cap is applied: 1024 bytes of reason in 1100 of body.
+	padded := "   " + strings.Repeat("x", 1024) + strings.Repeat(" ", 73)
+	if code := post(padded); code != http.StatusOK {
+		t.Fatalf("close with exactly 1024 bytes of reason (padded) = %d, want 200", code)
+	}
+	if got, _ := reg.Get(j.JobID, "win1", "acme"); got.State != StateClosed || len(got.ClosedReason) != 1024 {
+		t.Errorf("state=%s reason=%d bytes, want CLOSED with the whole 1024-byte reason", got.State, len(got.ClosedReason))
 	}
 }
 
@@ -1014,9 +1133,10 @@ func TestOperatorWritesThatFailAreServerErrors(t *testing.T) {
 }
 
 // What the agent hears about a report that comes after the queue gave up on the job:
-// a final job it never reported on, or a report that differs from the one on record,
-// is a 409 (and one audit line for the operator); an exact retry is a quiet 204; a
-// job nobody delivered, or someone else's, is a 404.
+// a job it was handed that went final without its report, or a report that differs from
+// the one on record, is a 409 (and one audit line for the operator); an exact retry is a
+// quiet 204; a job the agent was never handed is a 404 with a log line of its own, and
+// somebody else's job a 404 with none.
 func TestReportRouteAnswersALateReportHonestly(t *testing.T) {
 	srv, reg, _ := testService(t)
 	defer srv.Close()
@@ -1039,22 +1159,22 @@ func TestReportRouteAnswersALateReportHonestly(t *testing.T) {
 	rejected := jobIn(t, reg, StateRejected)
 	approved := jobIn(t, reg, StateApproved)
 
-	// The agent applied a job the operator had already rejected (or closed).
-	for name, j := range map[string]*RemediationJob{"REJECTED": rejected, "CLOSED": closed} {
+	// The agent applied a job the operator had already closed.
+	{
 		before := len(linesWith(logs, "relatório tardio"))
-		code, raw := report("win1", j.JobID, `{"status":"applied","after":"patched","rollback_token":"rb-77"}`)
+		code, raw := report("win1", closed.JobID, `{"status":"applied","after":"patched","rollback_token":"rb-77"}`)
 		if code != http.StatusConflict {
-			t.Errorf("late report on a %s job = %d, want 409 (%s)", name, code, raw)
+			t.Errorf("late report on a CLOSED job = %d, want 409 (%s)", code, raw)
 		}
 		if strings.Contains(raw, "rb-77") {
 			t.Errorf("the answer must not echo the agent's rollback handle: %s", raw)
 		}
 		lines := linesWith(logs, "relatório tardio")
-		if len(lines) != before+1 || !strings.Contains(lines[len(lines)-1], j.JobID) {
-			t.Errorf("a late report on a %s job should leave one audit line naming it, got %q", name, lines)
+		if len(lines) != before+1 || !strings.Contains(lines[len(lines)-1], closed.JobID) {
+			t.Errorf("a late report on a CLOSED job should leave one audit line naming it, got %q", lines)
 		}
-		if got, _ := reg.Get(j.JobID, "win1", "acme"); got.Result != nil {
-			t.Errorf("a refused report stored a result on the %s job: %+v", name, got.Result)
+		if got, _ := reg.Get(closed.JobID, "win1", "acme"); got.Result != nil {
+			t.Errorf("a refused report stored a result on the CLOSED job: %+v", got.Result)
 		}
 	}
 
@@ -1088,16 +1208,29 @@ func TestReportRouteAnswersALateReportHonestly(t *testing.T) {
 		t.Errorf("the contradicting report must leave the APPLIED job as it was and be kept: state=%s result=%+v kept=%+v", got.State, got.Result, got.LateReports)
 	}
 
-	// Never delivered, or somebody else's → 404, nothing audited.
+	// Somebody else's job → 404 and not a word in the log.
 	logged = logs.String()
-	if code, _ := report("win1", approved.JobID, `{"status":"applied"}`); code != http.StatusNotFound {
-		t.Errorf("report of a never-delivered job = %d, want 404", code)
-	}
 	if code, _ := report("winB", rejected.JobID, `{"status":"applied"}`); code != http.StatusNotFound {
 		t.Errorf("report by another agent = %d, want 404", code)
 	}
 	if got := logs.String(); got != logged {
-		t.Errorf("a report that found no job must not log: %q", got[len(logged):])
+		t.Errorf("a report by somebody else's agent must not log: %q", got[len(logged):])
+	}
+
+	// A job the agent was never handed (rejected before the poll, or still approved) →
+	// 404, one "nunca entregue" line each, and nothing kept.
+	for name, j := range map[string]*RemediationJob{"REJECTED": rejected, "APPROVED": approved} {
+		before := len(linesWith(logs, "relatório de job nunca entregue"))
+		if code, raw := report("win1", j.JobID, `{"status":"applied","rollback_token":"rb-55"}`); code != http.StatusNotFound {
+			t.Errorf("report of a never-delivered %s job = %d, want 404 (%s)", name, code, raw)
+		}
+		lines := linesWith(logs, "relatório de job nunca entregue")
+		if len(lines) != before+1 || !strings.Contains(lines[len(lines)-1], j.JobID) {
+			t.Errorf("a report on a never-delivered %s job should leave one line naming it, got %q", name, lines)
+		}
+		if got, _ := reg.Get(j.JobID, "win1", "acme"); got.Result != nil || len(got.LateReports) != 0 {
+			t.Errorf("the %s job kept something from a report it should never have had: %+v %+v", name, got.Result, got.LateReports)
+		}
 	}
 }
 
@@ -1272,6 +1405,41 @@ func TestOperatorSeesTheRefusedLateReports(t *testing.T) {
 	}
 	if got := closedAnswer.Job; got.LateReportsTotal != 1 || len(got.LateReports) != 1 || got.LateReports[0].RollbackToken != "rb-88" {
 		t.Errorf("the close answer should carry the refused report: %+v", got)
+	}
+}
+
+// The agent that sends the same refused report again (a retry) hears exactly the same
+// 409 — it names the kept report — and neither the job nor the log grows.
+func TestRepeatedLateReportGetsTheSame409OverHTTP(t *testing.T) {
+	srv, reg, _ := testService(t)
+	defer srv.Close()
+	logs := captureLog(t)
+	closed := closedFrom(t, reg, StateDelivered)
+	post := func() (int, string) {
+		t.Helper()
+		resp := agentReq(t, "POST", srv.URL+"/v1/remediation-jobs/"+closed.JobID+"/report", "win1", "acme",
+			`{"status":"applied","before":"v1","after":"v2","rollback_token":"rb-77"}`)
+		defer resp.Body.Close()
+		raw, err := io.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return resp.StatusCode, string(raw)
+	}
+	code1, first := post()
+	if code1 != http.StatusConflict || !strings.Contains(first, "late_report #1") {
+		t.Fatalf("first refusal = %d %q, want 409 naming late_report #1", code1, first)
+	}
+	logged := logs.String()
+	code2, second := post()
+	if code2 != http.StatusConflict || second != first {
+		t.Errorf("the repeat should get the very same 409: %d %q, first was %q", code2, second, first)
+	}
+	if got := logs.String(); got != logged {
+		t.Errorf("a repeated report must not log: %q", got[len(logged):])
+	}
+	if got, _ := reg.Get(closed.JobID, "win1", "acme"); got.LateReportsTotal != 1 || len(got.LateReports) != 1 {
+		t.Errorf("a repeat must not be kept again: total=%d kept=%d", got.LateReportsTotal, len(got.LateReports))
 	}
 }
 

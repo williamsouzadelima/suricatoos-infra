@@ -236,7 +236,7 @@ func (s *Service) ApproveHandler() http.HandlerFunc {
 			writeJSON(w, http.StatusConflict, map[string]any{"error": err.Error()})
 			return
 		}
-		log.Printf("remediation: job %s aprovado por %q (tenant=%s agent=%s)", job.JobID, approver, job.Tenant, job.AgentID)
+		log.Printf("remediation: job %s aprovado por %q (tenant=%q agent=%q)", job.JobID, approver, job.Tenant, job.AgentID)
 		writeJSON(w, http.StatusOK, map[string]any{"job": job})
 	}
 }
@@ -312,7 +312,12 @@ func (s *Service) CloseHandler() http.HandlerFunc {
 			http.Error(w, "operador obrigatório (X-Operator ou closed_by)", http.StatusBadRequest)
 			return
 		}
-		job, err := s.reg.Close(jobID, closer, strings.TrimSpace(body.Reason))
+		reason := strings.TrimSpace(body.Reason)
+		if len(reason) > maxCloseReason {
+			http.Error(w, "motivo deve ter no máximo "+strconv.Itoa(maxCloseReason)+" bytes", http.StatusBadRequest)
+			return
+		}
+		job, err := s.reg.Close(jobID, closer, reason)
 		switch {
 		case err == nil:
 			writeJSON(w, http.StatusOK, map[string]any{"job": newJobView(job)})
@@ -351,7 +356,7 @@ func (s *Service) VerifiedHandler() http.HandlerFunc {
 		job, err := s.reg.MarkVerified(jobID)
 		switch {
 		case err == nil:
-			log.Printf("remediation: job %s verificado por %q (tenant=%s agent=%s)", job.JobID, verifier, job.Tenant, job.AgentID)
+			log.Printf("remediation: job %s verificado por %q (tenant=%q agent=%q)", job.JobID, verifier, job.Tenant, job.AgentID)
 			writeJSON(w, http.StatusOK, map[string]any{"job": newJobView(job)})
 		case errors.Is(err, ErrNotFound):
 			http.Error(w, "not found", http.StatusNotFound)
@@ -405,12 +410,13 @@ func (s *Service) ListHandler() http.HandlerFunc {
 	}
 }
 
-// jobView is what the status routes (list, verified) expose of a job: a compact,
+// jobView is what the status routes (list, close, verified) expose of a job: a compact,
 // technical summary, as an explicit allow-list (a field added to RemediationJob later
-// is NOT exposed by default). The payload (payload_sha256 identifies it) and the
-// nonce are left out to keep the listing small and technical — NOT as a
-// confidentiality boundary: the bearer holder already gets the payload in the
-// enqueue/approve responses, and the agent's result (detail/before/after) may repeat
+// is NOT exposed by default — which is why rejected_*, closed_* and late_reports are
+// listed below by name). The payload (payload_sha256 identifies it) and the nonce are
+// left out to keep the listing small and technical — NOT as a confidentiality boundary:
+// the bearer holder already gets the payload in the enqueue/approve responses, and the
+// agent's result and late reports (detail/before/after/rollback_token) may repeat
 // technical values from it. The signature is public by nature. Unset timestamps are
 // omitted (omitzero) rather than printed as year 1.
 type jobView struct {
@@ -437,9 +443,10 @@ type jobView struct {
 	AckedAt       time.Time `json:"acked_at,omitzero"`
 	Result        *Result   `json:"result,omitempty"` // the agent's report (status/detail/before/after/rollback_token)
 	// Reports the queue refused (409) because the job was final, or APPLIED with a
-	// different result: the last three, whole — rollback_token included, for the manual
-	// revert — and how many were ever refused (the newest kept is #late_reports_total,
-	// the number in the audit line's "late_report #n"). Omitted when there are none.
+	// different result, kept whole — rollback_token included, for the manual revert: the
+	// FIRST one (#1, pinned) and the two most recent. late_reports_total counts the ones
+	// stored (the newest kept is #late_reports_total, the number in the audit line's
+	// "late_report #n"). Omitted when there are none.
 	LateReports      []Result `json:"late_reports,omitempty"`
 	LateReportsTotal int      `json:"late_reports_total,omitempty"`
 }

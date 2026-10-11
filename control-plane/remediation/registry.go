@@ -10,6 +10,7 @@ import (
 	"log"
 	"os"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 )
@@ -95,9 +96,11 @@ func requiresSignature(s JobState) bool {
 // defaultReapRetention is how long terminal jobs are kept before Reap drops them.
 const defaultReapRetention = 7 * 24 * time.Hour
 
-// Reap removes terminal jobs older than retention (by CreatedAt), bounding the
-// queue file's growth, and returns the count removed. Called opportunistically
-// from Enqueue; the wiring may also call it on a timer.
+// Reap removes terminal jobs whose last event is older than retention — the last of the
+// job's creation, rejection, closure, result and refused reports, see lastEventAt, so
+// that closing an old job or a late report restarts the clock — bounding the queue
+// file's growth, and returns the count removed. Called opportunistically from Enqueue;
+// the wiring may also call it on a timer.
 //
 // Only TERMINAL states go (VERIFIED, FAILED, EXPIRED, REJECTED, CLOSED). ACKED and
 // APPLIED are not terminal and, since Poll no longer expires them by ExpiresAt,
@@ -118,8 +121,8 @@ func (r *Registry) Reap(retention time.Duration) int {
 	return n
 }
 
-// reapLocked deletes terminal jobs older than retention (caller holds the lock,
-// caller persists). Returns the count removed.
+// reapLocked deletes terminal jobs whose last event (see lastEventAt) is older than
+// retention (caller holds the lock, caller persists). Returns the count removed.
 func (r *Registry) reapLocked(retention time.Duration) int {
 	if retention <= 0 {
 		retention = defaultReapRetention
@@ -127,7 +130,7 @@ func (r *Registry) reapLocked(retention time.Duration) int {
 	cutoff := r.now().Add(-retention)
 	n := 0
 	for id, j := range r.jobs {
-		if j.State.terminal() && j.CreatedAt.Before(cutoff) {
+		if j.State.terminal() && j.lastEventAt().Before(cutoff) {
 			delete(r.jobs, id)
 			n++
 		}
@@ -205,7 +208,7 @@ func (r *Registry) Enqueue(req EnqueueRequest) (*RemediationJob, error) {
 // job to APPROVED — the first state in which it is deliverable. Only a job in
 // PENDING_APPROVAL can be approved.
 func (r *Registry) Approve(jobID, approver string) (*RemediationJob, error) {
-	if approver == "" {
+	if blank(approver) {
 		return nil, fmt.Errorf("aprovador obrigatório")
 	}
 	r.mu.Lock()
@@ -249,6 +252,9 @@ func (r *Registry) Approve(jobID, approver string) (*RemediationJob, error) {
 // ErrNotFound. A write that fails undoes the change in memory (as Approve does) and
 // returns the error. Every effective rejection writes ONE audit line, values quoted.
 func (r *Registry) Reject(jobID, rejecter string) error {
+	if blank(rejecter) {
+		return fmt.Errorf("operador obrigatório")
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	j, ok := r.jobs[jobID]
@@ -259,7 +265,11 @@ func (r *Registry) Reject(jobID, rejecter string) error {
 		return nil
 	}
 	if j.State != StatePendingApproval && j.State != StateApproved {
-		return fmt.Errorf("%w: job %s não pode ser rejeitado em %s (só PENDING_APPROVAL ou APPROVED; um job já entregue ao agente se fecha com close)", ErrInvalidState, jobID, j.State)
+		hint := "" // suggest close only where close would work
+		if closable(j.State) {
+			hint = "; um job já entregue ao agente se fecha com close"
+		}
+		return fmt.Errorf("%w: job %s não pode ser rejeitado em %s (só PENDING_APPROVAL ou APPROVED%s)", ErrInvalidState, jobID, j.State, hint)
 	}
 	prevState := j.State
 	j.State = StateRejected
@@ -273,6 +283,10 @@ func (r *Registry) Reject(jobID, rejecter string) error {
 		jobID, rejecter, prevState, j.ApprovedBy, whenOrDash(j.ApprovedAt), j.Tenant, j.AgentID)
 	return nil
 }
+
+// maxCloseReason caps the reason given to Close, in bytes: it goes into the audit line and
+// onto the job, so a longer one is refused instead of bloating either.
+const maxCloseReason = 1024
 
 // Close takes a job the agent has already received out of the queue without saying
 // anything untrue about it: a DELIVERED, ACKED, APPLIED or FAILED job becomes CLOSED,
@@ -288,8 +302,11 @@ func (r *Registry) Reject(jobID, rejecter string) error {
 // that fails undoes the change in memory (as Approve does) and returns the error.
 // Every effective close writes ONE audit line, values quoted.
 func (r *Registry) Close(jobID, closer, reason string) (*RemediationJob, error) {
-	if closer == "" {
+	if blank(closer) {
 		return nil, fmt.Errorf("operador obrigatório")
+	}
+	if len(reason) > maxCloseReason {
+		return nil, fmt.Errorf("motivo muito longo (%d bytes; no máximo %d)", len(reason), maxCloseReason)
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -297,9 +314,7 @@ func (r *Registry) Close(jobID, closer, reason string) (*RemediationJob, error) 
 	if !ok {
 		return nil, ErrNotFound
 	}
-	switch j.State {
-	case StateDelivered, StateAcked, StateApplied, StateFailed:
-	default:
+	if !closable(j.State) {
 		return nil, fmt.Errorf("%w: job %s não pode ser fechado em %s (só DELIVERED, ACKED, APPLIED ou FAILED)", ErrInvalidState, jobID, j.State)
 	}
 	prevState := j.State
@@ -314,6 +329,20 @@ func (r *Registry) Close(jobID, closer, reason string) (*RemediationJob, error) 
 		jobID, closer, prevState, j.ApprovedBy, whenOrDash(j.ApprovedAt), reason, j.Tenant, j.AgentID)
 	return j.clone(), nil
 }
+
+// closable reports whether Close accepts a job in state s: the ones the agent holds.
+func closable(s JobState) bool {
+	switch s {
+	case StateDelivered, StateAcked, StateApplied, StateFailed:
+		return true
+	}
+	return false
+}
+
+// blank reports whether who names no one — empty or only whitespace. approve, reject and
+// close refuse such an operator themselves, so the audit trail never says "by nobody"
+// even for a caller that skipped the handler's check.
+func blank(who string) bool { return strings.TrimSpace(who) == "" }
 
 // whenOrDash renders t for an audit line: UTC RFC3339, or "-" when it was never set.
 func whenOrDash(t time.Time) string {
@@ -408,22 +437,26 @@ func (r *Registry) Ack(jobID, agentID, tenant string) bool {
 
 // Report records the agent's apply result, moving the job to APPLIED (status
 // "applied") or FAILED (anything else). Scoped to (agentID, tenant): a foreign or
-// unknown id is ErrNotFound — and so is a job nobody handed out yet (PENDING_APPROVAL,
-// APPROVED), which has nothing to report.
+// unknown id is ErrNotFound, silently. So is a job the agent was never handed
+// (DeliveredAt unset: pending, approved, or rejected or expired before the poll
+// delivered it), which has nothing to report — but that one is logged, on a line of its
+// own ("relatório de job nunca entregue"), and nothing is kept.
 //
-// A job that already holds the agent's result — a FINAL one (VERIFIED, FAILED,
-// EXPIRED, REJECTED, CLOSED, the last three without any) or APPLIED, which is not final
-// (the server still verifies by re-scan) but whose result is on record all the same —
-// takes no other. If the report is exactly the one it holds — a retry — it is an
-// idempotent success. Anything else is a late report the queue can no longer honour: the
-// agent applied (or says it tried) something on a job that was rejected, expired or
-// closed, or contradicts what it reported before. That is ErrInvalidState (409, so the
-// agent is told too); the stored Result and the state stay untouched; ONE audit line
-// records the job, its state, the status reported and the report's number
+// A job the agent was handed that already holds its result — a FINAL one (VERIFIED,
+// FAILED, EXPIRED, REJECTED, CLOSED, the last three possibly without any) or APPLIED,
+// which is not final (the server still verifies by re-scan) but whose result is on
+// record all the same — takes no other. If the report is exactly the one it holds — a
+// retry — it is an idempotent success. Anything else is a late report the queue can no
+// longer honour: the agent applied (or says it tried) something on a job that was
+// closed or expired, or contradicts what it reported before. That is ErrInvalidState
+// (409, so the agent is told too); the stored Result and the state stay untouched; ONE
+// audit line records the job, its state, the status reported and the report's number
 // ("late_report #n") — the operator has to know a change may have reached a host — and
-// the report itself is kept WHOLE in LateReports (the last maxLateReports of them,
-// persisted), because its before/rollback_token are the only copy of how to revert it:
-// the audit line stays at status and state, the operator reads the rest on the job.
+// the report itself is kept WHOLE in LateReports (the first one, pinned, and the two
+// most recent, persisted), because its before/rollback_token are the only copy of how
+// to revert it: the audit line stays at status and state, the operator reads the rest
+// on the job. A report equal to one already kept gets the very same 409 and nothing
+// else: not stored again, not written, not audited again.
 func (r *Registry) Report(jobID, agentID, tenant string, res *Result) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -434,9 +467,24 @@ func (r *Registry) Report(jobID, agentID, tenant string, res *Result) error {
 	if res == nil {
 		res = &Result{Status: "failed", Detail: "relatório vazio"}
 	}
+	// The agent can only report on a job it was handed. One it never received (still
+	// pending or approved, or rejected or expired before the poll delivered it) is not a
+	// late report — keeping it would lend such a claim an air of legitimacy — but it is
+	// not silent either: the agent is reporting on something it was never given.
+	if j.DeliveredAt.IsZero() {
+		log.Printf("remediation: relatório de job nunca entregue: job %s está %s e o agente reportou %q (tenant=%q agent=%q)",
+			jobID, j.State, res.Status, j.Tenant, j.AgentID)
+		return ErrNotFound
+	}
 	if j.State == StateApplied || j.State.terminal() {
 		if j.Result != nil && sameReport(*j.Result, *res) {
 			return nil
+		}
+		// A report the job already keeps is answered like the first time — same 409,
+		// naming the kept one — and stored, written and audited no second time: a
+		// retrying or hostile agent cannot push the genuine reports out of the three.
+		if i := j.lateReportIndex(*res); i >= 0 {
+			return fmt.Errorf("%w: job %s está %s e não aceita mais relatório (reportado %q; guardado como late_report #%d)", ErrInvalidState, jobID, j.State, res.Status, j.lateReportNumber(i))
 		}
 		n := recordLateReport(j, *res, r.now().UTC())
 		log.Printf("remediation: relatório tardio recusado: job %s está %s e o agente reportou %q (late_report #%d; tenant=%q agent=%q)",
@@ -449,9 +497,9 @@ func (r *Registry) Report(jobID, agentID, tenant string, res *Result) error {
 		}
 		return fmt.Errorf("%w: job %s está %s e não aceita mais relatório (reportado %q; guardado como late_report #%d)", ErrInvalidState, jobID, j.State, res.Status, n)
 	}
-	// A report is only valid AFTER delivery: the agent must have actually received
-	// the job (DELIVERED, or ACKED). APPROVED/PENDING_APPROVAL were never handed
-	// out, so a report from those states is rejected (404) rather than trusted.
+	// Only a job the agent holds takes a first report (DELIVERED, or ACKED). Defensive:
+	// one that was handed out yet sits in any other state — a hand-edited or corrupt
+	// queue file — is not trusted either (404).
 	if j.State != StateDelivered && j.State != StateAcked {
 		return ErrNotFound
 	}
@@ -468,19 +516,29 @@ func (r *Registry) Report(jobID, agentID, tenant string, res *Result) error {
 	return nil
 }
 
-// maxLateReports is how many refused reports a job keeps: the last ones, oldest dropped.
+// maxLateReports is how many refused reports a job keeps: the FIRST one, pinned for
+// good — it is usually the genuine "applied", with the real before/rollback_token — and
+// the most recent ones, which rotate. A report's size is bounded by the 256 KiB cap on
+// the request body (before/rollback_token are never truncated), so a job holds at most
+// three of them however an agent behaves.
 const maxLateReports = 3
 
 // recordLateReport keeps a copy of a refused report on j, stamped with the time it
 // arrived (the agent's own reported_at is not trusted any more than a first report's
-// is), drops the oldest beyond maxLateReports, and returns the report's number among
-// those refused for j: 1, 2, 3, ... — the number never repeats, even after a report is
-// dropped, so a "late_report #n" in the log always names one report.
+// is), and returns the report's number among those stored for j: 1, 2, 3, ... Beyond
+// maxLateReports the oldest of the rotating ones is dropped — never the first, which is
+// pinned as #1. The number never repeats within a run, even after a report is dropped,
+// so a "late_report #n" in the log names one report (see RemediationJob.lateReportNumber
+// for finding it, and the runbook for the one case where a number can repeat: a crash
+// between a refused report and the next persist that works).
 func recordLateReport(j *RemediationJob, res Result, at time.Time) int {
 	res.ReportedAt = at
 	j.LateReports = append(j.LateReports, res)
 	if len(j.LateReports) > maxLateReports {
-		j.LateReports = append([]Result(nil), j.LateReports[len(j.LateReports)-maxLateReports:]...)
+		kept := make([]Result, 0, maxLateReports)
+		kept = append(kept, j.LateReports[0])
+		kept = append(kept, j.LateReports[len(j.LateReports)-(maxLateReports-1):]...)
+		j.LateReports = kept
 	}
 	j.LateReportsTotal++
 	return j.LateReportsTotal

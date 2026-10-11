@@ -155,9 +155,11 @@ type RemediationJob struct {
 	AckedAt       time.Time       `json:"acked_at,omitempty"`
 	Result        *Result         `json:"result,omitempty"`
 	// LateReports keeps the reports the queue refused (see Registry.Report) whole, so
-	// an operator can still reach their before/rollback_token: the last maxLateReports
-	// of them, oldest dropped; LateReportsTotal counts every one ever refused, so the
-	// newest kept is #LateReportsTotal (the number the audit line quotes).
+	// an operator can still reach their before/rollback_token: at most maxLateReports
+	// of them — the FIRST one, pinned for good, and the most recent ones, which rotate.
+	// A report equal to a kept one is not stored again. LateReportsTotal counts the
+	// reports stored, so the pinned one is #1 and the newest kept is #LateReportsTotal
+	// (the number the audit line quotes).
 	LateReports      []Result `json:"late_reports,omitempty"`
 	LateReportsTotal int      `json:"late_reports_total,omitempty"`
 }
@@ -172,6 +174,51 @@ type EnqueueRequest struct {
 	NotBefore time.Time
 	NotAfter  time.Time
 	TTL       time.Duration // 0 → default
+}
+
+// lastEventAt is when something worth keeping last happened to the job: its creation, a
+// rejection, a closure, the agent's result or the latest report it refused. A final job
+// is reaped a retention AFTER this — not after its creation — so closing an old APPLIED
+// job, a result that arrives late or a late refused report restarts the clock instead of
+// handing the data they just preserved (approver, result, rollback_token) to the very
+// next Enqueue's reaper.
+func (j *RemediationJob) lastEventAt() time.Time {
+	last := j.CreatedAt
+	later := func(t time.Time) {
+		if t.After(last) {
+			last = t
+		}
+	}
+	later(j.RejectedAt)
+	later(j.ClosedAt)
+	if j.Result != nil {
+		later(j.Result.ReportedAt)
+	}
+	for _, lr := range j.LateReports {
+		later(lr.ReportedAt)
+	}
+	return last
+}
+
+// lateReportIndex is the index in LateReports of the kept report with the same content
+// as res (everything the agent supplies; the server's timestamp does not count), or -1.
+func (j *RemediationJob) lateReportIndex(res Result) int {
+	for i, lr := range j.LateReports {
+		if sameReport(lr, res) {
+			return i
+		}
+	}
+	return -1
+}
+
+// lateReportNumber is the "late_report #n" of the kept report at index i: the pinned
+// first one is #1, and the rest are the most recent ones, so the last is
+// #LateReportsTotal, the one before it #LateReportsTotal-1.
+func (j *RemediationJob) lateReportNumber(i int) int {
+	if i == 0 {
+		return 1
+	}
+	return j.LateReportsTotal - (len(j.LateReports) - 1 - i)
 }
 
 func (j *RemediationJob) clone() *RemediationJob {
