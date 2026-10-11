@@ -25,11 +25,13 @@ type Violation struct {
 	Detail  string // short text; member names from the input are quoted and truncated
 }
 
+// Error is bounded: the JSON pointer (which carries member names taken from the input) is quoted and cut to a
+// short prefix, and Detail only holds fixed text and quoted, truncated names.
 func (v *Violation) Error() string {
 	if v.Path == "" {
 		return fmt.Sprintf("%s: %s", v.Keyword, v.Detail)
 	}
-	return fmt.Sprintf("%s em %s: %s", v.Keyword, strconv.Quote(v.Path), v.Detail)
+	return fmt.Sprintf("%s em %s: %s", v.Keyword, quoteBounded(v.Path, 96), v.Detail)
 }
 
 // maxDepth is ADR-0011's nesting limit for every body: at most 32 levels of objects and arrays, the top-level
@@ -57,8 +59,10 @@ func escapePointer(s string) string {
 
 // quoteName renders a member name taken from the input for an error detail: quoted (no control characters
 // survive) and truncated.
-func quoteName(s string) string {
-	const max = 64
+func quoteName(s string) string { return quoteBounded(s, 64) }
+
+// quoteBounded quotes s, cut to its first max runes.
+func quoteBounded(s string, max int) string {
 	if utf8.RuneCountInString(s) > max {
 		s = string([]rune(s)[:max]) + "…"
 	}

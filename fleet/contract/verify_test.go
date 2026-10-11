@@ -105,8 +105,8 @@ func TestVerifyLines0to2(t *testing.T) {
 			if reason != c.reason {
 				t.Fatalf("motivo %q, esperado %q (err=%v)", reason, c.reason, err)
 			}
-			if v != nil {
-				t.Fatal("recusa nas linhas 0–2 não devolve *Verified (sem ack)")
+			if v != nil || envelopeOf(err) != nil {
+				t.Fatal("recusa nas linhas 0–2 não traz envelope autenticado (sem ack)")
 			}
 			if c.keyword == "" {
 				if viol != nil {
@@ -162,8 +162,9 @@ func TestVerifySizeCaps(t *testing.T) {
 	}
 }
 
-// TestVerifyAtWindow covers line 3 at its exact edges (skew 2 min) and line 4; an authenticated refusal returns
-// the *Verified too, because it gets an ack.
+// TestVerifyAtWindow covers line 3 at its exact edges (skew 2 min) and line 4. VerifyAt never returns a
+// *Verified together with an error; an authenticated refusal carries the envelope inside the RejectError,
+// because it gets an ack.
 func TestVerifyAtWindow(t *testing.T) {
 	withTimes := func(issued, notAfter string) []byte {
 		c := adrCommand()
@@ -199,10 +200,66 @@ func TestVerifyAtWindow(t *testing.T) {
 			if reason != c.reason {
 				t.Fatalf("motivo %q, esperado %q", reason, c.reason)
 			}
-			if v == nil {
-				t.Fatal("envelope autenticado: VerifyAt devolve *Verified também na recusa (ack)")
+			if err == nil {
+				if v == nil {
+					t.Fatal("aceito sem *Verified")
+				}
+				return
+			}
+			if v != nil {
+				t.Fatal("VerifyAt nunca devolve *Verified junto com um erro")
+			}
+			env := envelopeOf(err)
+			if env == nil || env.Command.CommandID == "" || !env.sealed {
+				t.Fatal("recusa autenticada (linhas 3–4) traz o envelope verificado no RejectError, para o ack")
 			}
 		})
+	}
+}
+
+// envelopeOf returns the authenticated envelope a RejectError carries (nil for lines 0–2 or no RejectError).
+func envelopeOf(err error) *Verified {
+	var re *RejectError
+	if errors.As(err, &re) {
+		return re.Envelope
+	}
+	return nil
+}
+
+// TestVerifiedSealed: only Verify builds a *Verified that CheckAt accepts — a hand-made one (or nil) is a
+// programming error, never a way around the signature.
+func TestVerifiedSealed(t *testing.T) {
+	forged := &Verified{Command: adrCommand(), IssuedAt: utc("2026-10-11T12:00:00Z"), NotAfter: utc("2026-10-11T13:00:00Z")}
+	if err := forged.CheckAt(utc("2026-10-11T12:30:00Z"), "node-lab-0001", skew2m); !errors.Is(err, ErrNotVerified) {
+		t.Fatalf("Verified fabricado: %v", err)
+	}
+	var none *Verified
+	if err := none.CheckAt(utc("2026-10-11T12:30:00Z"), "node-lab-0001", skew2m); !errors.Is(err, ErrNotVerified) {
+		t.Fatalf("Verified nil: %v", err)
+	}
+	v, err := Verify(goldenPub, []byte(adrEnvelope))
+	if err != nil || v.CheckAt(utc("2026-10-11T12:30:00Z"), "node-lab-0001", skew2m) != nil {
+		t.Fatalf("Verified de verdade: %v", err)
+	}
+}
+
+// TestRejectErrorBounded: an error message never carries more than a short quoted prefix of input-controlled
+// text (member names, JSON pointers), however long the input is.
+func TestRejectErrorBounded(t *testing.T) {
+	long := strings.Repeat("k", 40000) + `\n` // a JSON-escaped newline inside the name
+	cases := map[string]string{
+		"chave longa duplicada":    `{"` + long + `":1,"` + long + `":2}`,
+		"chave longa desconhecida": strings.Replace(adrEnvelope, `"tenant":"acme",`, `"tenant":"acme","`+long+`":1,`, 1),
+		"payload com chave longa":  strings.Replace(adrEnvelope, `{"task_id"`, `{"`+long+`":{"x":1.5},"task_id"`, 1),
+	}
+	for name, raw := range cases {
+		_, err := Verify(goldenPub, []byte(raw))
+		if err == nil {
+			t.Fatalf("%s: deveria falhar", name)
+		}
+		if msg := err.Error(); len(msg) > 400 || strings.Contains(msg, "\n") {
+			t.Errorf("%s: mensagem de %d bytes (ou com quebra de linha): %.120q", name, len(msg), msg)
+		}
 	}
 }
 

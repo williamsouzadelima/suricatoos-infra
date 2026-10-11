@@ -10,7 +10,8 @@ import (
 )
 
 // FuzzVerifyAt (seeds = every golden vector, run as a normal test in CI): VerifyAt never panics; every refusal
-// carries a reject_reason of the contract, with a *Verified exactly when the envelope authenticated; and no
+// carries a reject_reason of the contract and never a *Verified, and its RejectError carries the authenticated
+// envelope exactly when the envelope authenticated (lines 3-4); and no
 // mutation of a signed envelope that changes the signed bytes or the payload is ever authenticated — whatever
 // it authenticates is a canonical form the golden test key really signed, with its own payload. Mutations that
 // keep those bytes (insignificant whitespace, member order) may pass: they change nothing that is signed.
@@ -34,16 +35,20 @@ func FuzzVerifyAt(f *testing.F) {
 		}
 		v, err := VerifyAt(pub, raw, now, own, DefaultClockSkew)
 		if err != nil {
-			r, ok := ReasonOf(err)
-			if !ok || !r.Valid() {
+			var re *RejectError
+			if !errors.As(err, &re) || !re.Reason.Valid() {
 				t.Fatalf("erro sem reject_reason do contrato: %v", err)
 			}
-			if (v == nil) != (r.Class() == ClassUnauthenticated) {
-				t.Fatalf("%s: *Verified presente = %v", r, v != nil)
+			if v != nil {
+				t.Fatalf("%s: *Verified junto com um erro", re.Reason)
 			}
-			if v == nil {
+			if (re.Envelope == nil) != (re.Reason.Class() == ClassUnauthenticated) {
+				t.Fatalf("%s: envelope autenticado presente = %v", re.Reason, re.Envelope != nil)
+			}
+			if re.Envelope == nil {
 				return
 			}
+			v = re.Envelope // authenticated refusal (lines 3-4): the same checks below
 		}
 		if !signed[v.CanonicalSHA256] {
 			t.Fatalf("autenticou uma forma canônica que a chave de teste nunca assinou:\n%q", v.Canonical)
