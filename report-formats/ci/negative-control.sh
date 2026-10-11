@@ -6,7 +6,8 @@
 # producao. O caso passa se, e somente se, o generate:
 #   - sair com erro (exit 1..124; 125+ seria o docker, nao o generate);
 #   - NAO escrever nada no stdout -- logo, nenhum %PDF;
-#   - disser no stderr o que houve (palavra esperada por caso).
+#   - disser no stderr o que houve: a CAUSA esperada do caso (uma ERE do
+#     grep -E), e nao so' o prefixo de erro do generate.
 #
 # Casos:
 #   sem-blocks    bundle sem suricatoos-blocks.sty (o caso pedido na fatia);
@@ -55,7 +56,7 @@ open_perms "$work"
 failures=0
 rows=()
 
-# caso <nome> <bundle> <fixture> <palavra-esperada-no-stderr>
+# caso <nome> <bundle> <fixture> <causa-esperada-no-stderr (ERE)>
 caso() {
   local name=$1 bundle=$2 fixture=$3 expect=$4
   local out="$art/$name.stdout" err="$art/$name.stderr.txt"
@@ -63,11 +64,12 @@ caso() {
   gvmd_run "$work" "/work/$bundle" ./generate "/work/fixtures/$fixture" > "$out" 2> "$err" || rc=$?
   size=$(wc -c < "$out" | tr -d ' ')
   n_pdf=$({ grep -a -c -e '%PDF' -- "$out" 2>/dev/null || true; } | tr -d ' ')
-  n_expect=$({ grep -a -c -F -e "$expect" -- "$err" 2>/dev/null || true; } | tr -d ' ')
+  n_expect=$({ grep -a -c -E -e "$expect" -- "$err" 2>/dev/null || true; } | tr -d ' ')
   if [ "$rc" -lt 1 ] || [ "$rc" -gt 124 ]; then why="$why; exit $rc (esperado 1..124)"; fi
   if [ "${n_pdf:-0}" -ne 0 ]; then why="$why; %PDF no stdout"; fi
   if [ "$size" -ne 0 ]; then why="$why; stdout com $size bytes (esperado vazio)"; fi
-  if [ "${n_expect:-0}" -eq 0 ]; then why="$why; stderr nao menciona '$expect'"; fi
+  # ("|" da ERE vira " ou ": a frase vai para uma tabela markdown no resumo.)
+  if [ "${n_expect:-0}" -eq 0 ]; then why="$why; stderr nao menciona '${expect//|/ ou }'"; fi
   if [ -n "$why" ]; then
     verdict="FALHA: ${why#; }"
     failures=$((failures + 1))
@@ -77,13 +79,15 @@ caso() {
   rows+=("| $lang | $name | $rc | $size | $verdict |")
 }
 
-caso sem-blocks   sem-blocks sample.xml   'suricatoos-blocks.sty'
+caso sem-blocks   sem-blocks sample.xml   'suricatoos-blocks\.sty'
 caso erro-tex     erro-tex   sample.xml   'Undefined control sequence'
 caso xml-quebrado integro    quebrado.xml 'xsltproc'
 # Aqui o generate pega o .tex vazio antes do pdflatex; se um dia o xsltproc
 # devolver um "\n" em vez de nada, quem falha e' o pdflatex (Emergency stop) --
-# alto do mesmo jeito. Por isso a palavra e' o prefixo de erro do generate.
-caso xml-vazio    integro    vazio.xml    'generate: ERROR'
+# alto do mesmo jeito, e o generate diz "TeX errors" / "report.pdf missing".
+# Qualquer uma das tres causas serve; um "generate: ERROR" por OUTRO motivo
+# (bundle incompleto, catalogo, permissao) nao prova este caso e reprova.
+caso xml-vazio    integro    vazio.xml    'empty \.tex|TeX errors|report\.pdf missing'
 
 # Premissa do erro-tex: sem o generate no meio, o pdflatex entrega mesmo um PDF
 # com o erro no log? (Informativo -- e' o que torna o caso significativo.)
