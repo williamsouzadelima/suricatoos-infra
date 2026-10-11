@@ -547,6 +547,30 @@ def resolve_all(compose_dir, runner=run_docker_compose, out=None):
     return worst
 
 
+def resolve_config(compose_dir, extra_files=(), runner=run_docker_compose):
+    """`docker compose config --format json` de BASE_FILES + extra_files (com o --env-file
+    ficticio) -> dict. Usado pela pilha-esqueleto (skeleton_stack.py)."""
+    tmp = tempfile.mkdtemp(prefix="compose-config-")
+    try:
+        envfile = os.path.join(tmp, "exemplo.env")
+        with open(envfile, "w", encoding="utf-8", newline="\n") as f:
+            f.write(FICTITIOUS_ENV)
+        args = ["--env-file", envfile]
+        for name in BASE_FILES + list(extra_files):
+            args += ["-f", name]
+        args += ["config", "--format", "json"]
+        rc, stdout, stderr = runner(args, compose_dir, _clean_env())
+        if rc != 0:
+            raise InputError("`docker compose config` falhou (exit %d):\n%s"
+                             % (rc, _indent(stderr or stdout)))
+        try:
+            return json.loads(stdout)
+        except ValueError as e:
+            raise InputError("saida do compose nao e JSON (%s)" % e)
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 def _indent(text, prefix="    "):
     return "\n".join(prefix + line for line in (text or "").rstrip().splitlines())
 

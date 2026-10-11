@@ -6,14 +6,20 @@ name: compose-ci
 # gvmd/ospd-openvas/pg-gvm/redis-server (recriar o ospd-openvas mata scan em curso).
 # Racional no bloco `networks:` de compose/docker-compose.override.yml.
 #
-# Sem build e sem daemon: `docker compose config` so resolve os YAMLs. O
+# Job `redes` -- sem build e sem daemon: `docker compose config` so resolve os YAMLs. O
 # verificador reprova se qualquer combinacao de COMPOSE_FILE em uso sair da
 # politica; os testes provam, por mutacao, que ele reprova de verdade. O passo de hash
 # compara o hash de recriacao do Compose (o criterio que ele proprio usa para recriar um
 # container) entre o merge-base com a main e o HEAD, com o mesmo binario.
 #
+# Job `esqueleto` -- sobe uma pilha minima (busybox) com as MESMAS redes da combinacao
+# shared-host e mede o que o portao estatico nao mede: alcance por nome e por IP, gateway
+# de cada servico e IP de origem da porta publicada. Prova o Engine DO CI, nao o de
+# producao (as conferencias pos-deploy no host continuam obrigatorias).
+#
 # Local (com Docker):  python3 compose/test/check_networks.py --resolve
 #                      python3 compose/test/check_networks.py --hashes   (precisa do origin/main)
+#                      python3 compose/test/skeleton_stack.py
 # Local (sem Docker):  python3 -m unittest discover -s compose/test -v
 
 # `**` cruza `/` no filtro de paths: `compose/**.yml` pega o YAML em qualquer subdiretorio
@@ -57,3 +63,23 @@ jobs:
         run: python3 compose/test/check_networks.py --resolve
       - name: hash de recriacao dos servicos protegidos (merge-base com a main vs HEAD)
         run: python3 compose/test/check_networks.py --hashes
+
+  esqueleto:
+    name: pilha-esqueleto (isolamento, gateway e IP de origem no Engine do CI)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: versoes
+        run: |
+          docker --version
+          docker compose version
+      # Imprime cada verificacao (esperado x obtido); qualquer falha derruba o job.
+      - name: sobe a pilha-esqueleto e confere alcance, rotas e IP de origem
+        run: python3 compose/test/skeleton_stack.py
+      - name: derruba a pilha-esqueleto
+        if: always()
+        run: |
+          if [ -f "$RUNNER_TEMP/skel/skeleton.yml" ]; then
+            docker compose -p skel -f "$RUNNER_TEMP/skel/skeleton.yml" down -v --remove-orphans
+          fi

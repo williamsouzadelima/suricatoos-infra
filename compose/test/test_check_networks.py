@@ -563,6 +563,29 @@ class ResolveMode(unittest.TestCase):
         self.assertIn("docker", buf.getvalue())
 
 
+class ResolveConfig(unittest.TestCase):
+    """cn.resolve_config: o config resolvido de UMA combinacao (usado pela pilha-esqueleto)."""
+
+    def test_resolves_the_requested_combination_with_the_fictitious_env(self):
+        fake = FakeCompose()
+        cfg = cn.resolve_config(COMPOSE_DIR, ["docker-compose.shared-host.yml"], runner=fake)
+        self.assertEqual(cfg["name"], load_ok()["name"])
+        (call,) = fake.calls
+        self.assertEqual(call["files"], ("compose.yaml", "docker-compose.override.yml",
+                                         "docker-compose.shared-host.yml"))
+        self.assertEqual(call["args"][-3:], ["config", "--format", "json"])
+        self.assertIn("SCANNER_BIND_IP=192.0.2.10", call["envfile"])
+        self.assertFalse([k for k in call["env"] if k.startswith("COMPOSE_")])
+
+    def test_compose_failure_is_an_input_error(self):
+        with self.assertRaises(cn.InputError):
+            cn.resolve_config(COMPOSE_DIR, [], runner=FakeCompose(rc=1, stdout="", stderr="boom"))
+
+    def test_non_json_is_an_input_error(self):
+        with self.assertRaises(cn.InputError):
+            cn.resolve_config(COMPOSE_DIR, [], runner=FakeCompose(stdout="name: yaml\n"))
+
+
 class HashParsing(unittest.TestCase):
     H1 = "a" * 64
     H2 = "b" * 64
