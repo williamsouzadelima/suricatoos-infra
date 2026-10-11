@@ -2,14 +2,16 @@
 <!--
 Fixture SINTETICA do CI de veracidade do Suricatoos Premium PDF
 (report-formats/ci/check-veracity.py roda sobre o .tex desta fixture nos 3
-idiomas). Enderecos RFC 5737, nomes genericos, OIDs da faixa sintetica
-1.3.6.1.4.1.25623.1.0.99xxxx (nao existem no feed); nenhum dado de scan real.
+idiomas). Enderecos RFC 5737, nomes genericos e nenhum dado de scan real. Os
+OIDs sao da faixa sintetica 1.3.6.1.4.1.25623.1.0.99xxxx (nao existem no feed),
+EXCETO os cinco advisories do grupo, que usam de proposito OIDs PUBLICOS do
+feed, presentes nos catalogos de traducao pt_BR e es.
 
 Defeito 5 (acao do card consolidado sem traducao). Cinco advisories VendorFix
-do mesmo produto, com OIDs que EXISTEM nos catalogos pt_BR e es (sao OIDs
-publicos do feed; nome e solucao do fornecedor aqui sao sinteticos e marcados
-VENDOR-RAW). Em pt_BR/es a acao unica tem de sair do catalogo, como nos cards
-normais, e nao o texto cru do fornecedor.
+do mesmo produto, com OIDs que EXISTEM nos catalogos pt_BR e es (nome e
+solucao do fornecedor aqui sao sinteticos e marcados VENDOR-RAW). Em pt_BR/es
+a acao unica tem de sair do catalogo, como nos cards normais, e nao o texto
+cru do fornecedor.
 -->
 <report extension="pdf" content_type="application/pdf" id="00000000-0000-4000-8000-000000000035">
   <task id="00000000-0000-4000-8000-000000000001">

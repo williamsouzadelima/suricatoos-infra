@@ -187,7 +187,8 @@ SPDX-License-Identifier: GPL-2.0-or-later
        expressao do `use' de by-updgrp, que por ser atributo de xsl:key fica
        por extenso la'. Le so' o argumento, nunca o no de contexto (o no de
        contexto dentro de func:function nao e' o mesmo em toda versao do
-       libxslt). -->
+       libxslt), entao pode ser chamada de qualquer lugar. gvm:sev-max tambem:
+       so' le o node-set que recebe. -->
   <func:function name="gvm:grp">
     <xsl:param name="name"/>
     <func:result select="concat(substring-before(concat(normalize-space($name),' '),' '),' ',substring-before(concat(substring-after(normalize-space($name),' '),' '),' '))"/>
@@ -203,14 +204,24 @@ SPDX-License-Identifier: GPL-2.0-or-later
 
   <!-- Os NVTs confirmados do grupo `g', um no' por NVT (o representante: a
        primeira instancia). O teste de confianca roda uma vez por NVT, nao uma
-       vez por instancia. -->
+       vez por instancia.
+       ATENCAO (vale tambem para gvm:grp-members): ao contrario de gvm:grp, esta
+       funcao chama key(), e key() procura no DOCUMENTO DO NO' DE CONTEXTO.
+       Dentro de func:function esse no' e', conforme a versao do libxslt, o no'
+       corrente do XSLT ou o no' de contexto do XPath que fez a chamada — os
+       dois estao no relatorio de entrada em todos os chamadores de hoje
+       (variaveis globais, laco sobre $grp-reps, predicados sobre results).
+       NUNCA chamar de dentro de um laco sobre um node-set de RTF
+       (exsl:node-set: $ghosts, $ints200, $hx-ints...): ali o documento e' o
+       RTF, key() devolve vazio e o grupo some sem erro nenhum. -->
   <func:function name="gvm:grp-confreps">
     <xsl:param name="g"/>
     <func:result select="key('by-updgrp', $g)[generate-id() = generate-id(key('by-nvt', nvt/@oid)[1])][key('by-nvt', nvt/@oid)[not(qod/value and number(qod/value) &lt; number($qod-min))]]"/>
   </func:function>
 
   <!-- As instancias que um grupo consolidado DESCREVE: todas as dos NVTs
-       confirmados do grupo `g' (hosts, severidade, acao unica). -->
+       confirmados do grupo `g' (hosts, severidade, acao unica). Chama key():
+       mesma restricao de contexto de gvm:grp-confreps. -->
   <func:function name="gvm:grp-members">
     <xsl:param name="g"/>
     <func:result select="key('by-nvt', gvm:grp-confreps($g)/nvt/@oid)"/>
@@ -3105,6 +3116,13 @@ SPDX-License-Identifier: GPL-2.0-or-later
            exibida tambem — a melhor deteccao que o scanner conseguiu. -->
       <xsl:variable name="smax" select="gvm:sev-max($inst)"/>
       <xsl:variable name="qmax" select="math:max($inst/qod/value[number(.) = number(.)])"/>
+      <!-- A instancia que REPRESENTA o NVT no card: a primeira (ordem do
+           documento) que carrega a severidade maxima. Dela sai a pontuacao
+           impressa E o resultado da deteccao: o card nao pode dizer 9.8 e
+           mostrar a evidencia da instancia de 5.0. Sem severidade numerica em
+           nenhuma instancia, fica a primeira (o proprio no' corrente). -->
+      <xsl:variable name="repr"
+        select="$inst[number(severity) = $smax][1] | self::node()[not($inst[number(severity) = $smax])]"/>
       <xsl:variable name="sevkey">
         <xsl:call-template name="sevkey-detail">
           <xsl:with-param name="severity" select="$smax"/>
@@ -3115,7 +3133,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
            linha Log. Passar "0.0" ali seria afirmar uma nota que nao existe. -->
       <xsl:variable name="score">
         <xsl:if test="$sevkey != 'logsev' and $sevkey != 'falsepos'">
-          <xsl:value-of select="$inst[number(severity) = $smax][1]/severity"/>
+          <xsl:value-of select="$repr/severity"/>
         </xsl:if>
       </xsl:variable>
       <!-- O titulo sai traduzido, mas o nome ORIGINAL fica logo abaixo: e a
@@ -3334,18 +3352,19 @@ SPDX-License-Identifier: GPL-2.0-or-later
         <xsl:with-param name="value" select="$i18n_affected"/>
       </xsl:call-template>
 
-      <!-- Detection result (representative).
+      <!-- Detection result of the representative instance ($repr: a que
+           carrega a severidade maxima — antes era a da PRIMEIRA instancia).
            O corte agora cai no LIMITE DE PALAVRA: recua ate' 150 caracteres
            procurando um espaco, e so' corta no meio do token quando nao ha
            espaco nenhum ali atras (hash, base64) — caso em que o \surwb do
            escape_verbatim e' que segura a margem. E o aviso diz QUANTO ficou de
            fora, em vez de um "[saida truncada]" sem numero. -->
-      <xsl:if test="string-length(normalize-space(description)) &gt; 0">
-        <xsl:variable name="dlen" select="string-length(description)"/>
+      <xsl:if test="string-length(normalize-space($repr/description)) &gt; 0">
+        <xsl:variable name="dlen" select="string-length($repr/description)"/>
         <xsl:variable name="dcut">
           <xsl:choose>
             <xsl:when test="$dlen &gt; 1500">
-              <xsl:value-of select="gvm:cut-at(string(description), 1500, 150)"/>
+              <xsl:value-of select="gvm:cut-at(string($repr/description), 1500, 150)"/>
             </xsl:when>
             <xsl:otherwise><xsl:value-of select="$dlen"/></xsl:otherwise>
           </xsl:choose>
@@ -3362,7 +3381,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
              escape_text transforma a barra do XML em \textbackslash. -->
         <xsl:variable name="det">
           <xsl:call-template name="escape_verbatim">
-            <xsl:with-param name="string" select="substring(description, 1, $dcut)"/>
+            <xsl:with-param name="string" select="substring($repr/description, 1, $dcut)"/>
           </xsl:call-template>
         </xsl:variable>
         <xsl:text>\fieldlabel{\suriLblFldDetection}

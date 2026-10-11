@@ -10,7 +10,9 @@ defeito cada), e todas rodam em TODA fixture -- sample e tortura inclusive --,
 porque sao invariantes do documento, nao casos especiais.
 
   numeracao      o numero de cada linha do Sumario de Achados e' o numero do
-                 card que o \\hyperlink dela abre;
+                 card que o \\hyperlink dela abre; cada tabela numera 1..n em
+                 ordem (grupos primeiro) e os cards de cada bloco seguem a partir
+                 de (consolidados + 1);
   secoes         nenhuma tarja "confirmados"/"indicadores" (secoes 4 e 5) sem
                  linha ou card; a tarja de indicadores existe se e somente se ha
                  NVT de baixa confianca;
@@ -18,20 +20,25 @@ porque sao invariantes do documento, nao casos especiais.
                  severidade certas; NVT de baixa confianca nunca e' absorvido;
   instancias     severidade = MAXIMA entre as instancias; indicador so' se TODAS
                  as instancias estao abaixo do piso de QoD; QoD exibida = maxima;
-                 tabelas em ordem decrescente dessa severidade;
+                 tabelas e cards em ordem decrescente dessa severidade; o
+                 resultado da deteccao do card e' o da instancia que carrega a
+                 maxima (a primeira, no empate);
   acao           a acao unica do card consolidado sai do catalogo de traducao;
   vulns-unicas   VULNS UNICAS = NVTs distintos com severidade maxima >= 0.1;
-  faixas         as quatro faixas do resumo executivo vem da MESMA fonte; a
-                 clausula de remediacao so' fala de confianca quando Alto/Critico
-                 e baixa confianca vem da mesma populacao;
+  faixas         as quatro faixas do resumo executivo vem da MESMA fonte; o
+                 TOTAL DE ACHADOS e o N de Alto/Critico da narrativa batem com
+                 elas; a clausula de remediacao que fecha a frase e' exatamente
+                 a esperada, e so' fala de confianca quando Alto/Critico e baixa
+                 confianca vem da mesma populacao;
   ancoras        toda ancora casa ^[A-Za-z0-9-]+$; todo link tem alvo; um link e
                  um alvo por grupo consolidado;
   nome           o nome do projeto, quando cortado (capa, contracapa, narrativa,
                  titulo do mapa de portas), e' cortado em fronteira de palavra e
                  o corte declarado bate.
 
-Os limiares (qod-min, group-min, adv-max, cortes do nome) sao LIDOS do proprio
-latex.xsl, para a regua nunca divergir do relatorio.
+Os limiares (qod-min, group-min, adv-max, cortes do nome) e as frases do i18n
+sao LIDOS do proprio latex.xsl, para a regua nunca divergir do relatorio; um
+nome lido que esteja definido mais de uma vez la' e' erro (exit 2).
 
 Uso:
     check-veracity.py --lang <en|pt_BR|es> --xml <fixture.xml> --tex <report.tex>
@@ -55,29 +62,46 @@ WS = " \t\r\n"                       # espaco em branco do XPath
 # ---------------------------------------------------------------------------
 # Leitura do latex.xsl: limiares e textos do i18n
 # ---------------------------------------------------------------------------
+class StylesheetError(Exception):
+    pass
+
+
 class Stylesheet:
+    """Os numeros e as frases que a regua le do latex.xsl. Cada nome lido tem de
+    estar definido UMA vez: com duas definicoes (um xsl:param global e uma
+    variavel local com o mesmo nome, uma chave de i18n repetida) o valor que
+    vale depende do escopo, e a regua passaria a medir contra um palpite."""
+
     def __init__(self, path):
         root = ET.parse(path).getroot()
-        self.params = {}
+        self.defs = {}
         for tag in ("param", "variable"):
             for el in root.iter(XSL_NS + tag):
-                sel = el.get("select")
-                if el.get("name") and sel and re.fullmatch(r"\d+", sel):
-                    self.params[el.get("name")] = int(sel)
+                if el.get("name"):
+                    self.defs.setdefault(el.get("name"), []).append(el.get("select"))
         self.i18n = {}
         for s in root.iter("s"):
             if s.get("k"):
-                self.i18n[s.get("k")] = {"en": s.get("en"), "pt": s.get("pt"), "es": s.get("es")}
+                self.i18n.setdefault(s.get("k"), []).append(
+                    {"en": s.get("en"), "pt": s.get("pt"), "es": s.get("es")})
 
     def num(self, name):
-        if name not in self.params:
-            raise SystemExit("check-veracity: %s nao encontrado no latex.xsl" % name)
-        return self.params[name]
+        sels = self.defs.get(name, [])
+        if len(sels) != 1:
+            raise StylesheetError("%s definido %d vez(es) no latex.xsl, esperado 1"
+                                  % (name, len(sels)))
+        if not re.fullmatch(r"\d+", sels[0] or ""):
+            raise StylesheetError("%s nao e' um inteiro literal no latex.xsl: select=%r"
+                                  % (name, sels[0]))
+        return int(sels[0])
 
     def t(self, key, lang):
+        nodes = self.i18n.get(key, [])
+        if len(nodes) != 1:
+            raise StylesheetError("chave de i18n %r definida %d vez(es) no latex.xsl, esperado 1"
+                                  % (key, len(nodes)))
         bucket = "pt" if lang.startswith("pt") else ("es" if lang.startswith("es") else "en")
-        node = self.i18n[key]
-        return node.get(bucket) or node["en"]
+        return nodes[0].get(bucket) or nodes[0]["en"]
 
 
 # ---------------------------------------------------------------------------
@@ -149,6 +173,7 @@ class Result:
         self.has_qod = q is not None
         self.qod_raw = (q.text or "") if q is not None else ""
         self.qod = xnum(self.qod_raw)
+        self.desc = el.findtext("description") or ""
 
     def low(self, floor):
         """Instancia abaixo do piso: tem QoD e ela e' < piso (sem QoD = nao)."""
@@ -171,6 +196,10 @@ class Nvt:
         self.maxsev = max(sevs) if sevs else float("nan")
         self.maxsev_raw = next((r.sev_raw for r in instances
                                 if isnum(self.maxsev) and r.sev == self.maxsev), "")
+        # A instancia que representa o NVT no card (pontuacao e evidencia): a
+        # primeira com a severidade maxima; sem nenhuma numerica, a primeira.
+        self.repr = next((r for r in instances
+                          if isnum(self.maxsev) and r.sev == self.maxsev), instances[0])
         qods = [r.qod for r in instances if r.has_qod and isnum(r.qod)]
         self.maxqod = max(qods) if qods else float("nan")
         self.maxqod_raw = next((r.qod_raw for r in instances
@@ -412,6 +441,20 @@ def finding_cards(block):
     return cards
 
 
+def card_segments(block):
+    """[(card, trecho)]: cada \\findingcard com o texto que vem depois dele ate'
+    o proximo card (normal ou consolidado) -- onde moram os blocos do achado."""
+    starts = sorted([p for p, _ in macros(block, "findingcard", 4)] +
+                    [p for p, _ in macros(block, "consolidatedcard", 7)])
+    out = []
+    cards = finding_cards(block)
+    fpos = [p for p, _ in macros(block, "findingcard", 4)]
+    for c, p in zip(cards, fpos):
+        nxt = [q for q in starts if q > p]
+        out.append((c, block[p:nxt[0] if nxt else len(block)]))
+    return out
+
+
 def consolidated_cards(block):
     cards = []
     for _, a in macros(block, "consolidatedcard", 7):
@@ -432,17 +475,51 @@ def consolidated_cards(block):
 # As checagens. Cada uma devolve a lista de falhas (vazia = passou).
 # ---------------------------------------------------------------------------
 def check_numeracao(m, tex, sheet, lang):
+    """Linha #N do sumario == card #N; e cada lado numera direito por conta
+    propria: cada tabela 1..n em ordem, linhas de grupo primeiro; os cards de um
+    bloco em sequencia, a partir de (consolidados do bloco + 1). So' a igualdade
+    linha == card deixaria passar os dois lados errados do mesmo jeito (sem o
+    deslocamento dos grupos nos dois, por exemplo)."""
     fails = []
     rows = {}
+    n_grp_rows = 0
     for mode, block in tex.blocks(4):
+        nums, seen_nvt = [], False
         for r in summary_rows(block):
-            if r["anchor"] and r["anchor"].startswith("fnd-"):
-                rows[r["anchor"]] = (mode, r["num"])
+            nums.append(r["num"])
+            if row_group(r, sheet, lang) is not None:
+                n_grp_rows += 1
+                if seen_nvt:
+                    fails.append("sumario '%s': linha de grupo #%s depois de linha de achado"
+                                 % (mode, r["num"]))
+            else:
+                seen_nvt = True
+                if r["anchor"]:
+                    rows[r["anchor"]] = (mode, r["num"])
+        want = [str(i) for i in range(1, len(nums) + 1)]
+        if nums != want:
+            fails.append("sumario '%s' numerado %s, esperado 1..%d em ordem"
+                         % (mode, " ".join(nums[:15]) + (" ..." if len(nums) > 15 else ""),
+                            len(nums)))
     cards = {}
+    n_cons = 0
     for mode, block in tex.blocks(5):
-        for c in finding_cards(block):
+        fcs = finding_cards(block)
+        ncons = len(consolidated_cards(block))
+        n_cons += ncons
+        start = ncons + 1 if mode == "confirmados" else 1
+        nums = [c["num"] for c in fcs]
+        want = [str(i) for i in range(start, start + len(nums))]
+        if nums != want:
+            fails.append("cards '%s' numerados %s, esperado %d..%d (%d consolidado(s) antes)"
+                         % (mode, " ".join(str(x) for x in nums[:15]),
+                            start, start + len(nums) - 1, ncons))
+        for c in fcs:
             if c["anchor"]:
                 cards[c["anchor"]] = (mode, c["num"])
+    if n_grp_rows != n_cons:
+        fails.append("%d linha(s) de grupo no sumario e %d card(s) consolidado(s)"
+                     % (n_grp_rows, n_cons))
     for anchor, (mode, num) in sorted(rows.items()):
         if anchor not in cards:
             fails.append("linha #%s (%s) do sumario aponta %s, sem card" % (num, mode, anchor))
@@ -524,7 +601,17 @@ def check_consolidado(m, tex, sheet, lang):
 
 
 def check_instancias(m, tex, sheet, lang):
+    """Severidade, tabela e QoD de cada NVT pela regra das instancias (maxima;
+    indicador so' com TODAS abaixo do piso; QoD exibida = maxima), a ordem das
+    tabelas e dos cards pela severidade maxima do ORACULO (Log e falso positivo
+    inclusive, que nao imprimem pontuacao), e o resultado da deteccao de cada
+    card = o da instancia que carrega a maxima (a primeira, no empate)."""
     fails = []
+
+    def order_key(sev):
+        # O xsl:sort numerico decrescente poe NaN no fim.
+        return sev if isnum(sev) else float("-inf")
+
     for mode, block in tex.blocks(4):
         # Duas sequencias ordenadas por tabela: as linhas de grupo (no topo da
         # tabela de confirmados) e as de NVT. Cada uma em ordem decrescente.
@@ -546,30 +633,33 @@ def check_instancias(m, tex, sheet, lang):
                 if (r["sev"], r["score"]) != (want_sev, want_score):
                     fails.append("sumario: %s com %s/%s, esperado %s/%s (maxima das instancias)"
                                  % (n.oid, r["sev"], r["score"] or "-", want_sev, want_score or "-"))
+                key = order_key(n.maxsev)
             else:
                 kind = "grp"
                 if g not in m.groups:
                     fails.append("sumario: linha de grupo '%s' sem grupo de >= %d confirmados"
                                  % (g, m.group_min))
-                else:
-                    want_sev = sev_key_row(m.group_maxsev(g))
-                    want_score = "" if want_sev in ("logsev", "neutro") else m.group_top(g).sev_raw
-                    if (r["sev"], r["score"]) != (want_sev, want_score):
-                        fails.append("sumario: grupo '%s' com %s/%s, esperado %s/%s (maxima dos"
-                                     " confirmados)" % (g, r["sev"], r["score"] or "-",
-                                                        want_sev, want_score or "-"))
-                    if r["inst"] != str(len(m.groups[g])):
-                        fails.append("sumario: grupo '%s' com %s advisories, esperado %d"
-                                     % (g, r["inst"], len(m.groups[g])))
-            if r["score"] and isnum(xnum(r["score"])):
-                if last[kind] is not None and xnum(r["score"]) > last[kind]:
-                    fails.append("sumario '%s' fora de ordem: %s depois de %s"
-                                 % (mode, r["score"], last[kind]))
-                last[kind] = xnum(r["score"])
+                    continue
+                want_sev = sev_key_row(m.group_maxsev(g))
+                want_score = "" if want_sev in ("logsev", "neutro") else m.group_top(g).sev_raw
+                if (r["sev"], r["score"]) != (want_sev, want_score):
+                    fails.append("sumario: grupo '%s' com %s/%s, esperado %s/%s (maxima dos"
+                                 " confirmados)" % (g, r["sev"], r["score"] or "-",
+                                                    want_sev, want_score or "-"))
+                if r["inst"] != str(len(m.groups[g])):
+                    fails.append("sumario: grupo '%s' com %s advisories, esperado %d"
+                                 % (g, r["inst"], len(m.groups[g])))
+                key = order_key(m.group_maxsev(g))
+            if last[kind] is not None and key > last[kind]:
+                fails.append("sumario '%s' fora de ordem: linha #%s (severidade maxima %s) depois"
+                             " de uma de %s" % (mode, r["num"], key, last[kind]))
+            last[kind] = key
     for mode, block in tex.blocks(5):
-        for c in finding_cards(block):
+        last = None
+        for c, seg in card_segments(block):
             n = m.by_anchor.get(c["anchor"])
             if n is None:
+                fails.append("card %s: OID desconhecido" % c["anchor"])
                 continue
             want_sev = sev_key_card(n.maxsev)
             want_score = n.maxsev_raw if want_sev not in ("logsev", "falsepos") else ""
@@ -588,6 +678,30 @@ def check_instancias(m, tex, sheet, lang):
                 if c["qod"] != want_q:
                     fails.append("card %s: chip QoD %s, esperado %s (maxima das instancias)"
                                  % (n.oid, c["qod"], want_q))
+            key = order_key(n.maxsev)
+            if last is not None and key > last:
+                fails.append("cards '%s' fora de ordem: #%s (severidade maxima %s) depois de um"
+                             " de %s" % (mode, c["num"], key, last))
+            last = key
+            # Evidencia: o termbox do card e' a descricao da instancia
+            # representativa; a deteccao vazia (so' branco) nao abre termbox.
+            desc = n.repr.desc
+            box = re.search(r"\\begin\{termbox\}(.*?)\\end\{termbox\}", seg, re.S)
+            if not norm_space(desc):
+                if box:
+                    fails.append("card %s: termbox sem descricao na instancia representativa"
+                                 % n.oid)
+                continue
+            if not box:
+                fails.append("card %s: sem o resultado da deteccao" % n.oid)
+                continue
+            got, want = flat(box.group(1)), norm_space(desc)
+            ok = want.startswith(got) and len(got) > 0 if len(desc) > 1500 else got == want
+            if not ok:
+                fails.append("card %s: deteccao '%s', esperado a da instancia representativa"
+                             " (#%d no XML, severidade %s): '%s'"
+                             % (n.oid, got[:60], n.repr.pos + 1, n.repr.sev_raw or "-", want[:60]))
+        last = None
         for c in consolidated_cards(block):
             g = card_group(c, sheet, lang)
             if g not in m.groups:
@@ -597,6 +711,11 @@ def check_instancias(m, tex, sheet, lang):
             if (c["sev"], c["score"]) != (want_sev, want_score):
                 fails.append("card consolidado '%s': %s/%s, esperado %s/%s"
                              % (g, c["sev"], c["score"], want_sev, want_score))
+            key = order_key(m.group_maxsev(g))
+            if last is not None and key > last:
+                fails.append("cards consolidados fora de ordem: '%s' (%s) depois de um de %s"
+                             % (g, key, last))
+            last = key
     return fails
 
 
@@ -642,6 +761,9 @@ def check_vulns_unicas(m, tex, sheet, lang):
 
 
 def check_faixas(m, tex, sheet, lang):
+    """As quatro barras do resumo executivo, o TOTAL DE ACHADOS, o numero de
+    Alto/Critico da narrativa e a clausula de remediacao que fecha a frase --
+    todos da fonte que o latex.xsl tem de usar."""
     fails = []
     rc = m.report.find("result_count")
     names = ("critical", "high", "medium", "low")
@@ -660,12 +782,25 @@ def check_faixas(m, tex, sheet, lang):
     elif got != want:
         fails.append("barras critico/alto/medio/baixo = %s, esperado %s (fonte unica: %s)"
                      % (got, want, src))
-    # Clausula de remediacao: populacoes de Alto/Critico e de baixa confianca.
+    # TOTAL DE ACHADOS: o total do SCAN (o texto do result_count) quando e' um
+    # inteiro >= o que o export carrega; senao, o que o export carrega.
+    total = len(m.results)
+    rcn = xnum(rc.text if rc is not None else "")
+    total_full = int(rcn) if isnum(rcn) and rcn == int(rcn) and rcn >= total else total
+    truncated = total_full > total
+    kpi = macros(sec1, "kpirow", 8)
+    if not kpi:
+        fails.append("sem \\kpirow no resumo executivo")
+    elif kpi[0][1][5].strip() != str(total_full):
+        fails.append("TOTAL DE ACHADOS = %s, esperado %d (%s)"
+                     % (kpi[0][1][5].strip(), total_full,
+                        "texto do result_count" if truncated or total_full != total
+                        else "results do export"))
+    # Narrativa: o N de Alto/Critico e' a soma das MESMAS faixas das barras, e a
+    # clausula que fecha a frase depende de N, da baixa confianca (contada no
+    # export) e de as duas serem da mesma populacao.
     if m.hosts == 0:
         return fails
-    total = len(m.results)
-    rc_text = (rc.text or "").strip(WS) if rc is not None else ""
-    truncated = bool(re.fullmatch(r"\d+", rc_text)) and int(rc_text) > total
     hicrit = want[0] + want[1]
     lowconf = sum(1 for r in m.results if isnum(r.sev) and r.sev >= 7.0 and r.low(m.floor))
     known = (not rc_bands) or (not truncated)
@@ -673,22 +808,32 @@ def check_faixas(m, tex, sheet, lang):
     if not lede:
         return fails + ["sem \\suriLede no resumo executivo"]
     text = lede[0][1][0]
+    head = "\\textbf{%d " % hicrit
+    k = text.rfind(head)
+    if k < 0:
+        nums = re.findall(r"\\textbf\{(\d+) ", text)
+        return fails + ["narrativa diz %s Alto/Critico, esperado %d (critico + alto das barras)"
+                        % (" e ".join(nums) or "nenhum numero", hicrit)]
+    try:
+        _, end = group_at(text, k + len("\\textbf"))
+    except TexError as e:
+        return fails + ["narrativa: grupo do numero de Alto/Critico ilegivel (%s)" % e]
+    tail = text[end:]
     warrant = sheet.t("exec_warrant", lang)
-    alllow = sheet.t("exec_all_lowconf", lang)
-    ofwhich = sheet.t("of_which_lowconf", lang)
-    has = {k: (v in text) for k, v in (("warrant", warrant), ("all", alllow), ("ofwhich", ofwhich))}
     if not known:
-        if any(has.values()):
-            fails.append("clausula de remediacao fala de confianca com Alto/Critico do SCAN (%d) e"
-                         " baixa confianca do EXPORT parcial (%d): populacoes diferentes" % (hicrit, lowconf))
+        want_tail, why = ".", ("faixas do SCAN (%d Alto/Critico) e export parcial: a baixa"
+                               " confianca (%d no export) e' de outra populacao, a frase termina"
+                               " no numero" % (hicrit, lowconf))
     elif hicrit > 0 and lowconf >= hicrit:
-        if not has["all"]:
-            fails.append("todos os %d Alto/Critico sao de baixa confianca e a clausula nao diz" % hicrit)
+        want_tail, why = sheet.t("exec_all_lowconf", lang), "todos de baixa confianca"
     elif lowconf > 0:
-        if not (has["warrant"] and ("--- %d%s" % (lowconf, ofwhich)) in text):
-            fails.append("clausula sem '%d de baixa confianca'" % lowconf)
-    elif not has["warrant"] or has["ofwhich"] or has["all"]:
-        fails.append("clausula de remediacao inesperada (0 de baixa confianca)")
+        want_tail = "%s --- %d%s." % (warrant, lowconf, sheet.t("of_which_lowconf", lang))
+        why = "%d de baixa confianca" % lowconf
+    else:
+        want_tail, why = warrant + ".", "nenhum de baixa confianca"
+    if tail != want_tail:
+        fails.append("clausula de remediacao '%s', esperado '%s' (%s)"
+                     % (tail[:90], want_tail[:90], why))
     return fails
 
 
@@ -804,7 +949,7 @@ def main():
         sheet = Stylesheet(os.path.join(args.bundle, "latex.xsl"))
         model = Model(args.xml, sheet)
         tex = Tex(args.tex)
-    except (OSError, ET.ParseError, TexError) as e:
+    except (OSError, ET.ParseError, TexError, StylesheetError) as e:
         print("check-veracity: ERRO de leitura: %s" % e)
         return 2
     failed = 0
@@ -818,6 +963,9 @@ def main():
                 fails = fn(model, tex, sheet, args.lang)
         except TexError as e:
             fails = ["o .tex nao pode ser lido: %s" % e]
+        except StylesheetError as e:
+            print("check-veracity: ERRO no latex.xsl (checagem %s): %s" % (name, e))
+            return 2
         if fails:
             failed += 1
             print("  FALHA  %s" % name)

@@ -11,7 +11,9 @@ instancias estao abaixo do piso de QoD; a QoD exibida e' a maxima entre as
 instancias. O NVT ...400 abre com uma instancia de QoD 30 e severidade 5.0, e a
 segunda tem QoD 98 e 9.8: antes ia para os indicadores como Medio 5.0. O grupo
 Litware tem o membro menos severo primeiro: a linha do grupo no sumario dizia
-4.3 enquanto o card dizia 8.8.
+4.3 enquanto o card dizia 8.8. O resultado da deteccao do card e' o da
+instancia que carrega a severidade maxima (a primeira, no empate): cada
+instancia tem uma evidencia propria, marcada EVIDENCE-<oid>-...
 -->
 <report extension="pdf" content_type="application/pdf" id="00000000-0000-4000-8000-000000000034">
   <task id="00000000-0000-4000-8000-000000000001">
@@ -74,7 +76,7 @@ Litware tem o membro menos severo primeiro: a linha do grupo no sumario dizia
       <threat>Medium</threat>
       <severity>5.0</severity>
       <qod><value>30</value><type>remote_banner</type></qod>
-      <description>Synthetic detection output for Example Web Server Outdated Version.</description>
+      <description>EVIDENCE-400-FIRST: unreliable banner on 192.0.2.10 (severity 5.0).</description>
     </result>
     <result id="v-0002">
       <host>192.0.2.20<hostname>host02.example.com</hostname></host>
@@ -91,7 +93,7 @@ Litware tem o membro menos severo primeiro: a linha do grupo no sumario dizia
       <threat>Critical</threat>
       <severity>9.8</severity>
       <qod><value>98</value><type>remote_banner</type></qod>
-      <description>Synthetic detection output for Example Web Server Outdated Version.</description>
+      <description>EVIDENCE-400-MAX: package check on 192.0.2.20 (severity 9.8).</description>
     </result>
     <result id="v-0003">
       <host>192.0.2.10<hostname>host01.example.com</hostname></host>
@@ -108,7 +110,7 @@ Litware tem o membro menos severo primeiro: a linha do grupo no sumario dizia
       <threat>Medium</threat>
       <severity>5.0</severity>
       <qod><value>98</value><type>remote_banner</type></qod>
-      <description>Synthetic detection output for Example DNS Server Cache Snooping.</description>
+      <description>EVIDENCE-401-FIRST: recursive answer from 192.0.2.10 (severity 5.0, tie).</description>
     </result>
     <result id="v-0004">
       <host>198.51.100.30<hostname>host03.example.com</hostname></host>
@@ -125,7 +127,7 @@ Litware tem o membro menos severo primeiro: a linha do grupo no sumario dizia
       <threat>Medium</threat>
       <severity>5.0</severity>
       <qod><value>30</value><type>remote_banner</type></qod>
-      <description>Synthetic detection output for Example DNS Server Cache Snooping.</description>
+      <description>EVIDENCE-401-SECOND: recursive answer from 198.51.100.30 (severity 5.0, tie).</description>
     </result>
     <result id="v-0005">
       <host>192.0.2.20<hostname>host02.example.com</hostname></host>
@@ -142,7 +144,7 @@ Litware tem o membro menos severo primeiro: a linha do grupo no sumario dizia
       <threat>Medium</threat>
       <severity>6.4</severity>
       <qod><value>30</value><type>remote_banner</type></qod>
-      <description>Synthetic detection output for Example FTP Server Anonymous Login.</description>
+      <description>EVIDENCE-402-FIRST: anonymous login on 192.0.2.20 (severity 6.4).</description>
     </result>
     <result id="v-0006">
       <host>198.51.100.30<hostname>host03.example.com</hostname></host>
@@ -159,7 +161,7 @@ Litware tem o membro menos severo primeiro: a linha do grupo no sumario dizia
       <threat>High</threat>
       <severity>7.5</severity>
       <qod><value>50</value><type>remote_banner</type></qod>
-      <description>Synthetic detection output for Example FTP Server Anonymous Login.</description>
+      <description>EVIDENCE-402-MAX: anonymous login with write access on 198.51.100.30 (severity 7.5).</description>
     </result>
     <result id="v-0007">
       <host>203.0.113.40<hostname>host04.example.com</hostname></host>

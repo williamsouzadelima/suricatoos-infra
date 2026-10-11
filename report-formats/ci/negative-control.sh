@@ -81,7 +81,9 @@ caso() {
 
 caso sem-blocks   sem-blocks sample.xml   'suricatoos-blocks\.sty'
 caso erro-tex     erro-tex   sample.xml   'Undefined control sequence'
-caso xml-quebrado integro    quebrado.xml 'xsltproc'
+# "xsltproc" sozinho casaria tambem a mensagem do .tex vazio ("xsltproc
+# exited 0 but produced an empty .tex"): a causa aqui e' o exit NAO zero.
+caso xml-quebrado integro    quebrado.xml 'xsltproc exited [1-9]'
 # Aqui o generate pega o .tex vazio antes do pdflatex; se um dia o xsltproc
 # devolver um "\n" em vez de nada, quem falha e' o pdflatex (Emergency stop) --
 # alto do mesmo jeito, e o generate diz "TeX errors" / "report.pdf missing".
