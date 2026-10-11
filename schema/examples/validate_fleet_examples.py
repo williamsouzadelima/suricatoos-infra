@@ -6,19 +6,21 @@ $defs entry, it targets, OFFLINE: the six schemas are loaded from disk into a
 `referencing` registry keyed by their $id; any other reference raises instead of
 being fetched over the network.
 
-  valid/<schema>/<case>.json    must parse (no duplicate key), validate (with every
-                                integer written as one: no fraction, no exponent) and
+  valid/<schema>/<case>.json    must parse (no duplicate key, nesting <= 32, no
+                                unpaired surrogate), validate (every integer written
+                                as one; every date-time a real calendar instant) and
                                 carry the right raw-byte hashes: a signed command
                                 envelope its payload_sha256 and a real Ed25519
                                 signature, a state snapshot its content_sha256
   invalid/<schema>/<case>.json  must fail exactly as its "expect" in fleet/index.json
                                 says: {keyword, path} for a schema error (keyword +
                                 instance JSON pointer), or {check, path} for
-                                json_syntax (not exactly one JSON value, e.g. data
-                                after it) | duplicate_key | integer_lexical (an
-                                integer written with a fraction or exponent, which
-                                JSON Schema alone accepts) | payload_sha256 |
-                                signature | content_sha256 | audit_chain
+                                json_syntax (not exactly one JSON value, data after
+                                it, nesting > 32, unpaired surrogate) | duplicate_key
+                                | integer_lexical (a number written with a fraction
+                                or exponent where an integer goes -- in a command
+                                envelope, anywhere) | payload_sha256 | signature |
+                                content_sha256 | audit_chain
 
 A case named '<def>--<rest>.json' targets fleet-<schema>.schema.json#/$defs/<def>;
 any other case targets the schema root.
@@ -49,6 +51,7 @@ Usage:    python3 schema/examples/validate_fleet_examples.py   (exit 0 = contrac
 Requires: jsonschema >= 4.18 (ships `referencing`) and cryptography (Ed25519).
 """
 import base64
+import datetime
 import hashlib
 import json
 import re
@@ -59,7 +62,7 @@ from pathlib import Path
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-from jsonschema import Draft202012Validator, validators
+from jsonschema import Draft202012Validator, FormatChecker, validators
 from referencing import Registry, Resource
 from referencing.exceptions import NoSuchResource, Unresolvable
 from referencing.jsonschema import DRAFT202012
@@ -92,8 +95,28 @@ def canonical(env):
     return ("\n".join(lines) + "\n").encode("utf-8")
 
 
+MAX_DEPTH = 32  # ADR-0011 "Codificação JSON": nesting of objects/arrays; the top-level value is level 1
+_UTC_SHAPE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z")
+
+# format date-time = an RFC 3339 instant that EXISTS (no Feb 30, no hour 24, no second 60). Registered here, not left
+# to the optional rfc3339-validator package, so every environment checks the same thing; the pattern of utc_time
+# already pins the shape and the field ranges, this adds the calendar.
+FORMATS = FormatChecker()
+
+
+@FORMATS.checks("date-time", raises=ValueError)
+def _real_instant(value):
+    if isinstance(value, str) and _UTC_SHAPE.fullmatch(value):
+        datetime.datetime.strptime(value, "%Y-%m-%dT%H:%M:%SZ")
+    return True
+
+
 class DuplicateKey(ValueError):
     pass
+
+
+class JsonRule(ValueError):
+    """A JSON-text rule of ADR-0011 that json.loads does not enforce (nesting depth, unpaired surrogates)."""
 
 
 def _no_duplicates(pairs):
@@ -105,8 +128,41 @@ def _no_duplicates(pairs):
     return obj
 
 
+def _json_rules(value, depth=1):
+    if isinstance(value, str):
+        if any(0xD800 <= ord(ch) <= 0xDFFF for ch in value):
+            raise JsonRule("unpaired surrogate in a string (\\ud800-\\udfff escape without its pair)")
+        return
+    if isinstance(value, (dict, list)):
+        if depth > MAX_DEPTH:
+            raise JsonRule(f"nesting deeper than {MAX_DEPTH} levels")
+        for key, item in (value.items() if isinstance(value, dict) else enumerate(value)):
+            if isinstance(key, str):
+                _json_rules(key)
+            _json_rules(item, depth + 1)
+
+
 def parse(text):
-    return json.loads(text, object_pairs_hook=_no_duplicates)
+    """One JSON value, no duplicate key, nesting <= 32, no unpaired surrogate (ValueError otherwise)."""
+    value = json.loads(text, object_pairs_hook=_no_duplicates)
+    _json_rules(value)
+    return value
+
+
+def _pointer(parts):
+    return "".join("/" + str(p).replace("~", "~0").replace("/", "~1") for p in parts)
+
+
+def first_fraction(value, parts=()):
+    """JSON pointer of the first number written with a fraction or exponent (json parses it to float), else None."""
+    if isinstance(value, float):
+        return _pointer(parts)
+    if isinstance(value, (dict, list)):
+        for key, item in (value.items() if isinstance(value, dict) else enumerate(value)):
+            found = first_fraction(item, parts + (key,))
+            if found is not None:
+                return found
+    return None
 
 
 # --- raw value spans (payload_sha256 covers the EXACT transmitted bytes) -----
@@ -325,7 +381,7 @@ def main():
             cache[(target, cls)] = cls(
                 {"$schema": "https://json-schema.org/draft/2020-12/schema", "$ref": BASE + target},
                 registry=lexical_registry if cls is LexicalInt else registry,
-                format_checker=Draft202012Validator.FORMAT_CHECKER,
+                format_checker=FORMATS,
             )
         return cache[(target, cls)]
 
@@ -380,6 +436,13 @@ def main():
             failure = {"check": "duplicate_key", "path": "", "detail": f"duplicate key {exc}"}
         except ValueError as exc:
             failure = {"check": "json_syntax", "path": "", "detail": f"not one well-formed JSON value ({exc})"}
+        if failure is None and schema == "command":
+            # an envelope has no 'number' anywhere: ANY number with a fraction or exponent, even in a payload member
+            # the schema does not know, is refused lexically before the schema runs (as the node's token pass does)
+            fraction = first_fraction(inst)
+            if fraction is not None:
+                failure = {"check": "integer_lexical", "path": fraction,
+                           "detail": f"integer written with a fraction or exponent at '{fraction}'"}
         errors = []
         if failure is None:
             try:

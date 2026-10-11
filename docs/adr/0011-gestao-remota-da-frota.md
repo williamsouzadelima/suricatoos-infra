@@ -279,18 +279,20 @@ byte a byte.
   sai na versão nova. O hash de estado é sempre o da serialização na versão do envio. A idempotência do hub
   (`204` × `409`) compara valores, não bytes, para que re-serializar não vire conflito.
 - **Enroll e renew** saem na **maior** versão do nó, com o anúncio; o hub responde na maior versão comum.
-- **Versão não suportada ⇒ `426`.** O hub lê o `schema_version` do topo de todo corpo do nó antes da validação
-  estrita. A forma tem nome, `fleet-command.schema.json#/$defs/schema_version_wire`:
+- **Versão não suportada ⇒ `426`.** O hub lê o `schema_version` — membro de **nível superior** do corpo, em
+  qualquer posição entre os membros, porque objeto JSON não tem ordem — de todo corpo do nó antes da validação
+  completa. A forma tem nome, `fleet-command.schema.json#/$defs/schema_version_wire`:
   `^(0|[1-9][0-9]{0,2})\.(0|[1-9][0-9]{0,2})\.0$`, isto é, `MAJOR.MINOR.0` com MAJOR e MINOR em decimal **sem
   zero à esquerda** (`01.0.0` e `1.00.0` estão fora).
-  - ausente ou fora dessa forma ⇒ `400`;
+  - ausente no nível superior, não string ou fora dessa forma ⇒ `400`;
   - na forma, mas de uma versão que o hub não suporta ⇒ `426` com o corpo
     `fleet-heartbeat.schema.json#/$defs/version_unsupported` (`{"schema_versions": [...]}`, as do hub), sem
     consumir o token do enroll.
 
   São **invariantes** — nunca mudam, nem num MAJOR novo — a forma desse corpo, o membro `schema_versions` dos
-  corpos de enroll, renew e heartbeat e o nome, a posição e a forma do `schema_version` no topo de todo corpo
-  versionado (todos, menos o do `426`, que não tem versão) e de todo envelope: é o que o hub lê antes de validar.
+  corpos de enroll, renew e heartbeat, e o nome e a forma do `schema_version`, com ele como membro de nível
+  superior de todo corpo versionado (todos, menos o do `426`, que não tem versão) e de todo envelope: é o que o
+  receptor lê antes da validação completa.
   Reação do nó ao `426`:
   - recalcula a maior versão comum com esse anúncio; se existir, adota-a e reenvia o mesmo item
     re-serializado, no máximo uma vez por item;
@@ -318,22 +320,50 @@ byte a byte.
 
 ### Codificação JSON (normativo)
 
+As regras abaixo valem para os dois lados. O nó em Go (F2.1) as impõe, e o `validate_fleet_examples.py` confere as
+mesmas nos exemplos, para Python e Go darem o mesmo veredito.
+
 - **UTF-8** válido, sem BOM; **um único valor JSON** por corpo — depois dele, só espaço em branco (dado extra ⇒
   inválido; no envelope, `bad_envelope`).
 - **Sem chave duplicada**, em nível nenhum (inclusive dentro de `payload` e de `data`), e **caixa exata**: chave
   que só difere na caixa (`"Node_ID"`) é chave desconhecida, nunca um apelido de `node_id`. Atenção: o
   `encoding/json` do Go casa chave sem diferenciar caixa e aceita duplicata — o lado Go faz uma passada por
   tokens antes do decode.
+- **Aninhamento ≤ 32 níveis** de objeto e array, com o valor do topo no nível 1; acima disso, JSON inválido (no
+  envelope, `bad_envelope`).
+- **Sem surrogate desemparelhado** em string nenhuma (escape `\uD800`–`\uDFFF` sem o par): JSON inválido (no
+  envelope, `bad_envelope`). É regra do parser: o `encoding/json` do Go troca esse escape por U+FFFD em silêncio,
+  então o lado Go confere os tokens.
 - **Inteiros sem fração nem expoente** (`100`, nunca `100.0` nem `1e2`). A recusa é **léxica**, no JSON cru: o
   JSON Schema aceita `100.0` como `integer`, então validar o schema não basta. É obrigação do parser (F2.1) nos
   dois sentidos: o nó no envelope (`bad_envelope`) e o hub nos corpos nó→hub (`400`). O
-  `validate_fleet_examples.py` confere isso nos exemplos (checagem `integer_lexical`).
+  `validate_fleet_examples.py` confere isso nos exemplos (checagem `integer_lexical`). No **envelope** não existe
+  campo `number`: **todo** número dele, inclusive dentro de um payload de tipo desconhecido ou num membro que o
+  schema não conhece, é inteiro, e uma fração ou expoente é `bad_envelope` antes de olhar o schema.
+- **base64 canônico.** A `signature` é base64 padrão na forma **canônica**: exatamente 88 caracteres do alfabeto
+  padrão, terminando em `==`, com o caractere antes do padding com os 4 bits baixos zerados (`A`, `Q`, `g` ou
+  `w`). Espaço, alfabeto URL-safe, padding omitido ou bits de padding diferentes de zero ⇒ `bad_envelope`. O
+  schema codifica isso no padrão `^[A-Za-z0-9+/]{85}[AQgw]==$`.
+- **Instantes reais.** Todo tempo RFC 3339 é um instante que existe no calendário: sem 30/02, sem hora 24 e sem
+  segundo 60. O v1 não precisa de segundo bissexto, e o `time` do Go não o representa. O padrão de `utc_time`
+  fixa a faixa de cada campo, e o dia do mês é conferido como `format: date-time` (no envelope, `bad_envelope`).
+- **Caracteres XML 1.0** nos textos que chegam ao gvmd (nomes, `comment`, iCalendar, filtro): sem U+FFFE/U+FFFF e
+  sem controle C0 além do que o campo já permite (o iCalendar aceita TAB, CR e LF). O `no_control` e o
+  `icalendar` do schema recusam esses caracteres; o surrogate desemparelhado sai pela regra do parser acima.
 - **Bytes verbatim:** `payload_sha256` (comando) e `content_sha256` (estado) são sobre os bytes do valor **como
   transmitidos**. Quem verifica hasheia o trecho cru (num hub JS/TS, com parser que preserve o trecho —
-  `JSON.stringify` de novo não serve). O emissor serializa compacto e **sem escape de HTML**: `<`, `>`, `&` e
-  U+2028/U+2029 vão literais. Em Go, o payload vai como `json.RawMessage` num encoder com `SetEscapeHTML(false)`:
-  sem isso o `encoding/json` reescreve esses caracteres, e numa string comum ele escapa U+2028/U+2029 sempre.
-  Em qualquer linguagem, o hash é calculado sobre exatamente os bytes que saem.
+  `JSON.stringify` de novo não serve).
+- **Payload embutido sem re-codificar.** O emissor serializa o payload compacto e **sem escape de HTML** (`<`,
+  `>`, `&` e U+2028/U+2029 vão literais), calcula o hash sobre esses bytes e monta o envelope **concatenando esses
+  mesmos bytes** no lugar do valor de `payload`. Nenhum re-codificador JSON toca o payload depois do hash.
+  - Em Go, use o `fleet/contract` (o `Sign` monta o envelope assim; há também o `MarshalCompact`) ou monte os
+    bytes à mão.
+  - **Não** confie em `json.RawMessage` com `SetEscapeHTML(false)`: no go1.27, com o núcleo json/v2, o
+    `encoding/json` escapa U+2028/U+2029 até dentro de um `json.RawMessage`, e todo nó responderia
+    `payload_mismatch`.
+  - O mesmo vale para o `data` do estado.
+  - Travam isso o `valid/command/task-create-html-chars.json`, o
+    `invalid/command/payload-html-escaped-after-hashing.json` e os vetores golden equivalentes (lista abaixo).
 - O `fleet_ops.py` recebe **exatamente** os valores que passaram na validação (hosts na forma canônica do
   portão de escopo), nunca o JSON cru do hub.
 
@@ -383,7 +413,7 @@ possui chave de assinatura: um nó comprometido não forja comando para outro.
 ### Envelope assinado e forma canônica
 
 O envelope (`fleet-command.schema.json`) tem 12 campos: os 10 assinados abaixo + `payload` (objeto JSON) +
-`signature` (base64 padrão dos 64 bytes Ed25519). `fleet-command.schema.json#/$defs/envelope` é o mesmo envelope
+`signature` (base64 padrão, em forma canônica, dos 64 bytes Ed25519). `fleet-command.schema.json#/$defs/envelope` é o mesmo envelope
 na forma que a linha 0 confere (`type` = `command_type_any`, `payload` = qualquer objeto). A mensagem assinada é
 a **forma canônica**:
 
@@ -408,7 +438,8 @@ Regras (copiadas da disciplina de `control-plane/remediation/canonical.go`):
   fronteira de um campo.
 - `issued_at` e `not_after` em RFC 3339 **UTC, segundos inteiros, sufixo `Z`** (`2026-10-11T12:00:00Z`). O
   envelope JSON carrega **exatamente** essa forma (o schema exige 20 caracteres); fração de segundo ou offset
-  ⇒ `bad_envelope`. Diferente da remediação, os dois são **obrigatórios** (vazio ⇒ `bad_envelope`).
+  ⇒ `bad_envelope`. Cada um é um instante real (ver "Codificação JSON"). Diferente da remediação, os dois são
+  **obrigatórios** (vazio ⇒ `bad_envelope`).
 - `schema_version` = `MAJOR.MINOR.0` de uma versão que o nó suporta (`1.0.0` no v1; o PATCH nunca vai ao fio);
   `command_id` = UUID minúsculo; `nonce` = 32 bytes de CSPRNG em hex minúsculo
   (64 caracteres); `issued_by` = identificador **pseudônimo** do operador do hub, obrigatório (ex. `op-7f3a`;
@@ -451,7 +482,7 @@ destino do comando (ack em `fleet-result.schema.json#/$defs/ack`).
 
 | # | Checagem | Motivo se falhar | Decisão |
 |---|---|---|---|
-| 0 | forma (`#/$defs/envelope`): JSON estrito (ver "Codificação JSON"), `schema_version` = `MAJOR.MINOR.0` de uma versão que o nó suporta, formatos exatos (tempos, nonce, assinatura), tamanhos | `bad_envelope` | sem ack (só contado) |
+| 0 | forma (`#/$defs/envelope`): JSON estrito (ver "Codificação JSON"), `schema_version` = `MAJOR.MINOR.0` de uma versão que o nó suporta, formatos exatos (tempos como instantes reais, nonce, assinatura em base64 canônico), aninhamento, tamanhos | `bad_envelope` | sem ack (só contado) |
 | 1 | `sha256(bytes crus de payload) == payload_sha256` | `payload_mismatch` | sem ack (só contado) |
 | 2 | Ed25519 sobre a forma canônica com a chave **pinada** (1 + 2 = `Verify`) | `bad_signature` | sem ack (só contado) |
 | 2a | reentrega: a forma canônica (que inclui o nonce) já está **gravada** no store, inclusive como `replay` ⇒ reenvia o ack e o resultado gravados, sem reavaliar as linhas 3–9 e sem executar de novo. Não grava linha `received`: conta em `redeliveries` (heartbeat) e numa linha agregada periódica `redelivered` (fluxo `reject`); fica fora do orçamento, mas um poll sem comando **novo** aceito entra no backoff | — | a decisão gravada |
@@ -625,7 +656,9 @@ Vetores obrigatórios:
 - Da "Codificação JSON": payload com `<`, `>`, `&` e U+2028 literais (`accept`) e o mesmo payload re-escapado
   em HTML depois do hash (`payload_mismatch`); chave duplicada no envelope e no payload, chave com caixa
   diferente (`"Node_ID"`), dado depois do valor e inteiro com fração ou expoente, `70.0` e `7e1`
-  (`bad_envelope`, recusa léxica).
+  (`bad_envelope`, recusa léxica); e, das regras estritas, `signature` em base64 não canônico, instante inexistente
+  (30/02), hora 24, segundo 60, aninhamento de 33 níveis e surrogate desemparelhado (`bad_envelope`), mais U+FFFE
+  num nome de payload (`bad_payload`).
 
 ### Rotas do hub
 

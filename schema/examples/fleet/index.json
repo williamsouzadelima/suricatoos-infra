@@ -50,6 +50,15 @@
       }
     },
     {
+      "file": "invalid/command/envelope--fraction-in-unknown-payload-member.json",
+      "target": "fleet-command.schema.json#/$defs/envelope",
+      "description": "an envelope has no 'number': a fraction anywhere, even in a member the schema does not know, is refused lexically first",
+      "expect": {
+        "check": "integer_lexical",
+        "path": "/payload/weight"
+      }
+    },
+    {
       "file": "invalid/command/envelope--fractional-seconds.json",
       "target": "fleet-command.schema.json#/$defs/envelope",
       "description": "line 0 is strict on time format even for an unknown type",
@@ -86,9 +95,27 @@
       }
     },
     {
+      "file": "invalid/command/issued-at-february-30.json",
+      "target": "fleet-command.schema.json",
+      "description": "times are real calendar instants: no Feb 30 (format date-time)",
+      "expect": {
+        "keyword": "format",
+        "path": "/issued_at"
+      }
+    },
+    {
       "file": "invalid/command/issued-at-fractional-seconds.json",
       "target": "fleet-command.schema.json",
       "description": "fractional seconds would drift from the canonical rendering",
+      "expect": {
+        "keyword": "pattern",
+        "path": "/issued_at"
+      }
+    },
+    {
+      "file": "invalid/command/issued-at-hour-24.json",
+      "target": "fleet-command.schema.json",
+      "description": "times are real calendar instants: no hour 24",
       "expect": {
         "keyword": "pattern",
         "path": "/issued_at"
@@ -149,11 +176,29 @@
       }
     },
     {
+      "file": "invalid/command/not-after-second-60.json",
+      "target": "fleet-command.schema.json",
+      "description": "times are real calendar instants: no leap second 60",
+      "expect": {
+        "keyword": "pattern",
+        "path": "/not_after"
+      }
+    },
+    {
       "file": "invalid/command/payload-html-escaped-after-hashing.json",
       "target": "fleet-command.schema.json",
       "description": "M1: an HTML-escaping re-encoder (e.g. Go json.Marshal) rewrote <, >, & after the hash",
       "expect": {
         "check": "payload_sha256",
+        "path": ""
+      }
+    },
+    {
+      "file": "invalid/command/payload-nesting-depth-33.json",
+      "target": "fleet-command.schema.json",
+      "description": "JSON nesting is limited to 32 levels (envelope = 1, payload = 2): 33 is invalid JSON for the contract",
+      "expect": {
+        "check": "json_syntax",
         "path": ""
       }
     },
@@ -365,6 +410,15 @@
       }
     },
     {
+      "file": "invalid/command/signature-base64-noncanonical.json",
+      "target": "fleet-command.schema.json",
+      "description": "base64 in canonical form only: the same 64 bytes with non-zero padding bits are refused (Python's b64decode alone would accept them)",
+      "expect": {
+        "keyword": "pattern",
+        "path": "/signature"
+      }
+    },
+    {
       "file": "invalid/command/signature-field-altered.json",
       "target": "fleet-command.schema.json",
       "description": "tenant changed after signing (payload hash still matches)",
@@ -434,6 +488,24 @@
       "expect": {
         "keyword": "enum",
         "path": "/payload/alive_test"
+      }
+    },
+    {
+      "file": "invalid/command/task-create-name-noncharacter.json",
+      "target": "fleet-command.schema.json",
+      "description": "text that reaches gvmd's XML has only XML 1.0 characters: U+FFFE is refused (no_control)",
+      "expect": {
+        "keyword": "not",
+        "path": "/payload/name"
+      }
+    },
+    {
+      "file": "invalid/command/task-create-name-unpaired-surrogate.json",
+      "target": "fleet-command.schema.json",
+      "description": "no unpaired surrogate in any string (escape without its pair): invalid JSON for the contract",
+      "expect": {
+        "check": "json_syntax",
+        "path": ""
       }
     },
     {
