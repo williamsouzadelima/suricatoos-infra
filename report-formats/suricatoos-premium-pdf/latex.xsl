@@ -570,7 +570,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
 
   <!-- The report generation date ("today"), localised. Emitted instead of
        LaTeX's \today, which is locale-blind and would always read in English.
-       en: "July 1, 2026"; pt/es: "1 de julho de 2026" / "1 de julio de 2026". -->
+       en: "April 3, 2026"; pt/es: "3 de abril de 2026". -->
   <xsl:template name="emit-today">
     <xsl:variable name="now" select="date:date-time()"/>
     <xsl:variable name="mn" select="gvm:month-name(date:month-in-year($now))"/>
@@ -1005,8 +1005,8 @@ SPDX-License-Identifier: GPL-2.0-or-later
        solto NAO basta, e essa era a raiz de um defeito medido: o feed NVT
        quebra em ~65 colunas, e a linha de continuacao que comeca por numero de
        versao, ano, porta ou RFC ("2.0 and therefore...", "2019 and no security
-       fixes...") virava "item de lista" e ganhava um \newline duro. No PDF real
-       de cliente 99 de 4.199 linhas (2,4%) comecam por digito.
+       fixes...") virava "item de lista" e ganhava um \newline duro. Num feed real
+       uma parcela pequena das linhas de continuacao comeca por digito.
        Um a tres digitos cobre lista de 1 a 999 e nao precisa de recursao: sao
        tres testes de prefixo. -->
   <func:function name="gvm:num-marker">
@@ -1135,12 +1135,12 @@ SPDX-License-Identifier: GPL-2.0-or-later
     <!-- RECUO PENDURADO DO FEED.  O bloco <tags> do Greenbone escreve
          "chave=primeira linha" e indenta em DUAS colunas TODA linha de
          continuacao: e' convencao do formato do arquivo, nao intencao do autor
-         do NVT.  Medido neste relatorio (797 achados, 1.473 campos de prosa com
-         mais de uma linha): 1.606 primeiras linhas, TODAS na coluna 0; 5.144
-         linhas de continuacao, das quais 5.142 na coluna 2 e 2 na coluna 4.
+         do NVT.  Em qualquer feed, toda primeira linha comeca na coluna 0 e quase
+         toda linha de continuacao comeca na coluna 2; so' a indentacao relativa de
+         listas aparece mais a direita (coluna 4).
 
          Sem descontar essa base, a regra "$ind >= 2 e' indentacao deliberada"
-         logo abaixo casa em 99,96% das linhas de continuacao e o refluxo — a
+         logo abaixo casa em praticamente toda linha de continuacao e o refluxo — a
          razao de existir deste template — nunca acontece: cada paragrafo do PDF
          sai congelado na quebra de ~65 colunas do terminal de quem escreveu o
          NVT, com um recuo falso de 2 colunas por baixo.
@@ -1639,8 +1639,8 @@ SPDX-License-Identifier: GPL-2.0-or-later
          TODO valor vai entre chaves de proposito: as chaves de xkeyval sao
          separadas por virgula e o par e' cortado no primeiro "=", e tres destes
          valores carregam virgula ou "=" com frequencia — a data localizada em
-         pt/es sai "ter, 30 jun 2026 00:00 UTC" e o nome de tarefa e' texto livre
-         que o operador escreve como quiser. Sem as chaves, "ter" viraria uma
+         pt/es sai "qua, 14 jan 2026 13:00 UTC" e o nome de tarefa e' texto livre
+         que o operador escreve como quiser. Sem as chaves, "qua" viraria uma
          chave desconhecida de keyval e o run morreria com "undefined key". -->
     <xsl:text>\suriCover{
   kicker={</xsl:text>
@@ -1743,11 +1743,12 @@ SPDX-License-Identifier: GPL-2.0-or-later
                             correct instruction is to validate first — and the
                             severity shown is a ceiling, not a fact.
 
-       The last case is not hypothetical: on the scan this design was drawn from,
-       all 62 High/Critical findings carry QoD 30.  The old wording told the
-       reader to remediate immediately AND that all 62 needed manual validation,
-       in the same sentence.  Section 4 already segregates these two populations;
-       the summary must not undo that work one page earlier. -->
+       The last case is not hypothetical: a scan whose High/Critical findings all
+       come from version banners carries QoD 30 on every one of them.  The old
+       wording told the reader to remediate immediately AND that every one of them
+       needed manual validation, in the same sentence.  Section 4 already
+       segregates these two populations; the summary must not undo that work one
+       page earlier. -->
   <xsl:template name="exec-remediation-clause">
     <xsl:param name="hicrit"/>
     <xsl:param name="lowconf"/>
@@ -1772,9 +1773,9 @@ SPDX-License-Identifier: GPL-2.0-or-later
          from counting the <result> elements this export happens to carry.
          v4 fixed exactly this for the TOTAL and stopped there; the bars kept
          counting the filter window, so a filtered export under-reported them.
-         Measured in production: a report whose scan produced 4 High printed
-         "ALTO 2", because the default export filter (min_qod=70) had dropped
-         the two low-confidence High results before the stylesheet saw them.
+         Defect class: the default export filter (min_qod=70) drops the low-
+         confidence High results before the stylesheet sees them, so a scan that
+         produced 5 High would print "ALTO 3" (illustrative numbers).
          The <full> child is the scan; <filtered> is the window. Fall back to
          counting only when gvmd did not send the element. -->
     <xsl:variable name="rc" select="gvm:report()/result_count"/>
@@ -2711,15 +2712,15 @@ SPDX-License-Identifier: GPL-2.0-or-later
        para DETALHES TECNICOS, com ela. O resultado e' que a MESMA lista saia
        com marcador de verdade sob DETALHES TECNICOS e como paragrafos soltos
        comecando por hifen sob RESUMO — duas tipografias para a mesma coisa na
-       mesma pagina. Contado no relatorio de teste: 152 `insight', mas tambem 67
-       `summary', 33 `affected' e 2 `impact' trazem lista. Agora o rotulo e'
+       mesma pagina. A lista aparece no `insight', mas tambem em `summary',
+       `affected' e `impact'. Agora o rotulo e'
        parametro e a deteccao vale para os quatro.
 
        A deteccao e' conservadora e nao inventa item nenhum: a indentacao do
        marcador e' normalizada (o feed escreve "  - "), o texto ANTES do
        primeiro marcador continua saindo como paragrafo, e cada item passa
        inteiro pelo escape_prose — nada e' descartado.
-       O realce do prefixo ("CVE-2025-61984:") so' dispara quando o que vem
+       O realce do prefixo ("CVE-2099-0431:") so' dispara quando o que vem
        antes dos dois-pontos e' UMA palavra curta, que e' a forma do
        identificador; frase que por acaso tenha ':' no meio nao vira titulo. -->
   <xsl:template name="finding-field">
@@ -3012,7 +3013,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
       <!-- Sem entrada no catalogo: o card sai no idioma do fornecedor, e diz. -->
       <!-- So' marca quando HA catalogo para o idioma e ESTE NVT ficou de fora.
            Com catalogo vazio (idioma ainda nao traduzido) o relatorio inteiro
-           sai no idioma do fornecedor, e carimbar os 98 cards seria ruido, nao
+           sai no idioma do fornecedor, e carimbar todos os cards seria ruido, nao
            informacao. -->
       <xsl:if test="$nvtcat/n and not($nvtcat/n[@o = string(current()/nvt/@oid)])">
         <xsl:text>  \chip{</xsl:text>
@@ -3234,7 +3235,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
         <!-- O \solbox imprime o proprio rotulo SOLUCAO / REMEDIACAO, entao aqui
              nao vai \fieldlabel nenhum.
              O NEGRITO marca o que o leitor tem de executar. Numa correcao curta
-             ("Update to version 10.1 or later.") isso e' a frase inteira, que e'
+             ("Update to version 1.25.4 or later.") isso e' a frase inteira, que e'
              o que a pg-09 do modelo mostra; numa mitigacao de dez linhas o
              negrito vira parede, entao ali ele volta para o rotulo do tipo e o
              texto sai limpo. O criterio e' o tamanho do texto, nao o gosto. -->
@@ -3242,7 +3243,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
              embrulha frase unica na largura do terminal de quem escreveu o NVT
              ("...disable anonymous\n  logins."): isso e' quebra MACIA, e o
              solution-body a reflui num paragrafo so'.  Testar '\n' no cru
-             derrubava a correcao curta por causa dela — na pg-09 de producao o
+             derrubava a correcao curta por causa dela — o
              negrito ia para o rotulo e a correcao, que e' o que o leitor tem de
              executar, saia em peso regular.  O que de fato impede o \textbf e'
              LISTA: ali o negrito viraria parede.  Entao a pergunta passa a ser a
@@ -3912,7 +3913,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
   <!-- Collapse the fixed port families into one cell each. Only a cell that
        belongs to a family can group, so only those are matched against each
        other: scanning the whole set once per cell is quadratic in the number of
-       distinct ports (a 1500-port report spent 80% of the run in here), while
+       distinct ports (a report with thousands of ports spends most of the run here), while
        the families never hold more than a dozen cells between them. The output
        order is irrelevant, hx-ordered-cells ranks everything right after. -->
   <xsl:template name="hx-collapse">
@@ -4385,8 +4386,8 @@ SPDX-License-Identifier: GPL-2.0-or-later
   <!-- How many ports the board stands for, and in how many cells. Family
        collapsing makes the two numbers differ (135, 137, 138 and 139 ride in one
        "135-139" cell), and printing only the cell count would understate the
-       scan: the header would read "25 unique ports" for a scope where the
-       scanner actually observed 32. When nothing collapsed, both numbers agree
+       scan: the header would read "9 unique ports" for a scope where the
+       scanner actually observed 12. When nothing collapsed, both numbers agree
        and the shorter phrase is used. -->
   <xsl:template name="hx-scope-phrase">
     <xsl:param name="cells"/>

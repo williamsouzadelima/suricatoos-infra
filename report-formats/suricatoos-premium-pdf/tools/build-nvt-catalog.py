@@ -7,13 +7,13 @@ Entrada: array de objetos `{oid, name, summary, insight, impact, affected, solut
 Saída: `<nvti18n lang="..."><n o="OID"><campo>…</campo>…</n>…</nvti18n>`, que o
 `latex.xsl` carrega com `document()` e consulta por OID.
 
-DESESCAPE DA QUEBRA DE LINHA — o ponto que já custou um defeito em produção
+DESESCAPE DA QUEBRA DE LINHA — o ponto que já causou um defeito no relatório
 -------------------------------------------------------------------------
 A coluna `nvts.summary` do banco do gvmd guarda a quebra de linha como os DOIS
 caracteres `\` e `n`. O XML do relatório, por outro lado, entrega quebra REAL.
 Um catálogo montado a partir do banco carrega o escape, e aí o `\n` sai
-**impresso** no PDF — foram 264 linhas assim na primeira tentativa. Este script
-desescapa; não remova essa etapa.
+**impresso** no PDF, em várias linhas. Este script desescapa; não remova essa
+etapa.
 
 Depois de gerar, rode SEMPRE o teste de tortura (tools/build-torture-fixture.py):
 é ele que prova que nenhuma das entradas quebra o LaTeX.

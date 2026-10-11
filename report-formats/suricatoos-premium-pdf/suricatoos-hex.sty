@@ -394,14 +394,14 @@
 % ===========================================================================
 % 7. Card.
 % ===========================================================================
-% \hexcard{exemplo.com.br}{1 host · 19 portas únicas · qua, 1 jul 2026}{board}
+% \hexcard{exemplo.com.br}{1 host · 19 portas únicas · qua, 14 jan 2026}{board}
 % White card with a hairline border: domain in Mono bold on the left, the scope
 % line in Mono grey on the right, then whatever the third argument draws
 % (normally a hexboard followed by a \hexlegend).
 % The domain is tracked at 145/1000em, not at the \suritrack of the upper-case
 % labels: it is lower case and it is the only tracked run in the design that is
-% not a label.  145 is measured, not guessed — the model's sample domain sets
-% 83px wide, and 143..147 is the whole range that rasterises to 83px.
+% not a label.  145 is a value calibrated against the design model, not a guess:
+% re-measure against the model before changing it.
 \newcommand{\hexcard}[3]{%
   \par\begingroup
     \setlength{\fboxrule}{\suripx{1}}%

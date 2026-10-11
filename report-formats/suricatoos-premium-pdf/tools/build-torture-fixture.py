@@ -4,7 +4,7 @@
 Por que existe
 --------------
 O catálogo (`nvt-i18n-<lang>.xml`) injeta centenas de milhares de caracteres de
-texto novo no LaTeX. Um relatório real toca ~100 dos ~670 NVTs, então compilar um
+texto novo no LaTeX. Um relatório real toca só uma fração do catálogo, então compilar um
 relatório de verdade prova pouco: um caractere não escapado em qualquer das outras
 entradas só apareceria quando um cliente batesse nela.
 

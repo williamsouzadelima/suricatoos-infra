@@ -12109,11 +12109,11 @@ index 0000000..1fe3e18
 +//
 +// Sem isto, `fetch(...).then(r => r.json())` tratava 403 e 401 como sucesso:
 +// o corpo era a pagina de erro do nginx, o JSON.parse estourava, e o catch de
-+// cima engolia. Resultado medido em 17/08/2026: a rota /feed-sync/ e' restrita
-+// as redes de administracao, um operador fora da VPN levava 403 em todo GET, e
-+// a tela mostrava "Ultima atualizacao: nunca" com o formulario em branco --
-+// enquanto o agendamento real estava ativo, diario, e rodara com sucesso na
-+// vespera. O botao Salvar levava o mesmo 403 e nao dizia absolutamente nada.
++// cima engolia. Efeito: a rota /feed-sync/ e' restrita as redes de
++// administracao, entao um operador fora da VPN levava 403 em todo GET, e a
++// tela mostrava "Ultima atualizacao: nunca" com o formulario em branco --
++// enquanto o agendamento real estava ativo e rodando em dia. O botao Salvar
++// levava o mesmo 403 e nao dizia absolutamente nada.
 +//
 +// Um controle de acesso que a interface esconde nao parece um controle: parece
 +// um sistema quebrado. E manda o operador procurar defeito onde nao ha.
