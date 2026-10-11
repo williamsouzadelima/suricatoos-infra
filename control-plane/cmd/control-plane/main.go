@@ -45,9 +45,12 @@
 //	AI_FREE_MODELS_ONLY   DEFAULT true: only FREE models (id ending in ":free", or
 //	                      openrouter/free) of OpenRouter/UnoRouter may be configured,
 //	                      base_url is pinned to the router's official endpoint (a
-//	                      supplied one is ignored), and the planner refuses any other
-//	                      model or endpoint. "false" restores the generic gateway,
-//	                      custom endpoints and paid models (still governed).
+//	                      supplied one is ignored), enabling ALWAYS takes the
+//	                      data-policy acknowledgment, and the planner refuses any
+//	                      other model or endpoint. "false" restores the generic
+//	                      gateway, custom endpoints and paid models (still governed:
+//	                      UE + ZDR, or a free model on the official endpoint with
+//	                      the acknowledgment).
 //	AI_PLANNER_ENABLED    "true" mounts POST /api/v1/remediation/plan (operator-
 //	                      triggered AI draft). DARK by default; admin-bearer.
 //	AI_PLANNER_CONSENT    "true" grants per-purpose consent. DEFAULT off → no model
@@ -58,11 +61,15 @@
 //	AI_PLANNER_TIMEOUT    overall time budget of ONE draft — every provider and
 //	                      response-format attempt together (Go duration, default
 //	                      5m). The plan route gets its own write deadline from it;
-//	                      the server-wide WriteTimeout is unchanged.
+//	                      the server-wide WriteTimeout is unchanged. Behind nginx,
+//	                      the location = /agent/api/v1/remediation/plan reads for
+//	                      360s: raising this above 330s needs that raised too.
 //	AI_PLANNER_PROVIDER_ID comma-separated provider ids in priority order (the
-//	                      next one is tried on 429/5xx/timeout/network error);
-//	                      unset → every enabled provider, openrouter-free first,
-//	                      then unorouter-free, then the rest by name.
+//	                      next one is tried on any non-2xx answer, timeout or
+//	                      network error); unset → with AI_FREE_MODELS_ONLY=true
+//	                      ONLY the presets, openrouter-free then unorouter-free;
+//	                      with it false, every enabled provider, the presets first,
+//	                      then the rest by name.
 //
 // When CA_CERT_FILE/CA_KEY_FILE are set the CA survives restarts (agents keep
 // their mTLS certificates). Without them a new ephemeral CA is generated on

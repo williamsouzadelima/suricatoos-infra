@@ -8,11 +8,22 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 )
 
 const maxLLMResponse = 1 << 20
+
+// snippetMax caps, in characters, how much of a provider's error body a
+// StatusError keeps: the planner's final error (and its log line) may carry it.
+const snippetMax = 160
+
+// keyLike matches API-key-shaped tokens a provider may echo back (sk-…), besides
+// the exact key of the request, which redactKey already removes.
+var keyLike = regexp.MustCompile(`sk-[A-Za-z0-9_-]{8,}`)
 
 // The response formats Chat tries, in this order.
 const (
@@ -29,11 +40,12 @@ var responseFormats = []string{formatJSONSchema, formatJSONObject, formatNone}
 // assistant turn (no prefill).
 const schemaInstruction = "\n\nFormato obrigatório da resposta: um único objeto JSON, sem markdown e sem texto fora dele, que valide neste JSON Schema:\n"
 
-// StatusError is a non-2xx answer from the provider. The Planner reads Code to try
-// the next provider (429/5xx) or to stop (any other 4xx: the request is wrong).
+// StatusError is a non-2xx answer from the provider (after the response-format
+// fallback): the Planner moves on to the next provider and lists Code (with the
+// Snippet) in its final error.
 type StatusError struct {
 	Code    int
-	Snippet string // start of the provider's body, with the API key redacted
+	Snippet string // short, sanitized start of the provider's body (see snippet); never the key
 
 	formatRelated bool // a 400 that cites the response format: Chat tries the next format
 }
@@ -121,7 +133,7 @@ func (c *HTTPLLM) chatOnce(ctx context.Context, req ChatRequest, format string) 
 	if resp.StatusCode/100 != 2 {
 		return ChatResponse{}, &StatusError{
 			Code:          resp.StatusCode,
-			Snippet:       snippet([]byte(redactKey(string(raw), req.APIKey))),
+			Snippet:       snippet(raw, req.APIKey),
 			formatRelated: resp.StatusCode == http.StatusBadRequest && citesResponseFormat(raw),
 		}
 	}
@@ -190,10 +202,18 @@ func redactKey(s, key string) string {
 	return strings.ReplaceAll(s, key, "[chave]")
 }
 
-func snippet(b []byte) string {
-	s := strings.TrimSpace(string(b))
-	if len(s) > 200 {
-		return s[:200]
+// snippet is the short, sanitized start of a provider's error body: the request's
+// key — and anything shaped like a key — redacted, invalid UTF-8 dropped, control
+// characters and runs of whitespace folded into single spaces (one printable
+// line), at most snippetMax characters.
+func snippet(body []byte, key string) string {
+	s := strings.ToValidUTF8(redactKey(string(body), key), "")
+	s = keyLike.ReplaceAllString(s, "[chave]")
+	s = strings.Join(strings.FieldsFunc(s, func(r rune) bool {
+		return unicode.IsSpace(r) || unicode.IsControl(r)
+	}), " ")
+	if utf8.RuneCountInString(s) > snippetMax {
+		s = string([]rune(s)[:snippetMax])
 	}
 	return s
 }

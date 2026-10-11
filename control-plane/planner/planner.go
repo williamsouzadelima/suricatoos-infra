@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net"
-	"net/http"
 	"strings"
 	"time"
 
@@ -18,6 +18,9 @@ var (
 	ErrConsentOff   = errors.New("consentimento de IA desativado para esta finalidade (default off)")
 	ErrBudget       = errors.New("orçamento mensal de IA excedido")
 	ErrNonFreeModel = errors.New("recusado pela regra de modelos gratuitos (AI_FREE_MODELS_ONLY=true)")
+	// ErrUngoverned: with the free-models rule off, every candidate failed the
+	// governance bar at use time (neither UE + ZDR nor a free model acknowledged).
+	ErrUngoverned = errors.New("provedor fora da régua de governança da IA")
 	// ErrTimeout: the planner's overall time budget (Config.Timeout, all providers
 	// and formats together) ran out; the remaining attempts were not made.
 	ErrTimeout = errors.New("tempo total do planner esgotado (AI_PLANNER_TIMEOUT)")
@@ -32,9 +35,10 @@ type Config struct {
 	ConsentGranted   bool    // per-purpose consent; DEFAULT false (born off)
 	MonthlyBudgetUSD float64 // <= 0 → no ceiling
 	USDPer1kTokens   float64 // estimate used only for the budget gate
-	// FreeModelsOnly refuses (before any network) every provider whose model is
-	// not free (aiproviders.IsFreeModel) or that is not on its router's official
-	// endpoint (aiproviders.IsOfficialEndpoint). The control-plane turns it on by
+	// FreeModelsOnly selects the governance bar every provider must meet at use
+	// time, before any network (aiproviders.GovernanceRefusal): on, only a free
+	// model on its router's official endpoint, acknowledged by the operator; off,
+	// UE + ZDR or such a free model acknowledged. The control-plane turns it on by
 	// default (AI_FREE_MODELS_ONLY); the zero Config leaves it off.
 	FreeModelsOnly bool
 	// Timeout is the OVERALL budget of one Plan — every provider and every
@@ -82,15 +86,17 @@ func (p *Planner) Timeout() time.Duration { return p.timeout }
 // the draft, and ECHOES the attested severity/CVEs (never the model's). The
 // returned Plan is always a Draft for human review.
 //
-// The resolved providers are tried in priority order. While FreeModelsOnly is on,
-// a provider is never called unless its model is free AND it sits on its router's
-// official endpoint (a stored base_url pointing elsewhere is refused before any
-// network). A paid model is called only within the budget, while a FREE model
-// costs 0 (it neither needs nor consumes budget). On 429, 5xx, timeout or network
-// error the next provider is tried; any other failure (a 4xx is an error in the
-// request, not in the provider) stops. Everything — every provider and every
-// response-format attempt — runs inside ONE overall budget (Config.Timeout): when
-// it runs out the current attempt is cancelled and no other one starts (ErrTimeout).
+// The resolved providers are tried in priority order. A provider is never called
+// unless it meets, right now, the same governance bar the registry applies to
+// enable one (refusal): one that fails it is skipped, with the reason in the log.
+// A paid model is called only within the budget, while a FREE model (on its
+// router's official endpoint) costs 0 (it neither needs nor consumes budget). On
+// any non-2xx answer, timeout or network error the next provider is tried; an
+// error with no status (a 2xx without usable content) stops. When all fail, the
+// error lists each attempt (status and a short, sanitized excerpt; never a key).
+// Everything — every provider and every response-format attempt — runs inside ONE
+// overall budget (Config.Timeout): when it runs out the current attempt is
+// cancelled and no other one starts (ErrTimeout).
 func (p *Planner) Plan(ctx context.Context, req PlanRequest) (*Plan, error) {
 	if !p.cfg.ConsentGranted {
 		return nil, ErrConsentOff
@@ -109,10 +115,12 @@ func (p *Planner) Plan(ctx context.Context, req PlanRequest) (*Plan, error) {
 	budgetSpent := false
 	for _, prov := range provs {
 		if why := p.refusal(prov); why != "" {
-			refused = append(refused, why)
+			// Name and settings only — never a key.
+			log.Printf("remediation-planner: provedor %q pulado: %s", prov.Name, why)
+			refused = append(refused, fmt.Sprintf("%s (%s)", prov.Name, why))
 			continue
 		}
-		free := aiproviders.IsFreeModel(prov.Kind, prov.Model)
+		free := aiproviders.IsFree(prov.Kind, prov.BaseURL, prov.Model)
 		if !free && !p.budget.allow() {
 			budgetSpent = true
 			continue
@@ -129,6 +137,9 @@ func (p *Planner) Plan(ctx context.Context, req PlanRequest) (*Plan, error) {
 		})
 		if err != nil {
 			if retryable(ctx, err) {
+				// The error carries the status and, at most, a short sanitized
+				// excerpt of the provider's body (StatusError) — never the key.
+				log.Printf("remediation-planner: provedor %q falhou, tentando o próximo: %v", prov.Name, err)
 				failures = append(failures, fmt.Sprintf("%s: %v", prov.Name, err))
 				continue
 			}
@@ -143,6 +154,10 @@ func (p *Planner) Plan(ctx context.Context, req PlanRequest) (*Plan, error) {
 		return p.draft(req, ps, prov, resp.Content)
 	}
 
+	skipped := ""
+	if len(refused) > 0 {
+		skipped = "; pulados: " + strings.Join(refused, "; ")
+	}
 	switch {
 	case errors.Is(ctx.Err(), context.DeadlineExceeded) && len(failures) > 0:
 		return nil, fmt.Errorf("%w (%s)", ErrTimeout, strings.Join(failures, "; "))
@@ -151,33 +166,30 @@ func (p *Planner) Plan(ctx context.Context, req PlanRequest) (*Plan, error) {
 	case ctx.Err() != nil:
 		return nil, fmt.Errorf("pedido cancelado antes do rascunho: %w", ctx.Err())
 	case len(failures) > 0:
-		return nil, fmt.Errorf("chamada ao modelo: nenhum provedor respondeu (%s)", strings.Join(failures, "; "))
+		return nil, fmt.Errorf("chamada ao modelo: nenhum provedor respondeu (%s)%s", strings.Join(failures, "; "), skipped)
 	case budgetSpent:
 		return nil, ErrBudget
+	case len(refused) > 0 && p.cfg.FreeModelsOnly:
+		return nil, fmt.Errorf("%w: %s", ErrNonFreeModel, strings.Join(refused, "; "))
 	case len(refused) > 0:
-		return nil, fmt.Errorf("%w: %s", ErrNonFreeModel, strings.Join(refused, ", "))
+		return nil, fmt.Errorf("%w: %s", ErrUngoverned, strings.Join(refused, "; "))
 	default:
 		return nil, errors.New("provedor: nenhum provedor de IA habilitado")
 	}
 }
 
-// refusal says why the free-models-only rule forbids calling prov ("" = allowed):
-// only free models, only the two routers, and only on their official endpoints —
-// a stored key is never sent anywhere else, and ":free" only means zero cost there.
+// refusal says why prov may not be called at all ("" = it may): the SAME
+// governance bar the registry applies to enable a provider
+// (aiproviders.GovernanceRefusal), checked again at use time. A record stored
+// under the other rule, before a rule existed, or rewritten by an older image
+// (which drops the acknowledgment) never reaches the network on the strength of
+// its "enabled" flag alone; with the rule on, a stored key only ever goes to the
+// router's official endpoint, where ":free" means zero cost.
 func (p *Planner) refusal(prov Provider) string {
-	if !p.cfg.FreeModelsOnly {
-		return ""
-	}
-	official := aiproviders.OfficialBaseURL(prov.Kind)
-	switch {
-	case official == "":
-		return fmt.Sprintf("%s (tipo %q não permitido)", prov.Name, prov.Kind)
-	case !aiproviders.IsFreeModel(prov.Kind, prov.Model):
-		return fmt.Sprintf("%s (modelo não gratuito: %s)", prov.Name, prov.Model)
-	case !aiproviders.IsOfficialEndpoint(prov.Kind, prov.BaseURL):
-		return fmt.Sprintf("%s (endpoint %s não é o oficial %s)", prov.Name, prov.BaseURL, official)
-	}
-	return ""
+	return aiproviders.GovernanceRefusal(aiproviders.Terms{
+		Kind: prov.Kind, BaseURL: prov.BaseURL, Model: prov.Model,
+		EURegion: prov.EURegion, ZDR: prov.ZDR, DataPolicyAck: prov.DataPolicyAck,
+	}, p.cfg.FreeModelsOnly)
 }
 
 // draft validates the model's content (parseDraft — the ONLY bar a draft must
@@ -215,15 +227,19 @@ func (p *Planner) draft(req PlanRequest, ps *pseudonymizer, prov Provider, conte
 }
 
 // retryable reports whether a failed call should move on to the next provider:
-// 429, 5xx, timeout or network error. Not when the caller's own context is done
-// (the operator's request went away), and not on any other error.
+// ANY non-2xx answer — the provider's own response-format fallback already ran
+// (HTTPLLM.Chat) — and any timeout or network error. One router's 4xx (a model
+// gone from its catalog, a data-policy mismatch, a key it refuses) says nothing
+// about the next router. Not when the caller's own context is done (the
+// operator's request went away, or the overall budget ran out), and not on an
+// error with no status (a 2xx without usable content).
 func retryable(ctx context.Context, err error) bool {
 	if ctx.Err() != nil {
 		return false
 	}
 	var se *StatusError
 	if errors.As(err, &se) {
-		return se.Code == http.StatusTooManyRequests || se.Code >= 500
+		return true
 	}
 	var ne net.Error // *url.Error from the HTTP client: timeout or transport failure
 	return errors.As(err, &ne)

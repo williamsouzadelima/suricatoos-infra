@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"sort"
 	"strings"
 
@@ -12,11 +13,14 @@ import (
 
 // RegistryResolver resolves the ENABLED providers from the aiproviders registry,
 // in priority order, decrypting their keys server-side. With an explicit id list
-// (AI_PLANNER_PROVIDER_ID, comma-separated) it uses those, in that order; without
-// one, every enabled provider: the openrouter-free preset first, then
-// unorouter-free, then the rest by name. A provider that cannot be used (missing,
-// disabled, no key) is skipped. The plaintext key never leaves the process except
-// in the outbound request the HTTPLLM makes.
+// (AI_PLANNER_PROVIDER_ID, comma-separated) it uses those, in that order. Without
+// one: with the free-models rule on, ONLY the presets (openrouter-free, then
+// unorouter-free), and any other provider is ignored; with it off, every enabled
+// provider, the presets first and then the rest by name. A provider that cannot
+// be used (missing, disabled, no key) is skipped. Each provider carries its
+// governance terms (UE/ZDR/acknowledgment), which the Planner re-checks at use
+// time. The plaintext key never leaves the process except in the outbound request
+// the HTTPLLM makes.
 type RegistryResolver struct {
 	reg *aiproviders.Registry
 	ids []string
@@ -45,6 +49,9 @@ func (r *RegistryResolver) Resolve(_ context.Context) ([]Provider, error) {
 	if !explicit {
 		ids = r.defaultOrder()
 		if len(ids) == 0 {
+			if r.reg.FreeModelsOnly() {
+				return nil, errors.New("nenhum provedor de IA habilitado entre os presets (com AI_FREE_MODELS_ONLY=true o planner usa só openrouter-free e unorouter-free)")
+			}
 			return nil, errors.New("nenhum provedor de IA habilitado")
 		}
 	}
@@ -59,6 +66,7 @@ func (r *RegistryResolver) Resolve(_ context.Context) ([]Provider, error) {
 		out = append(out, Provider{
 			ID: pub.ID, Name: pub.Name, Kind: pub.Kind,
 			BaseURL: pub.BaseURL, APIKey: key, Model: pub.Model,
+			EURegion: pub.EURegion, ZDR: pub.ZDR, DataPolicyAck: pub.DataPolicyAck,
 		})
 	}
 	if len(out) == 0 {
@@ -70,8 +78,10 @@ func (r *RegistryResolver) Resolve(_ context.Context) ([]Provider, error) {
 	return out, nil
 }
 
-// defaultOrder lists the enabled providers: the openrouter-free preset, then
-// unorouter-free, then the rest in the registry's order (name, then id).
+// defaultOrder lists the enabled providers in priority order. With the free-models
+// rule on, ONLY the presets — openrouter-free, then unorouter-free; any other
+// enabled provider is ignored (and logged), as the UI says. With it off, the
+// presets first, then the rest in the registry's order (name, then id).
 func (r *RegistryResolver) defaultOrder() []string {
 	rank := map[string]int{}
 	for i, id := range aiproviders.PresetIDs() {
@@ -83,11 +93,21 @@ func (r *RegistryResolver) defaultOrder() []string {
 		}
 		return len(rank) + 1
 	}
+	presetsOnly := r.reg.FreeModelsOnly()
 	var enabled []aiproviders.PublicProvider
+	var ignored []string
 	for _, p := range r.reg.List() {
-		if p.Enabled {
-			enabled = append(enabled, p)
+		if !p.Enabled {
+			continue
 		}
+		if _, preset := rank[p.ID]; presetsOnly && !preset {
+			ignored = append(ignored, p.ID)
+			continue
+		}
+		enabled = append(enabled, p)
+	}
+	if len(ignored) > 0 {
+		log.Printf("remediation-planner: com AI_FREE_MODELS_ONLY=true a ordem padrão usa só os presets; ignorados: %s", strings.Join(ignored, ", "))
 	}
 	sort.SliceStable(enabled, func(i, j int) bool { return pos(enabled[i].ID) < pos(enabled[j].ID) })
 	ids := make([]string, len(enabled))

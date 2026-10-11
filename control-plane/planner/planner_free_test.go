@@ -57,9 +57,11 @@ var (
 	officialOR  = aiproviders.OfficialBaseURL(aiproviders.KindOpenRouter)
 	officialUno = aiproviders.OfficialBaseURL(aiproviders.KindUnoRouter)
 
-	freeA = Provider{ID: "openrouter-free", Name: "OpenRouter grátis", Kind: "openrouter", BaseURL: officialOR, APIKey: "ka", Model: "openrouter/free"}
-	freeB = Provider{ID: "unorouter-free", Name: "UnoRouter grátis", Kind: "unorouter", BaseURL: officialUno, APIKey: "kb", Model: "deepseek-v4-flash:free"}
-	paidP = Provider{ID: "pago", Name: "Pago", Kind: "openrouter", BaseURL: officialOR, APIKey: "kp", Model: "openai/gpt-5.5"}
+	// The free providers carry the operator's data-policy acknowledgment and the
+	// paid one is UE + ZDR: each meets the governance bar the planner re-checks.
+	freeA = Provider{ID: "openrouter-free", Name: "OpenRouter grátis", Kind: "openrouter", BaseURL: officialOR, APIKey: "ka", Model: "openrouter/free", DataPolicyAck: true}
+	freeB = Provider{ID: "unorouter-free", Name: "UnoRouter grátis", Kind: "unorouter", BaseURL: officialUno, APIKey: "kb", Model: "deepseek-v4-flash:free", DataPolicyAck: true}
+	paidP = Provider{ID: "pago", Name: "Pago", Kind: "openrouter", BaseURL: officialOR, APIKey: "kp", Model: "openai/gpt-5.5", EURegion: true, ZDR: true}
 )
 
 func okScript() scripted { return scripted{resp: ChatResponse{Content: okContent}} }
@@ -229,21 +231,29 @@ func TestPlan_FallsBackOnRetryableErrors(t *testing.T) {
 	}
 }
 
-func TestPlan_NoFallbackOnRequestErrors(t *testing.T) {
-	for _, code := range []int{400, 401, 403, 404, 422} {
+// M7: ANY non-2xx answer (after the provider's own response-format fallback) moves
+// on to the next provider — a 4xx from one router (a model removed from its
+// catalog, OpenRouter's "no endpoints found matching your data policy") says
+// nothing about the other.
+func TestPlan_AnyNon2xxFallsBackToTheNextProvider(t *testing.T) {
+	for _, code := range []int{400, 401, 402, 403, 404, 409, 422, 429, 500, 502, 503} {
 		llm := &scriptLLM{byModel: map[string]scripted{
-			freeA.Model: {err: &StatusError{Code: code}},
+			freeA.Model: {err: &StatusError{Code: code, Snippet: "recusado"}},
 			freeB.Model: okScript(),
 		}}
-		_, err := New(llm, fakeResolver{provs: []Provider{freeA, freeB}}, freeCfg()).Plan(context.Background(), sampleReq())
-		if err == nil {
-			t.Fatalf("%d: erro do pedido deveria parar (sem fallback)", code)
+		plan, err := New(llm, fakeResolver{provs: []Provider{freeA, freeB}}, freeCfg()).Plan(context.Background(), sampleReq())
+		if err != nil || plan.Provider != freeB.Name {
+			t.Fatalf("%d: deveria cair p/ o próximo provedor: plan=%+v err=%v", code, plan, err)
 		}
-		if llm.called() != freeA.Model {
-			t.Fatalf("%d: não deveria tentar o próximo, chamadas = %s", code, llm.called())
+		if llm.called() != freeA.Model+","+freeB.Model {
+			t.Fatalf("%d: ordem de chamadas = %s", code, llm.called())
 		}
 	}
-	// An unclassified error (not 429/5xx/timeout/network) also stops.
+}
+
+func TestPlan_UnclassifiedErrorStops(t *testing.T) {
+	// An error that is neither a non-2xx answer nor a timeout/network failure (a 2xx
+	// without usable content) stops: there is no status to judge by.
 	llm := &scriptLLM{byModel: map[string]scripted{
 		freeA.Model: {err: errors.New("provedor não retornou conteúdo")},
 		freeB.Model: okScript(),
@@ -370,10 +380,12 @@ func TestPlan_RuleOffProviderFallbackOverHTTP(t *testing.T) {
 	goneURL := gone.URL
 	gone.Close() // connection refused
 
+	// Custom endpoints are the legacy UE + ZDR gateways (":free" means nothing off
+	// the routers' official endpoints).
 	provs := []Provider{
-		{Name: "Fora do ar", Kind: "openrouter", BaseURL: goneURL, APIKey: "k1", Model: "openrouter/free"},
-		{Name: "503", Kind: "unorouter", BaseURL: down.URL, APIKey: "k2", Model: "x:free"},
-		{Name: "Saudável", Kind: "openai_compatible", BaseURL: up.URL, APIKey: "k3", Model: "y:free"},
+		{Name: "Fora do ar", Kind: "openrouter", BaseURL: goneURL, APIKey: "k1", Model: "openrouter/free", EURegion: true, ZDR: true},
+		{Name: "503", Kind: "unorouter", BaseURL: down.URL, APIKey: "k2", Model: "x:free", EURegion: true, ZDR: true},
+		{Name: "Saudável", Kind: "openai_compatible", BaseURL: up.URL, APIKey: "k3", Model: "y:free", EURegion: true, ZDR: true},
 	}
 	plan, err := New(NewHTTPLLM(), fakeResolver{provs: provs}, Config{ConsentGranted: true}).Plan(context.Background(), sampleReq())
 	if err != nil {
