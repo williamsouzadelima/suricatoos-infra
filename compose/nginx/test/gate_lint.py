@@ -1,12 +1,20 @@
 #!/usr/bin/env python3
 """Checagem estática da marca de portão de sessão nos configs do nginx.
 
-Regra (ver control-plane/sessiongate): toda location que faz proxy para o
+Regra 1 (ver control-plane/sessiongate): toda location que faz proxy para o
 control-plane declara, no PRÓPRIO nível, `proxy_set_header X-Suricatoos-Gate`:
 com "gsad-session" só nas locations com portão de sessão (SESSAO abaixo) e
 vazio ("") em todas as outras. O nginx não herda proxy_set_header do nível de
 cima quando a location define algum, então uma location sem a linha repassaria
 o valor que o cliente mandar.
+
+Regra 2: uma location que põe uma marca de confiança no pedido ao upstream
+(MARCAS abaixo: X-Suricatoos-Gate "gsad-session" para o control-plane,
+X-Suricatoos-UI "1" para o ingest) declara no PRÓPRIO nível um `auth_request`
+para uma location `internal` do mesmo arquivo — o portão de sessão forte, em que
+o gsad valida cookie E token. Sem ele a location confiaria só no cookie, que
+qualquer cliente forja; e um auth_request para uma location que não existe cai
+no fallback da SPA, que responde 200: portão aberto.
 
 Uso: gate_lint.py ARQUIVO.conf [...]   (sai com 1 se alguma location violar)
 Só stdlib; não precisa de docker.
@@ -17,6 +25,8 @@ HEADER = "x-suricatoos-gate"
 VALUE = "gsad-session"
 # Locations com portão de sessão — as únicas que podem setar a marca.
 SESSAO = {"/ai-providers/api/", "= /agents/scan", "/agent/provision/"}
+# Marcas de confiança (header em minúsculas → valor) que exigem o portão forte.
+MARCAS = {HEADER: VALUE, "x-suricatoos-ui": "1"}
 
 
 def tokens(text):
@@ -88,6 +98,50 @@ def walk(nodes):
             yield from walk(kids)
 
 
+def locations(tree):
+    """(nome, filhos) de cada bloco location, ex.: ("= /agents/scan", [...])."""
+    for args, kids in walk(tree):
+        if kids is not None and args and word(args[0]) == "location":
+            yield " ".join(word(a) for a in args[1:]), kids
+
+
+def nivel(kids, nome, n):
+    """Diretivas `nome` com n palavras no nível da location (fora de `if`)."""
+    return [
+        [word(a) for a in d]
+        for d, k in kids
+        if k is None and len(d) == n and word(d[0]) == nome
+    ]
+
+
+def check_fortes(tree):
+    """Regra 2: marca de confiança só com auth_request para location interna."""
+    internas = {loc for loc, kids in locations(tree) if nivel(kids, "internal", 1)}
+    erros, linhas = [], []
+    for loc, kids in locations(tree):
+        marcas = [
+            f"{h}: {v}"
+            for _, h, v in nivel(kids, "proxy_set_header", 3)
+            if MARCAS.get(h.lower()) == v
+        ]
+        if not marcas:
+            continue
+        alvos = [alvo for _, alvo in nivel(kids, "auth_request", 2)]
+        if not alvos:
+            erros.append(
+                f"{loc}: põe {', '.join(marcas)} sem auth_request no próprio nível "
+                "(portão só de cookie é forjável)"
+            )
+        for alvo in alvos:
+            if f"= {alvo}" not in internas:
+                erros.append(
+                    f"{loc}: auth_request {alvo} não aponta para uma location "
+                    f"interna ('location = {alvo}' com internal)"
+                )
+        linhas.append(f"  forte  {loc} -> auth_request {', '.join(alvos) or '(nenhum)'}")
+    return linhas, erros
+
+
 def check(path):
     with open(path, encoding="utf-8") as fh:
         tree = parse(tokens(fh.read()))
@@ -123,20 +177,23 @@ def check(path):
         linhas.append(f"  {'seta ' if esperado else 'limpa'}  {loc}")
     for loc in sorted(SESSAO - vistas):
         erros.append(f"{loc}: location de sessão não encontrada indo ao control-plane")
-    return linhas, erros
+    fortes, erros_fortes = check_fortes(tree)
+    return linhas, fortes, erros + erros_fortes
 
 
 def main(paths):
     falhou = False
     for path in paths:
         try:
-            linhas, erros = check(path)
+            linhas, fortes, erros = check(path)
         except (OSError, SyntaxError, ValueError) as exc:
             print(f"{path}: não consegui analisar: {exc}")
             falhou = True
             continue
         print(f"{path}: {len(linhas)} locations vão ao control-plane")
         print("\n".join(linhas))
+        print(f"{path}: {len(fortes)} locations põem marca de confiança")
+        print("\n".join(fortes))
         for e in erros:
             print(f"  ERRO {e}")
         falhou = falhou or bool(erros)
