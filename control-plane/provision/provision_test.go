@@ -75,7 +75,9 @@ func TestProvisionWindowsUsesPowershell(t *testing.T) {
 //     powershell interno rodar: sobra "=Join-Path ..." e "-OutFile" vazio.
 //   - Um caminho fixo em C:\Windows\Temp aceita arquivos de qualquer usuario local, que
 //     poderia pre-criar ou trocar o arquivo entre o download e a execucao elevada. O
-//     instalador vai para o TEMP do usuario que roda o comando.
+//     instalador vai para o TEMP do usuario que roda o comando, e a guarda recusa o TEMP
+//     do sistema (SYSTEM) antes de baixar.
+//   - O download e a condicao de um 'if': download que falha nao executa arquivo velho.
 //
 // A forma exata e as demais invariantes estao travadas no installcmd.
 func TestProvisionWindowsCommandIsRobust(t *testing.T) {
@@ -93,12 +95,13 @@ func TestProvisionWindowsCommandIsRobust(t *testing.T) {
 		t.Fatalf("os = %q", r.OS)
 	}
 	for _, want := range []string{
-		"powershell",
-		"iwr -useb https://scanner.suricatoos.com/install.ps1",
+		"powershell -NoProfile",
+		"if (iwr -useb https://scanner.suricatoos.com/install.ps1 -PassThru -OutFile ",
 		"-Server 'https://scanner.suricatoos.com/agent/v1'",
 		"-Token 'st_",
 		"-CaPin 'sha256:deadbeef'",
 		"(Get-Item env:TEMP).Value", // TEMP de quem roda o comando, nao um caminho fixo
+		"throw '",                   // guarda contra o TEMP do sistema
 	} {
 		if !strings.Contains(r.Command, want) {
 			t.Errorf("comando windows nao contem %q:\n%s", want, r.Command)
@@ -107,8 +110,8 @@ func TestProvisionWindowsCommandIsRobust(t *testing.T) {
 	if strings.ContainsAny(r.Command, "$`%") {
 		t.Errorf("comando windows nao pode conter '$', crase ou '%%' (o shell de fora expande ao colar):\n%s", r.Command)
 	}
-	if strings.Contains(r.Command, `Windows\Temp`) {
-		t.Errorf("comando windows nao pode gravar em C:\\Windows\\Temp (qualquer usuario local escreve la):\n%s", r.Command)
+	if strings.Contains(r.Command, `:\`) {
+		t.Errorf("comando windows nao pode ter caminho fixo (C:\\Windows\\Temp: qualquer usuario local escreve la):\n%s", r.Command)
 	}
 }
 

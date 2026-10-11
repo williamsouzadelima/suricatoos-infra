@@ -9,6 +9,7 @@
 
   Ou direto:
     powershell -ExecutionPolicy Bypass -File install.ps1 -Server <URL> -Token <TOKEN> -CaPin <PIN>
+  Em massa ou como SYSTEM (RMM, PsExec -s): baixe este arquivo para uma pasta protegida e rode com -File.
 
   NOTA: este arquivo e deliberadamente ASCII-only. O Windows PowerShell 5.1 le um
   script sem BOM na codepage ANSI, entao qualquer acento em UTF-8 sairia corrompido

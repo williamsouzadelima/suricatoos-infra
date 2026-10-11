@@ -348,6 +348,10 @@ func TestWindowsCommandIsRobust(t *testing.T) {
 		"-Token 'st_",
 		"-CaPin 'sha256:abc123'",
 		"(Get-Item env:TEMP).Value", // TEMP de quem roda o comando, nao um caminho fixo
+		"if (iwr -useb ",            // o download e a condicao: falha nao executa arquivo velho
+		" -PassThru ",
+		"powershell -NoProfile",
+		"throw '", // guarda contra o TEMP do sistema (SYSTEM)
 	} {
 		if !strings.Contains(r.Command, want) {
 			t.Errorf("comando windows nao contem %q:\n%s", want, r.Command)
@@ -362,8 +366,8 @@ func TestWindowsCommandIsRobust(t *testing.T) {
 	}
 	// REGRESSAO 2: nada de caminho fixo em C:\Windows\Temp, onde qualquer usuario local
 	// cria arquivos (pre-criar ou trocar o instalador antes da execucao elevada).
-	if strings.Contains(r.Command, `Windows\Temp`) {
-		t.Errorf("comando windows nao pode gravar em C:\\Windows\\Temp:\n%s", r.Command)
+	if strings.Contains(r.Command, `:\`) {
+		t.Errorf("comando windows nao pode ter caminho fixo (C:\\Windows\\Temp):\n%s", r.Command)
 	}
 }
 

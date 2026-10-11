@@ -39,10 +39,11 @@ func TestWindowsExactForm(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	const want = `powershell -ExecutionPolicy Bypass -Command "iwr -useb https://scanner.suricatoos.com/install.ps1 ` +
-		`-OutFile (Join-Path (Get-Item env:TEMP).Value 'suricatoos-install.ps1'); ` +
-		`& (Join-Path (Get-Item env:TEMP).Value 'suricatoos-install.ps1') ` +
-		`-Server 'https://scanner.suricatoos.com/agent/v1' -Token 'st_AbC123.xyz-9_Q' -CaPin 'sha256:0a1b2c'"`
+	const want = `powershell -NoProfile -ExecutionPolicy Bypass -Command "` +
+		`if ((Get-Item env:TEMP).Value -like '*\Windows\Temp*') { throw 'Nao rode como SYSTEM: use o install.ps1 com -File a partir de uma pasta protegida' }; ` +
+		`if (iwr -useb https://scanner.suricatoos.com/install.ps1 -PassThru -OutFile (Join-Path (Get-Item env:TEMP).Value 'suricatoos-install.ps1')) ` +
+		`{ & (Join-Path (Get-Item env:TEMP).Value 'suricatoos-install.ps1') ` +
+		`-Server 'https://scanner.suricatoos.com/agent/v1' -Token 'st_AbC123.xyz-9_Q' -CaPin 'sha256:0a1b2c' }"`
 	if got != want {
 		t.Errorf("forma do comando Windows mudou:\n got: %s\nwant: %s", got, want)
 	}
@@ -81,8 +82,8 @@ func TestWindowsCommandInvariants(t *testing.T) {
 	// 4. O mesmo caminho para baixar (-OutFile) e para executar (&), resolvido por
 	// cmdlets (Get-Item env:TEMP): os metodos estaticos do .NET ([IO.Path]::GetTempPath())
 	// sao recusados no Constrained Language Mode, os cmdlets nao.
-	dl := between(t, cmd, "-OutFile ", "; & ")
-	run := between(t, cmd, "; & ", " -Server ")
+	dl := between(t, cmd, "-OutFile ", ") { & ")
+	run := between(t, cmd, ") { & ", " -Server ")
 	if dl != run {
 		t.Errorf("baixa para um caminho e executa outro:\n-OutFile %s\n& %s", dl, run)
 	}
@@ -103,6 +104,56 @@ func TestWindowsCommandInvariants(t *testing.T) {
 	// 6. O install.ps1 sai do mesmo host do servidor.
 	if !strings.Contains(cmd, "iwr -useb https://scanner.suricatoos.com/install.ps1 ") {
 		t.Errorf("deveria baixar o install.ps1 do host do servidor:\n%s", cmd)
+	}
+
+	// 7. Fecha em falha. Com "iwr ...; & caminho" um download que falha (recusado, 404,
+	// cortado) seguia para o '&' e executava o arquivo velho ou plantado que estivesse no
+	// caminho, entregando o token a ele (reproduzido no PowerShell 5.1 real). Aqui o download
+	// e a CONDICAO de um 'if' ('-PassThru' faz o sucesso virar verdadeiro) e a chamada so
+	// existe no corpo dele.
+	if n := strings.Count(cmd, "&"); n != 1 {
+		t.Errorf("deveria haver um unico '&' (a chamada do instalador), ha %d:\n%s", n, cmd)
+	}
+	cond := between(t, cmd, "if (iwr ", ") { & ")
+	if !strings.Contains(cond, " -PassThru ") {
+		t.Errorf("sem -PassThru o download nao devolve nada e o 'if' nunca executa o corpo:\n%s", cmd)
+	}
+	if strings.Contains(cond, ";") {
+		t.Errorf("nada pode separar o download do corpo do 'if':\n%s", cmd)
+	}
+	if body := cmd[strings.Index(cmd, "{ & "):]; !strings.HasSuffix(body, ` }"`) || strings.Contains(body, ";") {
+		t.Errorf("o corpo do 'if' deve ser a unica coisa depois do download, e so a chamada:\n%s", cmd)
+	}
+
+	// 8. Guarda contra o TEMP do sistema, ANTES de qualquer download. Rodando como SYSTEM
+	// (RMM, PsExec -s) o TEMP e C:\Windows\Temp, onde qualquer usuario local cria arquivos:
+	// o comando recusa em vez de so documentar. Unica mencao a esse caminho no comando.
+	guard := between(t, cmd, `-Command "`, "; if (iwr ")
+	for _, want := range []string{"(Get-Item env:TEMP).Value", `-like '*\Windows\Temp*'`, "throw '"} {
+		if !strings.Contains(guard, want) {
+			t.Errorf("a guarda deveria conter %q, got %s", want, guard)
+		}
+	}
+	if strings.Count(cmd, `Windows\Temp`) != 1 {
+		t.Errorf("C:\\Windows\\Temp so pode aparecer na guarda:\n%s", cmd)
+	}
+
+	// 9. -NoProfile no powershell interno e elevado: nada do perfil do usuario roda com
+	// privilegio.
+	if !strings.HasPrefix(cmd, "powershell -NoProfile -ExecutionPolicy Bypass -Command ") {
+		t.Errorf("deveria comecar por 'powershell -NoProfile -ExecutionPolicy Bypass -Command':\n%s", cmd)
+	}
+
+	// 10. So ASCII (a linha passa por terminais com paginas de codigo diversas) e nenhuma
+	// barra invertida antes de aspas duplas (na linha de comando do Windows ela escapa a aspa).
+	for i := 0; i < len(cmd); i++ {
+		if cmd[i] > 127 {
+			t.Errorf("o comando deve ser ASCII, byte %d = 0x%x:\n%s", i, cmd[i], cmd)
+			break
+		}
+	}
+	if strings.Contains(cmd, `\"`) {
+		t.Errorf("nenhuma barra invertida pode vir antes de aspas duplas:\n%s", cmd)
 	}
 }
 

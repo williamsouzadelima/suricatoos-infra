@@ -20,20 +20,29 @@
 //   - That directory comes from cmdlets, (Get-Item env:TEMP).Value (the TEMP that
 //     install.ps1 itself uses), and not from [IO.Path]::GetTempPath(): .NET static
 //     calls are refused in Constrained Language Mode (WDAC/AppLocker-hardened
-//     endpoints), cmdlets are not. If TEMP is unset both statements fail and nothing
-//     is written.
+//     endpoints), cmdlets are not. If TEMP is unset the statements that build the
+//     path fail, so nothing is written and nothing runs.
 //   - The path expression is parenthesized. In argument mode a bare token is literal
 //     text, so "-OutFile [IO.Path]::Combine(...)" or "-OutFile Join-Path ..." binds
 //     the wrong arguments (PositionalParameterNotFound).
+//   - Fail closed. The download is the CONDITION of an `if` (-PassThru makes a
+//     successful download a truthy value) and the call exists only in its body. With
+//     a plain `iwr ...; & path`, a download that fails (refused, 404, cut) went on to
+//     run whatever file was already at the path, stale or planted, and handed it the
+//     enrollment token (reproduced on Windows PowerShell 5.1).
+//   - SYSTEM is refused, not just documented. Run as SYSTEM (RMM, PsExec -s), TEMP is
+//     C:\Windows\Temp, where any local user can create files. A guard before the
+//     download throws when TEMP matches *\Windows\Temp*; mass or SYSTEM deployment
+//     runs install.ps1 itself with -File from a protected directory (its header says
+//     so). A shared TEMP configured by hand (say C:\Temp writable by Users) is still
+//     trusted, exactly as install.ps1 trusts it.
+//   - -NoProfile: the inner powershell is elevated and must not load the user's
+//     profile scripts.
 //   - A file, not an in-memory script block. install.ps1 does not depend on its own
 //     location, but [scriptblock]::Create is refused in Constrained Language Mode
 //     too, a file keeps the documented `-File` behavior, and the install stays a
 //     plain download-then-run instead of a fileless download-and-execute, the
 //     pattern EDR tooling on the target endpoints tends to flag.
-//
-// Known limit: run as SYSTEM (RMM, PsExec -s), TEMP is C:\Windows\Temp, which is
-// shared. The command is meant for an administrator's elevated prompt; mass
-// deployment as SYSTEM should run install.ps1 itself from a protected directory.
 //
 // The interpolated values (server URL, token, CA pin) land inside single quotes
 // inside the double-quoted -Command: three nested contexts with different escape
@@ -63,10 +72,16 @@ var (
 // (download, then run). See the package comment for why it looks like this.
 const winInstaller = `(Join-Path (Get-Item env:TEMP).Value 'suricatoos-install.ps1')`
 
+// winSystemGuard runs before anything is downloaded and refuses a TEMP that is the
+// system temp directory (what SYSTEM gets). ASCII on purpose: it is printed in
+// whatever code page the terminal has. Its pattern is the only mention of that path.
+const winSystemGuard = `if ((Get-Item env:TEMP).Value -like '*\Windows\Temp*') { throw 'Nao rode como SYSTEM: use o install.ps1 com -File a partir de uma pasta protegida' }; `
+
 // Windows renders the one-liner for a Windows host: download install.ps1 into the
-// invoking user's temp directory and run it with the enrollment parameters. It
-// returns ErrUnsafeValue (and no command) when a value could be interpreted by the
-// shell it is pasted into, and ErrServerURL when serverURL has no usable host.
+// invoking user's temp directory and, only if that download succeeded, run it with
+// the enrollment parameters. It returns ErrUnsafeValue (and no command) when a value
+// could be interpreted by the shell it is pasted into, and ErrServerURL when
+// serverURL has no usable host.
 func Windows(serverURL, token, caPin string) (string, error) {
 	for _, v := range []string{serverURL, token, caPin} {
 		if !plain(v) {
@@ -79,8 +94,8 @@ func Windows(serverURL, token, caPin string) (string, error) {
 		return "", ErrServerURL
 	}
 	return fmt.Sprintf(
-		`powershell -ExecutionPolicy Bypass -Command "iwr -useb %[1]s/install.ps1 -OutFile %[2]s; & %[2]s -Server '%[3]s' -Token '%[4]s' -CaPin '%[5]s'"`,
-		base, winInstaller, serverURL, token, caPin), nil
+		`powershell -NoProfile -ExecutionPolicy Bypass -Command "%[1]sif (iwr -useb %[2]s/install.ps1 -PassThru -OutFile %[3]s) { & %[3]s -Server '%[4]s' -Token '%[5]s' -CaPin '%[6]s' }"`,
+		winSystemGuard, base, winInstaller, serverURL, token, caPin), nil
 }
 
 // Unix renders the one-liner for Linux and macOS: pipe install.sh into sh, which
