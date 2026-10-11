@@ -1,0 +1,180 @@
+name: gsa-pr-build
+
+# Valida em PR o patch da UI (greenbone/gsa + patches/gsa-*.patch) e o do gsad
+# ANTES do merge: aplica os dois nas tags pinadas, roda o type-check (tsc) e o
+# build de produção (Vite) da UI e confere os catálogos de idioma.
+# Não publica nada, não usa secrets e não faz login em registry: a publicação
+# continua só no build-publish.yml (push na main).
+on:
+  pull_request:
+    paths:
+      - 'patches/**'
+      - '.github/workflows/gsa-pr-build.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gsa-pr-build-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: aplica patches + type-check + build (GSA)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      # Folga de heap para o tsc e o Vite (runner com 16 GB).
+      NODE_OPTIONS: --max-old-space-size=6144
+    steps:
+      - name: Checkout (patches + workflow)
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      # Mesma lógica do build-publish.yml: a tag vem do nome do arquivo do patch.
+      - name: Derivar tags pinadas a partir dos nomes dos patches
+        id: refs
+        run: |
+          set -eu
+          if [ "$(ls patches/gsa-*.patch | wc -l)" -gt 1 ] || [ "$(ls patches/gsad-*.patch | wc -l)" -gt 1 ]; then
+            echo "::warning::mais de um patch por componente; vale o primeiro em ordem alfabética, como no build-publish.yml"
+          fi
+          GSA_PATCH=$(ls patches/gsa-*.patch | head -1)
+          GSAD_PATCH=$(ls patches/gsad-*.patch | head -1)
+          GSA_REF=$(basename "$GSA_PATCH" .patch | sed 's/^gsa-//')
+          GSAD_REF=$(basename "$GSAD_PATCH" .patch | sed 's/^gsad-//')
+          for REF in "$GSA_REF" "$GSAD_REF"; do
+            if ! printf '%s' "$REF" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+              echo "::error::tag inválida derivada do nome do patch: '$REF' (esperado vX.Y.Z)"
+              exit 1
+            fi
+          done
+          echo "gsa_ref=$GSA_REF"   >> "$GITHUB_OUTPUT"
+          echo "gsad_ref=$GSAD_REF" >> "$GITHUB_OUTPUT"
+          echo "Pinned -> gsa=$GSA_REF | gsad=$GSAD_REF"
+
+      # O patch do gsad só troca strings: basta provar que aplica na tag.
+      - name: gsad — aplica o patch na tag pinada
+        id: gsad
+        env:
+          GSAD_REF: ${{ steps.refs.outputs.gsad_ref }}
+        run: |
+          set -eux
+          git clone -q --branch "$GSAD_REF" --depth 1 https://github.com/greenbone/gsad.git gsad-src
+          git -C gsad-src apply --check "$GITHUB_WORKSPACE/patches/gsad-${GSAD_REF}.patch"
+          git -C gsad-src apply "$GITHUB_WORKSPACE/patches/gsad-${GSAD_REF}.patch"
+
+      - name: gsa — aplica o patch na tag pinada
+        id: gsa
+        env:
+          GSA_REF: ${{ steps.refs.outputs.gsa_ref }}
+        run: |
+          set -eux
+          git clone -q --branch "$GSA_REF" --depth 1 https://github.com/greenbone/gsa.git gsa-src
+          git -C gsa-src apply --check "$GITHUB_WORKSPACE/patches/gsa-${GSA_REF}.patch"
+          git -C gsa-src apply "$GITHUB_WORKSPACE/patches/gsa-${GSA_REF}.patch"
+
+      # O build de produção (.docker/prod.Dockerfile da tag) instala o Node da
+      # NodeSource (ENV NODE_VERSION=node_<major>.x): usar a mesma major aqui.
+      - name: Versão do Node do build de produção da tag
+        id: node
+        run: |
+          set -eu
+          MAJOR=$(sed -n 's/^ENV NODE_VERSION=node_\([0-9][0-9]*\)\.x.*$/\1/p' gsa-src/.docker/prod.Dockerfile | head -1)
+          if [ -z "$MAJOR" ]; then
+            MAJOR=24
+            echo "::warning::NODE_VERSION não encontrado em .docker/prod.Dockerfile; usando Node $MAJOR"
+          fi
+          echo "major=$MAJOR" >> "$GITHUB_OUTPUT"
+          echo "Node do build de produção: $MAJOR"
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ steps.node.outputs.major }}
+          cache: npm
+          cache-dependency-path: gsa-src/package-lock.json
+
+      # Lockfile da tag; sem scripts de instalação (o .npmrc da tag já tem
+      # ignore-scripts=true, e o build de produção também roda sem eles).
+      - name: Dependências (npm ci)
+        id: deps
+        working-directory: gsa-src
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      # Obrigatório e em passo próprio: o Vite não checa tipos. (Na v27.4.1 o
+      # "build" já é "tsc && vite build"; o passo separado aponta a causa da
+      # falha e continua valendo se o script de build mudar.)
+      - name: Type-check (npm run type-check = tsc --noEmit)
+        id: typecheck
+        working-directory: gsa-src
+        run: npm run type-check
+
+      - name: Build de produção (npm run build)
+        id: build
+        working-directory: gsa-src
+        run: |
+          set -eu
+          npm run build
+          test -s build/index.html
+
+      # O Vite copia public/ sem validar: um JSON quebrado ou com chave repetida
+      # num catálogo só apareceria no navegador.
+      - name: Catálogos de idioma (JSON válido, sem chave repetida)
+        id: locales
+        working-directory: gsa-src
+        run: |
+          python3 - public/locales/*.json <<'PY'
+          import collections
+          import json
+          import sys
+
+          bad = False
+          for path in sys.argv[1:]:
+              try:
+                  pairs = json.load(
+                      open(path, encoding='utf-8'),
+                      object_pairs_hook=lambda kv: kv,
+                  )
+              except ValueError as err:
+                  print(f'::error file={path}::JSON inválido: {err}')
+                  bad = True
+                  continue
+              counts = collections.Counter(key for key, _ in pairs)
+              dups = sorted(key for key, n in counts.items() if n > 1)
+              if dups:
+                  print(f'::error file={path}::chaves repetidas: {dups}')
+                  bad = True
+              print(f'{path}: {len(pairs)} chaves')
+          sys.exit(1 if bad else 0)
+          PY
+
+      - name: Resumo
+        if: always()
+        env:
+          GSA_REF: ${{ steps.refs.outputs.gsa_ref }}
+          GSAD_REF: ${{ steps.refs.outputs.gsad_ref }}
+          NODE_MAJOR: ${{ steps.node.outputs.major }}
+          R_GSAD: ${{ steps.gsad.outcome }}
+          R_GSA: ${{ steps.gsa.outcome }}
+          R_DEPS: ${{ steps.deps.outcome }}
+          R_TYPECHECK: ${{ steps.typecheck.outcome }}
+          R_BUILD: ${{ steps.build.outcome }}
+          R_LOCALES: ${{ steps.locales.outcome }}
+        run: |
+          {
+            echo "### Patch do GSA/gsad — validação de PR"
+            echo ""
+            echo "Tags pinadas: gsa \`${GSA_REF:-?}\` · gsad \`${GSAD_REF:-?}\` · Node ${NODE_MAJOR:-?}"
+            echo ""
+            echo "| Etapa | Resultado |"
+            echo "|---|---|"
+            echo "| gsad: git apply --check + apply | ${R_GSAD:-skipped} |"
+            echo "| gsa: git apply --check + apply | ${R_GSA:-skipped} |"
+            echo "| npm ci | ${R_DEPS:-skipped} |"
+            echo "| type-check (tsc --noEmit) | ${R_TYPECHECK:-skipped} |"
+            echo "| build de produção (npm run build) | ${R_BUILD:-skipped} |"
+            echo "| catálogos de idioma | ${R_LOCALES:-skipped} |"
+          } >> "$GITHUB_STEP_SUMMARY"
