@@ -33,7 +33,8 @@ SPDX-License-Identifier: GPL-2.0-or-later
     xmlns:exsl="http://exslt.org/common"
     xmlns:gvm="http://greenbone.net"
     xmlns:date="http://exslt.org/dates-and-times"
-    extension-element-prefixes="str func date exsl gvm">
+    xmlns:math="http://exslt.org/math"
+    extension-element-prefixes="str func date exsl gvm math">
   <xsl:output method="text" encoding="string" indent="no"/>
   <!-- Milhar com ponto, para os numeros exibidos em pt-BR e es. O formato
        padrao (milhar com virgula) continua valendo para o ingles. -->
@@ -132,11 +133,9 @@ SPDX-License-Identifier: GPL-2.0-or-later
        card lists every affected host instead. -->
   <xsl:key name="by-updgrp" match="result[nvt/solution/@type='VendorFix']"
            use="concat(substring-before(concat(normalize-space(nvt/name),' '),' '),' ',substring-before(concat(substring-after(normalize-space(nvt/name),' '),' '),' '))"/>
-  <!-- Same grouping, further split per NVT, so distinct advisories can be
-       counted WITHIN a group (a plain by-nvt key is global and would count
-       occurrences on other hosts too). -->
-  <xsl:key name="by-updgrp-nvt" match="result[nvt/solution/@type='VendorFix']"
-           use="concat(concat(substring-before(concat(normalize-space(nvt/name),' '),' '),' ',substring-before(concat(substring-after(normalize-space(nvt/name),' '),' '),' ')),'||',nvt/@oid)"/>
+  <!-- (A chave by-updgrp-nvt, grupo + OID, saiu: os advisories distintos de um
+       grupo sao contados agora pelos representantes dos NVTs — o primeiro
+       result de cada OID, por by-nvt — em gvm:grp-confreps.) -->
 
   <!-- Minimum distinct advisories for a group to be collapsed into one card.
        Below it the individual cards are more informative than a roll-up. -->
@@ -146,6 +145,103 @@ SPDX-License-Identifier: GPL-2.0-or-later
        Os mais severos são os que orientam a urgência; o restante é enumeração
        do mesmo produto, resolvida pela mesma ação. -->
   <xsl:param name="adv-max" select="10"/>
+
+  <!-- ===================================================================
+       O CONJUNTO DE ACHADOS, definido UMA vez para o Sumario de Achados
+       (secao 4) e para os cards (secao 5).
+
+       Cada secao montava o proprio conjunto com a sua copia de um predicado
+       de uma linha so', e as copias divergiram: a contagem que abria a secao
+       "Indicadores a validar" nao era a mesma selecao da tabela e dos cards, e
+       a secao saia VAZIA; a numeracao do sumario contava os cards
+       consolidados e a dos cards nao. Agora as duas secoes iteram os MESMOS
+       node-sets, com a MESMA chave de ordenacao — o que uma lista, a outra
+       lista, na mesma ordem e com o mesmo numero.
+
+       Regras (um NVT e' o conjunto das instancias — results — com o mesmo OID):
+         instancia BAIXA   tem <qod><value> e ele e' menor que $qod-min. Sem QoD
+                           NAO e' baixa: falta do campo nao e' evidencia de
+                           baixa qualidade.
+         INDICADOR         NVT com TODAS as instancias baixas. Basta uma
+                           instancia confiavel para o NVT ser CONFIRMADO. Os
+                           dois conjuntos particionam os NVTs: nenhum fica fora
+                           das duas secoes, nenhum aparece nas duas.
+         SEVERIDADE        a MAXIMA entre as instancias (a pontuacao impressa e'
+                           o texto da instancia que a carrega). Antes era a da
+                           PRIMEIRA instancia em ordem de documento: um NVT com
+                           9.8 num host e 5.0 noutro saia Medio ou Critico
+                           conforme a ordem do XML.
+         QoD EXIBIDA       a MAXIMA entre as instancias (veja finding-cards).
+         CONSOLIDADO       so' NVT VendorFix CONFIRMADO entra no agrupamento por
+                           produto, e o grupo so' colapsa com $group-min NVTs
+                           confirmados distintos. Indicador nunca e' absorvido:
+                           o card consolidado e' um card CONFIRMADO, e um
+                           advisory de baixa confianca dentro dele (pintando a
+                           severidade, escolhendo a acao unica) seria
+                           exatamente a mistura que a secao de indicadores
+                           existe para impedir. Todas as instancias de um NVT
+                           confirmado vao com ele, como no card normal.
+       =================================================================== -->
+
+  <!-- Chave de grupo de um nome de NVT: as duas primeiras palavras. E' a
+       expressao do `use' de by-updgrp, que por ser atributo de xsl:key fica
+       por extenso la'. Le so' o argumento, nunca o no de contexto (o no de
+       contexto dentro de func:function nao e' o mesmo em toda versao do
+       libxslt). -->
+  <func:function name="gvm:grp">
+    <xsl:param name="name"/>
+    <func:result select="concat(substring-before(concat(normalize-space($name),' '),' '),' ',substring-before(concat(substring-after(normalize-space($name),' '),' '),' '))"/>
+  </func:function>
+
+  <!-- Severidade MAXIMA de um conjunto de results (NaN se nenhum tem numero).
+       math:max devolve NaN se QUALQUER no' nao for numero, entao o filtro
+       vem antes. -->
+  <func:function name="gvm:sev-max">
+    <xsl:param name="rs"/>
+    <func:result select="math:max($rs/severity[number(.) = number(.)])"/>
+  </func:function>
+
+  <!-- Os NVTs confirmados do grupo `g', um no' por NVT (o representante: a
+       primeira instancia). O teste de confianca roda uma vez por NVT, nao uma
+       vez por instancia. -->
+  <func:function name="gvm:grp-confreps">
+    <xsl:param name="g"/>
+    <func:result select="key('by-updgrp', $g)[generate-id() = generate-id(key('by-nvt', nvt/@oid)[1])][key('by-nvt', nvt/@oid)[not(qod/value and number(qod/value) &lt; number($qod-min))]]"/>
+  </func:function>
+
+  <!-- As instancias que um grupo consolidado DESCREVE: todas as dos NVTs
+       confirmados do grupo `g' (hosts, severidade, acao unica). -->
+  <func:function name="gvm:grp-members">
+    <xsl:param name="g"/>
+    <func:result select="key('by-nvt', gvm:grp-confreps($g)/nvt/@oid)"/>
+  </func:function>
+
+  <!-- Um representante por NVT: a primeira instancia dele. -->
+  <xsl:variable name="nvt-reps"
+    select="gvm:report()/results/result[generate-id() = generate-id(key('by-nvt', nvt/@oid)[1])]"/>
+  <xsl:variable name="nvt-conf"
+    select="$nvt-reps[key('by-nvt', nvt/@oid)[not(qod/value and number(qod/value) &lt; number($qod-min))]]"/>
+  <!-- Linhas e cards de "Indicadores a validar": TODOS os indicadores, porque
+       nenhum e' absorvido. A contagem que abre a secao e' count() deste mesmo
+       node-set, entao a secao nao abre vazia. -->
+  <xsl:variable name="nvt-low"
+    select="$nvt-reps[not(key('by-nvt', nvt/@oid)[not(qod/value and number(qod/value) &lt; number($qod-min))])]"/>
+  <!-- Um representante por grupo consolidado (o primeiro NVT confirmado do
+       grupo), so' para os grupos com $group-min NVTs confirmados distintos. -->
+  <xsl:variable name="grp-reps"
+    select="$nvt-conf[nvt/solution/@type='VendorFix']
+                     [generate-id() = generate-id(gvm:grp-confreps(gvm:grp(nvt/name))[1])]
+                     [count(gvm:grp-confreps(gvm:grp(nvt/name))) &gt;= $group-min]"/>
+  <xsl:variable name="grp-keys-rtf">
+    <xsl:for-each select="$grp-reps"><k><xsl:value-of select="gvm:grp(nvt/name)"/></k></xsl:for-each>
+  </xsl:variable>
+  <xsl:variable name="grp-keys" select="exsl:node-set($grp-keys-rtf)/k"/>
+  <!-- Linhas e cards de "Achados confirmados": os confirmados que nenhum card
+       consolidado absorveu. Absorvido = VendorFix de um grupo que GANHOU card,
+       e a lista desses grupos e' a propria $grp-keys: o sumario e os cards nao
+       tem como discordar sobre quem foi absorvido. -->
+  <xsl:variable name="rows-conf"
+    select="$nvt-conf[not(nvt/solution/@type='VendorFix' and gvm:grp(nvt/name) = $grp-keys)]"/>
 
   <!-- Teto de LINHAS de cada tabela do sumario de achados (secao 4).
        O sumario existe para ser lido de uma olhada; um scan real produz dezenas
@@ -933,19 +1029,29 @@ SPDX-License-Identifier: GPL-2.0-or-later
        paragrafo, mas precisa poder quebrar, senao vira texto fora do papel.
        Leva as duas redes: junta (barata) e, dentro do token, \surwb (cara).
        O parametro $max corta o campo e DIZ quanto cortou. Vale 0 (sem corte)
-       por padrao; so' o rotulo de chrome que dimensiona a pagina o usa. -->
+       por padrao; so' o rotulo de chrome que dimensiona a pagina o usa.
+       O corte cai na ULTIMA FRONTEIRA DE PALAVRA dentro de $max (gvm:cut-at),
+       recuando no maximo metade de $max (e no maximo 199, o alcance da escada
+       de inteiros): o nome do projeto saia "Quarterly External Assessmen..."
+       na capa. Pede-se o corte a gvm:cut-at com $max + 1 para que um espaco
+       logo DEPOIS do orcamento conte — os $max primeiros caracteres sao entao
+       palavras inteiras —, e o resultado volta a ser limitado a $max. Sem
+       fronteira na janela (um token maior que ela), o corte e' em $max, como
+       antes. A marca continua dizendo quantos caracteres ficaram de fora. -->
   <xsl:template name="escape_break">
     <xsl:param name="string"/>
     <xsl:param name="max" select="0"/>
     <xsl:param name="wb" select="'\surwb{}'"/>
-    <xsl:variable name="cut">
+    <xsl:variable name="over" select="number($max) &gt; 0 and string-length($string) &gt; number($max)"/>
+    <xsl:variable name="keep">
       <xsl:choose>
-        <xsl:when test="number($max) &gt; 0 and string-length($string) &gt; number($max)">
-          <xsl:value-of select="substring($string, 1, number($max))"/>
+        <xsl:when test="$over">
+          <xsl:value-of select="gvm:hx-min2(gvm:cut-at(string($string), number($max) + 1, floor(number($max) div 2) + 1), number($max))"/>
         </xsl:when>
-        <xsl:otherwise><xsl:value-of select="$string"/></xsl:otherwise>
+        <xsl:otherwise><xsl:value-of select="string-length($string)"/></xsl:otherwise>
       </xsl:choose>
     </xsl:variable>
+    <xsl:variable name="cut" select="substring($string, 1, number($keep))"/>
     <xsl:variable name="e">
       <xsl:call-template name="escape_sliced">
         <xsl:with-param name="string" select="string($cut)"/>
@@ -953,9 +1059,9 @@ SPDX-License-Identifier: GPL-2.0-or-later
       </xsl:call-template>
     </xsl:variable>
     <xsl:value-of select="gvm:brk(string($e))"/>
-    <xsl:if test="number($max) &gt; 0 and string-length($string) &gt; number($max)">
+    <xsl:if test="$over">
       <xsl:text>\suriTruncMark{</xsl:text>
-      <xsl:value-of select="string-length($string) - number($max)"/>
+      <xsl:value-of select="string-length($string) - number($keep)"/>
       <xsl:text>}</xsl:text>
     </xsl:if>
   </xsl:template>
@@ -1748,11 +1854,22 @@ SPDX-License-Identifier: GPL-2.0-or-later
        wording told the reader to remediate immediately AND that every one of them
        needed manual validation, in the same sentence.  Section 4 already
        segregates these two populations; the summary must not undo that work one
-       page earlier. -->
+       page earlier.
+
+       Quarto caso: known = false.  Os tres acima comparam N (Alto/Critico) com
+       lowconf, e lowconf so' existe contado no EXPORT (o result_count do gvmd
+       nao separa por QoD).  Quando N vem do SCAN (as faixas do result_count) e
+       o export e' parcial, as duas contagens sao de populacoes diferentes: com
+       o filtro padrao (min_qod=70) o export nem carrega os de baixa confianca,
+       lowconf da' 0 e a frase mandava "remediar de imediato" um N que os
+       inclui.  Sem como saber, a frase termina no numero; o aviso de visao
+       parcial, logo abaixo, diz ao leitor o que ficou de fora. -->
   <xsl:template name="exec-remediation-clause">
     <xsl:param name="hicrit"/>
     <xsl:param name="lowconf"/>
+    <xsl:param name="known" select="true()"/>
     <xsl:choose>
+      <xsl:when test="not($known)"><xsl:text>.</xsl:text></xsl:when>
       <xsl:when test="$hicrit &gt; 0 and $lowconf &gt;= $hicrit">
         <xsl:value-of select="gvm:t('exec_all_lowconf')"/>
       </xsl:when>
@@ -1777,39 +1894,45 @@ SPDX-License-Identifier: GPL-2.0-or-later
          confidence High results before the stylesheet sees them, so a scan that
          produced 5 High would print "ALTO 3" (illustrative numbers).
          The <full> child is the scan; <filtered> is the window. Fall back to
-         counting only when gvmd did not send the element. -->
+         counting only when gvmd did not send the element.
+         UMA fonte para as QUATRO faixas. O fallback era faixa a faixa, e um
+         result_count sem <critical> (gvmd que ainda nao tem a classe) com as
+         demais presentes fazia o Critico sair da janela do export e Alto/Medio/
+         Baixo do scan inteiro — barras de populacoes diferentes lado a lado, e
+         nesse gvmd o <high> do scan ainda inclui os criticos, que entravam
+         duas vezes. Agora: as quatro de result_count/<faixa>/full quando as
+         quatro existem e sao numero; senao as quatro contadas no export. -->
     <xsl:variable name="rc" select="gvm:report()/result_count"/>
+    <xsl:variable name="rc-bands"
+      select="number($rc/critical/full) = number($rc/critical/full)
+              and number($rc/high/full) = number($rc/high/full)
+              and number($rc/medium/full) = number($rc/medium/full)
+              and number($rc/low/full) = number($rc/low/full)"/>
     <xsl:variable name="crit">
       <xsl:choose>
-        <xsl:when test="$rc/critical/full"><xsl:value-of select="number($rc/critical/full)"/></xsl:when>
+        <xsl:when test="$rc-bands"><xsl:value-of select="number($rc/critical/full)"/></xsl:when>
         <xsl:otherwise><xsl:value-of select="count(gvm:report()/results/result[number(severity) &gt;= 9.0])"/></xsl:otherwise>
       </xsl:choose>
     </xsl:variable>
     <xsl:variable name="high">
       <xsl:choose>
-        <xsl:when test="$rc/high/full"><xsl:value-of select="number($rc/high/full)"/></xsl:when>
+        <xsl:when test="$rc-bands"><xsl:value-of select="number($rc/high/full)"/></xsl:when>
         <xsl:otherwise><xsl:value-of select="count(gvm:report()/results/result[number(severity) &gt;= 7.0 and number(severity) &lt; 9.0])"/></xsl:otherwise>
       </xsl:choose>
     </xsl:variable>
     <xsl:variable name="med">
       <xsl:choose>
-        <xsl:when test="$rc/medium/full"><xsl:value-of select="number($rc/medium/full)"/></xsl:when>
+        <xsl:when test="$rc-bands"><xsl:value-of select="number($rc/medium/full)"/></xsl:when>
         <xsl:otherwise><xsl:value-of select="count(gvm:report()/results/result[number(severity) &gt;= 4.0 and number(severity) &lt; 7.0])"/></xsl:otherwise>
       </xsl:choose>
     </xsl:variable>
     <xsl:variable name="low">
       <xsl:choose>
-        <xsl:when test="$rc/low/full"><xsl:value-of select="number($rc/low/full)"/></xsl:when>
+        <xsl:when test="$rc-bands"><xsl:value-of select="number($rc/low/full)"/></xsl:when>
         <xsl:otherwise><xsl:value-of select="count(gvm:report()/results/result[number(severity) &gt;= 0.1 and number(severity) &lt; 4.0])"/></xsl:otherwise>
       </xsl:choose>
     </xsl:variable>
-    <!-- Log = informativo (severidade 0 a 0.1). Falso positivo tem severidade
-         NEGATIVA no GVM e é contado à parte: somá-lo ao Log inflaria o
-         informativo com itens que foram explicitamente descartados. -->
-    <xsl:variable name="logc" select="count(gvm:report()/results/result[number(severity) &gt;= 0 and number(severity) &lt; 0.1])"/>
-    <!-- Mesma faixa usada em sev-class: só -1 é falso positivo. Um -3 (erro de
-         scan) não é achado e não entra em contagem nenhuma. -->
-    <xsl:variable name="fpc" select="count(gvm:report()/results/result[number(severity) &lt; 0 and number(severity) &gt; -1.5])"/>
+    <!-- ($logc, $fpc e $rated sairam: eram calculados e nenhuma linha os lia.) -->
     <xsl:variable name="hosts" select="count(gvm:report()/host)"/>
     <!-- Results actually carried by this XML: what the document can describe. -->
     <xsl:variable name="total" select="count(gvm:report()/results/result)"/>
@@ -1830,11 +1953,20 @@ SPDX-License-Identifier: GPL-2.0-or-later
       </xsl:choose>
     </xsl:variable>
     <xsl:variable name="truncated" select="number($total-full) &gt; $total"/>
-    <xsl:variable name="rated" select="$crit + $high + $med + $low"/>
-    <xsl:variable name="uniq" select="count(gvm:report()/results/result[generate-id() = generate-id(key('by-nvt', nvt/@oid)[1])])"/>
+    <!-- VULNERABILIDADES unicas: NVTs distintos cuja severidade MAXIMA e' de
+         achado (>= 0.1). Contava todo NVT distinto, e Log (informativo) e falso
+         positivo (-1, descartado pelo analista) nao sao vulnerabilidade — o KPI
+         e a narrativa diziam "N vulnerabilidades unicas" com eles dentro. Um
+         NVT com uma instancia falso positivo e outra Media continua contando. -->
+    <xsl:variable name="uniq" select="count($nvt-reps[key('by-nvt', nvt/@oid)[number(severity) &gt;= 0.1]])"/>
     <!-- High/critical results the scanner is NOT confident about. Reported apart
-         so "warrant prompt remediation" never silently includes guesses. -->
+         so "warrant prompt remediation" never silently includes guesses.
+         Contado no EXPORT, a unica fonte com QoD: so' vale contra o N de
+         Alto/Critico quando os dois sao da mesma populacao — faixas contadas
+         no proprio export, ou export que carrega o scan inteiro. Senao a
+         clausula nao fala de confianca (exec-remediation-clause, known). -->
     <xsl:variable name="lowconf-hi" select="count(gvm:report()/results/result[number(severity) &gt;= 7.0][qod/value][number(qod/value) &lt; number($qod-min)])"/>
+    <xsl:variable name="lowconf-known" select="not($rc-bands) or not($truncated)"/>
 
     <!-- Overall risk rating derivation -->
     <xsl:variable name="riskWord">
@@ -1906,6 +2038,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
         <xsl:call-template name="exec-remediation-clause">
           <xsl:with-param name="hicrit" select="$hicrit"/>
           <xsl:with-param name="lowconf" select="$lowconf-hi"/>
+          <xsl:with-param name="known" select="$lowconf-known"/>
         </xsl:call-template>
       </xsl:when>
       <xsl:when test="$L='es'">
@@ -1918,6 +2051,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
         <xsl:call-template name="exec-remediation-clause">
           <xsl:with-param name="hicrit" select="$hicrit"/>
           <xsl:with-param name="lowconf" select="$lowconf-hi"/>
+          <xsl:with-param name="known" select="$lowconf-known"/>
         </xsl:call-template>
       </xsl:when>
       <xsl:otherwise>
@@ -1932,6 +2066,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
         <xsl:call-template name="exec-remediation-clause">
           <xsl:with-param name="hicrit" select="$hicrit"/>
           <xsl:with-param name="lowconf" select="$lowconf-hi"/>
+          <xsl:with-param name="known" select="$lowconf-known"/>
         </xsl:call-template>
       </xsl:otherwise>
     </xsl:choose>
@@ -2458,8 +2593,10 @@ SPDX-License-Identifier: GPL-2.0-or-later
   <!-- ================================================================= -->
 
   <xsl:template name="findings-summary">
-    <xsl:variable name="n-low" select="count(gvm:report()/results/result[generate-id() = generate-id(key('by-nvt', nvt/@oid)[1])][qod/value][number(qod/value) &lt; number($qod-min)])"/>
-    <xsl:variable name="n-ok" select="count(gvm:report()/results/result[generate-id() = generate-id(key('by-nvt', nvt/@oid)[1])][not(qod/value) or number(qod/value) &gt;= number($qod-min)])"/>
+    <!-- As contagens que decidem se cada tabela existe sao count() dos MESMOS
+         node-sets que a tabela itera (veja "O CONJUNTO DE ACHADOS"). -->
+    <xsl:variable name="n-low" select="count($nvt-low)"/>
+    <xsl:variable name="n-ok" select="count($rows-conf) + count($grp-reps)"/>
     <xsl:text>\suriSection{4}{</xsl:text><xsl:value-of select="gvm:t('sec_findings_summary')"/><xsl:text>}
 </xsl:text>
 
@@ -2514,27 +2651,26 @@ SPDX-License-Identifier: GPL-2.0-or-later
          critical row on the low-confidence table.  Nothing is emitted before
          the variables below are settled, because the truncation budget has to
          be known before the first row is written. -->
-    <xsl:variable name="rows" select="gvm:report()/results/result[generate-id() = generate-id(key('by-nvt', nvt/@oid)[1])]"/>
     <!-- Consolidated groups get one row each, at the top of the confirmed
          table, so the summary and the detail section describe the same set. -->
-    <xsl:variable name="groups" select="gvm:report()/results/result[nvt/solution/@type='VendorFix'][generate-id() = generate-id(key('by-updgrp',concat(substring-before(concat(normalize-space(nvt/name),' '),' '),' ',substring-before(concat(substring-after(normalize-space(nvt/name),' '),' '),' ')))[1])][count(key('by-updgrp',concat(substring-before(concat(normalize-space(nvt/name),' '),' '),' ',substring-before(concat(substring-after(normalize-space(nvt/name),' '),' '),' ')))[generate-id() = generate-id(key('by-updgrp-nvt',concat(concat(substring-before(concat(normalize-space(nvt/name),' '),' '),' ',substring-before(concat(substring-after(normalize-space(nvt/name),' '),' '),' ')),'||',nvt/@oid))[1])]) &gt;= $group-min]"/>
     <xsl:variable name="ngroups">
       <xsl:choose>
-        <xsl:when test="$low = 0"><xsl:value-of select="count($groups)"/></xsl:when>
+        <xsl:when test="$low = 0"><xsl:value-of select="count($grp-reps)"/></xsl:when>
         <xsl:otherwise>0</xsl:otherwise>
       </xsl:choose>
     </xsl:variable>
 
-    <!-- The rows this table is entitled to, bound once so the truncation budget
-         can be counted off exactly the set the loop below walks.  The expression
-         is the one the for-each carried before, unchanged: bucket by detection
-         quality, then drop whatever a consolidated advisory card already tells. -->
-    <xsl:variable name="sel" select="$rows[($low = 1 and qod/value and number(qod/value) &lt; number($qod-min)) or ($low = 0 and (not(qod/value) or number(qod/value) &gt;= number($qod-min)))][not((nvt/solution/@type='VendorFix' and count(key('by-updgrp',concat(substring-before(concat(normalize-space(nvt/name),' '),' '),' ',substring-before(concat(substring-after(normalize-space(nvt/name),' '),' '),' ')))[generate-id() = generate-id(key('by-updgrp-nvt',concat(concat(substring-before(concat(normalize-space(nvt/name),' '),' '),' ',substring-before(concat(substring-after(normalize-space(nvt/name),' '),' '),' ')),'||',nvt/@oid))[1])]) &gt;= $group-min))]"/>
+    <!-- The rows this table is entitled to: the SAME node-set the cards of the
+         same block iterate (finding-cards), so a row always has its card. -->
+    <xsl:variable name="sel" select="$rows-conf[$low = 0] | $nvt-low[$low = 1]"/>
     <!-- Truncation budget.  `keep' is how many rows of $sel are printed; it is
          never less than the number of ACIONAVEIS (severity >= 0.1), so what the
          cut can reach is only the informational tail — the rows sort by severity
-         descending, so that tail is at the bottom by construction. -->
-    <xsl:variable name="n-hard" select="count($sel[number(severity) &gt;= 0.1])"/>
+         descending, so that tail is at the bottom by construction.  Acionavel e'
+         o NVT cuja severidade MAXIMA e' >= 0.1 — a mesma que ordena as linhas;
+         contado pela da primeira instancia, um NVT acionavel podia cair no corte
+         dos informativos. -->
+    <xsl:variable name="n-hard" select="count($sel[key('by-nvt', nvt/@oid)[number(severity) &gt;= 0.1]])"/>
     <xsl:variable name="cap" select="number($summary-max) - number($ngroups)"/>
     <xsl:variable name="keep">
       <xsl:choose>
@@ -2553,9 +2689,15 @@ SPDX-License-Identifier: GPL-2.0-or-later
 </xsl:text>
 
     <xsl:if test="$low = 0">
-      <xsl:for-each select="$groups">
-        <xsl:sort select="severity" data-type="number" order="descending"/>
-        <xsl:variable name="gname" select="concat(substring-before(concat(normalize-space(nvt/name),' '),' '),' ',substring-before(concat(substring-after(normalize-space(nvt/name),' '),' '),' '))"/>
+      <xsl:for-each select="$grp-reps">
+        <!-- A severidade do grupo e' a MAXIMA dos seus confirmados — a mesma
+             chave de ordenacao e o mesmo valor do card consolidado. Era a do
+             PRIMEIRO membro em ordem de documento: a linha podia dizer Medio
+             enquanto o card que ela abre dizia Alto. -->
+        <xsl:sort select="gvm:sev-max(gvm:grp-members(gvm:grp(nvt/name)))" data-type="number" order="descending"/>
+        <xsl:variable name="gname" select="gvm:grp(nvt/name)"/>
+        <xsl:variable name="gmembers" select="gvm:grp-members($gname)"/>
+        <xsl:variable name="gmax" select="gvm:sev-max($gmembers)"/>
         <!-- Severity KEY of the design system.  Same ladder as `sev-class', in
              the vocabulary suricatoos-blocks.sty speaks; kept inline (twice)
              rather than hoisted into a named template, because this file is
@@ -2563,44 +2705,54 @@ SPDX-License-Identifier: GPL-2.0-or-later
              one edit that can collide. -->
         <xsl:variable name="gsev">
           <xsl:choose>
-            <xsl:when test="number(severity) &gt;= 9.0">critico</xsl:when>
-            <xsl:when test="number(severity) &gt;= 7.0">alto</xsl:when>
-            <xsl:when test="number(severity) &gt;= 4.0">medio</xsl:when>
-            <xsl:when test="number(severity) &gt;= 0.1">baixo</xsl:when>
+            <xsl:when test="$gmax &gt;= 9.0">critico</xsl:when>
+            <xsl:when test="$gmax &gt;= 7.0">alto</xsl:when>
+            <xsl:when test="$gmax &gt;= 4.0">medio</xsl:when>
+            <xsl:when test="$gmax &gt;= 0.1">baixo</xsl:when>
             <!-- -1 e' FALSO POSITIVO, nao pontuacao: `neutro' e' a chave sem
                  rampa de severidade do design (a palavra vem de \setsevword). -->
-            <xsl:when test="number(severity) &lt; 0 and number(severity) &gt; -1.5">neutro</xsl:when>
+            <xsl:when test="$gmax &lt; 0 and $gmax &gt; -1.5">neutro</xsl:when>
             <xsl:otherwise>logsev</xsl:otherwise>
           </xsl:choose>
         </xsl:variable>
         <xsl:text>\findingrow{</xsl:text><xsl:value-of select="position()"/><xsl:text>}{</xsl:text>
-        <xsl:text>\hyperlink{</xsl:text><xsl:value-of select="concat('grp-', translate($gname, ' ./:,()', '-------'))"/><xsl:text>}{</xsl:text>
+        <!-- Ancora DERIVADA do OID do representante do grupo, a mesma regra do
+             fnd-: so' [0-9-]. Era o nome do grupo com " ./:,()" trocados, e
+             _ & % # $ ~ ^ { } nas duas primeiras palavras do NVT entravam crus
+             em \hyperlink/\hypertarget e quebravam o pdflatex. O card
+             consolidado calcula a sua do MESMO no' ($grp-reps). -->
+        <xsl:text>\hyperlink{</xsl:text><xsl:value-of select="concat('grp-', translate(nvt/@oid, '.', '-'))"/><xsl:text>}{</xsl:text>
         <xsl:call-template name="escape_name">
           <xsl:with-param name="string" select="$gname"/>
         </xsl:call-template>
         <xsl:text> --- </xsl:text><xsl:value-of select="gvm:t('grp_title')"/>
         <xsl:text>}}{</xsl:text>
-        <xsl:value-of select="count(key('by-updgrp',concat(substring-before(concat(normalize-space(nvt/name),' '),' '),' ',substring-before(concat(substring-after(normalize-space(nvt/name),' '),' '),' ')))[generate-id() = generate-id(key('by-updgrp-nvt',concat(concat(substring-before(concat(normalize-space(nvt/name),' '),' '),' ',substring-before(concat(substring-after(normalize-space(nvt/name),' '),' '),' ')),'||',nvt/@oid))[1])])"/>
+        <xsl:value-of select="count(gvm:grp-confreps($gname))"/>
         <xsl:text>}{</xsl:text><xsl:value-of select="$gsev"/><xsl:text>}{</xsl:text>
-        <xsl:if test="$gsev != 'logsev' and $gsev != 'neutro'"><xsl:value-of select="severity"/></xsl:if>
+        <xsl:if test="$gsev != 'logsev' and $gsev != 'neutro'">
+          <xsl:value-of select="$gmembers[number(severity) = $gmax][1]/severity"/>
+        </xsl:if>
         <xsl:text>}
 </xsl:text>
       </xsl:for-each>
     </xsl:if>
     <xsl:for-each select="$sel">
-      <xsl:sort select="severity" data-type="number" order="descending"/>
+      <!-- Severidade MAXIMA entre as instancias, a mesma chave de finding-cards:
+           a linha N do sumario e' o card #N. -->
+      <xsl:sort select="gvm:sev-max(key('by-nvt', nvt/@oid))" data-type="number" order="descending"/>
       <xsl:if test="position() &lt;= number($keep)">
         <xsl:variable name="oid" select="nvt/@oid"/>
         <xsl:variable name="anchor" select="concat('fnd-', translate($oid, '.', '-'))"/>
         <xsl:variable name="instances" select="count(key('by-nvt', $oid))"/>
+        <xsl:variable name="smax" select="gvm:sev-max(key('by-nvt', $oid))"/>
         <!-- see the note on $gsev above: same ladder, deliberately inline -->
         <xsl:variable name="sevk">
           <xsl:choose>
-            <xsl:when test="number(severity) &gt;= 9.0">critico</xsl:when>
-            <xsl:when test="number(severity) &gt;= 7.0">alto</xsl:when>
-            <xsl:when test="number(severity) &gt;= 4.0">medio</xsl:when>
-            <xsl:when test="number(severity) &gt;= 0.1">baixo</xsl:when>
-            <xsl:when test="number(severity) &lt; 0 and number(severity) &gt; -1.5">neutro</xsl:when>
+            <xsl:when test="$smax &gt;= 9.0">critico</xsl:when>
+            <xsl:when test="$smax &gt;= 7.0">alto</xsl:when>
+            <xsl:when test="$smax &gt;= 4.0">medio</xsl:when>
+            <xsl:when test="$smax &gt;= 0.1">baixo</xsl:when>
+            <xsl:when test="$smax &lt; 0 and $smax &gt; -1.5">neutro</xsl:when>
             <xsl:otherwise>logsev</xsl:otherwise>
           </xsl:choose>
         </xsl:variable>
@@ -2622,7 +2774,9 @@ SPDX-License-Identifier: GPL-2.0-or-later
         </xsl:call-template>
         <xsl:text>}}{</xsl:text><xsl:value-of select="$instances"/><xsl:text>}{</xsl:text>
         <xsl:value-of select="$sevk"/><xsl:text>}{</xsl:text>
-        <xsl:if test="$sevk != 'logsev' and $sevk != 'neutro'"><xsl:value-of select="severity"/></xsl:if>
+        <xsl:if test="$sevk != 'logsev' and $sevk != 'neutro'">
+          <xsl:value-of select="key('by-nvt', $oid)[number(severity) = $smax][1]/severity"/>
+        </xsl:if>
         <xsl:text>}
 </xsl:text>
       </xsl:if>
@@ -2889,7 +3043,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
   </func:function>
 
   <xsl:template name="detailed-findings">
-    <xsl:variable name="n-low" select="count(gvm:report()/results/result[generate-id() = generate-id(key('by-nvt', nvt/@oid)[1])][qod/value][number(qod/value) &lt; number($qod-min)])"/>
+    <xsl:variable name="n-low" select="count($nvt-low)"/>
     <!-- Secao 5 do documento: a ordem das secoes esta' fixada na montagem
          (real-report), entao o numero e' constante e nao um contador do LaTeX
          — \suriSection carrega o numero como DADO, e ele tambem alimenta o
@@ -2904,6 +3058,12 @@ SPDX-License-Identifier: GPL-2.0-or-later
     <xsl:if test="$n-low &gt; 0">
       <xsl:text>\suriSummaryHead{confirmados}
 </xsl:text>
+      <!-- A tarja anuncia um bloco; sem nenhum confirmado ele ficava vazio,
+           colado na tarja de indicadores. Diz o que a tabela da secao 4 diz. -->
+      <xsl:if test="count($rows-conf) + count($grp-reps) = 0">
+        <xsl:text>\suriPara{</xsl:text><xsl:value-of select="gvm:t('none_confirmed')"/><xsl:text>}
+</xsl:text>
+      </xsl:if>
     </xsl:if>
     <xsl:call-template name="consolidated-update-cards"/>
     <xsl:call-template name="finding-cards">
@@ -2930,19 +3090,24 @@ SPDX-License-Identifier: GPL-2.0-or-later
        detection quality is under the threshold, low=0 the rest. -->
   <xsl:template name="finding-cards">
     <xsl:param name="low" select="0"/>
-    <xsl:variable name="rows" select="gvm:report()/results/result[generate-id() = generate-id(key('by-nvt', nvt/@oid)[1])]"/>
-    <!-- Advisories already described by a consolidated update card are dropped
-         here so the same vulnerability is not told twice. The trailing
-         predicate is the "was I absorbed?" test spelled out inline: XSLT 1.0
-         has no way to hoist it into a variable and still use it in a select. -->
-    <xsl:for-each select="$rows[($low = 1 and qod/value and number(qod/value) &lt; number($qod-min)) or ($low = 0 and (not(qod/value) or number(qod/value) &gt;= number($qod-min)))][not((nvt/solution/@type='VendorFix' and count(key('by-updgrp',concat(substring-before(concat(normalize-space(nvt/name),' '),' '),' ',substring-before(concat(substring-after(normalize-space(nvt/name),' '),' '),' ')))[generate-id() = generate-id(key('by-updgrp-nvt',concat(concat(substring-before(concat(normalize-space(nvt/name),' '),' '),' ',substring-before(concat(substring-after(normalize-space(nvt/name),' '),' '),' ')),'||',nvt/@oid))[1])]) &gt;= $group-min))]">
-      <xsl:sort select="severity" data-type="number" order="descending"/>
+    <!-- Os MESMOS node-sets e a MESMA chave de ordenacao das tabelas do
+         sumario (findings-summary-table). Advisories already described by a
+         consolidated update card are not in $rows-conf, so the same
+         vulnerability is not told twice. -->
+    <xsl:for-each select="$rows-conf[$low = 0] | $nvt-low[$low = 1]">
+      <xsl:sort select="gvm:sev-max(key('by-nvt', nvt/@oid))" data-type="number" order="descending"/>
       <xsl:variable name="oid" select="nvt/@oid"/>
       <xsl:variable name="anchor" select="concat('fnd-', translate($oid, '.', '-'))"/>
-      <xsl:variable name="instances" select="count(key('by-nvt', $oid))"/>
+      <xsl:variable name="inst" select="key('by-nvt', $oid)"/>
+      <xsl:variable name="instances" select="count($inst)"/>
+      <!-- Severidade e QoD do NVT, nao da primeira instancia (veja "O CONJUNTO
+           DE ACHADOS"): a severidade e' a maxima entre as instancias e a QoD
+           exibida tambem — a melhor deteccao que o scanner conseguiu. -->
+      <xsl:variable name="smax" select="gvm:sev-max($inst)"/>
+      <xsl:variable name="qmax" select="math:max($inst/qod/value[number(.) = number(.)])"/>
       <xsl:variable name="sevkey">
         <xsl:call-template name="sevkey-detail">
-          <xsl:with-param name="severity" select="severity"/>
+          <xsl:with-param name="severity" select="$smax"/>
         </xsl:call-template>
       </xsl:variable>
       <!-- Log e falso positivo nao carregam pontuacao: o \chipsev com segundo
@@ -2950,7 +3115,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
            linha Log. Passar "0.0" ali seria afirmar uma nota que nao existe. -->
       <xsl:variable name="score">
         <xsl:if test="$sevkey != 'logsev' and $sevkey != 'falsepos'">
-          <xsl:value-of select="severity"/>
+          <xsl:value-of select="$inst[number(severity) = $smax][1]/severity"/>
         </xsl:if>
       </xsl:variable>
       <!-- O titulo sai traduzido, mas o nome ORIGINAL fica logo abaixo: e a
@@ -2978,9 +3143,14 @@ SPDX-License-Identifier: GPL-2.0-or-later
            pagina: fora do card ele abre um paragrafo vazio antes de cada
            achado, e o \findingcard ja' traz o proprio ar. Ancorado no numero,
            o link do Sumario de Achados cai no card e nao no branco acima. -->
+      <!-- O NUMERO e' o da linha do sumario que abre este card: na tabela de
+           confirmados os cards consolidados ocupam os primeiros numeros, entao
+           o primeiro card normal e' o #(grupos + 1), e nao o #1 — o leitor
+           procurava o numero do sumario e achava outro achado. Indicadores
+           numeram a partir de 1, como a tabela deles. -->
       <xsl:text>\findingcard{</xsl:text><xsl:value-of select="$sevkey"/>
       <xsl:text>}{\hypertarget{</xsl:text><xsl:value-of select="$anchor"/><xsl:text>}{}\#</xsl:text>
-      <xsl:value-of select="position()"/><xsl:text>}{</xsl:text>
+      <xsl:value-of select="position() + count($grp-reps[$low = 0])"/><xsl:text>}{</xsl:text>
       <xsl:value-of select="$name_escaped"/>
       <xsl:if test="string($name-pt) != string(nvt/name)">
         <xsl:text>\findingorig{</xsl:text>
@@ -2994,16 +3164,21 @@ SPDX-License-Identifier: GPL-2.0-or-later
       <!-- Loud badge so a low-quality detection is never read as a fact, no
            matter how high its CVSS looks next to it: abaixo do limiar o chip e'
            o ambar de alerta e carrega a palavra; acima dele a QoD continua
-           visivel, em chip normal, porque e' dado do achado. -->
+           visivel, em chip normal, porque e' dado do achado.
+           O chip segue o BLOCO do card: ambar so' no bloco de indicadores (onde
+           todas as instancias estao abaixo do piso, e a maior delas e' a que
+           aparece); no de confirmados, chip normal com a maior QoD — e nenhum
+           chip quando o NVT so' e' confirmado por instancia sem QoD. -->
+      <xsl:variable name="qnode" select="$inst[number(qod/value) = $qmax][1]/qod/value"/>
       <xsl:choose>
-        <xsl:when test="qod/value and number(qod/value) &lt; number($qod-min)">
-          <xsl:text>  \chipwarn{QoD </xsl:text><xsl:value-of select="qod/value"/>
+        <xsl:when test="$low = 1">
+          <xsl:text>  \chipwarn{QoD </xsl:text><xsl:value-of select="$qnode"/>
           <xsl:text>\% \textperiodcentered\ </xsl:text><xsl:value-of select="gvm:t('lbl_lowconf')"/>
           <xsl:text>}%
 </xsl:text>
         </xsl:when>
-        <xsl:when test="string-length(qod/value) &gt; 0">
-          <xsl:text>  \chip{QoD </xsl:text><xsl:value-of select="qod/value"/><xsl:text>\%}%
+        <xsl:when test="$qmax &gt;= number($qod-min)">
+          <xsl:text>  \chip{QoD </xsl:text><xsl:value-of select="$qnode"/><xsl:text>\%}%
 </xsl:text>
         </xsl:when>
       </xsl:choose>
@@ -3325,12 +3500,20 @@ SPDX-License-Identifier: GPL-2.0-or-later
        threshold. Replaces N nearly identical cards with the single action that
        actually resolves them. -->
   <xsl:template name="consolidated-update-cards">
-    <xsl:for-each select="gvm:report()/results/result[nvt/solution/@type='VendorFix'][generate-id() = generate-id(key('by-updgrp',concat(substring-before(concat(normalize-space(nvt/name),' '),' '),' ',substring-before(concat(substring-after(normalize-space(nvt/name),' '),' '),' ')))[1])]">
-      <xsl:sort select="severity" data-type="number" order="descending"/>
-      <xsl:variable name="g" select="concat(substring-before(concat(normalize-space(nvt/name),' '),' '),' ',substring-before(concat(substring-after(normalize-space(nvt/name),' '),' '),' '))"/>
-      <xsl:variable name="ndist" select="count(key('by-updgrp',concat(substring-before(concat(normalize-space(nvt/name),' '),' '),' ',substring-before(concat(substring-after(normalize-space(nvt/name),' '),' '),' ')))[generate-id() = generate-id(key('by-updgrp-nvt',concat(concat(substring-before(concat(normalize-space(nvt/name),' '),' '),' ',substring-before(concat(substring-after(normalize-space(nvt/name),' '),' '),' ')),'||',nvt/@oid))[1])])"/>
+    <!-- Os grupos de $grp-reps, na MESMA ordem das linhas de grupo do sumario
+         (severidade maxima dos confirmados). Advisory de baixa confianca nao
+         entra em grupo nenhum: fica como indicador a validar (veja "O CONJUNTO
+         DE ACHADOS"). -->
+    <xsl:for-each select="$grp-reps">
+      <xsl:sort select="gvm:sev-max(gvm:grp-members(gvm:grp(nvt/name)))" data-type="number" order="descending"/>
+      <xsl:variable name="g" select="gvm:grp(nvt/name)"/>
+      <xsl:variable name="confreps" select="gvm:grp-confreps($g)"/>
+      <xsl:variable name="ndist" select="count($confreps)"/>
+      <!-- Sempre verdadeiro ($grp-reps so' tem grupos acima do limiar); fica
+           como guarda. -->
       <xsl:if test="$ndist &gt;= $group-min">
-        <xsl:variable name="members" select="key('by-updgrp', $g)"/>
+        <!-- Todas as instancias dos NVTs CONFIRMADOS do grupo, e so' delas. -->
+        <xsl:variable name="members" select="gvm:grp-members($g)"/>
         <!-- Highest severity in the group drives the card colour. -->
         <xsl:variable name="maxsev">
           <xsl:for-each select="$members">
@@ -3355,23 +3538,26 @@ SPDX-License-Identifier: GPL-2.0-or-later
              De quebra some um defeito da versao em prosa: o separador olhava a
              posicao dentro de $members, entao quando o primeiro host unico nao
              era o primeiro membro do grupo a lista abria com uma virgula solta. -->
+        <!-- A deduplicacao e' sobre a lista JA' ORDENADA por host (host igual
+             fica vizinho), e nao mais um preceding:: no documento inteiro: esse
+             teste olhava qualquer result VendorFix do grupo, e agora que o grupo
+             so' tem NVTs confirmados um host cuja primeira aparicao fosse num
+             advisory de baixa confianca sumiria da lista. -->
         <xsl:variable name="ghosts-rtf">
           <xsl:for-each select="$members">
             <xsl:sort select="host/text()"/>
-            <xsl:variable name="h" select="host/text()"/>
-            <xsl:if test="not(preceding::result[nvt/solution/@type='VendorFix'][host/text() = $h][concat(substring-before(concat(normalize-space(nvt/name),' '),' '),' ',substring-before(concat(substring-after(normalize-space(nvt/name),' '),' '),' ')) = $g])">
-              <h v="{$h}"/>
-            </xsl:if>
+            <h v="{host/text()}"/>
           </xsl:for-each>
         </xsl:variable>
-        <xsl:variable name="ghosts" select="exsl:node-set($ghosts-rtf)/h"/>
+        <xsl:variable name="ghosts" select="exsl:node-set($ghosts-rtf)/h[not(@v = preceding-sibling::h[1]/@v)]"/>
 
         <!-- Card consolidado (pg-08 do modelo). O \hypertarget vai dentro do
              titulo pelo mesmo motivo do card de achado: solto na pagina ele
              abriria um paragrafo vazio antes do card. -->
         <xsl:text>\consolidatedcard{</xsl:text><xsl:value-of select="$sevkey"/>
         <xsl:text>}{\hypertarget{</xsl:text>
-        <xsl:value-of select="concat('grp-', translate(concat(substring-before(concat(normalize-space(nvt/name),' '),' '),' ',substring-before(concat(substring-after(normalize-space(nvt/name),' '),' '),' ')), ' ./:,()', '-------'))"/>
+        <!-- A mesma ancora da linha do grupo no sumario, do mesmo no'. -->
+        <xsl:value-of select="concat('grp-', translate(nvt/@oid, '.', '-'))"/>
         <xsl:text>}{}</xsl:text><xsl:value-of select="gvm:t('grp_title')"/><xsl:text>: </xsl:text>
         <xsl:value-of select="$gname"/><xsl:text>}{</xsl:text>
         <xsl:value-of select="gvm:t('grp_badge')"/><xsl:text>}{%
@@ -3428,9 +3614,11 @@ SPDX-License-Identifier: GPL-2.0-or-later
         <xsl:text>}{%
 </xsl:text>
 
-        <!-- The advisories rolled up here, most severe first. -->
-        <xsl:for-each select="$members[generate-id() = generate-id(key('by-updgrp-nvt',concat($g,'||',nvt/@oid))[1])]">
-          <xsl:sort select="severity" data-type="number" order="descending"/>
+        <!-- The advisories rolled up here, most severe first: um no' por NVT
+             confirmado, com a severidade MAXIMA dele. -->
+        <xsl:for-each select="$confreps">
+          <xsl:sort select="gvm:sev-max(key('by-nvt', nvt/@oid))" data-type="number" order="descending"/>
+          <xsl:variable name="amax" select="gvm:sev-max(key('by-nvt', nvt/@oid))"/>
           <!-- Lista só os mais severos. O restante vira UMA linha que declara
                quantos ficaram de fora e até onde vai a severidade deles: um
                corte silencioso faria o card parecer completo, e este documento
@@ -3439,7 +3627,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
           <xsl:if test="position() &lt;= number($adv-max)">
             <xsl:variable name="asev">
               <xsl:call-template name="sevkey-detail">
-                <xsl:with-param name="severity" select="severity"/>
+                <xsl:with-param name="severity" select="$amax"/>
               </xsl:call-template>
             </xsl:variable>
             <!-- Traduzido tambem: a lista de advisories do card consolidado e
@@ -3456,7 +3644,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
             </xsl:call-template>
             <xsl:text>}{</xsl:text><xsl:value-of select="$asev"/><xsl:text>}{</xsl:text>
             <xsl:if test="$asev != 'logsev' and $asev != 'falsepos'">
-              <xsl:value-of select="severity"/>
+              <xsl:value-of select="key('by-nvt', nvt/@oid)[number(severity) = $amax][1]/severity"/>
             </xsl:if>
             <xsl:text>}
 </xsl:text>
@@ -3465,7 +3653,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
             <xsl:text>  \advisorytrunc{+ </xsl:text><xsl:value-of select="$ndist - number($adv-max)"/>
             <xsl:value-of select="gvm:t('grp_more_a')"/>
             <xsl:text>CVSS </xsl:text>
-            <xsl:value-of select="format-number(severity, '0.0')"/>
+            <xsl:value-of select="format-number($amax, '0.0')"/>
             <xsl:value-of select="gvm:t('grp_more_b')"/>
             <xsl:text>}
 </xsl:text>
@@ -3479,8 +3667,29 @@ SPDX-License-Identifier: GPL-2.0-or-later
         <xsl:for-each select="$members">
           <xsl:sort select="severity" data-type="number" order="descending"/>
           <xsl:if test="position() = 1">
+            <!-- Pelo catalogo de traducao, como a solucao do card normal
+                 (finding-cards): mesma origem (nvt/solution, ou a tag
+                 `solution' quando vazio) e mesmo nvt-i18n. Era o texto cru do
+                 fornecedor, em ingles no meio de um relatorio em pt-BR — e
+                 justamente na linha que diz ao cliente o que fazer. -->
+            <xsl:variable name="act-orig">
+              <xsl:choose>
+                <xsl:when test="string-length(normalize-space(nvt/solution)) &gt; 0">
+                  <xsl:value-of select="nvt/solution"/>
+                </xsl:when>
+                <xsl:otherwise>
+                  <xsl:value-of select="gvm:get-nvt-tag('solution')"/>
+                </xsl:otherwise>
+              </xsl:choose>
+            </xsl:variable>
+            <xsl:variable name="act">
+              <xsl:call-template name="nvt-i18n">
+                <xsl:with-param name="field" select="'solution'"/>
+                <xsl:with-param name="orig" select="string($act-orig)"/>
+              </xsl:call-template>
+            </xsl:variable>
             <xsl:call-template name="escape_prose">
-              <xsl:with-param name="string" select="nvt/solution"/>
+              <xsl:with-param name="string" select="string($act)"/>
             </xsl:call-template>
           </xsl:if>
         </xsl:for-each>
@@ -4211,8 +4420,19 @@ SPDX-License-Identifier: GPL-2.0-or-later
          and what was cut is declared. The integral value is on the cover and in
          the source report. (The narrative's own cut is another one:
          $task-name-max, by page height.) -->
+    <!-- Em fronteira de palavra, pela mesma regra do escape_break (gvm:cut-at,
+         recuo de no maximo metade do teto): era o quarto lugar em que o nome do
+         projeto saia partido no meio da palavra. -->
+    <xsl:variable name="title-k">
+      <xsl:choose>
+        <xsl:when test="string-length($title) &gt; 60">
+          <xsl:value-of select="gvm:hx-min2(gvm:cut-at(string($title), 61, 31), 60)"/>
+        </xsl:when>
+        <xsl:otherwise><xsl:value-of select="string-length($title)"/></xsl:otherwise>
+      </xsl:choose>
+    </xsl:variable>
     <xsl:variable name="title-c">
-      <xsl:value-of select="substring($title, 1, 60)"/>
+      <xsl:value-of select="substring($title, 1, number($title-k))"/>
       <xsl:if test="string-length($title) &gt; 60"><xsl:text>...</xsl:text></xsl:if>
     </xsl:variable>
     <xsl:text>\hexcard{</xsl:text>
