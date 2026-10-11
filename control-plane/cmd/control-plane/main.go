@@ -274,8 +274,11 @@ func main() {
 	// AI provider config (LLM router keys). Mounted ONLY when AI_CONFIG_ENABLED
 	// (dark by default). API keys are WRITE-ONLY over the admin API and encrypted at
 	// rest with a host KEK; a provider is enabled only if it meets the governance
-	// bar (EU + ZDR, or a free model with the data-policy acknowledgment). The
-	// plaintext key is read server-side only (planner + free-models listing).
+	// bar (aiproviders.GovernanceRefusal, re-checked by the planner at use time):
+	// with AI_FREE_MODELS_ONLY, a free model on its router's official endpoint WITH
+	// the data-policy acknowledgment, always; without it, EU + ZDR or such a free
+	// model acknowledged. The plaintext key is read server-side only (planner +
+	// free-models listing).
 	// AI_FREE_MODELS_ONLY (default true) restricts registry AND planner to the free
 	// models of OpenRouter/UnoRouter (zero cost).
 	aiFreeOnly := envBool("AI_FREE_MODELS_ONLY", true)

@@ -95,8 +95,10 @@ Coletamos apenas o mínimo necessário para **correlação de vulnerabilidade ba
 > (só os 4 últimos caracteres aparecem) e usadas só server-side, no envio ao próprio provedor. Com
 > `AI_FREE_MODELS_ONLY=true` a `base_url` fica fixa no endpoint oficial do roteador; com a regra ligada
 > ou não, trocar o tipo ou o endpoint de um provedor que tem chave exige colar a chave de novo (sem
-> chave nova → 422 e nada muda), então a chave guardada só vai ao destino para o qual foi colada. A
-> lista de modelos (rota de sessão) só consulta endpoints oficiais, com a regra ligada ou não.
+> chave nova → 422 e nada muda). A única exceção é salvar de novo, no mesmo tipo, um registro cuja base
+> antiga já estava no host oficial desse tipo (mesmo host e porta): o servidor só fixa o caminho
+> oficial. Assim a chave guardada só vai ao host para o qual foi colada. A lista de modelos (rota de
+> sessão) só consulta endpoints oficiais, com a regra ligada ou não.
 
 ## Base legal e finalidade
 

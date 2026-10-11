@@ -70,8 +70,10 @@ func (p *pseudonymizer) restore(s string) string {
 	return s
 }
 
-// apply returns a copy of req with identifying fields tokenized and free-text
-// fields scrubbed, so NO raw identifier reaches the model.
+// apply returns a copy of req with the finding's own identifiers — host, agent,
+// tenant and IP — tokenized, also where they appear in the title or evidence. Any
+// OTHER identifier in that free text (an account name, another host, IP or domain)
+// is NOT recognized and goes to the model as it is.
 func (p *pseudonymizer) apply(req PlanRequest) PlanRequest {
 	// Register identifiers first so scrub() also catches them inside free text.
 	host := p.token(req.Host, "host")

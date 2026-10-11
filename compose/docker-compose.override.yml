@@ -189,9 +189,11 @@ services:
       # Só modelos GRATUITOS (default true, custo zero): só OpenRouter/UnoRouter e só
       # modelo com id terminado em :free (ou openrouter/free no OpenRouter); a
       # base_url fica fixa no endpoint oficial do tipo (a enviada é ignorada) e
-      # trocar tipo/endpoint de provedor com chave exige colar a chave de novo, então
-      # a chave só vai ao roteador para o qual foi colada; o planner recusa qualquer
-      # outro modelo/endpoint antes de ir à rede. Modelo gratuito não garante ZDR:
+      # trocar tipo/endpoint de provedor com chave exige colar a chave de novo (única
+      # exceção: no mesmo tipo, com a base antiga já no host oficial dele, o servidor
+      # só fixa o caminho), então a chave só vai ao host para o qual foi colada; o
+      # planner recusa qualquer outro modelo/endpoint antes de ir à rede (e não segue
+      # redirect). Modelo gratuito não garante ZDR:
       # habilitar exige SEMPRE a ciência da política de dados (data_policy_ack; o
       # servidor grava quando, e "quem" fica o marcador "operator" até a identidade
       # do gsad chegar). Na conta do OpenRouter, confira a privacidade para modelos

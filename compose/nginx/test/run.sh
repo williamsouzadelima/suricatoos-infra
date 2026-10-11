@@ -738,7 +738,7 @@ main() {
     mut_ok=1
     echo "controle de mutação: $MUT_FAILED/$MUT_TOTAL casos reprovados, como esperado"
   else
-    echo "controle de mutação FALHOU: $MUT_FAILED de $MUT_TOTAL casos reprovaram com o catch-all reaberto"
+    echo "controle de mutação FALHOU: $MUT_FAILED de $MUT_TOTAL casos reprovaram nos mutantes (catch-all /agent/ reaberto; location do planner removida)"
     for c in "${MUT_NOT_FAILED[@]}"; do echo "  não reprovou: $c"; done
   fi
   echo "casos: $PASSED ok, $FAILED com falha"

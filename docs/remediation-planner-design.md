@@ -34,7 +34,7 @@ aprova (o que dispara a assinatura do job — [ADR-0010](adr/0010-executor-remed
 Finding ATESTADO (severity/CVE da fonte, evidência)
    │
    ├──► remediation-planner (IA)  ── rascunho {explicação, plano, prioridade, rollback, ressalvas}
-   │         (sem chaves; entrada pseudonimizada; saída = texto consultivo)
+   │         (sem chaves; identificadores do achado pseudonimizados; saída = texto consultivo)
    ▼
 operador REVISA/edita o rascunho ──► aprova  ──►  control-plane ASSINA o job (PENDING_APPROVAL→APPROVED)
                                                    (§6 do ADR-0010; a IA não participa daqui em diante)
@@ -54,7 +54,8 @@ relevante do host; **nunca** o inventário cru. Exemplo do que PODE entrar:
   (hardening).
 - Postura técnica que muda o plano: `os.build`/`os.ubr`, flags de `facts.management`
   (domain_joined/wsus/intune) — para o rascunho já avisar "gerido por GPO, trate na política".
-- Um **id opaco do host** (pseudônimo estável) para agrupar achados do mesmo host — **nunca** hostname/IP.
+- Um **id opaco do host** (pseudônimo por pedido) para agrupar os passos do mesmo host — o hostname/IP
+  **do achado** nunca vai como campo; título e evidência, porém, seguem como vieram (§5).
 
 **Saída (estruturada, `output_config` json_schema — Claude 5).** Texto consultivo, sem severidade:
 
@@ -131,7 +132,7 @@ tem as chaves de assinatura (feed/update/CA/remediação). O `OPENROUTER_API_KEY
 | Provedor responde qualquer não-2xx (depois do fallback de formato dele), timeout ou erro de rede | Tenta o próximo provedor da lista (§11). Todos falhando → sem rascunho; o erro lista cada tentativa (status + trecho curto e saneado do corpo, nunca a chave). |
 | Provedor recusa `response_format` json_schema (400 citando o formato) | Re-tenta UMA vez com `json_object` e, se de novo, sem `response_format` (§11); a saída continua tendo de passar no `parseDraft`. |
 | Modelo não gratuito com `AI_FREE_MODELS_ONLY=true` | Recusado antes de qualquer rede (403 na rota do planner); sem rascunho. |
-| Provedor fora do endpoint oficial com `AI_FREE_MODELS_ONLY=true` (registro antigo) | Recusado antes de qualquer rede (403 se for o único); salvar o provedor de novo fixa a base oficial. |
+| Provedor fora do endpoint oficial com `AI_FREE_MODELS_ONLY=true` (registro antigo) | Recusado antes de qualquer rede (403 se for o único); salvar o provedor de novo fixa a base oficial — sem chave nova, só se a base antiga já estava no host oficial do tipo; senão, cole a chave de novo. |
 | Provedor habilitado mas fora da régua na hora do uso (ex.: sem a ciência depois de reverter para uma imagem anterior a ela) | Pulado antes de qualquer rede, com o motivo no log; o próximo é tentado (403 se nenhum serve). |
 | Tempo total do rascunho esgotado (`AI_PLANNER_TIMEOUT`, default 5 min) | A tentativa em curso é cancelada e nenhuma outra começa; 504 em JSON; sem rascunho. Atrás do nginx, a location própria do planner lê por 360 s (§11). |
 | Saída não valida no json_schema | Rascunho descartado; sem rascunho (nunca texto livre não-estruturado). |
@@ -177,14 +178,18 @@ registro pago antigo siga habilitado).
 e a resposta mostra a efetiva. Assim, quem pode salvar um provedor não consegue repontar um provedor que
 já tem chave para um host seu e fazer o servidor mandar a chave para lá. Registro antigo com outra base
 (salvo antes da regra ou com ela desligada) é recusado pelo planner antes de qualquer rede e pela lista de
-modelos (422) até ser salvo de novo — o que fixa a base oficial. Com a regra desligada, endpoint próprio
+modelos (422) até ser salvo de novo — o que fixa a base oficial (sem chave nova, só se a base antiga já
+estava no host oficial do tipo; senão, cole a chave de novo). Com a regra desligada, endpoint próprio
 continua aceito no cadastro e no planner (comportamento anterior).
 
 **A chave é do destino para o qual foi colada.** A chave guardada (e a ciência) valem para o par
 tipo + endpoint. Num update **sem** `api_key` nova, trocar o tipo — ou mudar o endpoint efetivo para
 qualquer coisa que não seja o oficial do **mesmo** tipo — dá **422** ("cole a chave de novo ao trocar o
-tipo/endpoint") e nada muda no registro, com a regra ligada ou desligada. A exceção é salvar de novo um
-registro antigo do mesmo tipo para fixar o endpoint oficial: a chave fica. Com `api_key` nova, a troca
+tipo/endpoint") e nada muda no registro, com a regra ligada ou desligada. A única exceção é salvar de
+novo, no **mesmo** tipo, um registro cuja base antiga já estava no **host** oficial desse tipo (mesmo
+host e porta; ex.: outro caminho em `openrouter.ai`): o servidor só fixa o caminho oficial e a chave
+fica. Vindo de qualquer outro host — um proxy, o host do outro roteador (ex.: registro `unorouter` em
+`openrouter.ai` com a chave do OpenRouter) — é 422: cole a chave de novo. Com `api_key` nova, a troca
 passa, a chave é substituída e a ciência recomeça (outro destinatário, outra ciência): o provedor só
 fica habilitado se o mesmo pedido trouxer a ciência.
 
