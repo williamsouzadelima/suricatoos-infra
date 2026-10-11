@@ -24,16 +24,27 @@
 #                bitmap -- a face de verdade sumiu e o pdftex desenhou pixels;
 #   links/alvos  zero \hyperlink para alvo inexistente e
 #                #\hypertarget == #\hyperlink + soma dos cortes declarados
-#                (ver a nota abaixo); e, se o XML tem <result>, ao menos UM
-#                link: 0 links com 0 alvos fecha a conta e passaria em vazio
-#                justamente quando o sumario ou os cards sumissem;
+#                (ver a nota abaixo); se o XML tem <result>, ao menos UM link
+#                de ACHADO (fnd-/grp-): 0 links com 0 alvos fecha a conta e
+#                passaria em vazio justamente quando o sumario de achados ou
+#                os cards sumissem -- e os 6 links da pagina de sumario
+#                (sec-N), que existem em todo relatorio, NAO contam para esse
+#                piso; e exatamente esses 6, sec-1..sec-6, um de cada;
 #   overfull     #`Overfull \hbox` <= linha de base de (idioma, fixture);
 #   paridade     paginas do PDF do generate == paginas do diagnostico, ou seja,
 #                os portoes de log mediram o MESMO documento que o generate
 #                entrega;
 #   veracidade   check-veracity.py: o .tex diz a verdade sobre o XML
 #                (numeracao, secoes, consolidado, instancias, acao, VULNS
-#                UNICAS, faixas, ancoras, nome do projeto).
+#                UNICAS, faixas, ancoras, nome do projeto);
+#   navegacao    check-navigation.py: a pagina de sumario lista as 6 secoes
+#                e cada linha leva ao alto da sua; o PDF do generate TEM a
+#                arvore de marcadores (6 secoes no nivel 0; hosts da secao 3 e
+#                cards da secao 5 no nivel 1, com o numero e o titulo do card),
+#                todo marcador aponta para um destino que existe, dentro da
+#                secao do pai, e a pagina que o sumario imprime (rotulo do
+#                report.aux do diagnostico) e' a pagina em que a secao abre.
+#                O PDF e' lido com a biblioteca padrao do python3 (zlib).
 #
 # Nota sobre links/alvos. A regua historica e' "#\hyperlink == #\hypertarget no
 # .tex", e ela vale enquanto o Sumario de Achados lista todos os achados (caso
@@ -45,6 +56,12 @@
 # exata e' portanto alvos == links + soma(N) -- que vira a igualdade quando nao
 # ha corte --, e o defeito que a regua existe para pegar (link para ancora que
 # nao existe) e' checado diretamente.
+# A pagina de sumario soma 6 links (\hyperlink{sec-N}) e 6 alvos
+# (\hypertarget{sec-N}{}, um antes de cada \suriSection): entram dos dois lados
+# da conta, que continua exata. Os marcadores do PDF NAO sao \hyperlink nem
+# \hypertarget (sao \pdfbookmark, com destino proprio): nao mexem nesta conta, e
+# um marcador sem destino aparece no portao "destinos do PDF" (o pdfTeX avisa) e
+# no de navegacao.
 set -euo pipefail
 export LC_ALL=C
 
@@ -96,7 +113,7 @@ trap 'rm -rf "$tmpd"' EXIT
 
 failures=0
 # valores do resumo (summary.row); "?" = nao medido
-pages='?'; n_err='?'; n_font='?'; n_t3='?'; links_cell='?'; over_cell='?'; ver_cell='?'
+pages='?'; n_err='?'; n_font='?'; n_t3='?'; links_cell='?'; over_cell='?'; ver_cell='?'; nav_cell='?'
 
 say() { printf '%s\n' "$*" | tee -a "$report"; }
 indent() { sed 's/^/           | /' | tee -a "$report"; }
@@ -246,16 +263,27 @@ if [ -s "$tex" ]; then
   n_dup=$(uniq -d "$tmpd/targets.all" | wc -l | tr -d ' ')
   trunc=$({ grep -a -o -e '\\findingtrunc{\\suriEllip\\ + [0-9][0-9.,]*' -- "$tex" || true; } \
     | sed 's/.*+ //; s/[.,]//g' | awk '{ s += $1 } END { print s + 0 }')
+  # Links de ACHADO (linha do sumario de achados -> card) e os da pagina de
+  # sumario (sec-N -> alto da secao), contados a parte.
+  n_find_links=$(( $(count_matches '\\hyperlink{fnd-' "$tex") + $(count_matches '\\hyperlink{grp-' "$tex") ))
+  { grep -a -o -e '\\hyperlink{sec-[^}]*}' -- "$tex" || true; } \
+    | sed 's/^\\hyperlink{//; s/}$//' | sort > "$tmpd/toclinks"
+  n_toc=$(wc -l < "$tmpd/toclinks" | tr -d ' ')
+  toc_got=$(tr '\n' ' ' < "$tmpd/toclinks")
   links_cell="$n_links / $n_targets (+$trunc)"
-  detail="$n_links \\hyperlink, $n_targets \\hypertarget, corte declarado no sumario: $trunc, links sem alvo: $n_dangling"
-  # A conta acima fecha com 0 = 0: sem este piso, um sumario que sumisse
-  # inteiro passaria. Fixture com <result> tem de ter ao menos um link.
+  detail="$n_links \\hyperlink ($n_find_links de achado, $n_toc do sumario), $n_targets \\hypertarget, corte declarado no sumario: $trunc, links sem alvo: $n_dangling"
+  # A conta acima fecha com 0 = 0: sem este piso, um sumario de achados que
+  # sumisse inteiro passaria. Fixture com <result> tem de ter ao menos um link
+  # de ACHADO -- os 6 da pagina de sumario existem em qualquer relatorio e nao
+  # podem segurar o piso no lugar deles.
   n_results=0
   if [ -n "$xml" ] && [ -f "$xml" ]; then
     n_results=$(count_matches '<result[ >]' "$xml")
   fi
-  if [ "$n_results" -gt 0 ] && [ "$n_links" -eq 0 ]; then
-    gate falha "links/alvos" "$detail -- e o XML tem $n_results <result>: sumario sem nenhum link"
+  if [ "$n_results" -gt 0 ] && [ "$n_find_links" -eq 0 ]; then
+    gate falha "links/alvos" "$detail -- e o XML tem $n_results <result>: sumario de achados sem nenhum link"
+  elif [ "$toc_got" != "sec-1 sec-2 sec-3 sec-4 sec-5 sec-6 " ]; then
+    gate falha "links/alvos" "$detail -- a pagina de sumario tem de ter os 6 links sec-1..sec-6, um de cada; tem: ${toc_got:-nenhum}"
   elif [ "$n_dangling" -eq 0 ] && [ "$n_targets" -eq $((n_links + trunc)) ]; then
     gate ok "links/alvos" "$detail"
   else
@@ -320,9 +348,42 @@ else
   fi
 fi
 
+# --- navegacao: sumario e arvore de marcadores -----------------------------------
+# O .tex do diagnostico (o mesmo do portao acima), o PDF que o generate ENTREGOU
+# (a arvore de marcadores tem de estar nele) e o report.aux do diagnostico (a
+# pagina que o sumario imprime e' o rotulo suri-sec-N de la').
+if [ -z "$xml" ]; then
+  gate falha "navegacao" "sem o XML da fixture (6o argumento do gates.sh)"
+elif [ ! -s "$tex" ]; then
+  gate falha "navegacao" "sem .tex para checar"
+elif [ ! -s "$pdf" ]; then
+  gate falha "navegacao" "sem o PDF do generate para ler a arvore de marcadores"
+else
+  nav_aux=()
+  if [ -s "$diag/report.aux" ]; then nav_aux=(--aux "$diag/report.aux"); fi
+  nv_rc=0
+  python3 -X utf8 "$ci_dir/check-navigation.py" --lang "$lang" --xml "$xml" --tex "$tex" \
+    --pdf "$pdf" "${nav_aux[@]}" > "$tmpd/navigation" 2>&1 || nv_rc=$?
+  n_nfail=$(count_lines '^  FALHA ' "$tmpd/navigation")
+  if [ "$nv_rc" -eq 0 ] && [ "${#nav_aux[@]}" -gt 0 ]; then
+    nav_cell=OK
+    gate ok "navegacao" "$(count_lines '^  OK ' "$tmpd/navigation") checagens (sumario, marcadores, PDF)"
+    sed 's/^/           | /' "$tmpd/navigation" >> "$report"
+  elif [ "$nv_rc" -eq 0 ]; then
+    # Sem o .aux nao da' para conferir a pagina impressa no sumario: nao e' OK.
+    nav_cell="FALHA (sem .aux)"
+    gate falha "navegacao" "o diagnostico nao deixou report.aux: a pagina impressa no sumario nao foi conferida"
+    sed -n '1,60p' "$tmpd/navigation" | indent
+  else
+    nav_cell="FALHA ($n_nfail)"
+    gate falha "navegacao" "exit $nv_rc, $n_nfail checagem(ns) reprovada(s):"
+    sed -n '1,60p' "$tmpd/navigation" | indent
+  fi
+fi
+
 if [ "$failures" -eq 0 ]; then verdict=OK; else verdict="FALHA ($failures)"; fi
-printf '| %s | %s | %s | %s | %s | %s | %s | %s | %s | %s |\n' \
-  "$lang" "$fx" "$verdict" "$pages" "$n_err" "$n_font" "$n_t3" "$links_cell" "$over_cell" "$ver_cell" \
+printf '| %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s |\n' \
+  "$lang" "$fx" "$verdict" "$pages" "$n_err" "$n_font" "$n_t3" "$links_cell" "$over_cell" "$ver_cell" "$nav_cell" \
   > "$art/summary.row"
 say "VEREDITO $lang/$fx: $verdict"
 [ "$failures" -eq 0 ]

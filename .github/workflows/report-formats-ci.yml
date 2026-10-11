@@ -10,11 +10,14 @@ name: report-formats-ci
 #   compile    por idioma: `sh ./generate` ponta a ponta + compilacao de
 #              diagnostico de cada fixture -- sample, tortura e as de
 #              veracidade (report-formats/tests/fixtures/, uma por defeito ja'
-#              corrigido) -- com os portoes de log/fontes/links/destinos e o de
-#              veracidade (check-veracity.py: o .tex diz a verdade sobre o XML),
-#              todos em report-formats/ci/gates.sh; o controle negativo (o
-#              generate tem de falhar alto) e os artefatos (PDFs, .log, .tex,
-#              PNG das 3 primeiras paginas).
+#              corrigido) -- com os portoes de log/fontes/links/destinos, o de
+#              veracidade (check-veracity.py: o .tex diz a verdade sobre o XML)
+#              e o de navegacao (check-navigation.py: a pagina de sumario e a
+#              arvore de marcadores do PDF entregue), todos em
+#              report-formats/ci/gates.sh; o controle negativo (o generate tem
+#              de falhar alto) e os artefatos (PDFs, .log, .tex, .aux, .out,
+#              PNG das 3 primeiras paginas -- com o resumo executivo numa
+#              folha so', a 3a e' a de sumario).
 on:
   pull_request:
     paths:
