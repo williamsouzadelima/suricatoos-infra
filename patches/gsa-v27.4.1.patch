@@ -11832,10 +11832,10 @@ index 0000000..248f4e4
 +export default DownloadsPage;
 diff --git a/src/web/pages/endpoint-agents/EndpointAgentsPage.tsx b/src/web/pages/endpoint-agents/EndpointAgentsPage.tsx
 new file mode 100644
-index 0000000..935867c
+index 0000000..ce8ce8b
 --- /dev/null
 +++ b/src/web/pages/endpoint-agents/EndpointAgentsPage.tsx
-@@ -0,0 +1,335 @@
+@@ -0,0 +1,346 @@
 +/* SPDX-FileCopyrightText: 2024 Greenbone AG
 + *
 + * SPDX-License-Identifier: AGPL-3.0-or-later
@@ -11978,11 +11978,15 @@ index 0000000..935867c
 +  const {error, setError, refresh} = usePolling(load, 30000);
 +
 +  // The agent collects ~60 s after a scan request: one extra refresh at 70 s,
-+  // besides the polling. Cancelled on unmount.
++  // besides the polling. Never armed once the page is gone (the POST may end
++  // after it), and the pending ones are cancelled on unmount.
++  const mounted = useRef(false);
 +  const followUps = useRef(new Set<ReturnType<typeof setTimeout>>());
 +  useEffect(() => {
++    mounted.current = true;
 +    const pending = followUps.current;
 +    return () => {
++      mounted.current = false;
 +      for (const t of pending) {
 +        clearTimeout(t);
 +      }
@@ -12000,6 +12004,9 @@ index 0000000..935867c
 +          '',
 +          _('Scan solicitado para {{host}} — nova coleta em ~60s.', {host}),
 +        );
++        if (!mounted.current) {
++          return;
++        }
 +        const t = setTimeout(() => {
 +          followUps.current.delete(t);
 +          void refresh();
@@ -12063,10 +12070,14 @@ index 0000000..935867c
 +        <Section title={_('Agentes de Endpoint')} />
 +        <Layout flex="column">
 +          <div style={{margin: '0 0 12px'}}>
-+              <Button title={_('Atualizar')} onClick={() => void refresh()}>
-+                {_('Atualizar')}
-+              </Button>
-+            </div>
++            <Button
++              disabled={isSessionExpired(error)}
++              title={_('Atualizar')}
++              onClick={() => void refresh()}
++            >
++              {_('Atualizar')}
++            </Button>
++          </div>
 +            {error ? (
 +              <p style={{color: Theme.errorRed}}>
 +                {isSessionExpired(error)
@@ -12193,10 +12204,10 @@ index b995df4..be67f0d 100644
              <TableRow>
 diff --git a/src/web/pages/extras/FeedUpdateSection.tsx b/src/web/pages/extras/FeedUpdateSection.tsx
 new file mode 100644
-index 0000000..d75832c
+index 0000000..0dfd0dd
 --- /dev/null
 +++ b/src/web/pages/extras/FeedUpdateSection.tsx
-@@ -0,0 +1,329 @@
+@@ -0,0 +1,314 @@
 +/* SPDX-FileCopyrightText: 2026 Suricatoos
 + *
 + * SPDX-License-Identifier: AGPL-3.0-or-later
@@ -12232,21 +12243,6 @@ index 0000000..d75832c
 +  updated?: string[];
 +  schedule?: Schedule;
 +}
-+
-+// Os erros carregam o STATUS HTTP: vem tipados do cliente comum das paginas
-+// Suricatoos (web/utils/suricatoosApi), que tambem poe o `token` da sessao em
-+// toda chamada -- e' o que permite ao nginx VALIDAR a sessao, via gsad.
-+//
-+// Sem isto, `fetch(...).then(r => r.json())` tratava 403 e 401 como sucesso:
-+// o corpo era a pagina de erro do nginx, o JSON.parse estourava, e o catch de
-+// cima engolia. Resultado medido em 17/08/2026: a rota /feed-sync/ e' restrita
-+// as redes de administracao, um operador fora da VPN levava 403 em todo GET, e
-+// a tela mostrava "Ultima atualizacao: nunca" com o formulario em branco --
-+// enquanto o agendamento real estava ativo, diario, e rodara com sucesso na
-+// vespera. O botao Salvar levava o mesmo 403 e nao dizia absolutamente nada.
-+//
-+// Um controle de acesso que a interface esconde nao parece um controle: parece
-+// um sistema quebrado. E manda o operador procurar defeito onde nao ha.
 +
 +// POST com corpo JSON (o /sync vai com o mesmo cabecalho e sem corpo).
 +const postJson = (body?: unknown): ApiRequestInit => ({
@@ -13877,10 +13873,10 @@ index 0000000..5cd3437
 +export default AiProvidersPage;
 diff --git a/src/web/utils/__tests__/suricatoosApi.test.ts b/src/web/utils/__tests__/suricatoosApi.test.ts
 new file mode 100644
-index 0000000..f1b775a
+index 0000000..8f03e8f
 --- /dev/null
 +++ b/src/web/utils/__tests__/suricatoosApi.test.ts
-@@ -0,0 +1,789 @@
+@@ -0,0 +1,1041 @@
 +/* SPDX-FileCopyrightText: 2026 Suricatoos
 + *
 + * SPDX-License-Identifier: AGPL-3.0-or-later
@@ -13939,6 +13935,20 @@ index 0000000..f1b775a
 +    );
 +  });
 +
++// Answers 200 at once, but the body never arrives (until the abort).
++const hangingBody = (_url: RequestInfo | URL, init?: RequestInit) =>
++  Promise.resolve({
++    ok: true,
++    status: 200,
++    headers: new Headers({'Content-Type': 'application/json'}),
++    json: () =>
++      new Promise((_resolve, reject) => {
++        init?.signal?.addEventListener('abort', () =>
++          reject(new DOMException('The operation was aborted.', 'AbortError')),
++        );
++      }),
++  } as unknown as Response);
++
 +const requestInit = (call: number): RequestInit =>
 +  fetchMock.mock.calls[call][1] as RequestInit;
 +
@@ -13988,6 +13998,29 @@ index 0000000..f1b775a
 +    expect(fetchMock.mock.calls[1][0]).toBe('/agents/scan?id=h%201&token=tok');
 +  });
 +
++  test.each([
++    'https://evil.example/agents/data.json',
++    'http://localhost:3000/agents/data.json',
++    '//evil.example/x',
++    '/\\evil.example/x',
++    // protocol-relative even when it points back here: a path only
++    `//${window.location.host}/agents/data.json`,
++    `/\\${window.location.host}/agents/data.json`,
++    '/\t/evil.example/x',
++    '/\n/evil.example/x',
++    'agents/data.json',
++    'javascript:alert(1)',
++    '',
++  ])(
++    'refuses %j before any request: the token stays on this origin',
++    async url => {
++      const {error} = await settle(apiRequest(url, 'tok'));
++
++      expect(error).toBeInstanceOf(TypeError);
++      expect(fetchMock).not.toHaveBeenCalled();
++    },
++  );
++
 +  test('sends the cookie and passes method, headers and body as given', async () => {
 +    fetchMock.mockImplementation(async () => json(200, {}));
 +
@@ -14022,9 +14055,11 @@ index 0000000..f1b775a
 +  test('resolves the JSON body, and null for a 204', async () => {
 +    fetchMock.mockResolvedValueOnce(json(200, {providers: [1]}));
 +    fetchMock.mockResolvedValueOnce(new Response(null, {status: 204}));
++    fetchMock.mockResolvedValueOnce(new Response(null, {status: 204}));
 +
 +    await expect(apiRequest('/a', 't')).resolves.toEqual({providers: [1]});
 +    await expect(apiRequest('/b', 't', {method: 'DELETE'})).resolves.toBeNull();
++    await expect(apiRequest('/c', 't')).resolves.toBeNull();
 +  });
 +
 +  test.each([
@@ -14087,7 +14122,7 @@ index 0000000..f1b775a
 +    expect((error as SuricatoosApiError).status).toBe(0);
 +  });
 +
-+  test('a 2xx that is not JSON is an invalid response', async () => {
++  test('a 2xx to a GET that is not JSON is an invalid response', async () => {
 +    fetchMock.mockResolvedValue(
 +      new Response('<html></html>', {
 +        status: 200,
@@ -14099,6 +14134,34 @@ index 0000000..f1b775a
 +
 +    expect((error as SuricatoosApiError).kind).toBe('invalid-response');
 +    expect(fetchMock).toHaveBeenCalledTimes(1);
++  });
++
++  test.each([
++    ['POST', '<html>ok</html>'],
++    ['PUT', 'ok'],
++    ['DELETE', ''],
++    ['post', ''],
++  ])(
++    'a 2xx to a %s whose body is not JSON is a success: the action happened',
++    async (method, body) => {
++      fetchMock.mockResolvedValue(
++        new Response(body, {
++          status: 202,
++          headers: {'Content-Type': 'text/html'},
++        }),
++      );
++
++      await expect(apiRequest('/x', 't', {method})).resolves.toBeNull();
++    },
++  );
++
++  test('leaves no timer behind', async () => {
++    testing.useFakeTimers();
++    fetchMock.mockResolvedValue(json(200, {}));
++
++    await apiRequest('/x', 't');
++
++    expect(testing.getTimerCount()).toBe(0);
 +  });
 +
 +  test('gives up after 30 s by default, aborting the fetch', async () => {
@@ -14150,21 +14213,61 @@ index 0000000..f1b775a
 +    expect((error as SuricatoosApiError).kind).toBe('aborted');
 +    expect(fetchMock).not.toHaveBeenCalled();
 +  });
++
++  test('a GET whose body never arrives times out', async () => {
++    testing.useFakeTimers();
++    fetchMock.mockImplementation(hangingBody);
++
++    const result = settle(apiRequest('/x', 't'));
++    await advance(30000);
++
++    expect(((await result).error as SuricatoosApiError).kind).toBe('timeout');
++    expect(fetchMock).toHaveBeenCalledTimes(1);
++  });
++
++  test('a POST answered 2xx whose body never arrives still succeeded', async () => {
++    testing.useFakeTimers();
++    fetchMock.mockImplementation(hangingBody);
++
++    const result = settle(apiRequest('/x', 't', {method: 'POST'}));
++    await advance(30000);
++
++    expect(await result).toEqual({value: null, error: undefined});
++  });
++
++  test('the caller aborting during the body of a POST is an abort', async () => {
++    fetchMock.mockImplementation(hangingBody);
++    const controller = new AbortController();
++
++    const result = settle(
++      apiRequest('/x', 't', {method: 'POST', signal: controller.signal}),
++    );
++    await new Promise(resolve => setTimeout(resolve, 0));
++    controller.abort();
++
++    expect(((await result).error as SuricatoosApiError).kind).toBe('aborted');
++  });
 +});
 +
 +describe('apiRequest retries', () => {
-+  test.each([
-+    ['a 5xx', () => plain(503, '')],
-+    ['a 429', () => plain(429, '')],
-+    ['no answer', () => Promise.reject(new TypeError('Failed to fetch'))],
++  test.each<[string, () => Promise<Response> | Response, string | undefined]>([
++    ['a 5xx', () => plain(502, ''), undefined],
++    ['a 500 in plain text', () => plain(500, 'erro interno'), undefined],
++    ['a 429', () => plain(429, ''), undefined],
++    [
++      'no answer',
++      () => Promise.reject(new TypeError('Failed to fetch')),
++      undefined,
++    ],
++    ['a 5xx, method in lowercase', () => plain(502, ''), 'get'],
 +  ])(
 +    'retries a GET once after %s, with a short backoff',
-+    async (_name, fail) => {
++    async (_name, fail, method) => {
 +      testing.useFakeTimers();
 +      fetchMock.mockImplementationOnce(async () => fail());
 +      fetchMock.mockResolvedValueOnce(json(200, {ok: 1}));
 +
-+      const result = settle(apiRequest('/x', 't'));
++      const result = settle(apiRequest('/x', 't', {method}));
 +      await advance(999);
 +      expect(fetchMock).toHaveBeenCalledTimes(1);
 +      await advance(1);
@@ -14174,6 +14277,72 @@ index 0000000..f1b775a
 +      expect(fetchMock.mock.calls[1][0]).toBe('/x?token=t');
 +    },
 +  );
++
++  test.each<[string, () => Response]>([
++    [
++      'a 5xx that explains itself in JSON',
++      () => json(502, {error: 'o provedor respondeu HTTP 401'}),
++    ],
++    ['a 500 with a JSON detail', () => json(500, {detail: 'falhou'})],
++    ['a 503 without Retry-After (nginx limit_req)', () => plain(503, '')],
++  ])('does not retry %s', async (_name, fail) => {
++    testing.useFakeTimers();
++    fetchMock.mockImplementation(async () => fail());
++
++    const result = settle(apiRequest('/x', 't'));
++    await advance(10000);
++
++    expect((await result).error).toBeInstanceOf(SuricatoosApiError);
++    expect(fetchMock).toHaveBeenCalledTimes(1);
++  });
++
++  test('retries a 503 that asks for a short wait, after it', async () => {
++    testing.useFakeTimers();
++    fetchMock.mockResolvedValueOnce(plain(503, '', {'Retry-After': '2'}));
++    fetchMock.mockResolvedValueOnce(json(200, {}));
++
++    const result = settle(apiRequest('/x', 't'));
++    await advance(1999);
++    expect(fetchMock).toHaveBeenCalledTimes(1);
++    await advance(1);
++
++    await result;
++    expect(fetchMock).toHaveBeenCalledTimes(2);
++  });
++
++  test('never retries sooner than the backoff, whatever Retry-After says', async () => {
++    testing.useFakeTimers();
++    fetchMock.mockResolvedValueOnce(plain(429, '', {'Retry-After': '0'}));
++    fetchMock.mockResolvedValueOnce(json(200, {}));
++
++    const result = settle(apiRequest('/x', 't'));
++    await advance(999);
++    expect(fetchMock).toHaveBeenCalledTimes(1);
++    await advance(1);
++
++    await result;
++    expect(fetchMock).toHaveBeenCalledTimes(2);
++  });
++
++  test('waits a Retry-After of exactly 5 s, not one of 6 s', async () => {
++    testing.useFakeTimers();
++    fetchMock.mockResolvedValueOnce(plain(429, '', {'Retry-After': '5'}));
++    fetchMock.mockResolvedValueOnce(json(200, {}));
++
++    const five = settle(apiRequest('/x', 't'));
++    await advance(4999);
++    expect(fetchMock).toHaveBeenCalledTimes(1);
++    await advance(1);
++    await five;
++    expect(fetchMock).toHaveBeenCalledTimes(2);
++
++    fetchMock.mockReset();
++    fetchMock.mockResolvedValue(plain(429, '', {'Retry-After': '6'}));
++    const six = settle(apiRequest('/x', 't'));
++    await advance(10000);
++    expect(((await six).error as SuricatoosApiError).retryAfter).toBe(6);
++    expect(fetchMock).toHaveBeenCalledTimes(1);
++  });
 +
 +  test('makes at most 2 attempts', async () => {
 +    testing.useFakeTimers();
@@ -14229,34 +14398,40 @@ index 0000000..f1b775a
 +
 +  test.each(['POST', 'PUT', 'DELETE'])('never retries a %s', async method => {
 +    testing.useFakeTimers();
-+    fetchMock.mockImplementation(async () => plain(503, ''));
++    fetchMock.mockImplementation(async () => plain(502, ''));
 +
 +    const result = settle(apiRequest('/x', 't', {method, retry: true}));
 +    await advance(10000);
 +
-+    expect(((await result).error as SuricatoosApiError).status).toBe(503);
++    expect(((await result).error as SuricatoosApiError).status).toBe(502);
 +    expect(fetchMock).toHaveBeenCalledTimes(1);
 +  });
 +
 +  test('does not retry a GET marked retry: false', async () => {
 +    testing.useFakeTimers();
-+    fetchMock.mockImplementation(async () => plain(503, ''));
++    fetchMock.mockImplementation(async () => plain(502, ''));
 +
 +    const result = settle(apiRequest('/x', 't', {retry: false}));
 +    await advance(10000);
 +
-+    expect(((await result).error as SuricatoosApiError).status).toBe(503);
++    expect(((await result).error as SuricatoosApiError).status).toBe(502);
 +    expect(fetchMock).toHaveBeenCalledTimes(1);
 +  });
 +
 +  test('an abort during the backoff ends the call', async () => {
 +    testing.useFakeTimers();
-+    fetchMock.mockImplementation(async () => plain(503, ''));
++    fetchMock.mockImplementation(async () => plain(502, ''));
 +    const controller = new AbortController();
 +
-+    const result = settle(apiRequest('/x', 't', {signal: controller.signal}));
++    let settled = false;
++    const result = settle(
++      apiRequest('/x', 't', {signal: controller.signal}),
++    ).finally(() => (settled = true));
 +    await advance(500);
 +    controller.abort();
++    // At once: not when the backoff would have ended.
++    await advance(0);
++    expect(settled).toBe(true);
 +    await advance(10000);
 +
 +    expect(((await result).error as SuricatoosApiError).kind).toBe('aborted');
@@ -14466,6 +14641,20 @@ index 0000000..f1b775a
 +    expect(poll).toHaveBeenCalledTimes(4);
 +  });
 +
++  test('a poll that throws something else is a failed call, and is logged', async () => {
++    const logged = testing.spyOn(console, 'error').mockImplementation(() => {});
++    const poll = testing
++      .fn<(signal: AbortSignal) => Promise<void>>()
++      .mockRejectedValue(new Error('bug'));
++
++    const {result} = renderHook(() => usePolling(poll, 1000));
++    await flush();
++
++    expect(result.current.error?.kind).toBe('network');
++    expect(logged).toHaveBeenCalled();
++    logged.mockRestore();
++  });
++
 +  test('pauses while the tab is hidden and resumes when it shows', async () => {
 +    const poll = testing
 +      .fn<(signal: AbortSignal) => Promise<void>>()
@@ -14485,6 +14674,36 @@ index 0000000..f1b775a
 +    expect(poll).toHaveBeenCalledTimes(2);
 +    await flush(1000);
 +    expect(poll).toHaveBeenCalledTimes(3);
++  });
++
++  test('the tab shown again during a poll adds no poll on top of it', async () => {
++    const {poll, calls} = controlledPoll();
++
++    renderHook(() => usePolling(poll, 1000));
++    await setHidden(true);
++    await setHidden(false);
++    expect(poll).toHaveBeenCalledTimes(1);
++
++    await act(async () => calls[0].done.resolve());
++    await flush(999);
++    expect(poll).toHaveBeenCalledTimes(1);
++    await flush(1);
++    expect(poll).toHaveBeenCalledTimes(2);
++  });
++
++  test('a refresh asked while hidden, during a poll, runs as soon as the tab shows', async () => {
++    const {poll, calls} = controlledPoll();
++
++    const {result} = renderHook(() => usePolling(poll, 60000));
++    await setHidden(true);
++    await act(() => result.current.refresh());
++    // The poll in flight started before the refresh: it does not answer it.
++    await act(async () => calls[0].done.resolve());
++    await flush(1000);
++    expect(poll).toHaveBeenCalledTimes(1);
++
++    await setHidden(false);
++    expect(poll).toHaveBeenCalledTimes(2);
 +  });
 +
 +  test('a poll that ends while the tab is hidden schedules nothing', async () => {
@@ -14571,6 +14790,35 @@ index 0000000..f1b775a
 +
 +    renderHook(() => usePolling(poll, 1000));
 +    await flush(4999);
++    expect(poll).toHaveBeenCalledTimes(1);
++    await flush(1);
++    expect(poll).toHaveBeenCalledTimes(2);
++  });
++
++  test('a Retry-After shorter than the interval keeps the interval', async () => {
++    const poll = testing.fn<(signal: AbortSignal) => Promise<void>>();
++    poll.mockRejectedValueOnce(
++      new SuricatoosApiError('rate-limited', 429, '', 0),
++    );
++    poll.mockResolvedValue(undefined);
++
++    renderHook(() => usePolling(poll, 1000));
++    await flush(999);
++    expect(poll).toHaveBeenCalledTimes(1);
++    await flush(1);
++    expect(poll).toHaveBeenCalledTimes(2);
++  });
++
++  test('a huge Retry-After postpones the next poll by 5 min at most', async () => {
++    const poll = testing.fn<(signal: AbortSignal) => Promise<void>>();
++    // 10^10 s: as a setTimeout delay it would overflow and fire at once.
++    poll.mockRejectedValueOnce(
++      new SuricatoosApiError('rate-limited', 429, '', 1e10),
++    );
++    poll.mockResolvedValue(undefined);
++
++    renderHook(() => usePolling(poll, 1000));
++    await flush(299999);
 +    expect(poll).toHaveBeenCalledTimes(1);
 +    await flush(1);
 +    expect(poll).toHaveBeenCalledTimes(2);
@@ -14672,10 +14920,10 @@ index 0000000..f1b775a
 +});
 diff --git a/src/web/utils/suricatoosApi.ts b/src/web/utils/suricatoosApi.ts
 new file mode 100644
-index 0000000..547230e
+index 0000000..b309818
 --- /dev/null
 +++ b/src/web/utils/suricatoosApi.ts
-@@ -0,0 +1,530 @@
+@@ -0,0 +1,575 @@
 +/* SPDX-FileCopyrightText: 2026 Suricatoos
 + *
 + * SPDX-License-Identifier: AGPL-3.0-or-later
@@ -14701,7 +14949,7 @@ index 0000000..547230e
 +  | 'http' // any other non-2xx status
 +  | 'network' // no answer at all
 +  | 'timeout' // no answer within the deadline of the call
-+  | 'invalid-response' // a 2xx whose body is not JSON
++  | 'invalid-response' // a 2xx to a GET whose body is not JSON
 +  | 'aborted'; // the signal of the caller aborted the call
 +
 +export interface ApiRequestInit extends RequestInit {
@@ -14751,6 +14999,9 @@ index 0000000..547230e
 +// A Retry-After longer than this is not waited for inside a call: the call
 +// fails at once and the poller waits it out before the next poll.
 +const MAX_RETRY_AFTER = 5000;
++// The most a Retry-After postpones the next poll (past ~24.8 days setTimeout
++// overflows and fires at once, in a loop).
++const MAX_POLL_DELAY = 300000;
 +
 +export class SuricatoosApiError extends Error {
 +  readonly kind: ApiErrorKind;
@@ -14800,6 +15051,21 @@ index 0000000..547230e
 +// does not pass. It is the same token the GSA puts on every /gmp call.
 +const tokenUrl = (url: string, token: string): string =>
 +  url + (url.includes('?') ? '&' : '?') + 'token=' + encodeURIComponent(token);
++
++// So the token never leaves this origin, only a path of this site is taken:
++// "/" not followed by "/" or "\" (both make it protocol-relative), which must
++// also resolve to this origin (the URL parser drops tabs and newlines, so
++// "/\t/host" is "//host").
++const isSameOriginPath = (url: string): boolean => {
++  if (!/^\/(?![/\\])/.test(url)) {
++    return false;
++  }
++  try {
++    return new URL(url, document.baseURI).origin === window.location.origin;
++  } catch {
++    return false;
++  }
++};
 +
 +// The control-plane explains 400/409/422/502 with {"error": "..."} and other
 +// services may use {"detail": "..."}. Plain-text answers and the HTML error
@@ -14856,6 +15122,7 @@ index 0000000..547230e
 +const attempt = async <T>(
 +  url: string,
 +  init: RequestInit,
++  isGet: boolean,
 +  timeout: number,
 +  outer?: AbortSignal | null,
 +): Promise<T | null> => {
@@ -14898,9 +15165,16 @@ index 0000000..547230e
 +    try {
 +      return (await r.json()) as T;
 +    } catch {
-+      throw (
-+        abortError() ?? new SuricatoosApiError('invalid-response', r.status)
-+      );
++      const failure = abortError();
++      if (failure?.kind === 'aborted') {
++        throw failure;
++      }
++      if (!isGet) {
++        // A 2xx to POST/PUT/DELETE: the action happened, only its answer is
++        // not JSON (or is empty).
++        return null;
++      }
++      throw failure ?? new SuricatoosApiError('invalid-response', r.status);
 +    }
 +  } finally {
 +    clearTimeout(timer);
@@ -14909,17 +15183,22 @@ index 0000000..547230e
 +};
 +
 +// How long to wait before the next attempt, or undefined to give up now. Only
-+// failures that may pass by themselves are retried: no answer, 5xx and 429. A
-+// timeout is not: it already took the whole deadline.
++// failures that may pass by themselves are retried: no answer, a 429 and a
++// 5xx that does not explain itself. Not retried: a timeout (it already took
++// the whole deadline), a 5xx with a JSON detail/error (the server decided)
++// and a 503 without Retry-After (the nginx rate limit: asking again only
++// spends the budget).
 +const retryDelay = (
 +  e: SuricatoosApiError,
 +  attempts: number,
 +): number | undefined => {
-+  if (
-+    e.kind !== 'network' &&
-+    e.kind !== 'server' &&
-+    e.kind !== 'rate-limited'
-+  ) {
++  const transient =
++    e.kind === 'network' ||
++    e.kind === 'rate-limited' ||
++    (e.kind === 'server' &&
++      e.detail === '' &&
++      (e.status !== 503 || e.retryAfter !== undefined));
++  if (!transient) {
 +    return undefined;
 +  }
 +  const backoff = RETRY_DELAY * 2 ** (attempts - 1);
@@ -14932,18 +15211,23 @@ index 0000000..547230e
 +
 +/**
 + * Calls a Suricatoos API of the UI: `url` is the path (with any query) as
-+ * nginx serves it, and the session token is added to the query of every call.
++ * nginx serves it — a path of this origin, anything else is refused before
++ * any request — and the session token is added to the query of every call.
 + * Sends the cookie (same-origin) and passes method, headers and body as given.
 + *
-+ * Resolves with the JSON body (null for a 204). Rejects with a
-+ * SuricatoosApiError: by HTTP status, or network, timeout, invalid-response
-+ * and aborted (by the `signal` of the caller, for instance on unmount).
++ * Resolves with the JSON body: null for a 204, and for a 2xx to POST, PUT or
++ * DELETE whose body is not JSON. Rejects with a SuricatoosApiError: by HTTP
++ * status, or network, timeout, invalid-response (a GET) and aborted (by the
++ * `signal` of the caller, for instance on unmount).
 + */
 +export const apiRequest = async <T = unknown>(
 +  url: string,
 +  token: string,
 +  init: ApiRequestInit = {},
 +): Promise<T | null> => {
++  if (!isSameOriginPath(url)) {
++    throw new TypeError('apiRequest: not a path of this origin: ' + url);
++  }
 +  const {timeout = DEFAULT_TIMEOUT, retry, signal, ...rest} = init;
 +  const request: RequestInit = {credentials: 'same-origin', ...rest};
 +  const target = tokenUrl(url, token);
@@ -14951,7 +15235,7 @@ index 0000000..547230e
 +  const maxAttempts = isGet && retry !== false ? MAX_ATTEMPTS : 1;
 +  for (let attempts = 1; ; attempts++) {
 +    try {
-+      return await attempt<T>(target, request, timeout, signal);
++      return await attempt<T>(target, request, isGet, timeout, signal);
 +    } catch (e) {
 +      const error = e as SuricatoosApiError;
 +      const wait =
@@ -14964,10 +15248,15 @@ index 0000000..547230e
 +  }
 +};
 +
-+// Anything that did not come from apiRequest (a bug in the calling code) is
-+// shown as a failed call.
-+export const toApiError = (e: unknown): SuricatoosApiError =>
-+  e instanceof SuricatoosApiError ? e : new SuricatoosApiError('network');
++// Anything that did not come from apiRequest is a bug in the calling code:
++// logged, and shown as a failed call.
++export const toApiError = (e: unknown): SuricatoosApiError => {
++  if (e instanceof SuricatoosApiError) {
++    return e;
++  }
++  console.error('Suricatoos API: unexpected error', e);
++  return new SuricatoosApiError('network');
++};
 +
 +export const isSessionExpired = (e: unknown): boolean =>
 +  e instanceof SuricatoosApiError && e.kind === 'session-expired';
@@ -15026,7 +15315,7 @@ index 0000000..547230e
 + *   resumes, at once if the next poll is already due;
 + * - stopped for good by a 401 (or a `stopOn` error): asking again does not
 + *   bring the session back. The error stays in `error` for the page to show;
-+ * - a Retry-After of the server postpones the next poll;
++ * - a Retry-After of the server postpones the next poll (by 5 min at most);
 + * - on unmount, the timer is cleared and the poll in flight aborted.
 + *
 + * `poll` gets the AbortSignal of its call and must reject on failure (a
@@ -15100,7 +15389,10 @@ index 0000000..547230e
 +          const err = toApiError(e);
 +          setError(err);
 +          if (err.retryAfter !== undefined) {
-+            wait = Math.max(wait, err.retryAfter * 1000);
++            wait = Math.max(
++              wait,
++              Math.min(err.retryAfter * 1000, MAX_POLL_DELAY),
++            );
 +          }
 +        }
 +      }
@@ -15110,9 +15402,10 @@ index 0000000..547230e
 +      dueAt = wanted ? 0 : Date.now() + wait;
 +    };
 +
++    // Called only with no poll in flight: when one ends, or when the tab shows.
 +    const schedule = () => {
 +      clearTimer();
-+      if (!live() || running !== undefined || document.hidden) {
++      if (!live() || document.hidden) {
 +        return;
 +      }
 +      timer = setTimeout(
