@@ -1,0 +1,15 @@
+{
+  "stream": "exec",
+  "seq": 7,
+  "at": "2026-10-11T12:07:00Z",
+  "event": "result",
+  "command_id": "256235c9-3661-4e57-b4f3-bbfe17ecb23d",
+  "type": "report.export",
+  "tenant": "acme",
+  "status": "succeeded",
+  "artifact": {
+    "sha256": "202e584626515573d531f5508c9094f8d6b705e0fc0fe6fbf29c76969fef313f",
+    "size": 812345
+  },
+  "prev_sha256": "11cb3ef49b528cb7b437bfdeaf6516331cd82d13ee1d43cfa7f433f87bdb8581"
+}

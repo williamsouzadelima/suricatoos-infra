@@ -1,7 +1,16 @@
 {
-  "seq": 9,
-  "at": "2026-10-11T12:00:09Z",
+  "stream": "exec",
+  "seq": 4,
+  "at": "2026-10-11T12:04:00Z",
   "event": "result",
-  "token": "st_AbCdEfGhIjKl.Zm9vYmFyZm9vYmFyZm9vYmFyZm9vYmFyZm9vYmFyZm9vYmE",
-  "prev_sha256": "b1e5c9e7d26a4c0099f1d8cc9f359d32be97c93ffc298d2277faa3d4446174e6"
+  "command_id": "6f1c2a9e-3b7d-4c8a-9e21-5d4f0a7b3c18",
+  "type": "task.start",
+  "tenant": "acme",
+  "status": "succeeded",
+  "object_ids": [
+    "2d5b8f0e-1c4a-4e6b-9a3d-7f0c5e1b2a49",
+    "e2a4c6e8-0b1d-4f3a-9c5e-7a9b1d3f5e06"
+  ],
+  "prev_sha256": "950cef6b35fd881122b4ec99a9f026e3a0c8fe509996194ed1aab46b9822eab6",
+  "token": "st_AbCdEfGhIjKl.Zm9vYmFyZm9vYmFyZm9vYmFyZm9vYmFyZm9vYmFyZm9vYmE"
 }

@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://suricatoos.dev/schema/fleet-heartbeat.schema.json",
   "title": "Suricatoos — Fleet Node Heartbeat",
-  "description": "POST /fleet/v1/heartbeat (ADR-0011), outbound mTLS, every heartbeat_interval_s (default 60). The request carries the current content_sha256 of every state kind the node has; the hub compares them with the snapshots it holds and lists in 'resync' the kinds it wants re-sent in full (PUT /fleet/v1/state/{kind}). server_time lets the node measure clock offset (command windows depend on it). node_id must equal the CN of the client certificate. The root accepts either message; implementations validate the specific $defs entry.",
+  "description": "POST /fleet/v1/heartbeat (ADR-0011), outbound mTLS, every heartbeat_interval_s (default 60). The request carries the current content_sha256 of every state kind the node has; the hub compares them with the snapshots it holds and lists in 'resync' the kinds it wants re-sent in full (PUT /fleet/v1/state/{kind}). server_time is used ONLY to report clock_offset_s and raise an alert: the node never adjusts the clock it verifies command windows with to the hub's. node_id must equal the CN of the client certificate. The root accepts either message; implementations validate the specific $defs entry.",
   "oneOf": [
     { "$ref": "#/$defs/heartbeat_request" },
     { "$ref": "#/$defs/heartbeat_response" }
@@ -10,7 +10,7 @@
   "$defs": {
     "heartbeat_request": {
       "type": "object",
-      "required": ["schema_version", "node_id", "sent_at", "connector_version", "state_hashes", "outbox_events", "outbox_dropped", "pending_results"],
+      "required": ["schema_version", "node_id", "sent_at", "connector_version", "state_hashes", "outbox_events", "outbox_dropped", "pending_results", "unauthenticated_rejections"],
       "additionalProperties": false,
       "properties": {
         "schema_version": { "type": "string", "const": "1.0.0" },
@@ -26,7 +26,8 @@
         },
         "outbox_events": { "type": "integer", "minimum": 0, "description": "events waiting in the durable outbox" },
         "outbox_dropped": { "type": "integer", "minimum": 0, "description": "events dropped since start because the outbox cap was hit (oldest first)" },
-        "pending_results": { "type": "integer", "minimum": 0, "description": "acks/results/artifacts not yet accepted by the hub" }
+        "pending_results": { "type": "integer", "minimum": 0, "description": "acks/results/artifacts not yet accepted by the hub" },
+        "unauthenticated_rejections": { "type": "integer", "minimum": 0, "description": "envelopes refused at verification lines 0-2 (bad_envelope, payload_mismatch, bad_signature) since the connector started: they get no ack and are audited only as periodic counts" }
       }
     },
     "heartbeat_response": {
@@ -38,7 +39,7 @@
         "server_time": { "$ref": "fleet-command.schema.json#/$defs/utc_time" },
         "resync": { "type": "array", "maxItems": 12, "uniqueItems": true, "items": { "$ref": "fleet-state.schema.json#/$defs/state_kind" }, "description": "kinds to re-send in full; empty = nothing to do" },
         "heartbeat_interval_s": { "type": "integer", "minimum": 15, "maximum": 600 },
-        "poll_wait_s": { "type": "integer", "minimum": 0, "maximum": 30 }
+        "poll_wait_s": { "type": "integer", "minimum": 5, "maximum": 30, "description": "long-poll wait; the node also never polls more often than once per 5 s and backs off when a poll brings only rejections" }
       }
     }
   }

@@ -3,7 +3,7 @@
   "node_id": "node-lab-0001",
   "kind": "node",
   "collected_at": "2026-10-11T12:00:00Z",
-  "content_sha256": "c590763ab61863a782d5777fe5b458d3a987523439d837a925879c622930bf20",
+  "content_sha256": "2ca477799b6fb684570eb0b09dbbe3867c862a0339c5aedb9b0ae30102fb1b91",
   "data": {
     "node_kind": "central",
     "connector_version": "1.0.0",
@@ -94,17 +94,17 @@
       ]
     },
     "policy": {
-      "allowed_types": [
-        "state.resync",
-        "task.start",
-        "task.stop",
-        "task.resume",
+      "allow": [
+        "agent.scan_now",
         "report.export",
         "report.summary",
-        "agent.scan_now"
+        "state.resync",
+        "task.resume",
+        "task.start",
+        "task.stop"
       ],
       "sensitive_per_hour": 30
     },
-    "policy_sha256": "202e584626515573d531f5508c9094f8d6b705e0fc0fe6fbf29c76969fef313f"
+    "policy_sha256": "2c789a308f2c661301b783d73e9e065be7b5fe6a38a0195d8d29ed4f35d6c174"
   }
 }

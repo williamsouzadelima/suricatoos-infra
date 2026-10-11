@@ -76,7 +76,7 @@ Coletamos apenas o mínimo necessário para **correlação de vulnerabilidade ba
 | Estado `targets` e `scope` (entradas IP/CIDR literais dos alvos, CIDRs autorizados por tenant) | `fleet-state.schema.json#/$defs/data_targets`, `data_scope` | nó→hub | gerenciar alvos dentro do escopo | média (topologia da rede do cliente) |
 | Estado `agents` (agent_id, tenant, SO/arch/versão do agente, último contato, online) | `fleet-state.schema.json#/$defs/data_agents` | nó→hub | operar agentes | média (pseudônimo do host; **sem hostname**) |
 | Estado `tokens`, `sensors`, `scan_requests`, `remediation` (ids, tenant, estados, contagens) | `fleet-state.schema.json#/$defs/data_tokens`, `data_sensors`, `data_scan_requests`, `data_remediation` | nó→hub | operar enroll, sensores e fila de varredura; acompanhar remediação (só leitura) | baixa (sem segredo, sem alvos, sem payload de remediação) |
-| Estado `audit_tail` (cauda da auditoria local, linhas verbatim) | `fleet-state.schema.json#/$defs/data_audit_tail` | nó→hub | testemunha da cadeia de auditoria | média (contém `issued_by`, identificador do operador do hub) |
+| Estado `audit_tail` (caudas verbatim dos dois fluxos da auditoria local: `exec` e `reject`) | `fleet-state.schema.json#/$defs/data_audit_tail` | nó→hub | testemunha das cadeias de auditoria | média (contém `issued_by`, ids de objeto, hosts IP/CIDR dos alvos e os parâmetros dos exports — nunca segredo) |
 | Eventos (status de tarefa, report concluído com contagens, agente online/offline, feed, remediação pendente, rejeição por política) | `fleet-event.schema.json` | nó→hub | atividade da frota | baixa |
 | Comando assinado (tipo, tenant, payload, `issued_by`, janela, nonce, assinatura) | `fleet-command.schema.json` | hub→nó | executar UMA ação do catálogo | baixa/média (`issued_by` identifica o operador do hub) |
 | Ack e resultado (decisão e motivo, status, ids, valores anteriores dos campos alterados, contagens) | `fleet-result.schema.json` | nó→hub | estado do comando e rollback manual | baixa |
@@ -110,9 +110,11 @@ Coletamos apenas o mínimo necessário para **correlação de vulnerabilidade ba
 > **`issued_by`:** recomendado um identificador **pseudônimo** do operador do hub (o hub guarda o
 > mapeamento); um e-mail aqui seria dado pessoal replicado na auditoria de cada nó.
 >
-> **Auditoria local:** `FLEET_STATE_DIR/audit.jsonl`, append-only, encadeada por hash, **sem segredo** (payload
-> só por hash), rotação 32 MiB × 8 arquivos, visível ao operador local; a cauda (≤ 200 linhas) vai ao hub como
-> testemunha.
+> **Auditoria local:** dois fluxos append-only encadeados por hash (`FLEET_STATE_DIR/audit-exec.jsonl` com o
+> que foi aceito e executado; `audit-reject.jsonl` com rejeições, adiamentos e contagens de envelopes não
+> autenticados), cada um com `seq` e rotação próprios (32 MiB × 8 e × 4). As linhas guardam o "quê" de forma
+> limitada (ids de objeto, até 64 hosts, parâmetros do export, sha256 e tamanho do artefato) e **nunca segredo**.
+> Visíveis ao operador local; as caudas (≤ 200 linhas de cada fluxo) vão ao hub como testemunha.
 >
 > **Transporte:** HTTPS de saída + mTLS; no canário, hub alcançado só por rede privada (tailnet), fora da
 > internet. Os papéis LGPD (controlador/operador) entre o cliente e quem opera o hub seguem a base legal abaixo,

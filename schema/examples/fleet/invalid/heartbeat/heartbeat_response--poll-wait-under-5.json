@@ -1,0 +1,9 @@
+{
+  "schema_version": "1.0.0",
+  "server_time": "2026-10-11T12:00:01Z",
+  "resync": [
+    "tasks"
+  ],
+  "heartbeat_interval_s": 60,
+  "poll_wait_s": 2
+}

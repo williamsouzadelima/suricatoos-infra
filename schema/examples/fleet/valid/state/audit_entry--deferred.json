@@ -1,0 +1,16 @@
+{
+  "stream": "reject",
+  "seq": 2,
+  "at": "2026-10-11T12:02:00Z",
+  "event": "deferred",
+  "command_id": "fb698477-2b44-4d52-9204-20ba4ebaaa7d",
+  "type": "task.stop",
+  "tenant": "acme",
+  "issued_by": "op-7f3a",
+  "payload_sha256": "202e584626515573d531f5508c9094f8d6b705e0fc0fe6fbf29c76969fef313f",
+  "object_ids": [
+    "2d5b8f0e-1c4a-4e6b-9a3d-7f0c5e1b2a49"
+  ],
+  "reason": "not_yet_valid",
+  "prev_sha256": "869d26b22ffde245d29b0c89010262e5cfb08b00102837c273ec604159b37d6c"
+}

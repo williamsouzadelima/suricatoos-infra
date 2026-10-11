@@ -1,0 +1,8 @@
+{
+  "schema_version": "1.0.0",
+  "command_id": "6f1c2a9e-3b7d-4c8a-9e21-5d4f0a7b3c18",
+  "node_id": "node-lab-0001",
+  "decision": "rejected",
+  "received_at": "2026-10-11T12:00:01Z",
+  "reason": "bad_signature"
+}

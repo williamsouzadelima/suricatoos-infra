@@ -473,6 +473,15 @@
       }
     },
     {
+      "file": "invalid/heartbeat/heartbeat_request--without-unauthenticated-rejections.json",
+      "target": "fleet-heartbeat.schema.json#/$defs/heartbeat_request",
+      "description": "I4: lines 0-2 are only counted, and the count is mandatory",
+      "expect": {
+        "keyword": "required",
+        "path": ""
+      }
+    },
+    {
       "file": "invalid/heartbeat/heartbeat_response--duplicated-resync-kind.json",
       "target": "fleet-heartbeat.schema.json#/$defs/heartbeat_response",
       "description": "resync kinds are unique",
@@ -484,9 +493,18 @@
     {
       "file": "invalid/heartbeat/heartbeat_response--poll-wait-over-30.json",
       "target": "fleet-heartbeat.schema.json#/$defs/heartbeat_response",
-      "description": "long-poll wait is 0-30 s",
+      "description": "long-poll wait is 5-30 s",
       "expect": {
         "keyword": "maximum",
+        "path": "/poll_wait_s"
+      }
+    },
+    {
+      "file": "invalid/heartbeat/heartbeat_response--poll-wait-under-5.json",
+      "target": "fleet-heartbeat.schema.json#/$defs/heartbeat_response",
+      "description": "I6: long-poll wait has a 5 s floor",
+      "expect": {
+        "keyword": "minimum",
         "path": "/poll_wait_s"
       }
     },
@@ -497,6 +515,42 @@
       "expect": {
         "keyword": "not",
         "path": ""
+      }
+    },
+    {
+      "file": "invalid/result/ack--deferred-final-reason.json",
+      "target": "fleet-result.schema.json#/$defs/ack",
+      "description": "I4: a final reason cannot be deferred",
+      "expect": {
+        "keyword": "enum",
+        "path": "/reason"
+      }
+    },
+    {
+      "file": "invalid/result/ack--deferred-without-reason.json",
+      "target": "fleet-result.schema.json#/$defs/ack",
+      "description": "a deferral carries its reason",
+      "expect": {
+        "keyword": "required",
+        "path": ""
+      }
+    },
+    {
+      "file": "invalid/result/ack--rejected-deferred-reason.json",
+      "target": "fleet-result.schema.json#/$defs/ack",
+      "description": "I4: not_yet_valid is retryable, never final",
+      "expect": {
+        "keyword": "enum",
+        "path": "/reason"
+      }
+    },
+    {
+      "file": "invalid/result/ack--rejected-unauthenticated-reason.json",
+      "target": "fleet-result.schema.json#/$defs/ack",
+      "description": "I4: lines 0-2 never produce an ack",
+      "expect": {
+        "keyword": "enum",
+        "path": "/reason"
       }
     },
     {
@@ -511,7 +565,7 @@
     {
       "file": "invalid/result/ack--unknown-decision.json",
       "target": "fleet-result.schema.json#/$defs/ack",
-      "description": "decision is accepted|rejected",
+      "description": "decision is accepted|rejected|deferred",
       "expect": {
         "keyword": "enum",
         "path": "/decision"
@@ -653,11 +707,74 @@
       }
     },
     {
+      "file": "invalid/state/audit-tail-empty-stream-with-seq.json",
+      "target": "fleet-state.schema.json",
+      "description": "an empty stream has no seq/head",
+      "expect": {
+        "keyword": "not",
+        "path": "/data/reject"
+      }
+    },
+    {
+      "file": "invalid/state/audit-tail-single-stream.json",
+      "target": "fleet-state.schema.json",
+      "description": "I6: the tail carries both streams",
+      "expect": {
+        "keyword": "required",
+        "path": "/data"
+      }
+    },
+    {
+      "file": "invalid/state/audit_entry--exec-event-in-reject-stream.json",
+      "target": "fleet-state.schema.json#/$defs/audit_entry",
+      "description": "I6: executed/result live in the exec stream (own rotation budget)",
+      "expect": {
+        "keyword": "const",
+        "path": "/stream"
+      }
+    },
+    {
+      "file": "invalid/state/audit_entry--hosts-over-64.json",
+      "target": "fleet-state.schema.json#/$defs/audit_entry",
+      "description": "I6: at most 64 hosts per line (hosts_count carries the total)",
+      "expect": {
+        "keyword": "maxItems",
+        "path": "/hosts"
+      }
+    },
+    {
+      "file": "invalid/state/audit_entry--rejected-without-reason.json",
+      "target": "fleet-state.schema.json#/$defs/audit_entry",
+      "description": "a rejection is audited with its reason",
+      "expect": {
+        "keyword": "required",
+        "path": ""
+      }
+    },
+    {
+      "file": "invalid/state/audit_entry--unauthenticated-without-counts.json",
+      "target": "fleet-state.schema.json#/$defs/audit_entry",
+      "description": "an unauthenticated line carries the counts",
+      "expect": {
+        "keyword": "required",
+        "path": ""
+      }
+    },
+    {
       "file": "invalid/state/audit_entry--with-token.json",
       "target": "fleet-state.schema.json#/$defs/audit_entry",
       "description": "the audit never carries a secret",
       "expect": {
         "keyword": "additionalProperties",
+        "path": ""
+      }
+    },
+    {
+      "file": "invalid/state/audit_entry--without-seq.json",
+      "target": "fleet-state.schema.json#/$defs/audit_entry",
+      "description": "I6: every line has a monotonic seq",
+      "expect": {
+        "keyword": "required",
         "path": ""
       }
     },
@@ -686,6 +803,15 @@
       "expect": {
         "keyword": "enum",
         "path": "/data/capabilities/report_formats/0/variants/0"
+      }
+    },
+    {
+      "file": "invalid/state/node-policy-allowed-types.json",
+      "target": "fleet-state.schema.json",
+      "description": "M6: one name, 'allow', in policy.json and in the state",
+      "expect": {
+        "keyword": "required",
+        "path": "/data/policy"
       }
     },
     {
@@ -992,6 +1118,21 @@
       "description": "ack: verified, authorized, about to execute"
     },
     {
+      "file": "valid/result/ack--deferred-not-yet-valid.json",
+      "target": "fleet-result.schema.json#/$defs/ack",
+      "description": "I4: retryable, not recorded; the hub may redeliver the SAME envelope"
+    },
+    {
+      "file": "valid/result/ack--deferred-unavailable.json",
+      "target": "fleet-result.schema.json#/$defs/ack",
+      "description": "I4: a local dependency of the decision failed (fail-closed, retryable)"
+    },
+    {
+      "file": "valid/result/ack--rejected-expired.json",
+      "target": "fleet-result.schema.json#/$defs/ack",
+      "description": "I4: expired is FINAL and recorded"
+    },
+    {
       "file": "valid/result/ack--rejected-scope-denied.json",
       "target": "fleet-result.schema.json#/$defs/ack",
       "description": "ack: authentic command refused by the local scope gate"
@@ -1000,6 +1141,11 @@
       "file": "valid/result/ack--rejected-unsupported-report-variant.json",
       "target": "fleet-result.schema.json#/$defs/ack",
       "description": "RUNTIME rejection of a schema-valid report.export combination the node does not advertise"
+    },
+    {
+      "file": "valid/result/ack--rejected-wrong-node.json",
+      "target": "fleet-result.schema.json#/$defs/ack",
+      "description": "I4: wrong_node is FINAL (the hub answers 404 to it; observable in audit_tail)"
     },
     {
       "file": "valid/result/agent-revoke.json",
@@ -1132,6 +1278,11 @@
       "description": "PUT /fleet/v1/state/agents"
     },
     {
+      "file": "valid/state/audit-tail-empty-reject-stream.json",
+      "target": "fleet-state.schema.json",
+      "description": "a stream with no line yet carries no seq/head"
+    },
+    {
       "file": "valid/state/audit-tail.json",
       "target": "fleet-state.schema.json",
       "description": "PUT /fleet/v1/state/audit_tail"
@@ -1139,22 +1290,42 @@
     {
       "file": "valid/state/audit_entry--connector-started.json",
       "target": "fleet-state.schema.json#/$defs/audit_entry",
-      "description": "audit line seq=1 (connector_started), part of the audit-tail chain"
+      "description": "exec stream, seq 1 (genesis prev_sha256)"
+    },
+    {
+      "file": "valid/state/audit_entry--deferred.json",
+      "target": "fleet-state.schema.json#/$defs/audit_entry",
+      "description": "reject stream: deferred (not recorded; the hub may redeliver)"
     },
     {
       "file": "valid/state/audit_entry--executed.json",
       "target": "fleet-state.schema.json#/$defs/audit_entry",
-      "description": "audit line seq=3 (executed), part of the audit-tail chain"
+      "description": "exec stream: execution started"
     },
     {
-      "file": "valid/state/audit_entry--received.json",
+      "file": "valid/state/audit_entry--received-report-export.json",
       "target": "fleet-state.schema.json#/$defs/audit_entry",
-      "description": "audit line seq=2 (received), part of the audit-tail chain"
+      "description": "exec stream: report.export with every parameter of what will leave the node"
     },
     {
-      "file": "valid/state/audit_entry--result.json",
+      "file": "valid/state/audit_entry--received-with-objects.json",
       "target": "fleet-state.schema.json#/$defs/audit_entry",
-      "description": "audit line seq=4 (result), part of the audit-tail chain"
+      "description": "exec stream: accepted task.start with the object it acts on"
+    },
+    {
+      "file": "valid/state/audit_entry--rejected-with-hosts.json",
+      "target": "fleet-state.schema.json#/$defs/audit_entry",
+      "description": "reject stream: scope_denied with the (bounded) hosts that were refused"
+    },
+    {
+      "file": "valid/state/audit_entry--result-with-artifact.json",
+      "target": "fleet-state.schema.json#/$defs/audit_entry",
+      "description": "exec stream: report.export result with the artifact sha256 and size"
+    },
+    {
+      "file": "valid/state/audit_entry--unauthenticated-counts.json",
+      "target": "fleet-state.schema.json#/$defs/audit_entry",
+      "description": "reject stream: periodic count of lines 0-2 (no individual line, no ack)"
     },
     {
       "file": "valid/state/node-post-r5-editions.json",

@@ -11,7 +11,7 @@
       "additionalProperties": false,
       "properties": {
         "schema_version": { "type": "string", "const": "1.0.0" },
-        "command_id": { "$ref": "#/$defs/uuid", "description": "hub-assigned and unique; the node's idempotency key (journal) and the {id} of the ack/result routes" },
+        "command_id": { "$ref": "#/$defs/uuid", "description": "hub-assigned and unique; the {id} of the ack/result routes. The hub NEVER re-signs a command_id: a redelivery is the same envelope byte for byte. The node indexes its store by nonce AND by command_id — a different canonical form under an already-seen command_id (or nonce) is rejected as replay" },
         "node_id": { "$ref": "#/$defs/node_id", "description": "the ONE node this command is for; must equal the CN of the node's own fleet certificate (else rejected: wrong_node)" },
         "tenant": { "$ref": "#/$defs/tenant", "description": "tenant the command acts on; must be known AND enabled on the node (central: TENANTS_FILE registry; standalone/sensor: FLEET_TENANT). Existing objects are addressed only inside that tenant's gvmd partition" },
         "type": { "$ref": "#/$defs/command_type" },

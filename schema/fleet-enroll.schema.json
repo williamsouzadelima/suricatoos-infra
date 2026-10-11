@@ -45,7 +45,7 @@
         "command_pubkey": { "$ref": "#/$defs/pubkey_pem", "description": "Ed25519 command verification key, PKIX PEM (checked against FLEET_COMMAND_KEY_PIN at enroll; must stay identical at renew)" },
         "server_time": { "$ref": "fleet-command.schema.json#/$defs/utc_time" },
         "heartbeat_interval_s": { "type": "integer", "minimum": 15, "maximum": 600 },
-        "poll_wait_s": { "type": "integer", "minimum": 0, "maximum": 30 }
+        "poll_wait_s": { "type": "integer", "minimum": 5, "maximum": 30 }
       }
     },
     "csr_pem": {

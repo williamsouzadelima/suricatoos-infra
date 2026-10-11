@@ -1,0 +1,7 @@
+{
+  "stream": "reject",
+  "seq": 3,
+  "at": "2026-10-11T12:03:00Z",
+  "event": "unauthenticated",
+  "prev_sha256": "4c7a62f6ffc54c4d39a2decc41240541572b617d25e37575120a0ddc2026bba2"
+}

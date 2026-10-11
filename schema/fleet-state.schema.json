@@ -121,16 +121,16 @@
           }
         },
         "policy": {
-          "description": "the LOCAL policy in force (edited only on the node, never by a command)",
+          "description": "the LOCAL policy in force — the same object as FLEET_STATE_DIR/policy.json (edited only on the node, never by a command)",
           "type": "object",
-          "required": ["allowed_types", "sensitive_per_hour"],
+          "required": ["allow", "sensitive_per_hour"],
           "additionalProperties": false,
           "properties": {
-            "allowed_types": { "type": "array", "uniqueItems": true, "items": { "$ref": "fleet-command.schema.json#/$defs/command_type" } },
+            "allow": { "type": "array", "uniqueItems": true, "items": { "$ref": "fleet-command.schema.json#/$defs/command_type" } },
             "sensitive_per_hour": { "type": "integer", "minimum": 0, "maximum": 1000, "description": "local budget shared by the opt-in types, report.export and report.summary" }
           }
         },
-        "policy_sha256": { "$ref": "fleet-command.schema.json#/$defs/sha256_hex" }
+        "policy_sha256": { "$ref": "fleet-command.schema.json#/$defs/sha256_hex", "description": "sha256 of the policy object serialized as compact JSON with keys sorted and 'allow' sorted — the hub can recompute it from 'policy'" }
       }
     },
 
@@ -431,38 +431,98 @@
     },
 
     "data_audit_tail": {
-      "description": "The last lines of the node's local audit (JSONL, append-only, hash-chained), VERBATIM, so the hub can witness the chain: sha256(line_n bytes) must equal prev_sha256 inside line_n+1, and head_sha256 is the SHA-256 of the last line. Each line parses as $defs/audit_entry.",
+      "description": "The last lines of BOTH local audit streams (JSONL, append-only, each its own hash chain and seq), VERBATIM, so the hub can witness them: sha256(line_n bytes) must equal prev_sha256 inside line_n+1, and head_sha256 is the SHA-256 of the last line. exec = what was accepted and executed; reject = rejections, deferrals and unauthenticated counts. Each line parses as $defs/audit_entry. Gap rule (hub): first_seq > last seq seen + 1 => alert (flood or tampering — not proof).",
       "type": "object",
-      "required": ["lines", "first_seq", "last_seq", "head_sha256"],
+      "required": ["exec", "reject"],
       "additionalProperties": false,
       "properties": {
-        "lines": { "type": "array", "minItems": 1, "maxItems": 200, "items": { "type": "string", "minLength": 2, "maxLength": 4096, "allOf": [ { "$ref": "fleet-command.schema.json#/$defs/no_control" } ] } },
+        "exec": { "$ref": "#/$defs/audit_stream_tail" },
+        "reject": { "$ref": "#/$defs/audit_stream_tail" }
+      }
+    },
+    "audit_stream_tail": {
+      "type": "object",
+      "required": ["lines"],
+      "additionalProperties": false,
+      "properties": {
+        "lines": { "type": "array", "maxItems": 200, "items": { "type": "string", "minLength": 2, "maxLength": 8192, "allOf": [ { "$ref": "fleet-command.schema.json#/$defs/no_control" } ] } },
         "first_seq": { "type": "integer", "minimum": 1 },
         "last_seq": { "type": "integer", "minimum": 1 },
         "head_sha256": { "$ref": "fleet-command.schema.json#/$defs/sha256_hex" }
-      }
+      },
+      "if": { "properties": { "lines": { "minItems": 1 } }, "required": ["lines"] },
+      "then": { "required": ["first_seq", "last_seq", "head_sha256"] },
+      "else": { "not": { "anyOf": [ { "required": ["first_seq"] }, { "required": ["last_seq"] }, { "required": ["head_sha256"] } ] } }
     },
 
     "audit_entry": {
-      "description": "One line of the node's local audit file (FLEET_STATE_DIR/audit.jsonl). prev_sha256 = SHA-256 of the previous line's exact bytes (without the trailing newline); the first line ever uses 64 zeros, and the chain continues across file rotation. Never contains a secret (no token, password or key; payloads only by hash).",
+      "description": "One line of a local audit stream: FLEET_STATE_DIR/audit-exec.jsonl (stream exec: connector/identity/policy events and the accepted commands' received -> executed -> result) or FLEET_STATE_DIR/audit-reject.jsonl (stream reject: rejected, deferred, and periodic unauthenticated counts). Each stream has its own monotonic seq (+1 per line, across rotation), its own hash chain (prev_sha256 = SHA-256 of the previous line's exact bytes without the newline; 64 zeros for the first line ever) and its own rotation budget, so a flood of rejections can never rotate away the record of what was executed. Lines carry the bounded WHAT of a command (object ids, up to 64 hosts + their total count, the report parameters, the artifact hash and size) and never a secret: no token, password or key; the only secret of the contract (the token in the OUTPUT of enroll_token.create) is never written.",
       "type": "object",
-      "required": ["seq", "at", "event", "prev_sha256"],
+      "required": ["stream", "seq", "at", "event", "prev_sha256"],
       "additionalProperties": false,
       "properties": {
+        "stream": { "enum": ["exec", "reject"] },
         "seq": { "type": "integer", "minimum": 1 },
         "at": { "$ref": "fleet-command.schema.json#/$defs/utc_time" },
-        "event": { "enum": ["connector_started", "identity_changed", "policy_changed", "received", "rejected", "executed", "result"] },
+        "event": { "enum": ["connector_started", "identity_changed", "policy_changed", "received", "executed", "result", "rejected", "deferred", "unauthenticated"] },
         "command_id": { "$ref": "fleet-command.schema.json#/$defs/uuid" },
         "type": { "$ref": "fleet-command.schema.json#/$defs/command_type_any" },
         "tenant": { "$ref": "fleet-command.schema.json#/$defs/tenant" },
         "issued_by": { "$ref": "fleet-command.schema.json#/$defs/issued_by" },
         "payload_sha256": { "$ref": "fleet-command.schema.json#/$defs/sha256_hex" },
+        "object_ids": { "type": "array", "maxItems": 17, "uniqueItems": true, "items": { "type": "string", "minLength": 1, "maxLength": 128, "allOf": [ { "$ref": "fleet-command.schema.json#/$defs/no_control" } ] }, "description": "ids the command acts on: task/target/schedule/report/delta report UUIDs, agent_id, token_id, sensor job id" },
+        "hosts": { "type": "array", "maxItems": 64, "items": { "$ref": "fleet-command.schema.json#/$defs/ip_or_cidr" }, "description": "first 64 hosts/targets of target.create/modify or sensor_job.enqueue" },
+        "hosts_count": { "type": "integer", "minimum": 0, "description": "total hosts/targets of the command (may exceed the 64 listed)" },
+        "report": {
+          "description": "the parameters of report.export / report.summary",
+          "type": "object",
+          "required": ["report_id"],
+          "additionalProperties": false,
+          "properties": {
+            "report_id": { "$ref": "fleet-command.schema.json#/$defs/uuid" },
+            "format": { "$ref": "fleet-command.schema.json#/$defs/report_format" },
+            "lang": { "$ref": "fleet-command.schema.json#/$defs/report_lang" },
+            "variant": { "$ref": "fleet-command.schema.json#/$defs/report_variant" },
+            "delta_report_id": { "$ref": "fleet-command.schema.json#/$defs/uuid" },
+            "filter": { "$ref": "fleet-command.schema.json#/$defs/gmp_filter" },
+            "min_qod": { "type": "integer", "minimum": 0, "maximum": 100 },
+            "apply_overrides": { "type": "boolean" },
+            "levels": { "type": "string", "minLength": 1, "maxLength": 5, "pattern": "^c?h?m?l?g?$" }
+          }
+        },
+        "artifact": {
+          "description": "result of report.export: what left the node",
+          "type": "object",
+          "required": ["sha256", "size"],
+          "additionalProperties": false,
+          "properties": {
+            "sha256": { "$ref": "fleet-command.schema.json#/$defs/sha256_hex" },
+            "size": { "type": "integer", "minimum": 1, "maximum": 67108864 }
+          }
+        },
         "reason": { "$ref": "fleet-result.schema.json#/$defs/reject_reason" },
         "status": { "enum": ["succeeded", "failed"] },
         "error_code": { "$ref": "fleet-result.schema.json#/$defs/error_code" },
+        "unauthenticated": {
+          "description": "periodic count line (event unauthenticated, stream reject): envelopes refused at lines 0-2 since 'since'",
+          "type": "object",
+          "required": ["since", "bad_envelope", "payload_mismatch", "bad_signature"],
+          "additionalProperties": false,
+          "properties": {
+            "since": { "$ref": "fleet-command.schema.json#/$defs/utc_time" },
+            "bad_envelope": { "type": "integer", "minimum": 0 },
+            "payload_mismatch": { "type": "integer", "minimum": 0 },
+            "bad_signature": { "type": "integer", "minimum": 0 }
+          }
+        },
         "detail": { "type": "string", "maxLength": 256, "allOf": [ { "$ref": "fleet-command.schema.json#/$defs/no_control" } ] },
         "prev_sha256": { "$ref": "fleet-command.schema.json#/$defs/sha256_hex" }
-      }
+      },
+      "allOf": [
+        { "if": { "properties": { "event": { "enum": ["connector_started", "identity_changed", "policy_changed", "received", "executed", "result"] } }, "required": ["event"] }, "then": { "properties": { "stream": { "const": "exec" } } }, "else": { "properties": { "stream": { "const": "reject" } } } },
+        { "if": { "properties": { "event": { "enum": ["rejected", "deferred"] } }, "required": ["event"] }, "then": { "required": ["reason"] } },
+        { "if": { "properties": { "event": { "const": "unauthenticated" } }, "required": ["event"] }, "then": { "required": ["unauthenticated"] } }
+      ]
     }
   }
 }

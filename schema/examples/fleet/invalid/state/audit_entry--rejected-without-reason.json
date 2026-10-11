@@ -1,0 +1,17 @@
+{
+  "stream": "reject",
+  "seq": 1,
+  "at": "2026-10-11T12:01:00Z",
+  "event": "rejected",
+  "command_id": "9c292f96-3ec0-4dc9-9cba-fe75f2560c8b",
+  "type": "target.create",
+  "tenant": "acme",
+  "issued_by": "op-7f3a",
+  "payload_sha256": "a9a4d1759628b5708691988ce1512e3cbfa6881f90dfc0000d3fea08edcb7d74",
+  "hosts": [
+    "198.51.100.0/24"
+  ],
+  "hosts_count": 1,
+  "detail": "198.51.100.0/24 fora do escopo do tenant",
+  "prev_sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+}
