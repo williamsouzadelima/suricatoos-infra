@@ -41,6 +41,14 @@ services:
       # mais HTML estático montado aqui.)
       # Scripts de instalação one-shot servidos em /install.sh e /install.ps1.
       - ../packaging/install:/usr/share/suricatoos/install:ro
+    # Redes (racional no bloco `networks:` do fim do arquivo). MANTÉM a `default` — é
+    # por ela que o nginx fala com o gsad e com o feed-updater, e é por ela que saem as
+    # portas publicadas — e ENTRA na `backend`, onde estão o control-plane e o ingest.
+    # As duas têm de ser listadas: ao declarar `networks:` o Compose deixa de ligar o
+    # serviço à `default` implícita (listar só `backend` derrubaria a UI).
+    networks:
+      - default
+      - backend
 
   # Suricatoos: proxy restrito do docker socket (so containers/images/networks/volumes,
   # sem exec/swarm/secrets). O feed-updater fala com o docker SO atraves daqui.
@@ -69,6 +77,12 @@ services:
       PLUGINS: 0
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
+    # SÓ a `docker-api` (internal): quem fala com este proxy é o feed-updater e mais
+    # ninguém. Ele aceita POST em /containers — criar container = root no host —, então
+    # nenhum outro container do projeto pode enxergá-lo, nem o gsad que o nginx expõe à
+    # internet. Fora da `default` de propósito; não publica porta.
+    networks:
+      - docker-api
 
   # Suricatoos: helper que atualiza/agenda os feeds (chamado pelo GSA via /feed-sync/)
   feed-updater:
@@ -76,6 +90,15 @@ services:
     restart: unless-stopped
     depends_on:
       - docker-socket-proxy
+    # `docker-api`: único caminho até o proxy do docker (DOCKER_HOST abaixo). `backend`:
+    # upstream HTTP do nginx (:8008), junto de control-plane e ingest. `default`: MANTIDA
+    # — o espelho MSRC baixa da internet de dentro deste container, e uma rede `internal`
+    # não tem saída. (Mudar o conjunto de redes recria o container: não faça durante um
+    # sync de feed em andamento — ver /feed-sync/status.)
+    networks:
+      - default
+      - docker-api
+      - backend
     environment:
       TZ: America/Sao_Paulo
       COMPOSE_DIR: /compose
@@ -196,6 +219,14 @@ services:
       RENEW_CERT_TTL: 720h
     volumes:
       - /var/lib/suricatoos-cp:/data
+    # FORA da `default`. `backend` (internal): só o nginx e o ingest (CRL) chegam no
+    # :8080 — a premissa do código de remediação (remediation/service.go, WIRING-CRITICAL
+    # c), que até aqui não era verdade para nenhum outro container do projeto. `egress`:
+    # a saída para a internet que o planner de IA precisa (chamada ao provedor de LLM);
+    # a `backend`, sendo internal, não tem.
+    networks:
+      - backend
+      - egress
 
   # Suricatoos: data-plane do agente. Recebe inventários (push outbound dos
   # agentes, via nginx /ingest/ com mTLS), correlaciona contra as advisories
@@ -271,6 +302,13 @@ services:
       # ADR-0007: registro de tenants (control-plane grava) + secrets gvmd por-tenant,
       # read-only. O control-plane grava tenants.json em /var/lib/suricatoos-cp.
       - /var/lib/suricatoos-cp:/cp:ro
+    # FORA da `default`: o gsad e o resto do projeto não chegam no :9090. `backend`
+    # (internal): o nginx entrega o tráfego dos agentes e o ingest busca a CRL no
+    # control-plane (SCAN_CRL_URL, por nome) — os dois nesta rede. `egress`: a saída para
+    # a internet do push dos achados do sensor para o Score (SENSOR_SCORE_URL).
+    networks:
+      - backend
+      - egress
 
   # ------------------------------------------------------------------
   # Controle de admissao de scans + teto de processos do scanner.
@@ -339,3 +377,66 @@ volumes:
   # Espelho local do feed MSRC CSAF (ADR-0008); preenchido pelo feed-updater
   # quando MSRC_FEED_ENABLED=true, lido pelo ingest na 0c-3.
   msrc_data_vol:
+
+# ---------------------------------------------------------------------------
+# REDES — o proxy do docker socket e os serviços internos em redes próprias.
+#
+# POR QUE: até aqui tudo vivia na `default`. Qualquer container comprometido (o gsad,
+# por exemplo, que o nginx expõe à internet) alcançava (a) o docker-socket-proxy, que
+# aceita POST em /containers — é como o feed-updater recria os feeds — e portanto leva
+# ao host; e (b) o :8080 do control-plane e o :9090 do ingest, cujo código assume que
+# SÓ o nginx chega neles (control-plane/remediation/service.go, WIRING-CRITICAL c).
+#
+#   default     Implícita: NÃO é declarada aqui e não pode ser tocada (mudar a config
+#               dela faz o Compose recriar a rede, com os containers que estão nela).
+#               UI, feeds e motor do GVM: nginx, gsa, gsad, gvmd, ospd-openvas, pg-gvm,
+#               redis... e o feed-updater. Quem já estava nela fica EXATAMENTE como
+#               estava: mudar a rede do gvmd/ospd-openvas os recriaria no deploy, e
+#               recriar o ospd-openvas mata o scan em curso.
+#   docker-api  internal. docker-socket-proxy + feed-updater, só: o único caminho até a
+#               API do docker. Sem rota para fora e sem porta publicada.
+#   backend     internal. Os upstreams HTTP do nginx — control-plane (:8080), ingest
+#               (:9090), feed-updater (:8008) — e o próprio nginx. O ingest busca a CRL
+#               no control-plane por esta rede (SCAN_CRL_URL). Quem não está aqui
+#               (gsad, gvmd, ...) não chega no :8080 nem no :9090.
+#   egress      NÃO internal. control-plane e ingest, só. Uma rede internal não tem saída
+#               para a internet, e esses dois precisam dela: o planner de IA do
+#               control-plane chama o provedor de LLM e o ingest empurra os achados do
+#               sensor para o Score. Sem esta rede essas funções morreriam em silêncio
+#               assim que fossem ligadas.
+#
+# O nginx continua também na `default`: fala com o gsad, publica as portas e é por ela
+# que chega o IP real do cliente (set_real_ip_from 172.16.0.0/12 em nginx/default.conf).
+# A `backend` ser internal garante que juntar o nginx a ela não mexe nisso — uma rede
+# internal não tem gateway, então a saída e a publicação de portas seguem pela `default`.
+# O mesmo vale para o feed-updater.
+#
+# ARMADILHAS
+#  - Declarar `networks:` num serviço tira a `default` implícita: quem precisa dela
+#    (nginx, feed-updater) a lista de novo.
+#  - Em `networks:` só se ADICIONA. `!override`/`!reset` apagam o que os outros arquivos
+#    do COMPOSE_FILE definem.
+#  - As redes ficam AQUI, no override, que entra em todas as combinações de COMPOSE_FILE
+#    (shared-host, shared-host + scap-order, standalone). Declará-las num perfil só faria
+#    os outros falharem com "undefined network".
+#  - Serviço novo que precise falar com control-plane/ingest entra na `backend`, e a
+#    política em compose/test/check_networks.py muda junto: o CI (compose-ci) reprova
+#    qualquer rede fora dela.
+#
+# DEPLOY — recria SÓ nginx, control-plane, ingest, feed-updater e docker-socket-proxy
+# (os únicos cujas redes mudaram). gvmd, ospd-openvas, pg-gvm e redis-server NÃO são
+# tocados, então não há scan em curso a esperar. Nesta ordem:
+#   docker compose up -d --no-deps nginx
+#   docker compose up -d --no-deps control-plane ingest
+#   docker compose up -d --no-deps docker-socket-proxy feed-updater
+# O nginx vai primeiro: passa a estar nas duas redes e segue alcançando o control-plane e
+# o ingest enquanto eles ainda estão na `default`. O último passo não deve rodar com um
+# sync de feed em andamento. Cada rede nova consome uma sub-rede do pool de endereços do
+# docker: num host compartilhado, confira `docker network ls` antes.
+# ---------------------------------------------------------------------------
+networks:
+  docker-api:
+    internal: true
+  backend:
+    internal: true
+  egress: {}
