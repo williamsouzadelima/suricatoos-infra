@@ -257,6 +257,42 @@
       }
     },
     {
+      "file": "invalid/command/report-export-filter-blank.json",
+      "target": "fleet-command.schema.json",
+      "description": "the export filter pins apply_overrides, min_qod and levels explicitly (never gvmd's hidden defaults)",
+      "expect": {
+        "check": "export_filter",
+        "path": "/payload/filter"
+      }
+    },
+    {
+      "file": "invalid/command/report-export-filter-levels-repeated.json",
+      "target": "fleet-command.schema.json",
+      "description": "levels is a subset of chmlgf with no letter repeated",
+      "expect": {
+        "check": "export_filter",
+        "path": "/payload/filter"
+      }
+    },
+    {
+      "file": "invalid/command/report-export-filter-min-qod-101.json",
+      "target": "fleet-command.schema.json",
+      "description": "min_qod is 0-100",
+      "expect": {
+        "check": "export_filter",
+        "path": "/payload/filter"
+      }
+    },
+    {
+      "file": "invalid/command/report-export-filter-without-overrides-and-qod.json",
+      "target": "fleet-command.schema.json",
+      "description": "apply_overrides and min_qod missing: gvmd would apply min_qod=70 and apply_overrides=0 silently",
+      "expect": {
+        "check": "export_filter",
+        "path": "/payload/filter"
+      }
+    },
+    {
       "file": "invalid/command/report-export-gvm-csv-executive.json",
       "target": "fleet-command.schema.json",
       "description": "gvm-* formats only exist as technical",
@@ -1376,6 +1412,11 @@
       "file": "valid/command/report-export-executive-es.json",
       "target": "fleet-command.schema.json",
       "description": "executive edition in Spanish: schema-valid; runtime-gated like client"
+    },
+    {
+      "file": "valid/command/report-export-filter-any-order.json",
+      "target": "fleet-command.schema.json",
+      "description": "the three explicit tokens in any order; levels may include f (false positives), each letter once"
     },
     {
       "file": "valid/command/report-export-gvm-xml-delta.json",

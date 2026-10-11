@@ -20,7 +20,9 @@ being fetched over the network.
                                 | integer_lexical (a number written with a fraction
                                 or exponent where an integer goes -- in a command
                                 envelope, anywhere) | payload_sha256 | signature |
-                                content_sha256 | audit_chain
+                                content_sha256 | audit_chain | export_filter (a
+                                report.export filter without explicit apply_overrides,
+                                min_qod and levels)
 
 A case named '<def>--<rest>.json' targets fleet-<schema>.schema.json#/$defs/<def>;
 any other case targets the schema root.
@@ -97,6 +99,8 @@ def canonical(env):
 
 MAX_DEPTH = 32  # ADR-0011 "Codificação JSON": nesting of objects/arrays; the top-level value is level 1
 _UTC_SHAPE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z")
+_EXPORT_FILTER = {"apply_overrides": re.compile(r"[01]"), "min_qod": re.compile(r"0|[1-9][0-9]?|100"),
+                  "levels": re.compile(r"[chmlgf]{1,6}")}
 
 # format date-time = an RFC 3339 instant that EXISTS (no Feb 30, no hour 24, no second 60). Registered here, not left
 # to the optional rfc3339-validator package, so every environment checks the same thing; the pattern of utc_time
@@ -151,6 +155,26 @@ def parse(text):
 
 def _pointer(parts):
     return "".join("/" + str(p).replace("~", "~0").replace("/", "~1") for p in parts)
+
+
+def export_filter_problem(flt):
+    """None if a report.export filter pins apply_overrides, min_qod and levels explicitly (ADR-0011), else why not.
+    Tokens = the filter split on spaces (quotes do not group); a token belongs to a key when it starts with the key
+    followed by a relation (= < > ~ :); each key exactly once, with '=' and a valid value."""
+    seen = {}
+    for token in flt.split(" "):
+        key = re.split(r"[=<>~:]", token, maxsplit=1)[0]
+        if key not in _EXPORT_FILTER:
+            continue
+        value = token[len(key) + 1:]
+        if key in seen:
+            return f"{key} more than once"
+        if not token.startswith(key + "=") or not _EXPORT_FILTER[key].fullmatch(value) \
+                or (key == "levels" and len(set(value)) != len(value)):
+            return f"{token!r} is not {key}=<valid value>"
+        seen[key] = value
+    missing = [k for k in _EXPORT_FILTER if k not in seen]
+    return f"missing {', '.join(missing)}" if missing else None
 
 
 def first_fraction(value, parts=()):
@@ -460,6 +484,14 @@ def main():
                 problem = checker(text, start)
                 if problem:
                     failure = {"check": problem, "path": ptr, "detail": f"{problem} mismatch at '{ptr}'"}
+                    break
+        if failure is None and not errors and target in ("fleet-command.schema.json", "fleet-command.schema.json#/$defs/poll_response"):
+            for ptr, start in envelopes(target, text):  # line 8 semantics, after the line 0-2 checks above
+                env, _ = _DEC.raw_decode(text, start)
+                problem = export_filter_problem(env["payload"]["filter"]) if env["type"] == "report.export" else None
+                if problem:
+                    failure = {"check": "export_filter", "path": f"{ptr}/payload/filter",
+                               "detail": f"report.export filter at '{ptr}/payload/filter': {problem}"}
                     break
         audit_tail = failure is None and not errors and target == "fleet-state.schema.json" and inst["kind"] == "audit_tail"
         if audit_tail:

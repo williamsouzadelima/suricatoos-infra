@@ -271,7 +271,7 @@
         "lang": { "$ref": "#/$defs/report_lang" },
         "variant": { "$ref": "#/$defs/report_variant" },
         "delta_report_id": { "$ref": "#/$defs/uuid", "description": "optional: older report of the SAME task to diff against; present = delta export, absent = full export (independent of variant)" },
-        "filter": { "$ref": "#/$defs/gmp_filter" }
+        "filter": { "$ref": "#/$defs/gmp_filter", "description": "must carry, explicitly and in any order, the tokens apply_overrides=<0|1>, min_qod=<0..100, no leading zero> and levels=<subset of chmlgf, no letter repeated> — never gvmd's hidden defaults (min_qod=70, apply_overrides=0). Tokens = the filter split on spaces (quotes do not group); a token belongs to one of these keys when it starts with the key followed by = < > ~ or :; each key exactly once, with '=' and a valid value. Otherwise bad_payload (line 8). A semantic rule, not a pattern (Go's RE2 has no lookahead); the example validator checks it as export_filter" }
       },
       "allOf": [
         { "if": { "properties": { "format": { "const": "suricatoos-pdf" } }, "required": ["format"] }, "else": { "properties": { "lang": { "const": "en" }, "variant": { "const": "technical" } } } }

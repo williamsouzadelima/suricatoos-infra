@@ -498,7 +498,7 @@ destino do comando (ack em `fleet-result.schema.json#/$defs/ack`).
 | 7 | tipo no catálogo v1 e suportado por este `node_kind` | `unsupported` | `rejected`, final |
 | 7 | tipo presente em `allow` da política local | `type_not_allowed` | `rejected`, final |
 | 7 | aceitar este comando não estoura nenhum dos dois orçamentos locais: o global de aceitos (`total_per_hour`, qualquer tipo) e o de sensíveis (opt-in + `report.export` + `report.summary`) | `rate_limited` | `rejected`, final |
-| 8 | payload válido para o tipo (schema estrito + regras semânticas) | `bad_payload` | `rejected`, final |
+| 8 | payload válido para o tipo (schema estrito + regras semânticas, como o filtro explícito do `report.export`) | `bad_payload` | `rejected`, final |
 | 8 | `report.export`: a combinação (`format`, `lang`, `variant`) está em `capabilities.report_formats` do estado `node` | `unsupported_report_variant` | `rejected`, final |
 | 9 | escopo: os hosts de `target.create` e os resultantes de `target.modify` (os atuais, lidos no gvmd, se o payload não traz `hosts`); os alvos de `sensor_job.enqueue`; os hosts do target de `task.start/resume` e de `task.create/modify` com `target_id`; e os dos targets das tarefas que o comando liga a uma agenda ou cuja agenda ele altera (`schedule.create` com `task_ids`, `task.modify` com `schedule_id` não vazio, `task.clone` de tarefa com agenda, `schedule.modify`). Tudo lido no gvmd antes da decisão; tem de ser IP/CIDR literal ⊆ escopo do tenant, fora do espaço degenerado e **sem conter** IP próprio nem do hub | `scope_denied` | `rejected`, final |
 | — | o store anti-replay/journal não pôde ser gravado, ou a leitura no gvmd da linha 9 falhou | `unavailable` | `deferred` |
@@ -860,6 +860,18 @@ Regras transversais:
   combinações cujos objetos estão presentes e confiáveis no seu gvmd; até a R5 entrar, anuncia só `technical`.
   Um pedido válido no schema mas para combinação não anunciada é rejeitado (ack) com
   `unsupported_report_variant` — nunca cai em silêncio para outra edição.
+
+  **Filtro explícito (normativo).** O export nunca cai nos padrões escondidos do gvmd (`min_qod=70`,
+  `apply_overrides=0`). O `filter` tem de trazer os três tokens, explícitos e em qualquer ordem:
+  - `apply_overrides=` com `0` ou `1`;
+  - `min_qod=` com um inteiro de 0 a 100, em decimal sem zero à esquerda;
+  - `levels=` com um subconjunto de `chmlgf`, sem repetir letra e em qualquer ordem.
+
+  Os tokens são o filtro dividido por espaço (aspas não agrupam). Um token é de uma dessas chaves quando começa
+  pela chave seguida de uma relação (`=`, `<`, `>`, `~` ou `:`). Cada chave aparece exatamente uma vez, com `=` e
+  valor válido; senão, `bad_payload` (linha 8), e o `fleet_ops.py` também recusa. É regra semântica, não padrão do
+  schema, porque o RE2 do Go não tem lookahead; o `validate_fleet_examples.py` a confere (checagem
+  `export_filter`).
 - **Escopo em `sensor_job.enqueue`:** **todos** os alvos passam pelo portão local; um fora do escopo rejeita o
   comando inteiro (`scope_denied`) — nada é descartado em silêncio. A `sensorjobs` ainda aplica o seu próprio
   portão (defesa em profundidade). No v1 o payload só leva `targets` e `ports`: o sensor aplica o alive test,
@@ -888,7 +900,7 @@ dos tenants com a permissão Super do Catálogo. Todo kind de lista leva `items`
 | `node` | todos | versões, feeds NVT/SCAP/CERT/GVMD_DATA com versão e idade, saúde, capacidades (tipos suportados, `report_formats` = combinações format/lang/variants que o nó renderiza), política local + `policy_sha256` | gvmd (`get_version`, `get_feeds`, `get_report_formats`), conector | — |
 | `tasks` | todos | id, tenant, nome, status, progresso, ids de alvo/config/scanner/agenda, último report, nº de reports | `get_tasks` (filtro explícito) | `comment` |
 | `targets` | todos | id, tenant, nome, entradas IP/CIDR **literais** (≤ 256) + contagens, alive test, em uso | `get_targets` | hostnames (só contados), credenciais, `comment` |
-| `schedules` | todos | id, tenant, nome, fuso, iCalendar, próxima execução, tarefas ligadas | `get_schedules` | `comment` |
+| `schedules` | todos | id, tenant, nome, fuso, iCalendar, tarefas ligadas e, só quando o gvmd a fornece, a próxima execução (o `get_schedules` do gvmd 26 não traz; o `fleet_ops.py` hoje a omite) | `get_schedules` | `comment` |
 | `reports` | todos | id, tarefa, tenant, status, início/fim, contagens por severidade, nº de hosts | `get_reports` sem detalhes | **qualquer achado** |
 | `agents` | central | agent_id (por padrão = **hostname** do host; pode ser dado pessoal), tenant, policy, SO/arch/versão, último contato, online | API admin local (F2.2) + online do ingest | campo de hostname separado, inventário |
 | `tokens` | central | id, tenant, tipo, policy, usos, expiração, revogado | `GET /api/v1/tokens` | segredo, `created_by` |

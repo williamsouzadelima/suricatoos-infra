@@ -219,7 +219,7 @@
               "name": { "$ref": "fleet-command.schema.json#/$defs/gvm_name" },
               "timezone": { "$ref": "fleet-command.schema.json#/$defs/iana_timezone" },
               "icalendar": { "$ref": "fleet-command.schema.json#/$defs/icalendar" },
-              "next_run": { "$ref": "fleet-command.schema.json#/$defs/utc_time" },
+              "next_run": { "$ref": "fleet-command.schema.json#/$defs/utc_time", "description": "only when gvmd provides it: gvmd 26's get_schedules does not, and fleet_ops omits it today" },
               "task_ids": { "type": "array", "maxItems": 256, "uniqueItems": true, "items": { "$ref": "fleet-command.schema.json#/$defs/uuid" } }
             }
           }
