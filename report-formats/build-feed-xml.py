@@ -27,7 +27,7 @@ import os
 HERE = os.path.dirname(os.path.abspath(__file__))
 BUNDLE = os.path.join(HERE, "suricatoos-premium-pdf")
 
-VERSION = "20260824b"
+VERSION = "20261011a"
 
 # (lang code passed to xsltproc, report_format UUID, dropdown name).
 # EN keeps the original UUID so the already-deployed object is updated in place
@@ -152,6 +152,14 @@ def generate_for(lang: str) -> bytes:
     # the whole path stays on bytes with no encode/decode round trip.
     with open(os.path.join(BUNDLE, "generate"), "rb") as fh:
         script = fh.read()
+    # A CR here means a CRLF checkout (core.autocrlf on Windows). Embedded in the
+    # feed it breaks the shell script inside gvmd AND makes this build differ
+    # from the CI's, so refuse instead of shipping it.
+    if b"\r" in script:
+        raise SystemExit(
+            "generate: has CR (CRLF line endings) — check it out with LF "
+            "(.gitattributes eol=lf) before building the feed"
+        )
     token = GENERATE_TOKEN.encode("ascii")
     if token not in script:
         raise SystemExit(
@@ -215,7 +223,9 @@ def main():
     for lang, fmt_id, name in LANGS:
         xml = build_feed_object(lang, fmt_id, name)
         out = os.path.join(HERE, "pdf-suricatoos-%s.xml" % fmt_id)
-        with open(out, "w", encoding="utf-8") as fh:
+        # newline="\n": the same bytes on every OS (text mode on Windows would
+        # write CRLF, and the working copy would stop matching the CI's build).
+        with open(out, "w", encoding="utf-8", newline="\n") as fh:
             fh.write(xml)
         print("wrote %s  (%s, %d bytes)" % (os.path.basename(out), name, os.path.getsize(out)))
 

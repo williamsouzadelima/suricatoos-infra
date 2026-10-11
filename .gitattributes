@@ -1,0 +1,19 @@
+# Fim de linha: LF no indice E no checkout, em qualquer SO.
+#
+# Sem isto, o core.autocrlf=true do Windows devolvia os arquivos em CRLF; um
+# rebuild LOCAL dos feed XMLs do report format embutia esse CRLF no `generate`
+# (base64) e o CI reprovava o `git diff --exit-code`. O indice ja e' 100% LF:
+# este arquivo so' muda o comportamento do checkout, nao reescreve blob nenhum.
+* text=auto eol=lf
+
+# Binarios explicitos: nunca converter, nunca tentar diff textual. A deteccao
+# automatica do git olha so' os primeiros 8000 bytes, e um PDF sem NUL nesse
+# trecho seria tratado como texto.
+*.pdf binary
+*.png binary
+*.tar.gz binary
+*.gz binary
+*.der binary
+*.msi binary
+*.ico binary
+*.svg text
