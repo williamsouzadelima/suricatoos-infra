@@ -74,6 +74,39 @@ func TestRevoke(t *testing.T) {
 	}
 }
 
+// Revoking a token that is already revoked still answers ErrRevoked, but now with its
+// record (enrollments included), so the caller can redo a certificate revocation
+// that a failed or interrupted request left undone. The record is not touched again.
+func TestRevokeRecordOfARevokedTokenReturnsTheRecord(t *testing.T) {
+	now := time.Unix(1700000000, 0).UTC()
+	m := newTestManager(&now)
+	mt := mint(t, m, MintRequest{Type: Deployment, MaxUses: 5, TTL: time.Hour})
+	if _, err := m.Consume(mt.Token, Enrollment{AgentID: "a", CertSerial: "0a1b"}); err != nil {
+		t.Fatal(err)
+	}
+	first, err := m.RevokeRecord(mt.ID, "admin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	now = now.Add(time.Minute)
+	again, err := m.RevokeRecord(mt.ID, "someone-else")
+	if !errors.Is(err, ErrRevoked) {
+		t.Fatalf("second revoke err = %v, want ErrRevoked", err)
+	}
+	if again.ID != mt.ID || !again.Revoked || len(again.Enrollments) != 1 || again.Enrollments[0].CertSerial != "0a1b" {
+		t.Fatalf("second revoke returned %+v, want the revoked record with its enrollment", again)
+	}
+	if again.RevokedBy != "admin" || !again.RevokedAt.Equal(first.RevokedAt) {
+		t.Fatalf("the second revoke rewrote the revocation: by=%q at=%v, want admin at %v", again.RevokedBy, again.RevokedAt, first.RevokedAt)
+	}
+	if err := m.Revoke(mt.ID, "x"); !errors.Is(err, ErrRevoked) {
+		t.Fatalf("Revoke of a revoked token = %v, want ErrRevoked", err)
+	}
+	if _, err := m.RevokeRecord("nope", "x"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("unknown token = %v, want ErrNotFound", err)
+	}
+}
+
 func TestBadSecretAndMalformed(t *testing.T) {
 	now := time.Unix(1700000000, 0).UTC()
 	m := newTestManager(&now)

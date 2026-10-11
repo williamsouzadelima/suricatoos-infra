@@ -135,6 +135,8 @@ func main() {
 			log.Fatalf("CRL file: %v", err)
 		}
 		log.Printf("CRL: persisting revocations to %s", crlFile)
+	} else {
+		log.Printf("CRL: AVISO — CRL_FILE não definido: revogações só em memória — somem no restart (o certificado de um token revogado volta a valer)")
 	}
 
 	// Token store — BoltDB when TOKEN_DB_PATH is set; in-memory otherwise.

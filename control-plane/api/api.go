@@ -10,6 +10,7 @@ package api
 import (
 	"crypto/subtle"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -186,8 +187,14 @@ type revokeFailure struct {
 // The token is revoked first. A certificate whose revocation fails — or is kept only
 // in memory because CRL_FILE could not be written, and so would come back to life at
 // the next restart — is logged with its serial and turns the answer into a 500 that
-// says exactly that: the token IS revoked (a retry answers 409) and which serials
-// failed. It used to be a 200 that silently lost the revocation.
+// says exactly that: the token IS revoked, which serials failed, and to repeat the
+// DELETE. It used to be a 200 that silently lost the revocation.
+//
+// Repeating the DELETE of a token that is already revoked redoes the certificate
+// revocation (RevokeCertSerial is idempotent and saves the list again): the same 500
+// while something still fails, and 409 "already revoked" only when every serial is
+// revoked AND, with CRL_FILE set, on disk. That also covers a request that crashed
+// between the token store and the CRL, and a restart that lost an unsaved list.
 func (h *Handler) revokeToken(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {
@@ -195,35 +202,20 @@ func (h *Handler) revokeToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rec, err := h.tm.RevokeRecord(id, "admin-api")
-	if err != nil {
-		switch err {
-		case tokens.ErrNotFound:
-			http.Error(w, "token not found", http.StatusNotFound)
-		case tokens.ErrRevoked:
-			http.Error(w, "already revoked", http.StatusConflict)
-		default:
-			http.Error(w, "revoke failed: "+err.Error(), http.StatusInternalServerError)
-		}
+	already := errors.Is(err, tokens.ErrRevoked)
+	switch {
+	case already:
+		// Fall through to (re)do the certificates; rec carries the enrollments.
+	case errors.Is(err, tokens.ErrNotFound):
+		http.Error(w, "token not found", http.StatusNotFound)
+		return
+	case err != nil:
+		http.Error(w, "revoke failed: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
-	// Revoke all mTLS certs that were issued via this token's enrollments. Keep going
-	// after a failure: every certificate revoked (even only in memory) is blocked now.
-	now := time.Now().UTC()
-	revoked, failed := 0, []string{}
-	for _, enr := range rec.Enrollments {
-		if enr.CertSerial == "" {
-			continue
-		}
-		if err := h.authority.RevokeCertSerial(enr.CertSerial, now); err != nil {
-			h.logf("api: token %s revogado, mas a revogação do certificado serial=%s falhou: %v (bloqueado em memória até o restart: %v)",
-				id, enr.CertSerial, err, h.authority.IsRevoked(enr.CertSerial))
-			failed = append(failed, enr.CertSerial)
-			continue
-		}
-		revoked++
-	}
-	w.Header().Set("Content-Type", "application/json")
+	revoked, failed := h.revokeCerts(id, rec.Enrollments)
 	if len(failed) > 0 {
+		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(revokeFailure{
 			Status:        "partial",
@@ -231,14 +223,41 @@ func (h *Handler) revokeToken(w http.ResponseWriter, r *http.Request) {
 			TokenRevoked:  true,
 			CertsRevoked:  revoked,
 			FailedSerials: failed,
-			Error: fmt.Sprintf("o token foi revogado (repetir o DELETE responde 409), mas a revogação de %d de %d certificado(s) "+
-				"falhou ou não foi gravada em disco — detalhes no log do control-plane. Um certificado que entrou na lista "+
-				"em memória segue bloqueado só até o próximo restart; a próxima revogação gravada com sucesso persiste a lista inteira.",
+			Error: fmt.Sprintf("o token foi revogado, mas a revogação de %d de %d certificado(s) falhou ou não foi gravada "+
+				"em disco — detalhes no log do control-plane; repita o DELETE: ele refaz e grava a revogação (responde 409 "+
+				"quando todos estiverem revogados e gravados). Até lá, um certificado que entrou na lista em memória segue "+
+				"bloqueado só até o próximo restart.",
 				len(failed), len(failed)+revoked),
 		})
 		return
 	}
+	if already {
+		http.Error(w, "already revoked", http.StatusConflict)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"status": "revoked", "id": id})
+}
+
+// revokeCerts revokes, and saves, every certificate serial recorded in enrollments,
+// returning how many succeeded and which failed. It keeps going after a failure:
+// every certificate revoked, even if only in memory, is blocked right away.
+func (h *Handler) revokeCerts(tokenID string, enrollments []tokens.Enrollment) (revoked int, failed []string) {
+	now := time.Now().UTC()
+	failed = []string{}
+	for _, enr := range enrollments {
+		if enr.CertSerial == "" {
+			continue
+		}
+		if err := h.authority.RevokeCertSerial(enr.CertSerial, now); err != nil {
+			h.logf("api: token %s revogado, mas a revogação do certificado serial=%s falhou: %v (bloqueado em memória até o restart: %v)",
+				tokenID, enr.CertSerial, err, h.authority.IsRevoked(enr.CertSerial))
+			failed = append(failed, enr.CertSerial)
+			continue
+		}
+		revoked++
+	}
+	return revoked, failed
 }
 
 // buildBundle returns the YAML content for an enrollment bundle.

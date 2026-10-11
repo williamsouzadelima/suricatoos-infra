@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -318,10 +319,26 @@ type revokeBody struct {
 	Error         string   `json:"error"`
 }
 
+// servedSerials returns how many entries the CRL the CA serves holds.
+func servedSerials(t *testing.T, authority *ca.CA) int {
+	t.Helper()
+	der, err := authority.IssueCRL(time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	crl, err := x509.ParseRevocationList(der)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return len(crl.RevokedCertificateEntries)
+}
+
 // A revocation whose certificate list cannot be written to disk used to answer 200
 // and lose it at the next restart without anyone knowing. Now: 500, a JSON body that
-// says the token itself IS revoked (a retry answers 409) and which serials failed,
-// and one log line per failed serial.
+// says the token itself IS revoked, which serials failed and to repeat the DELETE,
+// one log line per failed serial — and the repeated DELETE redoes and saves the
+// revocation: 500 again while the disk is still gone (no duplicate entries), 409
+// once every serial is revoked AND on disk.
 func TestRevokeToken_PersistFailureIs500(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "state")
 	if err := os.Mkdir(dir, 0o700); err != nil {
@@ -351,8 +368,8 @@ func TestRevokeToken_PersistFailureIs500(t *testing.T) {
 	if strings.Join(body.FailedSerials, ",") != "0a1b2c,0d0e0f" {
 		t.Fatalf("failed_serials = %v, want [0a1b2c 0d0e0f]", body.FailedSerials)
 	}
-	if !strings.Contains(body.Error, "409") || strings.Contains(rr.Body.String(), dir) {
-		t.Fatalf("error must tell a retry answers 409 and must not leak the server path: %q", body.Error)
+	if !strings.Contains(body.Error, "repita o DELETE: ele refaz e grava a revogação") || strings.Contains(rr.Body.String(), dir) {
+		t.Fatalf("error must tell to repeat the DELETE and must not leak the server path: %q", body.Error)
 	}
 	for _, s := range []string{"0a1b2c", "0d0e0f"} {
 		found := false
@@ -368,9 +385,74 @@ func TestRevokeToken_PersistFailureIs500(t *testing.T) {
 		}
 	}
 
-	// The token itself is revoked; retrying the DELETE is a 409, as the body says.
+	// Retry with the disk still gone: the same 500, and nothing piles up in the CRL.
+	rr = deleteToken(h, id)
+	if rr.Code != http.StatusInternalServerError {
+		t.Fatalf("retry with the disk still gone = %d, want 500: %s", rr.Code, rr.Body)
+	}
+	body = revokeBody{}
+	if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil || strings.Join(body.FailedSerials, ",") != "0a1b2c,0d0e0f" || !body.TokenRevoked {
+		t.Fatalf("retry body = %+v (err %v), want the same failed_serials and token_revoked=true", body, err)
+	}
+	if n := servedSerials(t, authority); n != 2 {
+		t.Fatalf("served CRL has %d entries after the retry, want 2 (no duplicates)", n)
+	}
+
+	// The disk is back: the retry redoes and saves the revocation, then says 409.
+	if err := os.Mkdir(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
 	if rr := deleteToken(h, id); rr.Code != http.StatusConflict {
-		t.Fatalf("retry = %d, want 409", rr.Code)
+		t.Fatalf("retry with the disk back = %d, want 409 (already revoked, now on disk): %s", rr.Code, rr.Body)
+	}
+	fresh, err := ca.NewEphemeral(time.Now()) // a restart: only what is on disk survives
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := fresh.LoadCRLFile(filepath.Join(dir, "crl.json")); err != nil {
+		t.Fatal(err)
+	}
+	if !fresh.IsRevoked("0a1b2c") || !fresh.IsRevoked("0d0e0f") {
+		t.Fatal("after the 409 both serials must be on disk")
+	}
+	if n := servedSerials(t, fresh); n != 2 {
+		t.Fatalf("crl.json holds %d entries, want 2", n)
+	}
+}
+
+// A token revoked by a request that never got to its certificates (a crash between
+// the token store and the CRL, or a restart that lost an unsaved list): repeating the
+// DELETE revokes and saves them, then answers 409.
+func TestRevokeToken_RetryRevokesTheCertsOfAnAlreadyRevokedToken(t *testing.T) {
+	dir := t.TempDir()
+	h, authority, id := revokeSetup(t, dir, "0a1b2c", "0d0e0f")
+	h.logf = func(string, ...any) {}
+	if _, err := h.tm.RevokeRecord(id, "crashed-request"); err != nil { // token revoked, certs not
+		t.Fatal(err)
+	}
+	if authority.IsRevoked("0a1b2c") || authority.IsRevoked("0d0e0f") {
+		t.Fatal("setup: the certificates must not be revoked yet")
+	}
+
+	if rr := deleteToken(h, id); rr.Code != http.StatusConflict {
+		t.Fatalf("DELETE of the already revoked token = %d, want 409 after redoing the certs: %s", rr.Code, rr.Body)
+	}
+	if !authority.IsRevoked("0a1b2c") || !authority.IsRevoked("0d0e0f") {
+		t.Fatal("the retry must revoke the certificates the first request never reached")
+	}
+	fresh, _ := ca.NewEphemeral(time.Now())
+	if err := fresh.LoadCRLFile(filepath.Join(dir, "crl.json")); err != nil {
+		t.Fatal(err)
+	}
+	if !fresh.IsRevoked("0a1b2c") || !fresh.IsRevoked("0d0e0f") {
+		t.Fatal("the retried revocation must be on disk")
+	}
+	// And again: still 409, still exactly two entries.
+	if rr := deleteToken(h, id); rr.Code != http.StatusConflict {
+		t.Fatalf("second retry = %d, want 409", rr.Code)
+	}
+	if n := servedSerials(t, authority); n != 2 {
+		t.Fatalf("served CRL has %d entries, want 2", n)
 	}
 }
 

@@ -12,7 +12,7 @@ type Service struct {
 	adminSecret string
 }
 
-// NewService builds a Service. An empty adminSecret disables the routes (403).
+// NewService builds a Service. An empty adminSecret disables the routes (401).
 func NewService(reg *Registry, adminSecret string) *Service {
 	return &Service{reg: reg, adminSecret: adminSecret}
 }

@@ -204,6 +204,10 @@ func (c *CA) LoadCRLFile(path string) error {
 // and the served CRL keep blocking it until the next restart, and the next save that
 // succeeds writes it too: dropping it would unblock a certificate an operator just
 // revoked. The caller must report the lost persistence, never swallow it.
+//
+// It is idempotent, so the caller can simply retry: a serial already on the list is
+// not added again (its first revocation time is kept), but the list is saved again
+// anyway — after a save that failed, the retry is what puts it on disk.
 func (c *CA) RevokeCertSerial(serialHex string, revokedAt time.Time) error {
 	serial := new(big.Int)
 	if _, ok := serial.SetString(serialHex, 16); !ok {
@@ -211,13 +215,26 @@ func (c *CA) RevokeCertSerial(serialHex string, revokedAt time.Time) error {
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.revoked = append(c.revoked, x509.RevocationListEntry{SerialNumber: serial, RevocationTime: revokedAt})
+	if !c.revokedLocked(serial) {
+		c.revoked = append(c.revoked, x509.RevocationListEntry{SerialNumber: serial, RevocationTime: revokedAt})
+	}
 	if c.crlFile != "" {
 		if err := c.saveCRLLocked(); err != nil {
 			return fmt.Errorf("persistir crl: %w", err)
 		}
 	}
 	return nil
+}
+
+// revokedLocked reports whether serial is on the revocation list. Must be called with
+// c.mu held (read or write).
+func (c *CA) revokedLocked(serial *big.Int) bool {
+	for _, e := range c.revoked {
+		if e.SerialNumber != nil && e.SerialNumber.Cmp(serial) == 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // IsRevoked reports whether serialHex (a client-cert serial in hex; colons,
@@ -232,12 +249,7 @@ func (c *CA) IsRevoked(serialHex string) bool {
 	}
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	for _, e := range c.revoked {
-		if e.SerialNumber != nil && e.SerialNumber.Cmp(want) == 0 {
-			return true
-		}
-	}
-	return false
+	return c.revokedLocked(want)
 }
 
 // IssueCRL signs and returns a DER-encoded CRL valid for 24 hours from now.

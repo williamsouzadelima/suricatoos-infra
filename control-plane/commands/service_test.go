@@ -744,14 +744,48 @@ func TestPollAndAckRefuseARevokedCertificate(t *testing.T) {
 		t.Fatalf("after a refused ack state = %s, want PENDING (not acked)", st)
 	}
 
-	found := 0
-	for _, l := range *logs {
-		if strings.Contains(l, "agent-1") && strings.Contains(l, "0A1B2C") {
-			found++
+	// A revoked agent keeps polling every minute: the refusals are logged once per
+	// certificate per revokedLogEvery, not once each (see the next test).
+	if len(*logs) != 1 || !strings.Contains((*logs)[0], "agent-1") || !strings.Contains((*logs)[0], "0A1B2C") {
+		t.Fatalf("want one log line naming the agent and the serial for both refusals, got %q", *logs)
+	}
+}
+
+// The refusals of a revoked certificate are logged at most once per revokedLogEvery
+// for each cn|serial — a revoked agent that is still running polls every minute — and
+// every one of them is still a 403.
+func TestRevokedRefusalsAreLoggedOncePerWindowPerCertificate(t *testing.T) {
+	q := openQ(t, "", 0, newClock())
+	svc, _, logs := revocationSvc(q, "0A1B2C", "0D0E0F")
+	clk := newClock()
+	svc.now = clk.Now
+	poll := func(cn, serial string) {
+		t.Helper()
+		w := httptest.NewRecorder()
+		svc.PollHandler()(w, agentReq("GET", "/commands", cn, serial, ""))
+		if w.Code != http.StatusForbidden {
+			t.Fatalf("poll of %s/%s = %d, want 403", cn, serial, w.Code)
 		}
 	}
-	if found != 2 {
-		t.Fatalf("want one log line per refusal naming the agent and the serial, got %q", *logs)
+
+	for range 30 { // half an hour of polls
+		poll("agent-1", "0A1B2C")
+		clk.Advance(time.Minute)
+	}
+	if len(*logs) != 1 {
+		t.Fatalf("30 refused polls in 30 minutes logged %d lines, want 1: %q", len(*logs), *logs)
+	}
+	// Another revoked certificate (of the same agent, or of another) has its own line.
+	poll("agent-1", "0D0E0F")
+	poll("agent-2", "0A1B2C")
+	if len(*logs) != 3 {
+		t.Fatalf("want a line for each new cn|serial, got %q", *logs)
+	}
+	// Once the window has passed, the still-refused certificate is logged again.
+	clk.Advance(revokedLogEvery)
+	poll("agent-1", "0A1B2C")
+	if len(*logs) != 4 || !strings.Contains((*logs)[3], "agent-1") || !strings.Contains((*logs)[3], "0A1B2C") {
+		t.Fatalf("after revokedLogEvery the refusal must be logged again, got %q", *logs)
 	}
 }
 

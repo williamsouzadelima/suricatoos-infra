@@ -126,7 +126,18 @@ Um agente cujo certificado foi revogado (`DELETE /agent/api/v1/tokens/<id>`) rec
 O control-plane confere o serial que o nginx repassa (`X-Client-Cert-Serial`) contra a
 CA em processo, sem modo só-log — um agente não revogado nunca é afetado. Enquanto o
 nginx não repassa o serial, o poll é aceito e o control-plane loga uma vez por agente
-`commands: agente "<id>" sem X-Client-Cert-Serial`.
+`commands: agente "<id>" sem X-Client-Cert-Serial`. A recusa de um certificado revogado
+é logada no máximo uma vez por hora por certificado (o agente revogado que segue
+ligado faz poll a cada minuto).
+
+Se o `DELETE` do token responder `500` com `"status": "partial"`, o token **foi**
+revogado, mas a revogação de algum certificado falhou ou não foi gravada em disco
+(`failed_serials`; detalhes no log do control-plane). Corrija a causa (disco cheio,
+permissão em `CRL_FILE`) e **repita o `DELETE`**: ele refaz e grava a revogação dos
+certificados e responde `409` quando todos estão revogados e gravados. O mesmo `DELETE`
+repetido também recupera um pedido interrompido entre revogar o token e revogar os
+certificados. Sem `CRL_FILE` o control-plane avisa no boot que as revogações ficam só
+em memória e somem no restart.
 
 ## Referências
 

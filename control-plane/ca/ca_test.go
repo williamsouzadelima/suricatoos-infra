@@ -7,6 +7,7 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/json"
 	"encoding/pem"
 	"os"
 	"path/filepath"
@@ -314,6 +315,93 @@ func TestCRLFileSaveFailureKeepsThePreviousFile(t *testing.T) {
 	}
 	if !c.IsRevoked("0c1d") {
 		t.Fatal("the serial must stay revoked in memory after a failed save")
+	}
+}
+
+// readCRLFile parses the persisted revocation list.
+func readCRLFile(t *testing.T, path string) []crlEntry {
+	t.Helper()
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read %s: %v", path, err)
+	}
+	var entries []crlEntry
+	if err := json.Unmarshal(b, &entries); err != nil {
+		t.Fatalf("%s is not a revocation list: %v\n%s", path, err, b)
+	}
+	return entries
+}
+
+// servedEntries returns the entries of the CRL the CA signs and serves.
+func servedEntries(t *testing.T, c *CA, now time.Time) []x509.RevocationListEntry {
+	t.Helper()
+	der, err := c.IssueCRL(now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	crl, err := x509.ParseRevocationList(der)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return crl.RevokedCertificateEntries
+}
+
+// Revoking a serial that is already revoked adds nothing (a retried DELETE must not
+// duplicate entries in crl.json or in the served CRL) but saves again: after a save
+// that failed, the retry is what puts the list on disk.
+func TestRevokeCertSerialIsIdempotentAndSavesAgain(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "state")
+	if err := os.Mkdir(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "crl.json")
+	now := time.Unix(1700000000, 0).UTC()
+	c, _ := NewEphemeral(now)
+	if err := c.LoadCRLFile(path); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.RevokeCertSerial("0a1b", now); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.RevokeCertSerial("0A1B", now.Add(time.Hour)); err != nil {
+		t.Fatalf("revoking it again: %v", err)
+	}
+	if got := servedEntries(t, c, now); len(got) != 1 || !got[0].RevocationTime.Equal(now) {
+		t.Fatalf("served CRL = %+v, want one entry keeping the first revocation time", got)
+	}
+	if got := readCRLFile(t, path); len(got) != 1 {
+		t.Fatalf("crl.json = %+v, want one entry", got)
+	}
+
+	// The disk goes away: the new serial is blocked in memory, and a retry while the
+	// disk is still gone keeps failing (honestly) without piling up entries.
+	if err := os.RemoveAll(dir); err != nil {
+		t.Fatal(err)
+	}
+	for i := range 2 {
+		if err := c.RevokeCertSerial("0c1d", now); err == nil {
+			t.Fatalf("attempt %d with the disk gone: want an error", i+1)
+		}
+	}
+	if got := servedEntries(t, c, now); len(got) != 2 {
+		t.Fatalf("served CRL has %d entries after the failed retries, want 2", len(got))
+	}
+	// The disk is back: the retry saves the whole list.
+	if err := os.Mkdir(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.RevokeCertSerial("0c1d", now); err != nil {
+		t.Fatalf("retry with the disk back: %v", err)
+	}
+	if got := readCRLFile(t, path); len(got) != 2 {
+		t.Fatalf("crl.json = %+v, want both serials", got)
+	}
+	fresh, _ := NewEphemeral(now)
+	if err := fresh.LoadCRLFile(path); err != nil {
+		t.Fatal(err)
+	}
+	if !fresh.IsRevoked("0a1b") || !fresh.IsRevoked("0c1d") {
+		t.Fatal("a restarted CA must see both revocations")
 	}
 }
 

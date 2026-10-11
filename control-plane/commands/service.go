@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/williamsouzadelima/suricatoos-infra/control-plane/sessiongate"
 )
@@ -18,31 +19,48 @@ type Service struct {
 	allowedType map[string]bool
 	known       func(agentID string) bool
 	isRevoked   func(serialHex string) bool // nil: revocation not checked
-	noSerial    onceSet                     // agents already logged for coming without a serial
+	noSerial    logThrottle                 // agents logged for coming without a serial (once each)
+	revokedLog  logThrottle                 // cn|serial of refused revoked certs (once per revokedLogEvery)
 	logf        func(format string, args ...any)
+	now         func() time.Time
 }
 
-// onceSet remembers the keys already logged, so a condition that lasts a whole deploy
-// transition logs one line per agent instead of one per poll (agents poll every
-// minute). Bounded: when full it starts over, and an agent may be logged once more.
-type onceSet struct {
-	mu   sync.Mutex
-	seen map[string]struct{}
+// revokedLogEvery spaces the log lines of a revoked certificate that keeps polling
+// (a revoked agent that is still running polls every minute).
+const revokedLogEvery = time.Hour
+
+// logThrottle decides, per key, which log lines go out: the first time a key is seen
+// and then, with every > 0, again once every period; with every == 0, only once. So a
+// condition that lasts (a deploy transition, a revoked agent still polling every
+// minute) logs one line per agent, not one per poll. Bounded: keys are cut to
+// logThrottleKeyMax bytes, and when logThrottleMax keys are held it starts over (a key
+// may then be logged once more, early).
+type logThrottle struct {
+	mu    sync.Mutex
+	every time.Duration
+	last  map[string]time.Time
 }
 
-const onceSetMax = 10000
+const (
+	logThrottleMax    = 10000
+	logThrottleKeyMax = 256
+)
 
-// first reports whether key is new, and records it.
-func (o *onceSet) first(key string) bool {
-	o.mu.Lock()
-	defer o.mu.Unlock()
-	if _, ok := o.seen[key]; ok {
+// allow reports whether a line for key may be logged at now, and records it.
+func (l *logThrottle) allow(key string, now time.Time) bool {
+	if len(key) > logThrottleKeyMax {
+		key = key[:logThrottleKeyMax]
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	t, seen := l.last[key]
+	if seen && (l.every <= 0 || now.Sub(t) < l.every) {
 		return false
 	}
-	if o.seen == nil || len(o.seen) >= onceSetMax {
-		o.seen = make(map[string]struct{})
+	if !seen && (l.last == nil || len(l.last) >= logThrottleMax) {
+		l.last = make(map[string]time.Time)
 	}
-	o.seen[key] = struct{}{}
+	l.last[key] = now
 	return true
 }
 
@@ -51,7 +69,14 @@ func (o *onceSet) first(key string) bool {
 // not recognize. nil means no check (use it when there is no durable enrollment
 // record to ask). The admin-bearer route never consults it.
 func NewService(q *Queue, known func(agentID string) bool) *Service {
-	return &Service{q: q, allowedType: map[string]bool{CmdScanNow: true}, known: known, logf: log.Printf}
+	return &Service{
+		q:           q,
+		allowedType: map[string]bool{CmdScanNow: true},
+		known:       known,
+		revokedLog:  logThrottle{every: revokedLogEvery},
+		logf:        log.Printf,
+		now:         time.Now,
+	}
 }
 
 // WithRevocationCheck makes Poll and Ack refuse (403) a client certificate whose
@@ -78,13 +103,15 @@ func (s *Service) certAllowed(w http.ResponseWriter, r *http.Request, cn string)
 	}
 	serial := strings.TrimSpace(r.Header.Get("X-Client-Cert-Serial"))
 	if serial == "" {
-		if s.noSerial.first(cn) {
+		if s.noSerial.allow(cn, s.now()) {
 			s.logf("commands: agente %q sem X-Client-Cert-Serial (nginx ainda não encaminha o serial) — revogação não conferida; aceito (logado uma vez por agente)", cn)
 		}
 		return true
 	}
 	if s.isRevoked(serial) {
-		s.logf("commands: certificado revogado no canal de comandos (cn=%q serial=%s) — 403", cn, serial)
+		if s.revokedLog.allow(cn+"|"+serial, s.now()) {
+			s.logf("commands: certificado revogado no canal de comandos (cn=%q serial=%s) — 403 (logado no máximo uma vez por hora por certificado)", cn, serial)
+		}
 		http.Error(w, "certificate revoked", http.StatusForbidden)
 		return false
 	}
