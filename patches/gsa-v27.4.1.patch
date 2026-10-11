@@ -5349,7 +5349,7 @@ index eaff647..d6e39ef 100644
 \ No newline at end of file
 diff --git a/public/locales/gsa-es.json b/public/locales/gsa-es.json
 new file mode 100644
-index 0000000..9711a41
+index 0000000..176258e
 --- /dev/null
 +++ b/public/locales/gsa-es.json
 @@ -0,0 +1,2464 @@
@@ -5406,6 +5406,8 @@ index 0000000..9711a41
 +  "Session expired. Sign in again to see the endpoint agents.": "Sesión expirada. Inicie sesión de nuevo para ver los agentes de endpoint.",
 +  "Session expired. Sign in again to activate agents.": "Sesión expirada. Inicie sesión de nuevo para activar agentes.",
 +  "Windows: paste into a PowerShell/cmd opened as Administrator. Do not run as SYSTEM (RMM, Intune, GPO, PsExec -s) — the one-liner refuses; for mass deployment, download install.ps1 to a protected folder and run it with -File.": "Windows: péguelo en un PowerShell/cmd abierto como Administrador. No lo ejecute como SYSTEM (RMM, Intune, GPO, PsExec -s) — el one-liner se niega; para una implementación masiva, descargue install.ps1 en una carpeta protegida y ejecútelo con -File.",
++  "Session expired. Sign in again.": "Sesión expirada. Inicie sesión de nuevo.",
++  "No permission for this action.": "Sin permiso para esta acción.",
 +  "\nThis could have the following reasons:\n1. The CPE might not be included in the official NVD CPE dictionary yet, and no additional information is available.\n2. You might have followed an incorrect link and the CPE does not exist.": "\nEsto podría deberse a las siguientes razones:\n1. Es posible que el CPE aún no esté incluido en el diccionario CPE oficial del NVD y no haya información adicional disponible.\n2. Es posible que haya seguido un enlace incorrecto y que el CPE no exista.",
 +  "\nThis could have the following reasons:\n1. The CVE might not be included in the SCAP database yet. For new CVEs it can take a month or more until they become available.\n2. You might have followed an incorrect link and the CVE does not exist.": "\nEsto podría deberse a las siguientes razones:\n1. Es posible que el CVE aún no esté incluido en la base de datos SCAP. Para los CVE nuevos puede pasar un mes o más hasta que estén disponibles.\n2. Es posible que haya seguido un enlace incorrecto y que el CVE no exista.",
 +  "\nYou might have followed an incorrect link and the {{entity}} does not exist.": "\nEs posible que haya seguido un enlace incorrecto y que el {{entity}} no exista.",
@@ -7812,14 +7814,12 @@ index 0000000..9711a41
 +  "Last update: {{time}} — {{detail}}": "Última actualización: {{time}} — {{detail}}",
 +  "No permission from this network. Feed management is restricted to the administration networks — connect to the VPN and reload.": "Sin permiso desde esta red. La gestión de feeds está restringida a las redes de administración — conéctese a la VPN y recargue.",
 +  "Session expired. Sign in again to manage the feed.": "Sesión expirada. Inicie sesión de nuevo para gestionar el feed.",
-+  "Could not reach the feed service.": "No se pudo contactar con el servicio de feeds.",
-+  "The feed service answered with an error ({{status}}).": "El servicio de feeds respondió con un error ({{status}}).",
 +  "Status unavailable": "Estado no disponible",
 +  "error": "error"
 +}
 \ No newline at end of file
 diff --git a/public/locales/gsa-pt_BR.json b/public/locales/gsa-pt_BR.json
-index 10e592f..c79046d 100644
+index 10e592f..8071cad 100644
 --- a/public/locales/gsa-pt_BR.json
 +++ b/public/locales/gsa-pt_BR.json
 @@ -1,216 +1,2464 @@
@@ -7909,6 +7909,8 @@ index 10e592f..c79046d 100644
 +  "Session expired. Sign in again to see the endpoint agents.": "Sessão expirada. Entre novamente para ver os agentes de endpoint.",
 +  "Session expired. Sign in again to activate agents.": "Sessão expirada. Entre novamente para ativar agentes.",
 +  "Windows: paste into a PowerShell/cmd opened as Administrator. Do not run as SYSTEM (RMM, Intune, GPO, PsExec -s) — the one-liner refuses; for mass deployment, download install.ps1 to a protected folder and run it with -File.": "Windows: cole num PowerShell/cmd aberto como Administrador. Não rode como SYSTEM (RMM, Intune, GPO, PsExec -s) — o one-liner recusa; para implantação em massa, baixe o install.ps1 para uma pasta protegida e rode com -File.",
++  "Session expired. Sign in again.": "Sessão expirada. Entre novamente.",
++  "No permission for this action.": "Sem permissão para esta ação.",
 +  "\nThis could have the following reasons:\n1. The CPE might not be included in the official NVD CPE dictionary yet, and no additional information is available.\n2. You might have followed an incorrect link and the CPE does not exist.": "\nIsto pode ter os seguintes motivos:\n1. O CPE pode ainda nao estar incluido no dicionario oficial de CPE do NVD, e nenhuma informação adicional esta disponível.\n2. Voce pode ter seguido um link incorreto e o CPE nao existe.",
 +  "\nThis could have the following reasons:\n1. The CVE might not be included in the SCAP database yet. For new CVEs it can take a month or more until they become available.\n2. You might have followed an incorrect link and the CVE does not exist.": "\nIsto pode ter os seguintes motivos:\n1. O CVE pode ainda nao estar incluido no banco de dados SCAP. Para novos CVEs, pode levar um mes ou mais ate que se tornem disponíveis.\n2. Voce pode ter seguido um link incorreto e o CVE nao existe.",
 +  "\nYou might have followed an incorrect link and the {{entity}} does not exist.": "\nVoce pode ter seguido um link incorreto e o {{entity}} nao existe.",
@@ -10481,8 +10483,6 @@ index 10e592f..c79046d 100644
 +  "Last update: {{time}} — {{detail}}": "Última atualização: {{time}} — {{detail}}",
 +  "No permission from this network. Feed management is restricted to the administration networks — connect to the VPN and reload.": "Sem permissão a partir desta rede. A gestão de feed é restrita às redes de administração — conecte a VPN e recarregue.",
 +  "Session expired. Sign in again to manage the feed.": "Sessão expirada. Entre novamente para gerenciar o feed.",
-+  "Could not reach the feed service.": "Não foi possível falar com o serviço de feed.",
-+  "The feed service answered with an error ({{status}}).": "O serviço de feed respondeu com erro ({{status}}).",
 +  "Status unavailable": "Status indisponível",
 +  "error": "erro"
 +}
@@ -11592,10 +11592,10 @@ index a057cf9..409c93b 100644
    },
 diff --git a/src/web/pages/downloads/DownloadsPage.tsx b/src/web/pages/downloads/DownloadsPage.tsx
 new file mode 100644
-index 0000000..427a02c
+index 0000000..248f4e4
 --- /dev/null
 +++ b/src/web/pages/downloads/DownloadsPage.tsx
-@@ -0,0 +1,243 @@
+@@ -0,0 +1,234 @@
 +/* SPDX-FileCopyrightText: 2024 Greenbone AG
 + *
 + * SPDX-License-Identifier: AGPL-3.0-or-later
@@ -11615,6 +11615,12 @@ index 0000000..427a02c
 +import Section from 'web/components/section/Section';
 +import useGmp from 'web/hooks/useGmp';
 +import useTranslation from 'web/hooks/useTranslation';
++import {
++  apiErrorMessage,
++  apiRequest,
++  isSessionExpired,
++  SuricatoosApiError,
++} from 'web/utils/suricatoosApi';
 +import Theme from 'web/utils/Theme';
 +
 +interface EnrollResponse {
@@ -11665,31 +11671,6 @@ index 0000000..427a02c
 +  margin: '0 0 10px',
 +};
 +
-+// Carries the HTTP status (same idiom as FeedUpdateSection and
-+// AiProvidersPage), so a 401 from the nginx session gate shows as an expired
-+// session instead of a bare "HTTP 401".
-+class ErroHttp extends Error {
-+  status: number;
-+
-+  constructor(status: number) {
-+    super('HTTP ' + String(status));
-+    this.status = status;
-+  }
-+}
-+
-+const sessaoExpirada = (e: Error): boolean =>
-+  e instanceof ErroHttp && e.status === 401;
-+
-+// The session token goes on every call, as in FeedUpdateSection and
-+// AiProvidersPage: nginx validates the session by subrequest to the gsad, which
-+// requires the cookie AND the token (its CSRF defense) and answers 401 for a
-+// missing or forged session. The cookie alone does not pass.
-+const pedir = (p: string, token: string, init?: RequestInit) => {
-+  const sep = p.includes('?') ? '&' : '?';
-+  const url = p + sep + 'token=' + encodeURIComponent(token);
-+  return fetch(url, {credentials: 'same-origin', ...init});
-+};
-+
 +const DownloadsPage = () => {
 +  const [_] = useTranslation();
 +  const gmp = useGmp();
@@ -11702,20 +11683,27 @@ index 0000000..427a02c
 +  const [error, setError] = useState<Error | null>(null);
 +  const [copied, setCopied] = useState<boolean>(false);
 +
-+  // Load the tenant list on mount (behind the nginx session gate: cookie + token).
++  // Load the tenant list on mount (behind the nginx session gate: cookie +
++  // token, which the shared client adds). Aborted on unmount.
 +  useEffect(() => {
-+    pedir('/agent/provision/tenants', token, {
++    const controller = new AbortController();
++    apiRequest<{tenants?: string[]}>('/agent/provision/tenants', token, {
++      signal: controller.signal,
 +      headers: {Accept: 'application/json'},
 +    })
-+      .then(r => (r.ok ? r.json() : Promise.reject(new ErroHttp(r.status))))
 +      .then(d => {
-+        const ts: string[] = d.tenants || [];
++        const ts: string[] = d?.tenants || [];
 +        setTenants(ts);
 +        if (ts.length === 1) {
 +          setTenant(ts[0]);
 +        }
 +      })
-+      .catch(e => setError(e as Error));
++      .catch(e => {
++        if (!controller.signal.aborted) {
++          setError(e as Error);
++        }
++      });
++    return () => controller.abort();
 +  }, [token]);
 +
 +  const pick = useCallback(
@@ -11730,15 +11718,14 @@ index 0000000..427a02c
 +      setCopied(false);
 +      setLoading(true);
 +      try {
-+        const r = await pedir(
++        // retry: false — this GET mints a new enrollment token on every call:
++        // repeating it after a lost answer could mint a second one.
++        const data = await apiRequest<EnrollResponse>(
 +          `/agent/provision/enroll-command?tenant=${encodeURIComponent(tenant)}&target=${encodeURIComponent(tgt)}`,
 +          token,
-+          {headers: {Accept: 'application/json'}},
++          {headers: {Accept: 'application/json'}, retry: false},
 +        );
-+        if (!r.ok) {
-+          throw new ErroHttp(r.status);
-+        }
-+        setResp(await r.json());
++        setResp(data);
 +      } catch (e) {
 +        setError(e as Error);
 +      } finally {
@@ -11799,9 +11786,13 @@ index 0000000..427a02c
 +          {loading ? <p>{_('Gerando comando…')}</p> : null}
 +          {error ? (
 +            <p style={{color: Theme.errorRed}}>
-+              {sessaoExpirada(error)
++              {isSessionExpired(error)
 +                ? _('Session expired. Sign in again to activate agents.')
-+                : `${_('Erro ao gerar o comando')}: ${error.message}`}
++                : `${_('Erro ao gerar o comando')}: ${
++                    error instanceof SuricatoosApiError
++                      ? apiErrorMessage(_, error)
++                      : error.message
++                  }`}
 +            </p>
 +          ) : null}
 +          {resp ? (
@@ -11841,10 +11832,10 @@ index 0000000..427a02c
 +export default DownloadsPage;
 diff --git a/src/web/pages/endpoint-agents/EndpointAgentsPage.tsx b/src/web/pages/endpoint-agents/EndpointAgentsPage.tsx
 new file mode 100644
-index 0000000..28b405a
+index 0000000..ce8ce8b
 --- /dev/null
 +++ b/src/web/pages/endpoint-agents/EndpointAgentsPage.tsx
-@@ -0,0 +1,348 @@
+@@ -0,0 +1,346 @@
 +/* SPDX-FileCopyrightText: 2024 Greenbone AG
 + *
 + * SPDX-License-Identifier: AGPL-3.0-or-later
@@ -11857,7 +11848,7 @@ index 0000000..28b405a
 + * session token, validated by the gsad). Distinct from Greenbone's own "Agents"
 + * feature (/agents). */
 +
-+import React, {useState, useEffect, useCallback, useMemo} from 'react';
++import React, {useState, useEffect, useCallback, useMemo, useRef} from 'react';
 +import {showSuccessNotification} from '@greenbone/ui-lib';
 +import SeverityBar from 'web/components/bar/SeverityBar';
 +import Button from 'web/components/form/Button';
@@ -11874,6 +11865,12 @@ index 0000000..28b405a
 +import useGmp from 'web/hooks/useGmp';
 +import useTranslation from 'web/hooks/useTranslation';
 +import SortDirection, {type SortDirectionType} from 'web/utils/sort-direction';
++import {
++  apiErrorMessage,
++  apiRequest,
++  isSessionExpired,
++  usePolling,
++} from 'web/utils/suricatoosApi';
 +import Theme from 'web/utils/Theme';
 +
 +interface Agent {
@@ -11894,31 +11891,6 @@ index 0000000..28b405a
 +  online: boolean;
 +  status: string;
 +}
-+
-+// Carries the HTTP status (same idiom as FeedUpdateSection and
-+// AiProvidersPage), so a 401 from the nginx session gate shows as an expired
-+// session instead of a bare "HTTP 401".
-+class ErroHttp extends Error {
-+  status: number;
-+
-+  constructor(status: number) {
-+    super('HTTP ' + String(status));
-+    this.status = status;
-+  }
-+}
-+
-+const sessaoExpirada = (e: Error): boolean =>
-+  e instanceof ErroHttp && e.status === 401;
-+
-+// The session token goes on every call, as in FeedUpdateSection and
-+// AiProvidersPage: nginx validates the session by subrequest to the gsad, which
-+// requires the cookie AND the token (its CSRF defense) and answers 401 for a
-+// missing or forged session. The cookie alone does not pass.
-+const pedir = (p: string, token: string, init?: RequestInit) => {
-+  const sep = p.includes('?') ? '&' : '?';
-+  const url = p + sep + 'token=' + encodeURIComponent(token);
-+  return fetch(url, {credentials: 'same-origin', ...init});
-+};
 +
 +const relTime = (iso: string): string => {
 +  if (!iso) {
@@ -11983,55 +11955,68 @@ index 0000000..28b405a
 +  const token: string = gmp.session.token ?? '';
 +  const [agents, setAgents] = useState<Agent[]>([]);
 +  const [loading, setLoading] = useState<boolean>(true);
-+  const [error, setError] = useState<Error | null>(null);
 +  const [sortBy, setSortBy] = useState<string>('severity');
 +  const [sortDir, setSortDir] = useState<SortDirectionType>(SortDirection.DESC);
 +
-+  const load = useCallback(async () => {
-+    try {
-+      const resp = await pedir('/agents/data.json', token, {
-+        headers: {Accept: 'application/json'},
-+      });
-+      if (!resp.ok) {
-+        throw new ErroHttp(resp.status);
++  const load = useCallback(
++    async (signal: AbortSignal) => {
++      try {
++        const data = await apiRequest<Agent[]>('/agents/data.json', token, {
++          signal,
++          headers: {Accept: 'application/json'},
++        });
++        setAgents(data ?? []);
++      } finally {
++        setLoading(false);
 +      }
-+      const data: Agent[] = await resp.json();
-+      setAgents(data);
-+      setError(null);
-+    } catch (e) {
-+      setError(e as Error);
-+    } finally {
-+      setLoading(false);
-+    }
-+  }, [token]);
++    },
++    [token],
++  );
 +
++  // Every 30 s, one request at a time, nothing while the tab is hidden; a 401
++  // stops it for good. The error of a scan request lands in the same `error`.
++  const {error, setError, refresh} = usePolling(load, 30000);
++
++  // The agent collects ~60 s after a scan request: one extra refresh at 70 s,
++  // besides the polling. Never armed once the page is gone (the POST may end
++  // after it), and the pending ones are cancelled on unmount.
++  const mounted = useRef(false);
++  const followUps = useRef(new Set<ReturnType<typeof setTimeout>>());
 +  useEffect(() => {
-+    load();
-+    const id = setInterval(load, 30000);
-+    return () => clearInterval(id);
-+  }, [load]);
++    mounted.current = true;
++    const pending = followUps.current;
++    return () => {
++      mounted.current = false;
++      for (const t of pending) {
++        clearTimeout(t);
++      }
++      pending.clear();
++    };
++  }, []);
 +
 +  const scanNow = useCallback(
 +    async (host: string) => {
 +      try {
-+        const resp = await pedir(
-+          `/agents/scan?id=${encodeURIComponent(host)}`,
-+          token,
-+          {method: 'POST'},
-+        );
-+        if (resp.status !== 202) {
-+          throw new ErroHttp(resp.status);
-+        }
++        await apiRequest(`/agents/scan?id=${encodeURIComponent(host)}`, token, {
++          method: 'POST',
++        });
 +        showSuccessNotification(
 +          '',
 +          _('Scan solicitado para {{host}} — nova coleta em ~60s.', {host}),
 +        );
-+        setTimeout(load, 70000);
++        if (!mounted.current) {
++          return;
++        }
++        const t = setTimeout(() => {
++          followUps.current.delete(t);
++          void refresh();
++        }, 70000);
++        followUps.current.add(t);
 +      } catch (e) {
-+        setError(e as Error);
++        setError(e);
 +      }
 +    },
-+    [load, token, _],
++    [refresh, setError, token, _],
 +  );
 +
 +  const onSortChange = useCallback((field: string) => {
@@ -12085,17 +12070,21 @@ index 0000000..28b405a
 +        <Section title={_('Agentes de Endpoint')} />
 +        <Layout flex="column">
 +          <div style={{margin: '0 0 12px'}}>
-+              <Button title={_('Atualizar')} onClick={() => load()}>
-+                {_('Atualizar')}
-+              </Button>
-+            </div>
++            <Button
++              disabled={isSessionExpired(error)}
++              title={_('Atualizar')}
++              onClick={() => void refresh()}
++            >
++              {_('Atualizar')}
++            </Button>
++          </div>
 +            {error ? (
 +              <p style={{color: Theme.errorRed}}>
-+                {sessaoExpirada(error)
++                {isSessionExpired(error)
 +                  ? _(
 +                      'Session expired. Sign in again to see the endpoint agents.',
 +                    )
-+                  : `${_('Erro ao carregar')}: ${error.message}`}
++                  : `${_('Erro ao carregar')}: ${apiErrorMessage(_, error)}`}
 +              </p>
 +            ) : null}
 +            {loading ? (
@@ -12215,10 +12204,10 @@ index b995df4..be67f0d 100644
              <TableRow>
 diff --git a/src/web/pages/extras/FeedUpdateSection.tsx b/src/web/pages/extras/FeedUpdateSection.tsx
 new file mode 100644
-index 0000000..1fe3e18
+index 0000000..0dfd0dd
 --- /dev/null
 +++ b/src/web/pages/extras/FeedUpdateSection.tsx
-@@ -0,0 +1,347 @@
+@@ -0,0 +1,314 @@
 +/* SPDX-FileCopyrightText: 2026 Suricatoos
 + *
 + * SPDX-License-Identifier: AGPL-3.0-or-later
@@ -12228,8 +12217,17 @@ index 0000000..1fe3e18
 +import {Button, Group, Loader, Select, Stack, Switch, Text} from '@mantine/core';
 +import useGmp from 'web/hooks/useGmp';
 +import useTranslation from 'web/hooks/useTranslation';
++import {
++  apiErrorMessage,
++  apiRequest,
++  type ApiRequestInit,
++  usePolling,
++} from 'web/utils/suricatoosApi';
 +
 +const API = '/feed-sync';
++
++// Prazo de cada chamada: o proxy_read_timeout da location /feed-sync/ do nginx.
++const TIMEOUT = 120000;
 +
 +interface Schedule {
 +  enabled: boolean;
@@ -12246,56 +12244,13 @@ index 0000000..1fe3e18
 +  schedule?: Schedule;
 +}
 +
-+// Erro que carrega o STATUS HTTP.
-+//
-+// Sem isto, `fetch(...).then(r => r.json())` tratava 403 e 401 como sucesso:
-+// o corpo era a pagina de erro do nginx, o JSON.parse estourava, e o catch de
-+// cima engolia. Resultado medido em 17/08/2026: a rota /feed-sync/ e' restrita
-+// as redes de administracao, um operador fora da VPN levava 403 em todo GET, e
-+// a tela mostrava "Ultima atualizacao: nunca" com o formulario em branco --
-+// enquanto o agendamento real estava ativo, diario, e rodara com sucesso na
-+// vespera. O botao Salvar levava o mesmo 403 e nao dizia absolutamente nada.
-+//
-+// Um controle de acesso que a interface esconde nao parece um controle: parece
-+// um sistema quebrado. E manda o operador procurar defeito onde nao ha.
-+const ERRO_REDE = -1;
-+
-+class ErroHttp extends Error {
-+  status: number;
-+
-+  constructor(status: number) {
-+    super('HTTP ' + String(status));
-+    this.status = status;
-+  }
-+}
-+
-+// O `token` da sessao vai junto em toda chamada.
-+//
-+// Nao e' enfeite: e' o que permite ao nginx VALIDAR a sessao antes de deixar
-+// passar, via subrequisicao ao proprio gsad. O gsad exige cookie E token -- o
-+// token e' a defesa CSRF dele -- e devolve 401 para sessao ausente ou forjada.
-+// Sem o token aqui, a unica defesa possivel na rota era restringir por REDE, o
-+// que obrigava VPN para uma tela que o operador ja acessa logado.
-+// E' o mesmo token que a interface ja poe na URL de toda chamada ao /gmp.
-+const pedir = async (p: string, token: string, init?: RequestInit) => {
-+  const sep = p.includes('?') ? '&' : '?';
-+  const url = API + p + sep + 'token=' + encodeURIComponent(token);
-+  const r = await fetch(url, {credentials: 'same-origin', ...init});
-+  if (!r.ok) {
-+    throw new ErroHttp(r.status);
-+  }
-+  return r.json();
-+};
-+
-+const jget = (p: string, token: string): Promise<Status> =>
-+  pedir(p, token) as Promise<Status>;
-+
-+const jpost = (p: string, token: string, body?: unknown): Promise<Schedule> =>
-+  pedir(p, token, {
-+    method: 'POST',
-+    headers: {'Content-Type': 'application/json'},
-+    body: body !== undefined ? JSON.stringify(body) : undefined,
-+  }) as Promise<Schedule>;
++// POST com corpo JSON (o /sync vai com o mesmo cabecalho e sem corpo).
++const postJson = (body?: unknown): ApiRequestInit => ({
++  method: 'POST',
++  headers: {'Content-Type': 'application/json'},
++  body: body !== undefined ? JSON.stringify(body) : undefined,
++  timeout: TIMEOUT,
++});
 +
 +const DEFAULT_SCHEDULE: Schedule = {
 +  enabled: false,
@@ -12312,57 +12267,56 @@ index 0000000..1fe3e18
 +  const [sch, setSch] = useState<Schedule>(DEFAULT_SCHEDULE);
 +  const [busy, setBusy] = useState(false);
 +  const [saved, setSaved] = useState(false);
-+  const [erro, setErro] = useState<number | null>(null);
 +  // o agendamento eh carregado no form UMA vez; o polling depois so atualiza o
 +  // status do sync, sem clobberar o que o usuario esta editando (senao o toggle
 +  // "desabilita sozinho" quando o poll traz o estado antigo do servidor).
 +  const schLoadedRef = useRef(false);
-+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 +
-+  const refresh = useCallback(async () => {
-+    try {
-+      const s = await jget('/status', token);
++  const loadStatus = useCallback(
++    async (signal: AbortSignal) => {
++      const s = await apiRequest<Status>(API + '/status', token, {
++        signal,
++        timeout: TIMEOUT,
++      });
 +      setStatus(s);
-+      setErro(null);
-+      if (!schLoadedRef.current && s.schedule) {
++      if (!schLoadedRef.current && s?.schedule) {
 +        schLoadedRef.current = true;
 +        setSch({...DEFAULT_SCHEDULE, ...s.schedule});
 +      }
-+    } catch (e) {
-+      setErro(e instanceof ErroHttp ? e.status : ERRO_REDE);
-+    }
-+  }, [token]);
++    },
++    [token],
++  );
 +
-+  useEffect(() => {
-+    refresh();
-+    pollRef.current = setInterval(refresh, 5000);
-+    return () => {
-+      if (pollRef.current) {
-+        clearInterval(pollRef.current);
-+      }
-+    };
-+  }, [refresh]);
++  // Status a cada 5 s, um pedido por vez e nada com a aba oculta. Para de vez
++  // no 401 e tambem no 403: nenhum dos dois se resolve sozinho, e sem parar a
++  // tela pedia /status a cada 5 s indefinidamente e enchia o log do nginx de
++  // requisicao negada.
++  const {
++    error: erro,
++    setError: setErro,
++    refresh,
++  } = usePolling(loadStatus, 5000, {stopOn: e => e.status === 403});
 +
-+  // 403 nao se resolve sozinho: sem parar o polling, a tela pedia /status a
-+  // cada 5 s indefinidamente e enchia o log do nginx de requisicao negada.
++  // "Salvo" some em 2,5 s; o timer morre junto com a tela.
 +  useEffect(() => {
-+    if (erro === 403 && pollRef.current) {
-+      clearInterval(pollRef.current);
-+      pollRef.current = null;
++    if (!saved) {
++      return undefined;
 +    }
-+  }, [erro]);
++    const t = setTimeout(() => setSaved(false), 2500);
++    return () => clearTimeout(t);
++  }, [saved]);
 +
 +  const running = status?.state === 'running';
-+  const semPermissao = erro === 403 || erro === 401;
++  const semPermissao = erro?.status === 403 || erro?.status === 401;
 +
 +  const syncNow = async () => {
 +    setBusy(true);
 +    try {
-+      await jpost('/sync', token);
++      await apiRequest(API + '/sync', token, postJson());
 +      setErro(null);
 +      await refresh();
 +    } catch (e) {
-+      setErro(e instanceof ErroHttp ? e.status : ERRO_REDE);
++      setErro(e);
 +    } finally {
 +      setBusy(false);
 +    }
@@ -12371,15 +12325,18 @@ index 0000000..1fe3e18
 +  const saveSchedule = async () => {
 +    setBusy(true);
 +    try {
-+      const r = await jpost('/schedule', token, sch);
++      const r = await apiRequest<Schedule>(
++        API + '/schedule',
++        token,
++        postJson(sch),
++      );
 +      if (r && typeof r.enabled === 'boolean') {
 +        setSch({...DEFAULT_SCHEDULE, ...r});
 +      }
 +      setErro(null);
 +      setSaved(true);
-+      setTimeout(() => setSaved(false), 2500);
 +    } catch (e) {
-+      setErro(e instanceof ErroHttp ? e.status : ERRO_REDE);
++      setErro(e);
 +    } finally {
 +      setBusy(false);
 +    }
@@ -12395,20 +12352,19 @@ index 0000000..1fe3e18
 +    {value: '7', label: _('Sunday')},
 +  ];
 +
-+  let msgErro = '';
-+  if (erro === 403) {
-+    msgErro = _(
-+      'No permission from this network. Feed management is restricted to the administration networks — connect to the VPN and reload.',
-+    );
-+  } else if (erro === 401) {
-+    msgErro = _('Session expired. Sign in again to manage the feed.');
-+  } else if (erro === ERRO_REDE) {
-+    msgErro = _('Could not reach the feed service.');
-+  } else if (erro !== null) {
-+    msgErro = _('The feed service answered with an error ({{status}}).', {
-+      status: String(erro),
-+    });
-+  }
++  // 401 e 403 dizem o que fazer nesta tela; o resto e' o texto comum das
++  // paginas.
++  const msgErro =
++    erro === null
++      ? ''
++      : apiErrorMessage(_, erro, {
++          sessionExpired: _(
++            'Session expired. Sign in again to manage the feed.',
++          ),
++          forbidden: _(
++            'No permission from this network. Feed management is restricted to the administration networks — connect to the VPN and reload.',
++          ),
++        });
 +
 +  let detail = '';
 +  if (status?.last_result === 'success') {
@@ -12838,10 +12794,10 @@ index dd0b390..9316ed8 100644
    Layers: {
 diff --git a/src/web/pages/ai-providers/AiProvidersPage.tsx b/src/web/pages/ai-providers/AiProvidersPage.tsx
 new file mode 100644
-index 0000000..a52ca49
+index 0000000..5cd3437
 --- /dev/null
 +++ b/src/web/pages/ai-providers/AiProvidersPage.tsx
-@@ -0,0 +1,1120 @@
+@@ -0,0 +1,1073 @@
 +/* SPDX-FileCopyrightText: 2026 Suricatoos
 + *
 + * SPDX-License-Identifier: AGPL-3.0-or-later
@@ -12866,6 +12822,12 @@ index 0000000..a52ca49
 +import useGmp from 'web/hooks/useGmp';
 +import useTranslation, {type TranslateFunc} from 'web/hooks/useTranslation';
 +import useUserTimezone from 'web/hooks/useUserTimezone';
++import {
++  apiErrorMessage,
++  apiRequest,
++  type ApiRequestInit,
++  SuricatoosApiError,
++} from 'web/utils/suricatoosApi';
 +import {formattedUserSettingDateTimeWithTimeZone} from 'web/utils/user-setting-time-date-formatters';
 +
 +interface Provider {
@@ -12976,6 +12938,11 @@ index 0000000..a52ca49
 +
 +const API = '/ai-providers/api';
 +
++// Deadline of each call: the proxy_read_timeout of the nginx /ai-providers/api/
++// location. The live model list has its own (the control-plane gives the
++// provider 10 s) and must not be cut before nginx would answer.
++const TIMEOUT = 60000;
++
 +// Where each router issues API keys. Static help text: nothing is fetched.
 +const KEY_PAGE: Record<string, string> = {
 +  openrouter: 'https://openrouter.ai/settings/keys',
@@ -13015,83 +12982,25 @@ index 0000000..a52ca49
 +// accepts any provider, so the generic form is the screen that matches it.
 +const LEGACY_POLICY: Policy = {free_models_only: false, presets: []};
 +
-+// Carries the HTTP status so 401/403/422 are handled, not swallowed (same idiom
-+// as FeedUpdateSection), plus the `error` text of a JSON answer: the
-+// control-plane explains 400/409/422/502 that way. 401/403/404/500 come as
-+// text/plain and nginx error pages as HTML: those keep `detail` empty and get a
-+// fixed message.
-+class ErroHttp extends Error {
-+  status: number;
-+  detail: string;
-+
-+  constructor(status: number, detail: string) {
-+    super('HTTP ' + String(status));
-+    this.status = status;
-+    this.detail = detail;
-+  }
-+}
-+
-+const lerDetalhe = async (r: Response): Promise<string> => {
-+  if (!(r.headers.get('content-type') ?? '').includes('application/json')) {
-+    return '';
-+  }
-+  try {
-+    const corpo = (await r.json()) as {error?: unknown} | null;
-+    return typeof corpo?.error === 'string' ? corpo.error : '';
-+  } catch {
-+    return '';
-+  }
-+};
-+
-+// The token goes on every call so nginx can validate the gsad session by
-+// subrequest before proxying to the control-plane.
-+async function pedir<T>(
++// The shared client (web/utils/suricatoosApi) puts the session token on every
++// call, so nginx can validate the gsad session by subrequest before proxying to
++// the control-plane; it also types the errors, with the `error` text the
++// control-plane sends for 400/409/422/502.
++function pedir<T>(
 +  p: string,
 +  token: string,
-+  init?: RequestInit,
++  init?: ApiRequestInit,
 +): Promise<T | null> {
-+  const sep = p.includes('?') ? '&' : '?';
-+  const url = API + p + sep + 'token=' + encodeURIComponent(token);
-+  const r = await fetch(url, {credentials: 'same-origin', ...init});
-+  if (!r.ok) {
-+    throw new ErroHttp(r.status, await lerDetalhe(r));
-+  }
-+  if (r.status === 204) {
-+    return null;
-+  }
-+  return (await r.json()) as T;
++  return apiRequest<T>(API + p, token, {timeout: TIMEOUT, ...init});
 +}
 +
-+const mensagemDeErro = (_: TranslateFunc, e: unknown): string => {
-+  if (!(e instanceof ErroHttp)) {
-+    return _('Could not reach the server.');
-+  }
-+  // For these the fixed message wins over any body: what the operator must do
-+  // next does not depend on it.
-+  switch (e.status) {
-+    case 401:
-+      return _('Session expired. Sign in again to manage AI providers.');
-+    case 403:
-+      return _('No permission to manage AI providers.');
-+    case 404:
-+      return _('Not found. Reload the page.');
-+    case 500:
-+      return _('Internal server error.');
-+  }
-+  if (e.detail !== '') {
-+    return e.detail;
-+  }
-+  if (e.status === 429 || e.status === 503) {
-+    // nginx rate-limits this API (limit_req answers 503 by default).
-+    return _(
-+      'The server is busy or limiting requests ({{status}}). Wait a minute and try again.',
-+      {status: String(e.status)},
-+    );
-+  }
-+  return _('The server answered with an error ({{status}}).', {
-+    status: String(e.status),
++// 401 and 403 say what to do on this page; the rest is the text shared by the
++// Suricatoos pages.
++const mensagemDeErro = (_: TranslateFunc, e: unknown): string =>
++  apiErrorMessage(_, e, {
++    sessionExpired: _('Session expired. Sign in again to manage AI providers.'),
++    forbidden: _('No permission to manage AI providers.'),
 +  });
-+};
 +
 +// Whether the component is still mounted: a save or delete that finishes after
 +// the operator left the page must not touch its state. (The request itself is
@@ -13281,9 +13190,9 @@ index 0000000..a52ca49
 +      if (signal.aborted) {
 +        return;
 +      }
-+      if (e instanceof ErroHttp && e.status === 409) {
++      if (e instanceof SuricatoosApiError && e.status === 409) {
 +        setList({state: 'needs-key'});
-+      } else if (e instanceof ErroHttp && e.status === 422) {
++      } else if (e instanceof SuricatoosApiError && e.status === 422) {
 +        // The stored endpoint is not the official one (old record): saving the
 +        // provider pins it.
 +        setList({
@@ -13818,7 +13727,7 @@ index 0000000..a52ca49
 +        const [rawPolicy, data] = await Promise.all([
 +          pedir<Partial<Policy>>('/policy', token, {signal}).catch(
 +            (e: unknown) => {
-+              if (e instanceof ErroHttp && e.status === 404) {
++              if (e instanceof SuricatoosApiError && e.status === 404) {
 +                return LEGACY_POLICY;
 +              }
 +              throw e;
@@ -13837,7 +13746,7 @@ index 0000000..a52ca49
 +        }
 +        setPolicy(null);
 +        setLoadError(
-+          e instanceof ErroHttp && e.status === 404
++          e instanceof SuricatoosApiError && e.status === 404
 +            ? _(
 +                'AI provider configuration was not found on the server. Check that it is enabled (AI_CONFIG_ENABLED=true).',
 +              )
@@ -13962,3 +13871,1631 @@ index 0000000..a52ca49
 +};
 +
 +export default AiProvidersPage;
+diff --git a/src/web/utils/__tests__/suricatoosApi.test.ts b/src/web/utils/__tests__/suricatoosApi.test.ts
+new file mode 100644
+index 0000000..8f03e8f
+--- /dev/null
++++ b/src/web/utils/__tests__/suricatoosApi.test.ts
+@@ -0,0 +1,1041 @@
++/* SPDX-FileCopyrightText: 2026 Suricatoos
++ *
++ * SPDX-License-Identifier: AGPL-3.0-or-later
++ */
++
++import {
++  afterEach,
++  beforeEach,
++  describe,
++  expect,
++  test,
++  testing,
++} from '@gsa/testing';
++import {act, renderHook} from 'web/testing';
++import {
++  apiErrorMessage,
++  apiRequest,
++  isSessionExpired,
++  SuricatoosApiError,
++  usePolling,
++} from 'web/utils/suricatoosApi';
++
++interface Deferred {
++  promise: Promise<void>;
++  resolve: () => void;
++  reject: (e: unknown) => void;
++}
++
++const fetchMock = testing.fn<typeof fetch>();
++
++const json = (
++  status: number,
++  body: unknown,
++  headers: Record<string, string> = {},
++) =>
++  new Response(JSON.stringify(body), {
++    status,
++    headers: {'Content-Type': 'application/json', ...headers},
++  });
++
++const plain = (
++  status: number,
++  body: string,
++  headers: Record<string, string> = {},
++) =>
++  new Response(body, {
++    status,
++    headers: {'Content-Type': 'text/plain', ...headers},
++  });
++
++// A fetch that never answers, but rejects like the real one on abort.
++const hanging = (_url: RequestInfo | URL, init?: RequestInit) =>
++  new Promise<Response>((_resolve, reject) => {
++    init?.signal?.addEventListener('abort', () =>
++      reject(new DOMException('The operation was aborted.', 'AbortError')),
++    );
++  });
++
++// Answers 200 at once, but the body never arrives (until the abort).
++const hangingBody = (_url: RequestInfo | URL, init?: RequestInit) =>
++  Promise.resolve({
++    ok: true,
++    status: 200,
++    headers: new Headers({'Content-Type': 'application/json'}),
++    json: () =>
++      new Promise((_resolve, reject) => {
++        init?.signal?.addEventListener('abort', () =>
++          reject(new DOMException('The operation was aborted.', 'AbortError')),
++        );
++      }),
++  } as unknown as Response);
++
++const requestInit = (call: number): RequestInit =>
++  fetchMock.mock.calls[call][1] as RequestInit;
++
++// Settles a promise without an unhandled rejection while timers advance.
++const settle = <T>(p: Promise<T>) =>
++  p.then(
++    value => ({value, error: undefined as unknown}),
++    (error: unknown) => ({value: undefined, error}),
++  );
++
++const advance = (ms: number) => testing.advanceTimersByTimeAsync(ms);
++
++const deferred = (): Deferred => {
++  let resolve: () => void = () => {};
++  let reject: (e: unknown) => void = () => {};
++  const promise = new Promise<void>((res, rej) => {
++    resolve = res;
++    reject = rej;
++  });
++  return {promise, resolve, reject};
++};
++
++// Echoes the key with its interpolations, like the GSA without a catalog.
++const _ = (key: string, options?: Record<string, string | number>) =>
++  key.replace(/{{(\w+)}}/g, (_m, name: string) => String(options?.[name]));
++
++beforeEach(() => {
++  fetchMock.mockReset();
++  testing.stubGlobal('fetch', fetchMock);
++});
++
++afterEach(() => {
++  testing.unstubAllGlobals();
++  testing.useRealTimers();
++});
++
++describe('apiRequest', () => {
++  test('adds the session token to the query of every call', async () => {
++    fetchMock.mockImplementation(async () => json(200, {}));
++
++    await apiRequest('/feed-sync/status', 'a b&c');
++    await apiRequest('/agents/scan?id=h%201', 'tok', {method: 'POST'});
++
++    expect(fetchMock.mock.calls[0][0]).toBe(
++      '/feed-sync/status?token=a%20b%26c',
++    );
++    expect(fetchMock.mock.calls[1][0]).toBe('/agents/scan?id=h%201&token=tok');
++  });
++
++  test.each([
++    'https://evil.example/agents/data.json',
++    'http://localhost:3000/agents/data.json',
++    '//evil.example/x',
++    '/\\evil.example/x',
++    // protocol-relative even when it points back here: a path only
++    `//${window.location.host}/agents/data.json`,
++    `/\\${window.location.host}/agents/data.json`,
++    '/\t/evil.example/x',
++    '/\n/evil.example/x',
++    'agents/data.json',
++    'javascript:alert(1)',
++    '',
++  ])(
++    'refuses %j before any request: the token stays on this origin',
++    async url => {
++      const {error} = await settle(apiRequest(url, 'tok'));
++
++      expect(error).toBeInstanceOf(TypeError);
++      expect(fetchMock).not.toHaveBeenCalled();
++    },
++  );
++
++  test('sends the cookie and passes method, headers and body as given', async () => {
++    fetchMock.mockImplementation(async () => json(200, {}));
++
++    await apiRequest('/feed-sync/schedule', 'tok', {
++      method: 'POST',
++      headers: {'Content-Type': 'application/json'},
++      body: '{"enabled":true}',
++      timeout: 5000,
++      retry: true,
++    });
++    await apiRequest('/agents/data.json', 'tok', {
++      headers: {Accept: 'application/json'},
++    });
++
++    const post = requestInit(0);
++    expect(Object.keys(post).sort()).toEqual(
++      ['body', 'credentials', 'headers', 'method', 'signal'].sort(),
++    );
++    expect(post.credentials).toBe('same-origin');
++    expect(post.method).toBe('POST');
++    expect(post.headers).toEqual({'Content-Type': 'application/json'});
++    expect(post.body).toBe('{"enabled":true}');
++    expect(post.signal).toBeInstanceOf(AbortSignal);
++
++    const get = requestInit(1);
++    expect(Object.keys(get).sort()).toEqual(
++      ['credentials', 'headers', 'signal'].sort(),
++    );
++    expect(get.headers).toEqual({Accept: 'application/json'});
++  });
++
++  test('resolves the JSON body, and null for a 204', async () => {
++    fetchMock.mockResolvedValueOnce(json(200, {providers: [1]}));
++    fetchMock.mockResolvedValueOnce(new Response(null, {status: 204}));
++    fetchMock.mockResolvedValueOnce(new Response(null, {status: 204}));
++
++    await expect(apiRequest('/a', 't')).resolves.toEqual({providers: [1]});
++    await expect(apiRequest('/b', 't', {method: 'DELETE'})).resolves.toBeNull();
++    await expect(apiRequest('/c', 't')).resolves.toBeNull();
++  });
++
++  test.each([
++    [401, 'session-expired'],
++    [403, 'forbidden'],
++    [404, 'not-found'],
++    [409, 'conflict'],
++    [422, 'unprocessable'],
++    [429, 'rate-limited'],
++    [500, 'server'],
++    [502, 'server'],
++    [503, 'server'],
++    [400, 'http'],
++  ])('types a %i answer as %s', async (status, kind) => {
++    fetchMock.mockResolvedValue(plain(status, 'nope'));
++
++    const {error} = await settle(apiRequest('/x', 't', {method: 'POST'}));
++
++    expect(error).toBeInstanceOf(SuricatoosApiError);
++    expect((error as SuricatoosApiError).kind).toBe(kind);
++    expect((error as SuricatoosApiError).status).toBe(status);
++    expect((error as SuricatoosApiError).detail).toBe('');
++  });
++
++  test('keeps the detail or error text of a JSON error answer', async () => {
++    fetchMock.mockResolvedValueOnce(json(422, {detail: 'chave presa ao tipo'}));
++    fetchMock.mockResolvedValueOnce(json(409, {error: 'cole a chave'}));
++    fetchMock.mockResolvedValueOnce(plain(400, 'tenant obrigatório'));
++    fetchMock.mockResolvedValueOnce(json(400, {detail: [{msg: 'x'}]}));
++
++    const details: string[] = [];
++    for (let i = 0; i < 4; i++) {
++      const {error} = await settle(apiRequest('/x', 't', {method: 'POST'}));
++      details.push((error as SuricatoosApiError).detail);
++    }
++
++    expect(details).toEqual(['chave presa ao tipo', 'cole a chave', '', '']);
++  });
++
++  test('reads Retry-After in seconds or as an HTTP date', async () => {
++    testing.useFakeTimers({now: new Date('2026-10-11T12:00:00Z')});
++    fetchMock.mockResolvedValueOnce(plain(429, '', {'Retry-After': '7'}));
++    fetchMock.mockResolvedValueOnce(
++      plain(503, '', {'Retry-After': 'Sun, 11 Oct 2026 12:00:30 GMT'}),
++    );
++
++    const first = await settle(apiRequest('/x', 't', {method: 'POST'}));
++    const second = await settle(apiRequest('/x', 't', {method: 'POST'}));
++
++    expect((first.error as SuricatoosApiError).retryAfter).toBe(7);
++    expect((second.error as SuricatoosApiError).retryAfter).toBe(30);
++  });
++
++  test('a failed fetch is a network error', async () => {
++    fetchMock.mockRejectedValue(new TypeError('Failed to fetch'));
++
++    const {error} = await settle(apiRequest('/x', 't', {method: 'POST'}));
++
++    expect((error as SuricatoosApiError).kind).toBe('network');
++    expect((error as SuricatoosApiError).status).toBe(0);
++  });
++
++  test('a 2xx to a GET that is not JSON is an invalid response', async () => {
++    fetchMock.mockResolvedValue(
++      new Response('<html></html>', {
++        status: 200,
++        headers: {'Content-Type': 'text/html'},
++      }),
++    );
++
++    const {error} = await settle(apiRequest('/x', 't'));
++
++    expect((error as SuricatoosApiError).kind).toBe('invalid-response');
++    expect(fetchMock).toHaveBeenCalledTimes(1);
++  });
++
++  test.each([
++    ['POST', '<html>ok</html>'],
++    ['PUT', 'ok'],
++    ['DELETE', ''],
++    ['post', ''],
++  ])(
++    'a 2xx to a %s whose body is not JSON is a success: the action happened',
++    async (method, body) => {
++      fetchMock.mockResolvedValue(
++        new Response(body, {
++          status: 202,
++          headers: {'Content-Type': 'text/html'},
++        }),
++      );
++
++      await expect(apiRequest('/x', 't', {method})).resolves.toBeNull();
++    },
++  );
++
++  test('leaves no timer behind', async () => {
++    testing.useFakeTimers();
++    fetchMock.mockResolvedValue(json(200, {}));
++
++    await apiRequest('/x', 't');
++
++    expect(testing.getTimerCount()).toBe(0);
++  });
++
++  test('gives up after 30 s by default, aborting the fetch', async () => {
++    testing.useFakeTimers();
++    fetchMock.mockImplementation(hanging);
++
++    const result = settle(apiRequest('/x', 't', {method: 'POST'}));
++    await advance(29999);
++    expect(requestInit(0).signal?.aborted).toBe(false);
++    await advance(1);
++
++    expect(requestInit(0).signal?.aborted).toBe(true);
++    expect(((await result).error as SuricatoosApiError).kind).toBe('timeout');
++  });
++
++  test('takes the deadline of the call', async () => {
++    testing.useFakeTimers();
++    fetchMock.mockImplementation(hanging);
++
++    const result = settle(apiRequest('/x', 't', {timeout: 120000}));
++    await advance(119999);
++    expect(requestInit(0).signal?.aborted).toBe(false);
++    await advance(1);
++
++    expect(((await result).error as SuricatoosApiError).kind).toBe('timeout');
++    // A timeout already took the whole deadline: not retried.
++    expect(fetchMock).toHaveBeenCalledTimes(1);
++  });
++
++  test('an external signal aborts the call', async () => {
++    fetchMock.mockImplementation(hanging);
++    const controller = new AbortController();
++
++    const result = settle(apiRequest('/x', 't', {signal: controller.signal}));
++    controller.abort();
++
++    expect(((await result).error as SuricatoosApiError).kind).toBe('aborted');
++    expect(requestInit(0).signal?.aborted).toBe(true);
++  });
++
++  test('an already aborted signal sends nothing', async () => {
++    const controller = new AbortController();
++    controller.abort();
++
++    const {error} = await settle(
++      apiRequest('/x', 't', {signal: controller.signal}),
++    );
++
++    expect((error as SuricatoosApiError).kind).toBe('aborted');
++    expect(fetchMock).not.toHaveBeenCalled();
++  });
++
++  test('a GET whose body never arrives times out', async () => {
++    testing.useFakeTimers();
++    fetchMock.mockImplementation(hangingBody);
++
++    const result = settle(apiRequest('/x', 't'));
++    await advance(30000);
++
++    expect(((await result).error as SuricatoosApiError).kind).toBe('timeout');
++    expect(fetchMock).toHaveBeenCalledTimes(1);
++  });
++
++  test('a POST answered 2xx whose body never arrives still succeeded', async () => {
++    testing.useFakeTimers();
++    fetchMock.mockImplementation(hangingBody);
++
++    const result = settle(apiRequest('/x', 't', {method: 'POST'}));
++    await advance(30000);
++
++    expect(await result).toEqual({value: null, error: undefined});
++  });
++
++  test('the caller aborting during the body of a POST is an abort', async () => {
++    fetchMock.mockImplementation(hangingBody);
++    const controller = new AbortController();
++
++    const result = settle(
++      apiRequest('/x', 't', {method: 'POST', signal: controller.signal}),
++    );
++    await new Promise(resolve => setTimeout(resolve, 0));
++    controller.abort();
++
++    expect(((await result).error as SuricatoosApiError).kind).toBe('aborted');
++  });
++});
++
++describe('apiRequest retries', () => {
++  test.each<[string, () => Promise<Response> | Response, string | undefined]>([
++    ['a 5xx', () => plain(502, ''), undefined],
++    ['a 500 in plain text', () => plain(500, 'erro interno'), undefined],
++    ['a 429', () => plain(429, ''), undefined],
++    [
++      'no answer',
++      () => Promise.reject(new TypeError('Failed to fetch')),
++      undefined,
++    ],
++    ['a 5xx, method in lowercase', () => plain(502, ''), 'get'],
++  ])(
++    'retries a GET once after %s, with a short backoff',
++    async (_name, fail, method) => {
++      testing.useFakeTimers();
++      fetchMock.mockImplementationOnce(async () => fail());
++      fetchMock.mockResolvedValueOnce(json(200, {ok: 1}));
++
++      const result = settle(apiRequest('/x', 't', {method}));
++      await advance(999);
++      expect(fetchMock).toHaveBeenCalledTimes(1);
++      await advance(1);
++
++      expect((await result).value).toEqual({ok: 1});
++      expect(fetchMock).toHaveBeenCalledTimes(2);
++      expect(fetchMock.mock.calls[1][0]).toBe('/x?token=t');
++    },
++  );
++
++  test.each<[string, () => Response]>([
++    [
++      'a 5xx that explains itself in JSON',
++      () => json(502, {error: 'o provedor respondeu HTTP 401'}),
++    ],
++    ['a 500 with a JSON detail', () => json(500, {detail: 'falhou'})],
++    ['a 503 without Retry-After (nginx limit_req)', () => plain(503, '')],
++  ])('does not retry %s', async (_name, fail) => {
++    testing.useFakeTimers();
++    fetchMock.mockImplementation(async () => fail());
++
++    const result = settle(apiRequest('/x', 't'));
++    await advance(10000);
++
++    expect((await result).error).toBeInstanceOf(SuricatoosApiError);
++    expect(fetchMock).toHaveBeenCalledTimes(1);
++  });
++
++  test('retries a 503 that asks for a short wait, after it', async () => {
++    testing.useFakeTimers();
++    fetchMock.mockResolvedValueOnce(plain(503, '', {'Retry-After': '2'}));
++    fetchMock.mockResolvedValueOnce(json(200, {}));
++
++    const result = settle(apiRequest('/x', 't'));
++    await advance(1999);
++    expect(fetchMock).toHaveBeenCalledTimes(1);
++    await advance(1);
++
++    await result;
++    expect(fetchMock).toHaveBeenCalledTimes(2);
++  });
++
++  test('never retries sooner than the backoff, whatever Retry-After says', async () => {
++    testing.useFakeTimers();
++    fetchMock.mockResolvedValueOnce(plain(429, '', {'Retry-After': '0'}));
++    fetchMock.mockResolvedValueOnce(json(200, {}));
++
++    const result = settle(apiRequest('/x', 't'));
++    await advance(999);
++    expect(fetchMock).toHaveBeenCalledTimes(1);
++    await advance(1);
++
++    await result;
++    expect(fetchMock).toHaveBeenCalledTimes(2);
++  });
++
++  test('waits a Retry-After of exactly 5 s, not one of 6 s', async () => {
++    testing.useFakeTimers();
++    fetchMock.mockResolvedValueOnce(plain(429, '', {'Retry-After': '5'}));
++    fetchMock.mockResolvedValueOnce(json(200, {}));
++
++    const five = settle(apiRequest('/x', 't'));
++    await advance(4999);
++    expect(fetchMock).toHaveBeenCalledTimes(1);
++    await advance(1);
++    await five;
++    expect(fetchMock).toHaveBeenCalledTimes(2);
++
++    fetchMock.mockReset();
++    fetchMock.mockResolvedValue(plain(429, '', {'Retry-After': '6'}));
++    const six = settle(apiRequest('/x', 't'));
++    await advance(10000);
++    expect(((await six).error as SuricatoosApiError).retryAfter).toBe(6);
++    expect(fetchMock).toHaveBeenCalledTimes(1);
++  });
++
++  test('makes at most 2 attempts', async () => {
++    testing.useFakeTimers();
++    fetchMock.mockImplementation(async () => plain(502, ''));
++
++    const result = settle(apiRequest('/x', 't'));
++    await advance(60000);
++
++    expect(((await result).error as SuricatoosApiError).status).toBe(502);
++    expect(fetchMock).toHaveBeenCalledTimes(2);
++  });
++
++  test('waits the Retry-After of the server before retrying', async () => {
++    testing.useFakeTimers();
++    fetchMock.mockResolvedValueOnce(plain(429, '', {'Retry-After': '3'}));
++    fetchMock.mockResolvedValueOnce(json(200, {}));
++
++    const result = settle(apiRequest('/x', 't'));
++    await advance(2999);
++    expect(fetchMock).toHaveBeenCalledTimes(1);
++    await advance(1);
++
++    await result;
++    expect(fetchMock).toHaveBeenCalledTimes(2);
++  });
++
++  test('does not retry when Retry-After asks for more than a short wait', async () => {
++    testing.useFakeTimers();
++    fetchMock.mockResolvedValue(plain(429, '', {'Retry-After': '60'}));
++
++    const result = settle(apiRequest('/x', 't'));
++    await advance(10000);
++
++    const error = (await result).error as SuricatoosApiError;
++    expect(error.kind).toBe('rate-limited');
++    expect(error.retryAfter).toBe(60);
++    expect(fetchMock).toHaveBeenCalledTimes(1);
++  });
++
++  test.each([401, 403, 404, 409, 422, 400])(
++    'does not retry a %i',
++    async status => {
++      testing.useFakeTimers();
++      fetchMock.mockImplementation(async () => plain(status, ''));
++
++      const result = settle(apiRequest('/x', 't'));
++      await advance(10000);
++
++      expect(((await result).error as SuricatoosApiError).status).toBe(status);
++      expect(fetchMock).toHaveBeenCalledTimes(1);
++    },
++  );
++
++  test.each(['POST', 'PUT', 'DELETE'])('never retries a %s', async method => {
++    testing.useFakeTimers();
++    fetchMock.mockImplementation(async () => plain(502, ''));
++
++    const result = settle(apiRequest('/x', 't', {method, retry: true}));
++    await advance(10000);
++
++    expect(((await result).error as SuricatoosApiError).status).toBe(502);
++    expect(fetchMock).toHaveBeenCalledTimes(1);
++  });
++
++  test('does not retry a GET marked retry: false', async () => {
++    testing.useFakeTimers();
++    fetchMock.mockImplementation(async () => plain(502, ''));
++
++    const result = settle(apiRequest('/x', 't', {retry: false}));
++    await advance(10000);
++
++    expect(((await result).error as SuricatoosApiError).status).toBe(502);
++    expect(fetchMock).toHaveBeenCalledTimes(1);
++  });
++
++  test('an abort during the backoff ends the call', async () => {
++    testing.useFakeTimers();
++    fetchMock.mockImplementation(async () => plain(502, ''));
++    const controller = new AbortController();
++
++    let settled = false;
++    const result = settle(
++      apiRequest('/x', 't', {signal: controller.signal}),
++    ).finally(() => (settled = true));
++    await advance(500);
++    controller.abort();
++    // At once: not when the backoff would have ended.
++    await advance(0);
++    expect(settled).toBe(true);
++    await advance(10000);
++
++    expect(((await result).error as SuricatoosApiError).kind).toBe('aborted');
++    expect(fetchMock).toHaveBeenCalledTimes(1);
++  });
++});
++
++describe('apiErrorMessage', () => {
++  const texts = {sessionExpired: 'session here', forbidden: 'forbidden here'};
++
++  test.each<[string, unknown, string]>([
++    ['anything else', new Error('boom'), 'Could not reach the server.'],
++    [
++      'no answer',
++      new SuricatoosApiError('network'),
++      'Could not reach the server.',
++    ],
++    [
++      'an invalid answer',
++      new SuricatoosApiError('invalid-response', 200),
++      'Could not reach the server.',
++    ],
++    ['a timeout', new SuricatoosApiError('timeout'), 'Request timed out'],
++    [
++      'a 401',
++      new SuricatoosApiError('session-expired', 401, 'x'),
++      'Session expired. Sign in again.',
++    ],
++    [
++      'a 403',
++      new SuricatoosApiError('forbidden', 403, 'x'),
++      'No permission for this action.',
++    ],
++    [
++      'a 404, even with a detail',
++      new SuricatoosApiError('not-found', 404, 'x'),
++      'Not found. Reload the page.',
++    ],
++    [
++      'a 500, even with a detail',
++      new SuricatoosApiError('server', 500, 'x'),
++      'Internal server error.',
++    ],
++    [
++      'a 422 with a detail',
++      new SuricatoosApiError('unprocessable', 422, 'chave presa ao tipo'),
++      'chave presa ao tipo',
++    ],
++    [
++      'a 502 with a detail',
++      new SuricatoosApiError('server', 502, 'o provedor respondeu HTTP 401'),
++      'o provedor respondeu HTTP 401',
++    ],
++    [
++      'a 503',
++      new SuricatoosApiError('server', 503),
++      'The server is busy or limiting requests (503). Wait a minute and try again.',
++    ],
++    [
++      'a 429',
++      new SuricatoosApiError('rate-limited', 429, '', 3),
++      'The server is busy or limiting requests (429). Wait a minute and try again.',
++    ],
++    [
++      'a 409 without a detail',
++      new SuricatoosApiError('conflict', 409),
++      'The server answered with an error (409).',
++    ],
++    ['an aborted call', new SuricatoosApiError('aborted'), ''],
++  ])('describes %s', (_name, error, message) => {
++    expect(apiErrorMessage(_, error)).toBe(message);
++  });
++
++  test('takes the texts of the page for 401 and 403', () => {
++    expect(
++      apiErrorMessage(_, new SuricatoosApiError('session-expired', 401), texts),
++    ).toBe('session here');
++    expect(
++      apiErrorMessage(_, new SuricatoosApiError('forbidden', 403), texts),
++    ).toBe('forbidden here');
++    expect(
++      apiErrorMessage(_, new SuricatoosApiError('server', 500), texts),
++    ).toBe('Internal server error.');
++  });
++
++  test('isSessionExpired', () => {
++    expect(
++      isSessionExpired(new SuricatoosApiError('session-expired', 401)),
++    ).toBe(true);
++    expect(isSessionExpired(new SuricatoosApiError('forbidden', 403))).toBe(
++      false,
++    );
++    expect(isSessionExpired(new Error('HTTP 401'))).toBe(false);
++  });
++});
++
++describe('usePolling', () => {
++  let hidden = false;
++
++  const setHidden = (value: boolean) =>
++    act(() => {
++      hidden = value;
++      document.dispatchEvent(new Event('visibilitychange'));
++    });
++
++  const flush = (ms = 0) =>
++    act(async () => {
++      await advance(ms);
++    });
++
++  // A poll that stays in flight until the test settles it.
++  const controlledPoll = () => {
++    const calls: Array<{signal: AbortSignal; done: Deferred}> = [];
++    const poll = testing.fn((signal: AbortSignal) => {
++      const done = deferred();
++      calls.push({signal, done});
++      return done.promise;
++    });
++    return {poll, calls};
++  };
++
++  beforeEach(() => {
++    testing.useFakeTimers();
++    hidden = false;
++    Object.defineProperty(document, 'hidden', {
++      configurable: true,
++      get: () => hidden,
++    });
++  });
++
++  afterEach(() => {
++    Reflect.deleteProperty(document, 'hidden');
++  });
++
++  test('polls at once, then every interval, one poll at a time', async () => {
++    const {poll, calls} = controlledPoll();
++
++    renderHook(() => usePolling(poll, 1000));
++    expect(poll).toHaveBeenCalledTimes(1);
++
++    // Still in flight: no second poll on top of it.
++    await flush(5000);
++    expect(poll).toHaveBeenCalledTimes(1);
++
++    await act(async () => calls[0].done.resolve());
++    await flush(999);
++    expect(poll).toHaveBeenCalledTimes(1);
++    await flush(1);
++    expect(poll).toHaveBeenCalledTimes(2);
++  });
++
++  test('keeps the error of a poll until a poll succeeds', async () => {
++    const poll = testing.fn<(signal: AbortSignal) => Promise<void>>();
++    poll.mockRejectedValueOnce(new SuricatoosApiError('server', 502));
++    poll.mockResolvedValue(undefined);
++
++    const {result} = renderHook(() => usePolling(poll, 1000));
++    await flush();
++    expect(result.current.error?.status).toBe(502);
++
++    await flush(1000);
++    expect(poll).toHaveBeenCalledTimes(2);
++    expect(result.current.error).toBeNull();
++  });
++
++  test('stops for good on a 401 and keeps it to show', async () => {
++    const poll = testing
++      .fn<(signal: AbortSignal) => Promise<void>>()
++      .mockRejectedValue(new SuricatoosApiError('session-expired', 401));
++
++    const {result} = renderHook(() => usePolling(poll, 1000));
++    await flush();
++    expect(result.current.error?.kind).toBe('session-expired');
++
++    await flush(60000);
++    await act(() => result.current.refresh());
++    await setHidden(true);
++    await setHidden(false);
++    await flush(60000);
++
++    expect(poll).toHaveBeenCalledTimes(1);
++    expect(result.current.error?.kind).toBe('session-expired');
++  });
++
++  test('stops on the errors of stopOn too', async () => {
++    const poll = testing
++      .fn<(signal: AbortSignal) => Promise<void>>()
++      .mockRejectedValue(new SuricatoosApiError('forbidden', 403));
++
++    const {result} = renderHook(() =>
++      usePolling(poll, 1000, {stopOn: e => e.status === 403}),
++    );
++    await flush(60000);
++
++    expect(poll).toHaveBeenCalledTimes(1);
++    expect(result.current.error?.status).toBe(403);
++  });
++
++  test('keeps polling after other errors', async () => {
++    const poll = testing
++      .fn<(signal: AbortSignal) => Promise<void>>()
++      .mockRejectedValue(new SuricatoosApiError('forbidden', 403));
++
++    renderHook(() => usePolling(poll, 1000));
++    await flush(3000);
++
++    expect(poll).toHaveBeenCalledTimes(4);
++  });
++
++  test('a poll that throws something else is a failed call, and is logged', async () => {
++    const logged = testing.spyOn(console, 'error').mockImplementation(() => {});
++    const poll = testing
++      .fn<(signal: AbortSignal) => Promise<void>>()
++      .mockRejectedValue(new Error('bug'));
++
++    const {result} = renderHook(() => usePolling(poll, 1000));
++    await flush();
++
++    expect(result.current.error?.kind).toBe('network');
++    expect(logged).toHaveBeenCalled();
++    logged.mockRestore();
++  });
++
++  test('pauses while the tab is hidden and resumes when it shows', async () => {
++    const poll = testing
++      .fn<(signal: AbortSignal) => Promise<void>>()
++      .mockResolvedValue(undefined);
++
++    renderHook(() => usePolling(poll, 1000));
++    await flush();
++    expect(poll).toHaveBeenCalledTimes(1);
++
++    await setHidden(true);
++    await flush(10000);
++    expect(poll).toHaveBeenCalledTimes(1);
++
++    // The next poll is long overdue: it runs as soon as the tab shows.
++    await setHidden(false);
++    await flush();
++    expect(poll).toHaveBeenCalledTimes(2);
++    await flush(1000);
++    expect(poll).toHaveBeenCalledTimes(3);
++  });
++
++  test('the tab shown again during a poll adds no poll on top of it', async () => {
++    const {poll, calls} = controlledPoll();
++
++    renderHook(() => usePolling(poll, 1000));
++    await setHidden(true);
++    await setHidden(false);
++    expect(poll).toHaveBeenCalledTimes(1);
++
++    await act(async () => calls[0].done.resolve());
++    await flush(999);
++    expect(poll).toHaveBeenCalledTimes(1);
++    await flush(1);
++    expect(poll).toHaveBeenCalledTimes(2);
++  });
++
++  test('a refresh asked while hidden, during a poll, runs as soon as the tab shows', async () => {
++    const {poll, calls} = controlledPoll();
++
++    const {result} = renderHook(() => usePolling(poll, 60000));
++    await setHidden(true);
++    await act(() => result.current.refresh());
++    // The poll in flight started before the refresh: it does not answer it.
++    await act(async () => calls[0].done.resolve());
++    await flush(1000);
++    expect(poll).toHaveBeenCalledTimes(1);
++
++    await setHidden(false);
++    expect(poll).toHaveBeenCalledTimes(2);
++  });
++
++  test('a poll that ends while the tab is hidden schedules nothing', async () => {
++    const {poll, calls} = controlledPoll();
++
++    renderHook(() => usePolling(poll, 1000));
++    await setHidden(true);
++    await act(async () => calls[0].done.resolve());
++    await flush(10000);
++    expect(poll).toHaveBeenCalledTimes(1);
++
++    await setHidden(false);
++    await flush();
++    expect(poll).toHaveBeenCalledTimes(2);
++  });
++
++  test('back before the next poll is due, it waits for the rest of the interval', async () => {
++    const poll = testing
++      .fn<(signal: AbortSignal) => Promise<void>>()
++      .mockResolvedValue(undefined);
++
++    renderHook(() => usePolling(poll, 1000));
++    await flush(200);
++    await setHidden(true);
++    await flush(300);
++    await setHidden(false);
++    await flush();
++    expect(poll).toHaveBeenCalledTimes(1);
++
++    await flush(499);
++    expect(poll).toHaveBeenCalledTimes(1);
++    await flush(1);
++    expect(poll).toHaveBeenCalledTimes(2);
++  });
++
++  test('mounted in a hidden tab, it polls only when the tab shows', async () => {
++    const poll = testing
++      .fn<(signal: AbortSignal) => Promise<void>>()
++      .mockResolvedValue(undefined);
++    hidden = true;
++
++    renderHook(() => usePolling(poll, 1000));
++    await flush(10000);
++    expect(poll).not.toHaveBeenCalled();
++
++    await setHidden(false);
++    await flush();
++    expect(poll).toHaveBeenCalledTimes(1);
++  });
++
++  test('unmount aborts the poll in flight and schedules nothing', async () => {
++    const {poll, calls} = controlledPoll();
++
++    const {unmount} = renderHook(() => usePolling(poll, 1000));
++    unmount();
++
++    expect(calls[0].signal.aborted).toBe(true);
++    await act(async () =>
++      calls[0].done.reject(new SuricatoosApiError('aborted')),
++    );
++    await flush(10000);
++    expect(poll).toHaveBeenCalledTimes(1);
++  });
++
++  test('unmount clears the timer of the next poll', async () => {
++    const poll = testing
++      .fn<(signal: AbortSignal) => Promise<void>>()
++      .mockResolvedValue(undefined);
++
++    const {unmount} = renderHook(() => usePolling(poll, 1000));
++    await flush(500);
++    unmount();
++    await flush(10000);
++
++    expect(poll).toHaveBeenCalledTimes(1);
++  });
++
++  test('Retry-After postpones the next poll', async () => {
++    const poll = testing.fn<(signal: AbortSignal) => Promise<void>>();
++    poll.mockRejectedValueOnce(
++      new SuricatoosApiError('rate-limited', 429, '', 5),
++    );
++    poll.mockResolvedValue(undefined);
++
++    renderHook(() => usePolling(poll, 1000));
++    await flush(4999);
++    expect(poll).toHaveBeenCalledTimes(1);
++    await flush(1);
++    expect(poll).toHaveBeenCalledTimes(2);
++  });
++
++  test('a Retry-After shorter than the interval keeps the interval', async () => {
++    const poll = testing.fn<(signal: AbortSignal) => Promise<void>>();
++    poll.mockRejectedValueOnce(
++      new SuricatoosApiError('rate-limited', 429, '', 0),
++    );
++    poll.mockResolvedValue(undefined);
++
++    renderHook(() => usePolling(poll, 1000));
++    await flush(999);
++    expect(poll).toHaveBeenCalledTimes(1);
++    await flush(1);
++    expect(poll).toHaveBeenCalledTimes(2);
++  });
++
++  test('a huge Retry-After postpones the next poll by 5 min at most', async () => {
++    const poll = testing.fn<(signal: AbortSignal) => Promise<void>>();
++    // 10^10 s: as a setTimeout delay it would overflow and fire at once.
++    poll.mockRejectedValueOnce(
++      new SuricatoosApiError('rate-limited', 429, '', 1e10),
++    );
++    poll.mockResolvedValue(undefined);
++
++    renderHook(() => usePolling(poll, 1000));
++    await flush(299999);
++    expect(poll).toHaveBeenCalledTimes(1);
++    await flush(1);
++    expect(poll).toHaveBeenCalledTimes(2);
++  });
++
++  test('refresh during a poll runs one more right after it', async () => {
++    const {poll, calls} = controlledPoll();
++
++    const {result} = renderHook(() => usePolling(poll, 1000));
++    let first = false;
++    let second = false;
++    void result.current.refresh().then(() => (first = true));
++    void result.current.refresh().then(() => (second = true));
++    expect(poll).toHaveBeenCalledTimes(1);
++
++    await act(async () => calls[0].done.resolve());
++    expect(poll).toHaveBeenCalledTimes(2);
++    expect(first || second).toBe(false);
++
++    await act(async () => calls[1].done.resolve());
++    expect(first && second).toBe(true);
++    // The schedule restarts from the end of that poll.
++    await flush(999);
++    expect(poll).toHaveBeenCalledTimes(2);
++    await flush(1);
++    expect(poll).toHaveBeenCalledTimes(3);
++  });
++
++  test('refresh while hidden polls as soon as the tab shows', async () => {
++    const poll = testing
++      .fn<(signal: AbortSignal) => Promise<void>>()
++      .mockResolvedValue(undefined);
++
++    const {result} = renderHook(() => usePolling(poll, 60000));
++    await flush();
++    await setHidden(true);
++    await act(() => result.current.refresh());
++    expect(poll).toHaveBeenCalledTimes(1);
++
++    await setHidden(false);
++    await flush();
++    expect(poll).toHaveBeenCalledTimes(2);
++  });
++
++  test('a 401 reported by the page stops the polling and the poll in flight', async () => {
++    const {poll, calls} = controlledPoll();
++
++    const {result} = renderHook(() => usePolling(poll, 1000));
++    act(() =>
++      result.current.setError(new SuricatoosApiError('session-expired', 401)),
++    );
++    expect(calls[0].signal.aborted).toBe(true);
++
++    // The aborted poll does not clear the 401.
++    await act(async () => calls[0].done.resolve());
++    await flush(60000);
++    expect(poll).toHaveBeenCalledTimes(1);
++    expect(result.current.error?.status).toBe(401);
++  });
++
++  test('setError shows the error of another call; null clears it', async () => {
++    const poll = testing
++      .fn<(signal: AbortSignal) => Promise<void>>()
++      .mockResolvedValue(undefined);
++
++    const {result} = renderHook(() => usePolling(poll, 1000));
++    await flush();
++    act(() => result.current.setError(new SuricatoosApiError('conflict', 409)));
++    expect(result.current.error?.status).toBe(409);
++    act(() => result.current.setError(null));
++    expect(result.current.error).toBeNull();
++
++    act(() => result.current.setError(new SuricatoosApiError('aborted')));
++    expect(result.current.error).toBeNull();
++    await flush(1000);
++    expect(poll).toHaveBeenCalledTimes(2);
++  });
++
++  test('uses the latest poll function', async () => {
++    const first = testing
++      .fn<(signal: AbortSignal) => Promise<void>>()
++      .mockResolvedValue(undefined);
++    const second = testing
++      .fn<(signal: AbortSignal) => Promise<void>>()
++      .mockResolvedValue(undefined);
++
++    const {rerender} = renderHook(
++      ({poll}: {poll: (signal: AbortSignal) => Promise<void>}) =>
++        usePolling(poll, 1000),
++      {initialProps: {poll: first}},
++    );
++    await flush();
++    rerender({poll: second});
++    await flush(1000);
++
++    expect(first).toHaveBeenCalledTimes(1);
++    expect(second).toHaveBeenCalledTimes(1);
++  });
++});
+diff --git a/src/web/utils/suricatoosApi.ts b/src/web/utils/suricatoosApi.ts
+new file mode 100644
+index 0000000..b309818
+--- /dev/null
++++ b/src/web/utils/suricatoosApi.ts
+@@ -0,0 +1,575 @@
++/* SPDX-FileCopyrightText: 2026 Suricatoos
++ *
++ * SPDX-License-Identifier: AGPL-3.0-or-later
++ */
++
++/* Suricatoos: the one HTTP client of the pages this patch adds to the GSA
++ * (feed update, AI providers, endpoint agents, agent activation) for the APIs
++ * that nginx puts behind the gsad session gate — /feed-sync/,
++ * /ai-providers/api/, /agents/* and /agent/provision/* — plus the polling hook
++ * of those pages. */
++
++import {useCallback, useEffect, useRef, useState} from 'react';
++import {type TranslateFunc} from 'web/hooks/useTranslation';
++
++export type ApiErrorKind =
++  | 'session-expired' // 401: the session gate refused the session
++  | 'forbidden' // 403
++  | 'not-found' // 404
++  | 'conflict' // 409
++  | 'unprocessable' // 422
++  | 'rate-limited' // 429
++  | 'server' // 5xx (nginx answers its own rate limit with 503)
++  | 'http' // any other non-2xx status
++  | 'network' // no answer at all
++  | 'timeout' // no answer within the deadline of the call
++  | 'invalid-response' // a 2xx to a GET whose body is not JSON
++  | 'aborted'; // the signal of the caller aborted the call
++
++export interface ApiRequestInit extends RequestInit {
++  // Deadline of each attempt, in ms. Never less than the proxy_read_timeout of
++  // the nginx location the call goes through (compose/nginx/default.conf), so
++  // the client never gives up on an answer nginx would still deliver.
++  timeout?: number;
++  // Retries are for GET only, and on by default there; false for a GET that
++  // is not idempotent. POST, PUT and DELETE are never retried.
++  retry?: boolean;
++}
++
++// What the operator must do after a 401 or a 403 depends on the page.
++export interface ApiErrorTexts {
++  sessionExpired?: string;
++  forbidden?: string;
++}
++
++export interface PollingOptions {
++  // Errors that also stop the polling for good (a 401 always does).
++  stopOn?: (error: SuricatoosApiError) => boolean;
++}
++
++export interface Polling {
++  // Last error: of a poll, or reported by the page with setError. A
++  // successful poll clears it.
++  error: SuricatoosApiError | null;
++  // Reports the error of another call of the page (null clears). A 401 (or a
++  // stopOn error) stops the polling here too.
++  setError: (error: unknown) => void;
++  // Polls now, or right after the poll in flight. Resolves when it is done
++  // (never rejects). While the tab is hidden it only marks the poll as due.
++  refresh: () => Promise<void>;
++}
++
++interface PollControl {
++  refresh: () => Promise<void>;
++  halt: () => void;
++}
++
++export const DEFAULT_TIMEOUT = 30000;
++
++// At most 2 attempts: the request and, for a GET, one retry.
++const MAX_ATTEMPTS = 2;
++// Short backoff before the retry, doubled per attempt.
++const RETRY_DELAY = 1000;
++// A Retry-After longer than this is not waited for inside a call: the call
++// fails at once and the poller waits it out before the next poll.
++const MAX_RETRY_AFTER = 5000;
++// The most a Retry-After postpones the next poll (past ~24.8 days setTimeout
++// overflows and fires at once, in a loop).
++const MAX_POLL_DELAY = 300000;
++
++export class SuricatoosApiError extends Error {
++  readonly kind: ApiErrorKind;
++  // HTTP status; 0 when there was no answer.
++  readonly status: number;
++  // The `detail` or `error` text of a JSON error answer ('' when none).
++  readonly detail: string;
++  // Seconds asked by Retry-After, when the answer had it.
++  readonly retryAfter?: number;
++
++  constructor(
++    kind: ApiErrorKind,
++    status = 0,
++    detail = '',
++    retryAfter?: number,
++  ) {
++    super(status > 0 ? 'HTTP ' + String(status) : kind);
++    this.name = 'SuricatoosApiError';
++    this.kind = kind;
++    this.status = status;
++    this.detail = detail;
++    this.retryAfter = retryAfter;
++  }
++}
++
++const kindOf = (status: number): ApiErrorKind => {
++  switch (status) {
++    case 401:
++      return 'session-expired';
++    case 403:
++      return 'forbidden';
++    case 404:
++      return 'not-found';
++    case 409:
++      return 'conflict';
++    case 422:
++      return 'unprocessable';
++    case 429:
++      return 'rate-limited';
++  }
++  return status >= 500 ? 'server' : 'http';
++};
++
++// The session token goes on every call. nginx validates the session by
++// subrequest to the gsad, which requires the cookie AND the token (its CSRF
++// defense) and answers 401 for a missing or forged session: the cookie alone
++// does not pass. It is the same token the GSA puts on every /gmp call.
++const tokenUrl = (url: string, token: string): string =>
++  url + (url.includes('?') ? '&' : '?') + 'token=' + encodeURIComponent(token);
++
++// So the token never leaves this origin, only a path of this site is taken:
++// "/" not followed by "/" or "\" (both make it protocol-relative), which must
++// also resolve to this origin (the URL parser drops tabs and newlines, so
++// "/\t/host" is "//host").
++const isSameOriginPath = (url: string): boolean => {
++  if (!/^\/(?![/\\])/.test(url)) {
++    return false;
++  }
++  try {
++    return new URL(url, document.baseURI).origin === window.location.origin;
++  } catch {
++    return false;
++  }
++};
++
++// The control-plane explains 400/409/422/502 with {"error": "..."} and other
++// services may use {"detail": "..."}. Plain-text answers and the HTML error
++// pages of nginx carry nothing to show: those keep the fixed messages.
++const readDetail = async (r: Response): Promise<string> => {
++  if (!(r.headers.get('content-type') ?? '').includes('application/json')) {
++    return '';
++  }
++  try {
++    const body = (await r.json()) as {detail?: unknown; error?: unknown} | null;
++    for (const text of [body?.detail, body?.error]) {
++      if (typeof text === 'string' && text !== '') {
++        return text;
++      }
++    }
++  } catch {
++    // not JSON after all
++  }
++  return '';
++};
++
++// Retry-After is either seconds or an HTTP date.
++const parseRetryAfter = (value: string | null): number | undefined => {
++  if (value === null) {
++    return undefined;
++  }
++  const text = value.trim();
++  if (/^\d+$/.test(text)) {
++    return Number(text);
++  }
++  const at = Date.parse(text);
++  return isNaN(at)
++    ? undefined
++    : Math.max(0, Math.ceil((at - Date.now()) / 1000));
++};
++
++const pause = (ms: number, signal?: AbortSignal | null): Promise<void> =>
++  new Promise((resolve, reject) => {
++    if (signal?.aborted) {
++      reject(new SuricatoosApiError('aborted'));
++      return;
++    }
++    const onAbort = () => {
++      clearTimeout(timer);
++      reject(new SuricatoosApiError('aborted'));
++    };
++    const timer = setTimeout(() => {
++      signal?.removeEventListener('abort', onAbort);
++      resolve();
++    }, ms);
++    signal?.addEventListener('abort', onAbort, {once: true});
++  });
++
++const attempt = async <T>(
++  url: string,
++  init: RequestInit,
++  isGet: boolean,
++  timeout: number,
++  outer?: AbortSignal | null,
++): Promise<T | null> => {
++  if (outer?.aborted) {
++    throw new SuricatoosApiError('aborted');
++  }
++  const controller = new AbortController();
++  let timedOut = false;
++  const onAbort = () => controller.abort();
++  outer?.addEventListener('abort', onAbort, {once: true});
++  const timer = setTimeout(() => {
++    timedOut = true;
++    controller.abort();
++  }, timeout);
++  // An abort (the deadline or the caller) rejects the fetch or the body read.
++  const abortError = () => {
++    if (timedOut) {
++      return new SuricatoosApiError('timeout');
++    }
++    return outer?.aborted ? new SuricatoosApiError('aborted') : undefined;
++  };
++  try {
++    let r: Response;
++    try {
++      r = await fetch(url, {...init, signal: controller.signal});
++    } catch {
++      throw abortError() ?? new SuricatoosApiError('network');
++    }
++    if (!r.ok) {
++      throw new SuricatoosApiError(
++        kindOf(r.status),
++        r.status,
++        await readDetail(r),
++        parseRetryAfter(r.headers.get('Retry-After')),
++      );
++    }
++    if (r.status === 204) {
++      return null;
++    }
++    try {
++      return (await r.json()) as T;
++    } catch {
++      const failure = abortError();
++      if (failure?.kind === 'aborted') {
++        throw failure;
++      }
++      if (!isGet) {
++        // A 2xx to POST/PUT/DELETE: the action happened, only its answer is
++        // not JSON (or is empty).
++        return null;
++      }
++      throw failure ?? new SuricatoosApiError('invalid-response', r.status);
++    }
++  } finally {
++    clearTimeout(timer);
++    outer?.removeEventListener('abort', onAbort);
++  }
++};
++
++// How long to wait before the next attempt, or undefined to give up now. Only
++// failures that may pass by themselves are retried: no answer, a 429 and a
++// 5xx that does not explain itself. Not retried: a timeout (it already took
++// the whole deadline), a 5xx with a JSON detail/error (the server decided)
++// and a 503 without Retry-After (the nginx rate limit: asking again only
++// spends the budget).
++const retryDelay = (
++  e: SuricatoosApiError,
++  attempts: number,
++): number | undefined => {
++  const transient =
++    e.kind === 'network' ||
++    e.kind === 'rate-limited' ||
++    (e.kind === 'server' &&
++      e.detail === '' &&
++      (e.status !== 503 || e.retryAfter !== undefined));
++  if (!transient) {
++    return undefined;
++  }
++  const backoff = RETRY_DELAY * 2 ** (attempts - 1);
++  if (e.retryAfter === undefined) {
++    return backoff;
++  }
++  const asked = e.retryAfter * 1000;
++  return asked > MAX_RETRY_AFTER ? undefined : Math.max(backoff, asked);
++};
++
++/**
++ * Calls a Suricatoos API of the UI: `url` is the path (with any query) as
++ * nginx serves it — a path of this origin, anything else is refused before
++ * any request — and the session token is added to the query of every call.
++ * Sends the cookie (same-origin) and passes method, headers and body as given.
++ *
++ * Resolves with the JSON body: null for a 204, and for a 2xx to POST, PUT or
++ * DELETE whose body is not JSON. Rejects with a SuricatoosApiError: by HTTP
++ * status, or network, timeout, invalid-response (a GET) and aborted (by the
++ * `signal` of the caller, for instance on unmount).
++ */
++export const apiRequest = async <T = unknown>(
++  url: string,
++  token: string,
++  init: ApiRequestInit = {},
++): Promise<T | null> => {
++  if (!isSameOriginPath(url)) {
++    throw new TypeError('apiRequest: not a path of this origin: ' + url);
++  }
++  const {timeout = DEFAULT_TIMEOUT, retry, signal, ...rest} = init;
++  const request: RequestInit = {credentials: 'same-origin', ...rest};
++  const target = tokenUrl(url, token);
++  const isGet = (rest.method ?? 'GET').toUpperCase() === 'GET';
++  const maxAttempts = isGet && retry !== false ? MAX_ATTEMPTS : 1;
++  for (let attempts = 1; ; attempts++) {
++    try {
++      return await attempt<T>(target, request, isGet, timeout, signal);
++    } catch (e) {
++      const error = e as SuricatoosApiError;
++      const wait =
++        attempts < maxAttempts ? retryDelay(error, attempts) : undefined;
++      if (wait === undefined) {
++        throw error;
++      }
++      await pause(wait, signal);
++    }
++  }
++};
++
++// Anything that did not come from apiRequest is a bug in the calling code:
++// logged, and shown as a failed call.
++export const toApiError = (e: unknown): SuricatoosApiError => {
++  if (e instanceof SuricatoosApiError) {
++    return e;
++  }
++  console.error('Suricatoos API: unexpected error', e);
++  return new SuricatoosApiError('network');
++};
++
++export const isSessionExpired = (e: unknown): boolean =>
++  e instanceof SuricatoosApiError && e.kind === 'session-expired';
++
++/**
++ * The message for the operator, the same on every page for the same failure.
++ * 401 and 403 take the text of the page (`texts`). 404 and 500 have fixed
++ * texts; for any other status the `detail`/`error` of the server wins when it
++ * sent one. An aborted call has no message.
++ */
++export const apiErrorMessage = (
++  _: TranslateFunc,
++  e: unknown,
++  texts: ApiErrorTexts = {},
++): string => {
++  if (!(e instanceof SuricatoosApiError)) {
++    return _('Could not reach the server.');
++  }
++  switch (e.kind) {
++    case 'aborted':
++      return '';
++    case 'network':
++    case 'invalid-response':
++      return _('Could not reach the server.');
++    case 'timeout':
++      return _('Request timed out');
++    case 'session-expired':
++      return texts.sessionExpired ?? _('Session expired. Sign in again.');
++    case 'forbidden':
++      return texts.forbidden ?? _('No permission for this action.');
++    case 'not-found':
++      return _('Not found. Reload the page.');
++  }
++  if (e.status === 500) {
++    return _('Internal server error.');
++  }
++  if (e.detail !== '') {
++    return e.detail;
++  }
++  if (e.status === 429 || e.status === 503) {
++    // nginx rate-limits these APIs (limit_req answers 503 by default).
++    return _(
++      'The server is busy or limiting requests ({{status}}). Wait a minute and try again.',
++      {status: String(e.status)},
++    );
++  }
++  return _('The server answered with an error ({{status}}).', {
++    status: String(e.status),
++  });
++};
++
++/**
++ * Polls `poll` every `intervalMs` ms:
++ * - one poll at a time: the next one is scheduled when the previous one ends;
++ * - none while the tab is hidden (document.hidden): on visibilitychange it
++ *   resumes, at once if the next poll is already due;
++ * - stopped for good by a 401 (or a `stopOn` error): asking again does not
++ *   bring the session back. The error stays in `error` for the page to show;
++ * - a Retry-After of the server postpones the next poll (by 5 min at most);
++ * - on unmount, the timer is cleared and the poll in flight aborted.
++ *
++ * `poll` gets the AbortSignal of its call and must reject on failure (a
++ * SuricatoosApiError from apiRequest). The latest `poll` is always used, so
++ * the poller does not restart when it changes.
++ */
++export const usePolling = (
++  poll: (signal: AbortSignal) => Promise<unknown>,
++  intervalMs: number,
++  options: PollingOptions = {},
++): Polling => {
++  const [error, setErrorState] = useState<SuricatoosApiError | null>(null);
++  const pollRef = useRef(poll);
++  const stopOnRef = useRef(options.stopOn);
++  // Once set, this poller sends nothing else until unmount.
++  const stoppedRef = useRef(false);
++  const controlRef = useRef<PollControl | null>(null);
++
++  useEffect(() => {
++    pollRef.current = poll;
++    stopOnRef.current = options.stopOn;
++  });
++
++  const setError = useCallback((e: unknown) => {
++    if (e === null || e === undefined) {
++      setErrorState(null);
++      return;
++    }
++    const err = toApiError(e);
++    if (err.kind === 'aborted') {
++      return;
++    }
++    setErrorState(err);
++    if (err.kind === 'session-expired' || stopOnRef.current?.(err) === true) {
++      stoppedRef.current = true;
++      controlRef.current?.halt();
++    }
++  }, []);
++
++  useEffect(() => {
++    let disposed = false;
++    let timer: ReturnType<typeof setTimeout> | undefined;
++    let controller: AbortController | undefined;
++    let running: Promise<void> | undefined;
++    let queued: Promise<void> | undefined;
++    // When the next poll is due (Date.now() clock).
++    let dueAt = 0;
++    // A refresh asked while the tab was hidden: poll as soon as it shows.
++    let wanted = false;
++
++    const live = () => !disposed && !stoppedRef.current;
++
++    const clearTimer = () => {
++      if (timer !== undefined) {
++        clearTimeout(timer);
++        timer = undefined;
++      }
++    };
++
++    const runOnce = async () => {
++      const own = new AbortController();
++      controller = own;
++      let wait = intervalMs;
++      try {
++        await pollRef.current(own.signal);
++        if (!own.signal.aborted) {
++          setErrorState(null);
++        }
++      } catch (e) {
++        if (!own.signal.aborted) {
++          const err = toApiError(e);
++          setError(err);
++          if (err.retryAfter !== undefined) {
++            wait = Math.max(
++              wait,
++              Math.min(err.retryAfter * 1000, MAX_POLL_DELAY),
++            );
++          }
++        }
++      }
++      if (controller === own) {
++        controller = undefined;
++      }
++      dueAt = wanted ? 0 : Date.now() + wait;
++    };
++
++    // Called only with no poll in flight: when one ends, or when the tab shows.
++    const schedule = () => {
++      clearTimer();
++      if (!live() || document.hidden) {
++        return;
++      }
++      timer = setTimeout(
++        () => {
++          timer = undefined;
++          void start();
++        },
++        Math.max(0, dueAt - Date.now()),
++      );
++    };
++
++    const start = (): Promise<void> => {
++      if (!live()) {
++        return Promise.resolve();
++      }
++      if (running !== undefined) {
++        // No overlap: one more poll right after the one in flight, shared by
++        // every caller in the meantime.
++        if (queued === undefined) {
++          queued = running.then(() => {
++            queued = undefined;
++            return start();
++          });
++        }
++        return queued;
++      }
++      clearTimer();
++      wanted = false;
++      running = runOnce().finally(() => {
++        running = undefined;
++        schedule();
++      });
++      return running;
++    };
++
++    const refresh = (): Promise<void> => {
++      if (!live()) {
++        return Promise.resolve();
++      }
++      if (document.hidden) {
++        wanted = true;
++        dueAt = 0;
++        return Promise.resolve();
++      }
++      return start();
++    };
++
++    const onVisibilityChange = () => {
++      if (document.hidden) {
++        // Paused: the poll in flight, if any, ends and schedules nothing.
++        clearTimer();
++      } else if (running === undefined) {
++        if (dueAt <= Date.now()) {
++          void start();
++        } else {
++          schedule();
++        }
++      }
++    };
++
++    const control: PollControl = {
++      refresh,
++      halt: () => {
++        clearTimer();
++        controller?.abort();
++      },
++    };
++    controlRef.current = control;
++    document.addEventListener('visibilitychange', onVisibilityChange);
++    if (document.hidden) {
++      dueAt = 0;
++    } else {
++      void start();
++    }
++
++    return () => {
++      disposed = true;
++      clearTimer();
++      controller?.abort();
++      document.removeEventListener('visibilitychange', onVisibilityChange);
++      if (controlRef.current === control) {
++        controlRef.current = null;
++      }
++    };
++  }, [intervalMs, setError]);
++
++  const refresh = useCallback(
++    () => controlRef.current?.refresh() ?? Promise.resolve(),
++    [],
++  );
++
++  return {error, setError, refresh};
++};

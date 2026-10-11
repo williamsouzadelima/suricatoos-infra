@@ -2,7 +2,8 @@ name: gsa-pr-build
 
 # Valida em PR o patch da UI (greenbone/gsa + patches/gsa-*.patch) e o do gsad
 # ANTES do merge: aplica os dois nas tags pinadas, roda o type-check (tsc) e o
-# build de produção (Vite) da UI e confere os catálogos de idioma.
+# build de produção (Vite) da UI, os testes vitest que o patch traz e confere
+# os catálogos de idioma.
 # Não publica nada, não usa secrets e não faz login em registry: a publicação
 # continua só no build-publish.yml (push na main).
 on:
@@ -120,6 +121,20 @@ jobs:
           npm run build
           test -s build/index.html
 
+      # Os testes que o patch traz (cliente HTTP e polling das telas da
+      # Suricatoos): só esses arquivos, uns segundos. A suíte inteira do GSA
+      # não é portão deste workflow. Teste novo no patch entra na lista.
+      - name: Testes do patch (vitest)
+        id: tests
+        # Roda mesmo com o type-check ou o build quebrados (o job continua
+        # falhando), desde que as dependências tenham instalado.
+        if: ${{ !cancelled() && steps.deps.outcome == 'success' }}
+        working-directory: gsa-src
+        run: |
+          set -eu
+          npx vitest run --project web \
+            src/web/utils/__tests__/suricatoosApi.test.ts
+
       # O Vite copia public/ sem validar: um JSON quebrado ou com chave repetida
       # num catálogo só apareceria no navegador.
       - name: Catálogos de idioma (JSON válido, sem chave repetida)
@@ -165,6 +180,7 @@ jobs:
           R_DEPS: ${{ steps.deps.outcome }}
           R_TYPECHECK: ${{ steps.typecheck.outcome }}
           R_BUILD: ${{ steps.build.outcome }}
+          R_TESTS: ${{ steps.tests.outcome }}
           R_LOCALES: ${{ steps.locales.outcome }}
         run: |
           {
@@ -179,5 +195,6 @@ jobs:
             echo "| npm ci | ${R_DEPS:-skipped} |"
             echo "| type-check (tsc --noEmit) | ${R_TYPECHECK:-skipped} |"
             echo "| build de produção (npm run build) | ${R_BUILD:-skipped} |"
+            echo "| testes do patch (vitest) | ${R_TESTS:-skipped} |"
             echo "| catálogos de idioma | ${R_LOCALES:-skipped} |"
           } >> "$GITHUB_STEP_SUMMARY"
