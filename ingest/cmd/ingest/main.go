@@ -16,6 +16,14 @@
 //	GMP_USERNAME     gvmd username               (default: admin)
 //	GVM_PASSWORD     gvmd password
 //	GMP_TASK_NAME    container task prefix        (default: suricatoos-import)
+//	INGEST_AGENT_IDENTITY  off | log | enforce   (default: log) — POST /v1/inventory:
+//	                 agent_id in the body vs the CN of the client certificate nginx
+//	                 verified (X-Client-Cert-DN), and certificate revocation
+//	                 (X-Client-Cert-Serial vs the CRL). log = log and accept;
+//	                 enforce = 403; off = no check. An unavailable CRL is logged and
+//	                 the inventory accepted (fail-open, unlike sensor-report).
+//	SCAN_CRL_URL     control-plane CRL (DER) for the inventory and sensor-report
+//	                 revocation checks (default: http://control-plane:8080/v1/crl.der)
 package main
 
 import (
@@ -86,16 +94,34 @@ func main() {
 		log.Printf("scanlaunch: desabilitado — defina SCAN_BRIDGE_SCRIPT para habilitar")
 	}
 
-	// Internal-sensor report import (ADR-0007). Wired when SENSOR_REPORT_ENABLED=true.
-	// Reuses the scanlaunch CRL fetcher (fail-closed) for revocation and reads the
-	// tenant registry + secrets from host-mounted files (ingest can't import the
-	// control-plane module).
-	if os.Getenv("SENSOR_REPORT_ENABLED") == "true" {
-		crl := scanlaunch.NewCRL(
+	// The control-plane's CRL (SCAN_CRL_URL), fetched by the scanlaunch fetcher and
+	// shared by the routes below that check revocation: the sensor-report import
+	// (fail-closed, through Check) and the inventory identity check (fail-open,
+	// through Revoked — see ingest/identity.go). Fetched only when one of them is on.
+	identityMode := ingest.IdentityModeFromEnv()
+	sensorReportEnabled := os.Getenv("SENSOR_REPORT_ENABLED") == "true"
+	var crl *scanlaunch.CRL
+	if identityMode != ingest.IdentityOff || sensorReportEnabled {
+		crl = scanlaunch.NewCRL(
 			envOr("SCAN_CRL_URL", "http://control-plane:8080/v1/crl.der"),
 			os.Getenv("SCAN_REQUIRE_CRL") != "false",
 		)
 		crl.Start(context.Background())
+	}
+
+	// Agent identity on POST /v1/inventory (INGEST_AGENT_IDENTITY=off|log|enforce,
+	// default log): agent_id in the body vs the CN of the certificate nginx verified,
+	// plus revocation. Logs the mode in effect.
+	var revocation ingest.RevocationList // a nil interface, not a nil *CRL, when there is none
+	if crl != nil {
+		revocation = crl
+	}
+	server.SetAgentIdentity(identityMode, revocation)
+
+	// Internal-sensor report import (ADR-0007). Wired when SENSOR_REPORT_ENABLED=true.
+	// Uses the shared CRL fail-closed for revocation and reads the tenant registry +
+	// secrets from host-mounted files (ingest can't import the control-plane module).
+	if sensorReportEnabled {
 		resolver := sensorreport.NewFileResolver(
 			envOr("TENANTS_FILE", "/data/tenants.json"),
 			os.Getenv("SENSOR_TENANT_SECRETS"),

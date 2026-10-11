@@ -159,6 +159,18 @@ type Server struct {
 	// sensorReport, when set, mounts the sensor-report import route (ADR-0007).
 	// nil = feature not wired.
 	sensorReport *sensorreport.Service
+
+	// identity / crl: the agent identity check on POST /v1/inventory (see
+	// identity.go). identity defaults to IdentityLog; crl nil = revocation not
+	// checked. noted and crlWarnAt keep the transition logs to one line per agent and
+	// one "CRL unavailable" line per crlWarnEvery.
+	identity  IdentityMode
+	crl       RevocationList
+	noted     onceSet
+	crlWarnMu sync.Mutex
+	crlWarnAt time.Time
+
+	logf func(format string, args ...any) // log.Printf; tests capture it
 }
 
 // AttachScanLaunch wires the reNgine→OpenVAS launch service so its routes are
@@ -188,6 +200,8 @@ func NewServer(s Sink) *Server {
 		now:          time.Now,
 		queryAgents:  execAgentsQuery,
 		lastSeenPath: os.Getenv("AGENT_LASTSEEN_FILE"),
+		identity:     IdentityLog,
+		logf:         log.Printf,
 	}
 	srv.loadLastSeen()
 	return srv
@@ -290,6 +304,10 @@ func (s *Server) Handler() http.Handler {
 		}
 		if inv.Agent.AgentID == "" || inv.OS.Family == "" {
 			http.Error(w, "inventário incompleto", http.StatusBadRequest)
+			return
+		}
+		// agent_id vs the client certificate, and revocation (INGEST_AGENT_IDENTITY).
+		if !s.agentIdentityOK(w, r, inv.Agent.AgentID) {
 			return
 		}
 		s.markSeen(inv.Agent.AgentID) // last check-in for online/offline, even if deduped downstream

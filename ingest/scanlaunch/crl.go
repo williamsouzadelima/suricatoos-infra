@@ -116,6 +116,23 @@ func (c *CRL) Check(serialHex string) error {
 	return nil
 }
 
+// Revoked reports whether serialHex is on the last CRL loaded. known is false when
+// there is nothing to consult — revocation is not configured (no URL) or no CRL has
+// loaded since boot — so a caller can tell "not revoked" from "could not check".
+// It ignores required: Check is the fail-closed answer (scan-request, sensor-report);
+// this one serves a caller that fails open on its own terms (the inventory route).
+func (c *CRL) Revoked(serialHex string) (revoked, known bool) {
+	if c.url == "" {
+		return false, false
+	}
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if !c.loaded {
+		return false, false
+	}
+	return c.revoked[normalizeSerial(serialHex)], true
+}
+
 // normalizeSerial lowercases a hex serial and strips separators and leading
 // zeros so nginx's "0A:1B" and x509's "a1b" compare equal.
 func normalizeSerial(s string) string {
