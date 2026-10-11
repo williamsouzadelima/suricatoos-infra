@@ -1,9 +1,13 @@
 package enrollcmd
 
 import (
+	"bytes"
 	"encoding/json"
+	"errors"
+	"log"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 
@@ -436,6 +440,98 @@ func TestWindowsRefusedWhenServerURLIsUnsafe(t *testing.T) {
 		if !strings.Contains(r.Command, want) {
 			t.Errorf("%s: o valor deveria sair citado para o shell (%s):\n%s", target, want, r.Command)
 		}
+	}
+}
+
+// failingUpdateStore falha em Update (disco cheio, banco travado): o Revoke falha junto.
+type failingUpdateStore struct{ tokens.Store }
+
+func (failingUpdateStore) Update(tokens.Record) error { return errors.New("disco cheio") }
+
+// captureLog redireciona o log padrao para um buffer ate o fim do teste.
+func captureLog(t *testing.T) *bytes.Buffer {
+	t.Helper()
+	var buf bytes.Buffer
+	log.SetOutput(&buf)
+	t.Cleanup(func() { log.SetOutput(os.Stderr) })
+	return &buf
+}
+
+// idAndSecret separa um token "st_<id>.<segredo>".
+func idAndSecret(t *testing.T, token string) (id, secret string) {
+	t.Helper()
+	body := strings.TrimPrefix(token, "st_")
+	i := strings.Index(body, ".")
+	if i < 0 {
+		t.Fatalf("token fora do formato st_<id>.<segredo>: %q", token)
+	}
+	return body[:i], body[i+1:]
+}
+
+// newSvcWithStore e o newSvc com o armazenamento de tokens escolhido pelo teste.
+func newSvcWithStore(store tokens.Store) (*Service, *tokens.Manager) {
+	tm := tokens.NewManager(store)
+	return New(Config{
+		TM:          tm,
+		Known:       knownAcme,
+		CAPin:       "sha256:abc123",
+		ServerURL:   "https://scanner.suricatoos.com/agent/v1",
+		AdminSecret: "sekret",
+	}), tm
+}
+
+// Falha tardia: o token ja existe e o comando nao sai (nao acontece com tokens reais, que
+// sempre cabem; o teste a simula por render). O pedido da 500, o token e revogado e nada do
+// segredo vai para a resposta nem para o log.
+func TestLateRenderFailureRevokesTheToken(t *testing.T) {
+	logs := captureLog(t)
+	s, tm := newSvcWithStore(tokens.NewMemStore())
+	var seen string
+	s.render = func(target, token string) (string, error) {
+		seen = token
+		return "", errors.New("falha simulada")
+	}
+
+	w := do(s, "GET", "/api/v1/tenants/acme/enroll-command?target=linux", "sekret")
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("falha tardia deveria 500, got %d: %s", w.Code, w.Body.String())
+	}
+	if recs, _ := tm.List(); len(recs) != 1 || !recs[0].Revoked {
+		t.Fatalf("o token do comando que nao saiu deveria estar revogado: %+v", recs)
+	}
+	_, secret := idAndSecret(t, seen)
+	for name, text := range map[string]string{"resposta": w.Body.String(), "log": logs.String()} {
+		if strings.Contains(text, secret) || strings.Contains(text, seen) {
+			t.Errorf("%s vazou o segredo do token: %s", name, text)
+		}
+	}
+}
+
+// A revogacao que falha nao some em silencio: o log traz o id do token e o motivo (nunca o
+// segredo), porque o token segue valido ate expirar.
+func TestRevokeFailureIsLogged(t *testing.T) {
+	logs := captureLog(t)
+	s, _ := newSvcWithStore(failingUpdateStore{tokens.NewMemStore()})
+	var seen string
+	s.render = func(target, token string) (string, error) {
+		seen = token
+		return "", errors.New("falha simulada")
+	}
+
+	w := do(s, "GET", "/api/v1/tenants/acme/enroll-command?target=linux", "sekret")
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("falha tardia deveria 500, got %d: %s", w.Code, w.Body.String())
+	}
+	id, secret := idAndSecret(t, seen)
+	out := logs.String()
+	if !strings.Contains(out, id) {
+		t.Errorf("o log deveria citar o id %s do token que ficou sem revogar:\n%s", id, out)
+	}
+	if !strings.Contains(out, "disco cheio") {
+		t.Errorf("o log deveria trazer o motivo da falha ao revogar:\n%s", out)
+	}
+	if strings.Contains(out, secret) || strings.Contains(out, seen) {
+		t.Errorf("o log vazou o segredo do token:\n%s", out)
 	}
 }
 

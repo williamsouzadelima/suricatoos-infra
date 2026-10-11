@@ -1,9 +1,13 @@
 package provision
 
 import (
+	"bytes"
 	"encoding/json"
+	"errors"
+	"log"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 
@@ -189,6 +193,90 @@ func TestProvisionUnusableServerURLRefusesEverythingBeforeMinting(t *testing.T) 
 	}
 	if recs, _ := tm.List(); len(recs) != 0 {
 		t.Fatalf("a config recusada nao deveria mintar token: %+v", recs)
+	}
+}
+
+// failingUpdateStore falha em Update (disco cheio, banco travado): o Revoke falha junto.
+type failingUpdateStore struct{ tokens.Store }
+
+func (failingUpdateStore) Update(tokens.Record) error { return errors.New("disco cheio") }
+
+// captureLog redireciona o log padrao para um buffer ate o fim do teste.
+func captureLog(t *testing.T) *bytes.Buffer {
+	t.Helper()
+	var buf bytes.Buffer
+	log.SetOutput(&buf)
+	t.Cleanup(func() { log.SetOutput(os.Stderr) })
+	return &buf
+}
+
+// idAndSecret separa um token "st_<id>.<segredo>".
+func idAndSecret(t *testing.T, token string) (id, secret string) {
+	t.Helper()
+	body := strings.TrimPrefix(token, "st_")
+	i := strings.Index(body, ".")
+	if i < 0 {
+		t.Fatalf("token fora do formato st_<id>.<segredo>: %q", token)
+	}
+	return body[:i], body[i+1:]
+}
+
+// Falha tardia: o token ja existe e o comando nao sai (nao acontece com tokens reais, que
+// sempre cabem; o teste a simula por render). O pedido da 500, o token e revogado e nada do
+// segredo vai para a resposta nem para o log.
+func TestProvisionLateRenderFailureRevokesTheToken(t *testing.T) {
+	logs := captureLog(t)
+	tm := tokens.NewManager(tokens.NewMemStore())
+	svc := New(tm, "sha256:deadbeef", "https://scanner.suricatoos.com/agent/v1")
+	var seen string
+	svc.render = func(goos, token string) (string, error) {
+		seen = token
+		return "", errors.New("falha simulada")
+	}
+
+	rec := httptest.NewRecorder()
+	svc.Handler()(rec, gatedGet("/provision/install?os=linux"))
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("falha tardia deveria 500, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if recs, _ := tm.List(); len(recs) != 1 || !recs[0].Revoked {
+		t.Fatalf("o token do comando que nao saiu deveria estar revogado: %+v", recs)
+	}
+	_, secret := idAndSecret(t, seen)
+	for name, text := range map[string]string{"resposta": rec.Body.String(), "log": logs.String()} {
+		if strings.Contains(text, secret) || strings.Contains(text, seen) {
+			t.Errorf("%s vazou o segredo do token: %s", name, text)
+		}
+	}
+}
+
+// A revogacao que falha nao some em silencio: o log traz o id do token e o motivo (nunca o
+// segredo), porque o token segue valido ate expirar.
+func TestProvisionRevokeFailureIsLogged(t *testing.T) {
+	logs := captureLog(t)
+	tm := tokens.NewManager(failingUpdateStore{tokens.NewMemStore()})
+	svc := New(tm, "sha256:deadbeef", "https://scanner.suricatoos.com/agent/v1")
+	var seen string
+	svc.render = func(goos, token string) (string, error) {
+		seen = token
+		return "", errors.New("falha simulada")
+	}
+
+	rec := httptest.NewRecorder()
+	svc.Handler()(rec, gatedGet("/provision/install?os=linux"))
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("falha tardia deveria 500, got %d: %s", rec.Code, rec.Body.String())
+	}
+	id, secret := idAndSecret(t, seen)
+	out := logs.String()
+	if !strings.Contains(out, id) {
+		t.Errorf("o log deveria citar o id %s do token que ficou sem revogar:\n%s", id, out)
+	}
+	if !strings.Contains(out, "disco cheio") {
+		t.Errorf("o log deveria trazer o motivo da falha ao revogar:\n%s", out)
+	}
+	if strings.Contains(out, secret) || strings.Contains(out, seen) {
+		t.Errorf("o log vazou o segredo do token:\n%s", out)
 	}
 }
 

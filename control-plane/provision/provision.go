@@ -30,13 +30,19 @@ type Service struct {
 	tm        *tokens.Manager
 	caPin     string // CA fingerprint (--ca-pin), from authority.Fingerprint()
 	serverURL string // CONTROL_PLANE_URL handed to the agent (ends in /v1)
+	// render builds the command once a token exists. It is a field only so a test can
+	// simulate a failure at that late point, which real tokens never cause (the
+	// configuration was validated before minting); New sets it to command.
+	render func(goos, token string) (string, error)
 }
 
 // New returns a provision Service. serverURL is CONTROL_PLANE_URL (e.g.
 // https://scanner.suricatoos.com/agent/v1); the install scripts are fetched from its
 // scheme+host (see installcmd.PublicBase).
 func New(tm *tokens.Manager, caPin, serverURL string) *Service {
-	return &Service{tm: tm, caPin: caPin, serverURL: serverURL}
+	s := &Service{tm: tm, caPin: caPin, serverURL: serverURL}
+	s.render = s.command
+	return s
 }
 
 type response struct {
@@ -83,10 +89,9 @@ func (s *Service) Handler() http.HandlerFunc {
 			return
 		}
 
-		cmd, err := s.command(goos, minted.Token)
+		cmd, err := s.render(goos, minted.Token)
 		if err != nil {
-			// Nothing was handed out, so do not leave a live token behind.
-			_ = s.tm.Revoke(minted.ID, "provision (comando recusado)")
+			s.discard(minted.ID)
 			log.Printf("provision: comando %s recusado: %v", goos, err)
 			http.Error(w, "falha ao montar o comando de instalação", http.StatusInternalServerError)
 			return
@@ -104,6 +109,15 @@ func (s *Service) Handler() http.HandlerFunc {
 		w.Header().Set("Cache-Control", "no-store")
 		_ = json.NewEncoder(w).Encode(resp)
 	})
+}
+
+// discard revokes a token that was minted but never handed out, so no live token is left
+// behind. A revoke that fails is logged, with the id and never the secret: the token then
+// stays valid until it expires and someone should know.
+func (s *Service) discard(id string) {
+	if err := s.tm.Revoke(id, "provision (comando recusado)"); err != nil {
+		log.Printf("provision: não consegui revogar o token %s do comando recusado (segue válido até expirar): %v", id, err)
+	}
 }
 
 // check reports, before any token exists, whether this configuration can render the

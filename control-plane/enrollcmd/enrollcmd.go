@@ -41,14 +41,22 @@ type Config struct {
 }
 
 // Service renders per-tenant enrollment commands backed by fresh tokens.
-type Service struct{ cfg Config }
+type Service struct {
+	cfg Config
+	// render builds the command once a token exists. It is a field only so a test can
+	// simulate a failure at that late point, which real tokens never cause (the
+	// configuration was validated before minting); New sets it to command.
+	render func(target, token string) (string, error)
+}
 
 // New builds a Service.
 func New(cfg Config) *Service {
 	if cfg.Image == "" {
 		cfg.Image = "ghcr.io/williamsouzadelima/suricatoos-agent:stable"
 	}
-	return &Service{cfg: cfg}
+	s := &Service{cfg: cfg}
+	s.render = s.command
+	return s
 }
 
 // defaults for a deployment token: one command activates a fleet within a window.
@@ -179,10 +187,9 @@ func (s *Service) serve(w http.ResponseWriter, r *http.Request, tenant string) {
 		return
 	}
 
-	cmd, err := s.command(target, minted.Token)
+	cmd, err := s.render(target, minted.Token)
 	if err != nil {
-		// Nothing was handed out, so do not leave a live token behind.
-		_ = s.cfg.TM.Revoke(minted.ID, "enroll-command ("+tenant+") comando recusado")
+		s.discard(minted.ID, tenant)
 		log.Printf("enrollcmd: tenant %q, target %s: comando recusado: %v", tenant, target, err)
 		http.Error(w, "falha ao montar o comando de instalação", http.StatusInternalServerError)
 		return
@@ -204,6 +211,15 @@ func (s *Service) serve(w http.ResponseWriter, r *http.Request, tenant string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
 	_ = json.NewEncoder(w).Encode(resp)
+}
+
+// discard revokes a token that was minted but never handed out, so no live token is left
+// behind. A revoke that fails is logged, with the id and never the secret: the token then
+// stays valid until it expires and someone should know.
+func (s *Service) discard(id, tenant string) {
+	if err := s.cfg.TM.Revoke(id, "enroll-command ("+tenant+") comando recusado"); err != nil {
+		log.Printf("enrollcmd: tenant %q: não consegui revogar o token %s do comando recusado (segue válido até expirar): %v", tenant, id, err)
+	}
 }
 
 // check reports, before any token exists, whether this configuration can render the
