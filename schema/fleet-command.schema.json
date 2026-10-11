@@ -1,0 +1,325 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://suricatoos.dev/schema/fleet-command.schema.json",
+  "title": "Suricatoos — Fleet Command (signed envelope)",
+  "description": "A command the fleet hub (commandcenter) queues for ONE node and the node PULLS over its outbound mTLS long-poll (GET /fleet/v1/commands, ADR-0011). The node acts only on a command whose Ed25519 signature verifies against the command key pinned at enroll (a key separate from the fleet CA). Signed bytes = the canonical form: the domain line 'suricatoos-fleet-command-v1' then one length-prefixed line 'key=<len>:<value>\\n' per field, in this exact order: schema_version, command_id, node_id, tenant, type, issued_by, issued_at, not_after, nonce, payload_sha256 (<len> = byte length in decimal; same framing as control-plane/remediation/canonical.go). payload is compact JSON and payload_sha256 is the lowercase hex SHA-256 of the EXACT bytes of the payload value as transmitted (never of a re-serialization). After the signature the node checks the window [issued_at - skew, not_after + skew], node_id == itself, the nonce against its persisted anti-replay cache, the tenant against its local registry, its local policy and its local scan scope. The root validates ONE command; $defs also holds the long-poll response, the payload of each type and the shared primitives the other fleet-*.schema.json files reference.",
+  "$ref": "#/$defs/command",
+  "$defs": {
+    "command": {
+      "type": "object",
+      "required": ["schema_version", "command_id", "node_id", "tenant", "type", "issued_by", "issued_at", "not_after", "nonce", "payload_sha256", "payload", "signature"],
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": { "type": "string", "const": "1.0.0" },
+        "command_id": { "$ref": "#/$defs/uuid", "description": "hub-assigned and unique; the node's idempotency key (journal) and the {id} of the ack/result routes" },
+        "node_id": { "$ref": "#/$defs/node_id", "description": "the ONE node this command is for; must equal the CN of the node's own fleet certificate (else rejected: wrong_node)" },
+        "tenant": { "$ref": "#/$defs/tenant", "description": "tenant the command acts on; must be known AND enabled on the node (central: TENANTS_FILE registry; standalone/sensor: FLEET_TENANT). Existing objects are addressed only inside that tenant's gvmd partition" },
+        "type": { "$ref": "#/$defs/command_type" },
+        "issued_by": { "$ref": "#/$defs/issued_by" },
+        "issued_at": { "$ref": "#/$defs/utc_time", "description": "signing time (hub clock)" },
+        "not_after": { "$ref": "#/$defs/utc_time", "description": "expiry; the node requires issued_at < not_after <= issued_at + 24h" },
+        "nonce": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[0-9a-f]{64}$", "description": "32 CSPRNG bytes in hex, single-use; the node persists it until not_after + skew" },
+        "payload_sha256": { "$ref": "#/$defs/sha256_hex" },
+        "payload": { "type": "object", "description": "compact JSON; its shape depends on type (see allOf)" },
+        "signature": { "type": "string", "minLength": 88, "maxLength": 88, "pattern": "^[A-Za-z0-9+/]{86}==$", "description": "standard base64 of the 64-byte Ed25519 signature over the canonical form (not part of the canonical)" }
+      },
+      "allOf": [
+        { "if": { "properties": { "type": { "const": "state.resync" } }, "required": ["type"] }, "then": { "properties": { "payload": { "$ref": "#/$defs/payload_state_resync" } } } },
+        { "if": { "properties": { "type": { "enum": ["task.start", "task.stop", "task.resume", "task.delete"] } }, "required": ["type"] }, "then": { "properties": { "payload": { "$ref": "#/$defs/payload_task_ref" } } } },
+        { "if": { "properties": { "type": { "const": "task.create" } }, "required": ["type"] }, "then": { "properties": { "payload": { "$ref": "#/$defs/payload_task_create" } } } },
+        { "if": { "properties": { "type": { "const": "task.modify" } }, "required": ["type"] }, "then": { "properties": { "payload": { "$ref": "#/$defs/payload_task_modify" } } } },
+        { "if": { "properties": { "type": { "const": "task.clone" } }, "required": ["type"] }, "then": { "properties": { "payload": { "$ref": "#/$defs/payload_task_clone" } } } },
+        { "if": { "properties": { "type": { "const": "target.create" } }, "required": ["type"] }, "then": { "properties": { "payload": { "$ref": "#/$defs/payload_target_create" } } } },
+        { "if": { "properties": { "type": { "const": "target.modify" } }, "required": ["type"] }, "then": { "properties": { "payload": { "$ref": "#/$defs/payload_target_modify" } } } },
+        { "if": { "properties": { "type": { "const": "target.delete" } }, "required": ["type"] }, "then": { "properties": { "payload": { "$ref": "#/$defs/payload_target_ref" } } } },
+        { "if": { "properties": { "type": { "const": "schedule.create" } }, "required": ["type"] }, "then": { "properties": { "payload": { "$ref": "#/$defs/payload_schedule_create" } } } },
+        { "if": { "properties": { "type": { "const": "schedule.modify" } }, "required": ["type"] }, "then": { "properties": { "payload": { "$ref": "#/$defs/payload_schedule_modify" } } } },
+        { "if": { "properties": { "type": { "const": "schedule.delete" } }, "required": ["type"] }, "then": { "properties": { "payload": { "$ref": "#/$defs/payload_schedule_ref" } } } },
+        { "if": { "properties": { "type": { "const": "report.export" } }, "required": ["type"] }, "then": { "properties": { "payload": { "$ref": "#/$defs/payload_report_export" } } } },
+        { "if": { "properties": { "type": { "const": "report.summary" } }, "required": ["type"] }, "then": { "properties": { "payload": { "$ref": "#/$defs/payload_report_summary" } } } },
+        { "if": { "properties": { "type": { "const": "agent.scan_now" } }, "required": ["type"] }, "then": { "properties": { "payload": { "$ref": "#/$defs/payload_agent_ref" } } } },
+        { "if": { "properties": { "type": { "const": "agent.revoke" } }, "required": ["type"] }, "then": { "properties": { "payload": { "$ref": "#/$defs/payload_agent_revoke" } } } },
+        { "if": { "properties": { "type": { "const": "enroll_token.create" } }, "required": ["type"] }, "then": { "properties": { "payload": { "$ref": "#/$defs/payload_enroll_token_create" } } } },
+        { "if": { "properties": { "type": { "const": "enroll_token.revoke" } }, "required": ["type"] }, "then": { "properties": { "payload": { "$ref": "#/$defs/payload_enroll_token_revoke" } } } },
+        { "if": { "properties": { "type": { "const": "sensor_job.enqueue" } }, "required": ["type"] }, "then": { "properties": { "payload": { "$ref": "#/$defs/payload_sensor_job_enqueue" } } } },
+        { "if": { "properties": { "type": { "const": "feed.sync_now" } }, "required": ["type"] }, "then": { "properties": { "payload": { "$ref": "#/$defs/payload_empty" } } } }
+      ]
+    },
+
+    "poll_response": {
+      "description": "200 body of GET /fleet/v1/commands?wait=N: 1..10 commands for the polling node, oldest issued_at first. Nothing pending → 204 with no body.",
+      "type": "object",
+      "required": ["commands"],
+      "additionalProperties": false,
+      "properties": {
+        "commands": { "type": "array", "minItems": 1, "maxItems": 10, "items": { "$ref": "#/$defs/command" } }
+      }
+    },
+
+    "no_control": {
+      "description": "Rejects ASCII control characters (incl. CR/LF): no log/XML/line injection, and no trailing newline slipping past a '$' anchor in validators where '$' also matches before a final newline.",
+      "not": { "pattern": "[\\x00-\\x1f\\x7f]" }
+    },
+    "uuid": { "type": "string", "format": "uuid", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", "description": "lowercase canonical UUID (also the shape of every gvmd object id)" },
+    "node_id": { "type": "string", "minLength": 3, "maxLength": 64, "pattern": "^[a-z0-9][a-z0-9-]{2,63}$", "allOf": [ { "$ref": "#/$defs/no_control" } ], "description": "fleet node identity = CN of the node certificate issued by the FLEET CA (OU=fleet-node)" },
+    "tenant": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$", "allOf": [ { "$ref": "#/$defs/no_control" } ] },
+    "issued_by": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z0-9._@+-]+$", "allOf": [ { "$ref": "#/$defs/no_control" } ], "description": "hub operator who issued the command (non-repudiation; recorded in the node's local audit). Recommended: a pseudonymous operator id kept by the hub, not an e-mail (LGPD minimization)" },
+    "utc_time": { "type": "string", "format": "date-time", "minLength": 20, "maxLength": 20, "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$", "description": "RFC 3339, UTC, whole seconds, 'Z' suffix — byte-identical to the canonical rendering (no fraction, no offset)" },
+    "sha256_hex": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[0-9a-f]{64}$" },
+    "pin": { "type": "string", "minLength": 71, "maxLength": 71, "pattern": "^sha256:[0-9a-f]{64}$", "description": "'sha256:' + hex SHA-256 of a DER structure (same format as the control-plane CA Fingerprint)" },
+    "version_string": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[0-9A-Za-z][0-9A-Za-z.+_-]*$", "allOf": [ { "$ref": "#/$defs/no_control" } ] },
+    "gvm_name": { "type": "string", "minLength": 1, "maxLength": 128, "allOf": [ { "$ref": "#/$defs/no_control" } ], "description": "gvmd object name" },
+    "gvm_comment": { "type": "string", "maxLength": 400, "allOf": [ { "$ref": "#/$defs/no_control" } ], "description": "gvmd object comment; the node prefixes 'fleet:<command_id> ' for traceability in the GSA" },
+    "gmp_filter": { "type": "string", "minLength": 1, "maxLength": 1024, "allOf": [ { "$ref": "#/$defs/no_control" } ], "description": "EXPLICIT GMP filter string applied inside the addressed report only; the node never falls back to gvmd's implicit or saved filters (ADR-0011 D1)" },
+    "ip_literal": { "type": "string", "minLength": 2, "maxLength": 39, "pattern": "^[0-9A-Fa-f:.]+$", "allOf": [ { "$ref": "#/$defs/no_control" } ], "description": "IPv4/IPv6 literal; the node parses it authoritatively (a hostname is refused)" },
+    "ip_or_cidr": { "type": "string", "minLength": 2, "maxLength": 43, "pattern": "^[0-9A-Fa-f:.]+(/[0-9]{1,3})?$", "allOf": [ { "$ref": "#/$defs/no_control" } ], "description": "IPv4/IPv6 or CIDR LITERAL — never a hostname (no scan-time DNS rebinding). The node re-checks it with its local scope gate" },
+    "port_range": { "type": "string", "minLength": 3, "maxLength": 1024, "pattern": "^[TU]:[0-9,-]+$", "allOf": [ { "$ref": "#/$defs/no_control" } ], "description": "GVM port_range, same grammar scan_bridge.py accepts, e.g. T:1-65535" },
+    "alive_test": {
+      "description": "GVM alive test. Default when omitted: 'ICMP, TCP-SYN Service & ARP Ping'. Fallback (ADR-0011): if the local gvmd refuses that value, the node uses 'ICMP, TCP-ACK Service & ARP Ping' and reports the value actually applied as alive_test_effective; it never silently falls back to 'Consider Alive' or 'Scan Config Default'.",
+      "enum": [
+        "ICMP, TCP-SYN Service & ARP Ping",
+        "ICMP, TCP-ACK Service & ARP Ping",
+        "ICMP & TCP-ACK Service Ping",
+        "ICMP & ARP Ping",
+        "TCP-ACK Service & ARP Ping",
+        "ICMP Ping",
+        "TCP-ACK Service Ping",
+        "TCP-SYN Service Ping",
+        "ARP Ping",
+        "Consider Alive",
+        "Scan Config Default"
+      ]
+    },
+    "agent_id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[^,=+\"\\\\;<>]+$", "allOf": [ { "$ref": "#/$defs/no_control" } ], "description": "endpoint agent id = CN of the agent's scanner certificate (same charset rule as control-plane/enroll validateAgentID)" },
+    "token_id": { "type": "string", "minLength": 8, "maxLength": 64, "pattern": "^[A-Za-z0-9_-]+$", "description": "public id of a scanner bootstrap token (st_<id>.<secret>, ADR-0004) — never the secret" },
+    "command_type": {
+      "enum": [
+        "state.resync",
+        "task.start", "task.stop", "task.resume", "task.create", "task.modify", "task.clone", "task.delete",
+        "target.create", "target.modify", "target.delete",
+        "schedule.create", "schedule.modify", "schedule.delete",
+        "report.export", "report.summary",
+        "agent.scan_now", "agent.revoke",
+        "enroll_token.create", "enroll_token.revoke",
+        "sensor_job.enqueue",
+        "feed.sync_now"
+      ]
+    },
+    "command_type_any": { "type": "string", "minLength": 3, "maxLength": 64, "pattern": "^[a-z][a-z_]*\\.[a-z][a-z_]*$", "description": "a command type AS RECEIVED (used where a rejection must echo a type outside the v1 catalog, reason=unsupported); v1 values are command_type" },
+    "report_format": { "enum": ["suricatoos-pdf", "gvm-xml", "gvm-csv-results", "gvm-pdf"], "description": "symbolic export format; the node maps (format, lang) to a local report_format id" },
+    "report_lang": { "enum": ["en", "pt_BR", "es"] },
+    "iana_timezone": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[A-Za-z][A-Za-z0-9_+-]*(/[A-Za-z0-9_+-]+)*$", "allOf": [ { "$ref": "#/$defs/no_control" } ], "description": "IANA tz name, e.g. America/Sao_Paulo or UTC" },
+    "icalendar": { "type": "string", "minLength": 15, "maxLength": 8192, "pattern": "^BEGIN:VCALENDAR", "not": { "pattern": "[\\x00-\\x08\\x0b\\x0c\\x0e-\\x1f\\x7f]" }, "description": "RFC 5545 VCALENDAR text (CR/LF allowed) as gvmd's create_schedule expects" },
+
+    "payload_state_resync": {
+      "type": "object",
+      "required": ["kinds"],
+      "additionalProperties": false,
+      "properties": {
+        "kinds": { "type": "array", "minItems": 1, "maxItems": 12, "uniqueItems": true, "items": { "$ref": "fleet-state.schema.json#/$defs/state_kind" } }
+      }
+    },
+    "payload_task_ref": {
+      "description": "task.start | task.stop | task.resume | task.delete (delete = trash, never ultimate)",
+      "type": "object",
+      "required": ["task_id"],
+      "additionalProperties": false,
+      "properties": { "task_id": { "$ref": "#/$defs/uuid" } }
+    },
+    "payload_task_create": {
+      "type": "object",
+      "required": ["name", "target_id", "scan_config_id"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "$ref": "#/$defs/gvm_name" },
+        "comment": { "$ref": "#/$defs/gvm_comment" },
+        "target_id": { "$ref": "#/$defs/uuid", "description": "must be owned by the tenant's gvmd user" },
+        "scan_config_id": { "$ref": "#/$defs/uuid" },
+        "scanner_id": { "$ref": "#/$defs/uuid", "description": "default: the local 'OpenVAS Default' scanner (08b69003-5fc2-4037-a479-93b440211c73)" },
+        "schedule_id": { "$ref": "#/$defs/uuid", "description": "links the new task to an existing schedule owned by the tenant" }
+      }
+    },
+    "payload_task_modify": {
+      "type": "object",
+      "required": ["task_id"],
+      "minProperties": 2,
+      "additionalProperties": false,
+      "properties": {
+        "task_id": { "$ref": "#/$defs/uuid" },
+        "name": { "$ref": "#/$defs/gvm_name" },
+        "comment": { "$ref": "#/$defs/gvm_comment" },
+        "target_id": { "$ref": "#/$defs/uuid" },
+        "scan_config_id": { "$ref": "#/$defs/uuid" },
+        "schedule_id": { "anyOf": [ { "$ref": "#/$defs/uuid" }, { "const": "" } ], "description": "a schedule owned by the tenant links it; \"\" unlinks" }
+      }
+    },
+    "payload_task_clone": {
+      "type": "object",
+      "required": ["task_id"],
+      "additionalProperties": false,
+      "properties": {
+        "task_id": { "$ref": "#/$defs/uuid" },
+        "name": { "$ref": "#/$defs/gvm_name", "description": "name of the clone (default: gvmd's 'Clone of ...')" }
+      }
+    },
+    "payload_target_create": {
+      "description": "Scope-gated: every hosts entry must be an IP/CIDR literal inside the tenant's LOCAL scope and outside the absolute deny list (loopback, link-local/metadata, multicast, unspecified, self/hub). No credentials, no asset filter, no reverse lookup (out of v1 by design). Exactly one of port_list_id | port_range.",
+      "type": "object",
+      "required": ["name", "hosts"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "$ref": "#/$defs/gvm_name" },
+        "comment": { "$ref": "#/$defs/gvm_comment" },
+        "hosts": { "type": "array", "minItems": 1, "maxItems": 256, "uniqueItems": true, "items": { "$ref": "#/$defs/ip_or_cidr" } },
+        "exclude_hosts": { "type": "array", "maxItems": 256, "uniqueItems": true, "items": { "$ref": "#/$defs/ip_or_cidr" } },
+        "port_list_id": { "$ref": "#/$defs/uuid" },
+        "port_range": { "$ref": "#/$defs/port_range" },
+        "alive_test": { "$ref": "#/$defs/alive_test" }
+      },
+      "oneOf": [ { "required": ["port_list_id"] }, { "required": ["port_range"] } ]
+    },
+    "payload_target_modify": {
+      "description": "Same scope gate as target.create for any new hosts/exclude_hosts. At most one of port_list_id | port_range.",
+      "type": "object",
+      "required": ["target_id"],
+      "minProperties": 2,
+      "additionalProperties": false,
+      "properties": {
+        "target_id": { "$ref": "#/$defs/uuid" },
+        "name": { "$ref": "#/$defs/gvm_name" },
+        "comment": { "$ref": "#/$defs/gvm_comment" },
+        "hosts": { "type": "array", "minItems": 1, "maxItems": 256, "uniqueItems": true, "items": { "$ref": "#/$defs/ip_or_cidr" } },
+        "exclude_hosts": { "type": "array", "maxItems": 256, "uniqueItems": true, "items": { "$ref": "#/$defs/ip_or_cidr" } },
+        "port_list_id": { "$ref": "#/$defs/uuid" },
+        "port_range": { "$ref": "#/$defs/port_range" },
+        "alive_test": { "$ref": "#/$defs/alive_test" }
+      },
+      "not": { "required": ["port_list_id", "port_range"] }
+    },
+    "payload_target_ref": {
+      "description": "target.delete (trash, never ultimate)",
+      "type": "object",
+      "required": ["target_id"],
+      "additionalProperties": false,
+      "properties": { "target_id": { "$ref": "#/$defs/uuid" } }
+    },
+    "payload_schedule_create": {
+      "description": "Creates a schedule and, when task_ids is present, links each task to it (each link is a task modification: the node's local policy must also allow task.modify).",
+      "type": "object",
+      "required": ["name", "icalendar", "timezone"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "$ref": "#/$defs/gvm_name" },
+        "comment": { "$ref": "#/$defs/gvm_comment" },
+        "icalendar": { "$ref": "#/$defs/icalendar" },
+        "timezone": { "$ref": "#/$defs/iana_timezone" },
+        "task_ids": { "type": "array", "maxItems": 16, "uniqueItems": true, "items": { "$ref": "#/$defs/uuid" } }
+      }
+    },
+    "payload_schedule_modify": {
+      "type": "object",
+      "required": ["schedule_id"],
+      "minProperties": 2,
+      "additionalProperties": false,
+      "properties": {
+        "schedule_id": { "$ref": "#/$defs/uuid" },
+        "name": { "$ref": "#/$defs/gvm_name" },
+        "comment": { "$ref": "#/$defs/gvm_comment" },
+        "icalendar": { "$ref": "#/$defs/icalendar" },
+        "timezone": { "$ref": "#/$defs/iana_timezone" }
+      }
+    },
+    "payload_schedule_ref": {
+      "description": "schedule.delete (trash, never ultimate)",
+      "type": "object",
+      "required": ["schedule_id"],
+      "additionalProperties": false,
+      "properties": { "schedule_id": { "$ref": "#/$defs/uuid" } }
+    },
+    "payload_report_export": {
+      "description": "Detailed findings leave the node ONLY through this explicit command, as one gzip artifact (PUT /fleet/v1/artifacts/{command_id}/{name}). Every input is explicit: format, lang, variant and the GMP filter. gvm-* formats are English-only (lang must be 'en'); variant 'delta' requires delta_report_id.",
+      "type": "object",
+      "required": ["report_id", "format", "lang", "variant", "filter"],
+      "additionalProperties": false,
+      "properties": {
+        "report_id": { "$ref": "#/$defs/uuid" },
+        "format": { "$ref": "#/$defs/report_format" },
+        "lang": { "$ref": "#/$defs/report_lang" },
+        "variant": { "enum": ["full", "delta"] },
+        "delta_report_id": { "$ref": "#/$defs/uuid", "description": "older report of the SAME task to diff against (variant=delta only)" },
+        "filter": { "$ref": "#/$defs/gmp_filter" }
+      },
+      "allOf": [
+        { "if": { "properties": { "variant": { "const": "delta" } }, "required": ["variant"] }, "then": { "required": ["delta_report_id"] }, "else": { "not": { "required": ["delta_report_id"] } } },
+        { "if": { "properties": { "format": { "const": "suricatoos-pdf" } }, "required": ["format"] }, "else": { "properties": { "lang": { "const": "en" } } } }
+      ]
+    },
+    "payload_report_summary": {
+      "type": "object",
+      "required": ["report_id", "filter"],
+      "additionalProperties": false,
+      "properties": {
+        "report_id": { "$ref": "#/$defs/uuid" },
+        "filter": { "$ref": "#/$defs/gmp_filter" },
+        "top": { "type": "integer", "minimum": 1, "maximum": 50, "description": "how many top findings (by severity, then hosts affected); default 20" }
+      }
+    },
+    "payload_agent_ref": {
+      "description": "agent.scan_now: re-runs the agent's LOCAL inventory collection now (ADR-0001 passive agent) — not a network scan",
+      "type": "object",
+      "required": ["agent_id"],
+      "additionalProperties": false,
+      "properties": { "agent_id": { "$ref": "#/$defs/agent_id" } }
+    },
+    "payload_agent_revoke": {
+      "description": "Revokes ONLY this agent's scanner certificate serial(s); irreversible (the agent must re-enroll).",
+      "type": "object",
+      "required": ["agent_id"],
+      "additionalProperties": false,
+      "properties": {
+        "agent_id": { "$ref": "#/$defs/agent_id" },
+        "reason": { "type": "string", "maxLength": 256, "allOf": [ { "$ref": "#/$defs/no_control" } ], "description": "free text recorded in the node's local audit" }
+      }
+    },
+    "payload_enroll_token_create": {
+      "description": "Mints a scanner bootstrap token (ADR-0004) for the envelope's tenant. The secret is returned ONCE in the result (contains_secret=true). Caps tighter than the admin API: ttl <= 168h, deployment max_uses <= 1000.",
+      "type": "object",
+      "required": ["token_type", "policy", "ttl_hours"],
+      "additionalProperties": false,
+      "properties": {
+        "token_type": { "enum": ["single_host", "deployment"] },
+        "policy": { "enum": ["agent-endpoint", "scanner-sensor"], "description": "cert OU the enrolled agent/sensor receives" },
+        "ttl_hours": { "type": "integer", "minimum": 1, "maximum": 168 },
+        "max_uses": { "type": "integer", "minimum": 1, "maximum": 1000 }
+      },
+      "allOf": [
+        { "if": { "properties": { "token_type": { "const": "deployment" } }, "required": ["token_type"] }, "then": { "required": ["max_uses"] }, "else": { "properties": { "max_uses": { "const": 1 } } } }
+      ]
+    },
+    "payload_enroll_token_revoke": {
+      "description": "Revokes the token AND every certificate enrolled with it (the existing kill-switch semantics of DELETE /api/v1/tokens/{id}).",
+      "type": "object",
+      "required": ["token_id"],
+      "additionalProperties": false,
+      "properties": { "token_id": { "$ref": "#/$defs/token_id" } }
+    },
+    "payload_sensor_job_enqueue": {
+      "description": "Enqueues an ADR-0007 sensor scan job (source=operator-scope) for the envelope's tenant. ALL targets must pass the node's scope gate — one out-of-scope target rejects the whole command (scope_denied); nothing is dropped silently.",
+      "type": "object",
+      "required": ["targets"],
+      "additionalProperties": false,
+      "properties": {
+        "targets": { "type": "array", "minItems": 1, "maxItems": 256, "uniqueItems": true, "items": { "$ref": "#/$defs/ip_or_cidr" } },
+        "ports": { "$ref": "#/$defs/port_range" },
+        "scan_config": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-z0-9][a-z0-9-]*$", "allOf": [ { "$ref": "#/$defs/no_control" } ], "description": "scan config name as control-plane/sensorjobs accepts, e.g. full-and-fast" },
+        "alive_test": { "$ref": "#/$defs/alive_test" },
+        "max_duration": { "type": "string", "minLength": 2, "maxLength": 5, "pattern": "^[1-9][0-9]{0,3}[mh]$", "description": "Go-style duration in minutes or hours, e.g. 6h" }
+      }
+    },
+    "payload_empty": {
+      "description": "feed.sync_now: no parameters",
+      "type": "object",
+      "maxProperties": 0
+    }
+  }
+}

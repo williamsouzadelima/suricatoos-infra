@@ -1,0 +1,397 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://suricatoos.dev/schema/fleet-result.schema.json",
+  "title": "Suricatoos — Fleet Command Ack and Result",
+  "description": "What a node reports about ONE command (ADR-0011). The root validates the body of POST /fleet/v1/commands/{id}/result: the final outcome of an ACCEPTED command, sent at-least-once (the hub answers an identical repeat with 204 and a different one with 409). $defs/ack validates POST /fleet/v1/commands/{id}/ack: accepted | rejected, sent after verification and BEFORE execution. command_id must equal the {id} path segment and node_id the CN of the client certificate. Any artifact (report.export only) is uploaded BEFORE the result that lists it. contains_secret is true ONLY for a successful enroll_token.create (the token secret, returned once): the hub must never log it, must encrypt it at rest and show it once; the node never writes it to disk or to its audit.",
+  "$ref": "#/$defs/result",
+  "$defs": {
+    "result": {
+      "type": "object",
+      "required": ["schema_version", "command_id", "node_id", "type", "status", "started_at", "finished_at", "contains_secret"],
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": { "type": "string", "const": "1.0.0" },
+        "command_id": { "$ref": "fleet-command.schema.json#/$defs/uuid" },
+        "node_id": { "$ref": "fleet-command.schema.json#/$defs/node_id" },
+        "type": { "$ref": "fleet-command.schema.json#/$defs/command_type", "description": "echo of the command's type (selects the output shape)" },
+        "status": { "enum": ["succeeded", "failed"] },
+        "started_at": { "$ref": "fleet-command.schema.json#/$defs/utc_time" },
+        "finished_at": { "$ref": "fleet-command.schema.json#/$defs/utc_time" },
+        "contains_secret": { "type": "boolean" },
+        "error": { "$ref": "#/$defs/error" },
+        "output": { "type": "object" },
+        "artifacts": { "type": "array", "maxItems": 4, "items": { "$ref": "#/$defs/artifact" } }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "status": { "const": "succeeded" } }, "required": ["status"] },
+          "then": { "required": ["output"], "not": { "required": ["error"] } },
+          "else": { "required": ["error"], "not": { "required": ["output"] } }
+        },
+        {
+          "if": { "properties": { "type": { "const": "enroll_token.create" }, "status": { "const": "succeeded" } }, "required": ["type", "status"] },
+          "then": { "properties": { "contains_secret": { "const": true } } },
+          "else": { "properties": { "contains_secret": { "const": false } } }
+        },
+        {
+          "if": { "properties": { "type": { "const": "report.export" }, "status": { "const": "succeeded" } }, "required": ["type", "status"] },
+          "then": { "required": ["artifacts"], "properties": { "artifacts": { "minItems": 1, "maxItems": 1 } } },
+          "else": { "properties": { "artifacts": { "maxItems": 0 } } }
+        },
+        { "if": { "properties": { "type": { "const": "state.resync" } }, "required": ["type"] }, "then": { "properties": { "output": { "$ref": "#/$defs/output_state_resync" } } } },
+        { "if": { "properties": { "type": { "enum": ["task.start", "task.stop", "task.resume"] } }, "required": ["type"] }, "then": { "properties": { "output": { "$ref": "#/$defs/output_task_action" } } } },
+        { "if": { "properties": { "type": { "const": "task.create" } }, "required": ["type"] }, "then": { "properties": { "output": { "$ref": "#/$defs/output_task_create" } } } },
+        { "if": { "properties": { "type": { "const": "task.modify" } }, "required": ["type"] }, "then": { "properties": { "output": { "$ref": "#/$defs/output_task_modify" } } } },
+        { "if": { "properties": { "type": { "const": "task.clone" } }, "required": ["type"] }, "then": { "properties": { "output": { "$ref": "#/$defs/output_task_clone" } } } },
+        { "if": { "properties": { "type": { "enum": ["task.delete", "target.delete", "schedule.delete"] } }, "required": ["type"] }, "then": { "properties": { "output": { "$ref": "#/$defs/output_trash" } } } },
+        { "if": { "properties": { "type": { "const": "target.create" } }, "required": ["type"] }, "then": { "properties": { "output": { "$ref": "#/$defs/output_target_create" } } } },
+        { "if": { "properties": { "type": { "const": "target.modify" } }, "required": ["type"] }, "then": { "properties": { "output": { "$ref": "#/$defs/output_target_modify" } } } },
+        { "if": { "properties": { "type": { "const": "schedule.create" } }, "required": ["type"] }, "then": { "properties": { "output": { "$ref": "#/$defs/output_schedule_create" } } } },
+        { "if": { "properties": { "type": { "const": "schedule.modify" } }, "required": ["type"] }, "then": { "properties": { "output": { "$ref": "#/$defs/output_schedule_modify" } } } },
+        { "if": { "properties": { "type": { "const": "report.export" } }, "required": ["type"] }, "then": { "properties": { "output": { "$ref": "#/$defs/output_report_export" } } } },
+        { "if": { "properties": { "type": { "const": "report.summary" } }, "required": ["type"] }, "then": { "properties": { "output": { "$ref": "#/$defs/output_report_summary" } } } },
+        { "if": { "properties": { "type": { "const": "agent.scan_now" } }, "required": ["type"] }, "then": { "properties": { "output": { "$ref": "#/$defs/output_agent_scan_now" } } } },
+        { "if": { "properties": { "type": { "const": "agent.revoke" } }, "required": ["type"] }, "then": { "properties": { "output": { "$ref": "#/$defs/output_agent_revoke" } } } },
+        { "if": { "properties": { "type": { "const": "enroll_token.create" } }, "required": ["type"] }, "then": { "properties": { "output": { "$ref": "#/$defs/output_enroll_token_create" } } } },
+        { "if": { "properties": { "type": { "const": "enroll_token.revoke" } }, "required": ["type"] }, "then": { "properties": { "output": { "$ref": "#/$defs/output_enroll_token_revoke" } } } },
+        { "if": { "properties": { "type": { "const": "sensor_job.enqueue" } }, "required": ["type"] }, "then": { "properties": { "output": { "$ref": "#/$defs/output_sensor_job_enqueue" } } } },
+        { "if": { "properties": { "type": { "const": "feed.sync_now" } }, "required": ["type"] }, "then": { "properties": { "output": { "$ref": "#/$defs/output_feed_sync_now" } } } }
+      ]
+    },
+
+    "ack": {
+      "description": "Body of POST /fleet/v1/commands/{id}/ack. 'accepted' = verified, authorized and about to execute; 'rejected' is FINAL for that command_id (the hub issues a new command with a new nonce after the local cause is fixed).",
+      "type": "object",
+      "required": ["schema_version", "command_id", "node_id", "decision", "received_at"],
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": { "type": "string", "const": "1.0.0" },
+        "command_id": { "$ref": "fleet-command.schema.json#/$defs/uuid" },
+        "node_id": { "$ref": "fleet-command.schema.json#/$defs/node_id" },
+        "decision": { "enum": ["accepted", "rejected"] },
+        "reason": { "$ref": "#/$defs/reject_reason" },
+        "detail": { "type": "string", "maxLength": 512, "allOf": [ { "$ref": "fleet-command.schema.json#/$defs/no_control" } ] },
+        "received_at": { "$ref": "fleet-command.schema.json#/$defs/utc_time" }
+      },
+      "if": { "properties": { "decision": { "const": "rejected" } }, "required": ["decision"] },
+      "then": { "required": ["reason"] },
+      "else": { "not": { "required": ["reason"] } }
+    },
+
+    "reject_reason": {
+      "description": "Why the node refused a command, in verification order. bad_envelope, payload_mismatch and bad_signature happen BEFORE authentication (nonce not recorded); not_yet_valid, expired, bad_window, wrong_node and replay are refused without recording; tenant_unknown, unsupported, type_not_allowed, rate_limited, bad_payload and scope_denied are recorded with the nonce (final for that command_id) and also emitted as a command.rejected_by_policy event; unavailable = a local dependency of the verifier (e.g. the anti-replay store) failed — fail-closed, not recorded.",
+      "enum": [
+        "bad_envelope",
+        "payload_mismatch",
+        "bad_signature",
+        "not_yet_valid",
+        "expired",
+        "bad_window",
+        "wrong_node",
+        "replay",
+        "tenant_unknown",
+        "unsupported",
+        "type_not_allowed",
+        "rate_limited",
+        "bad_payload",
+        "scope_denied",
+        "unavailable"
+      ]
+    },
+    "error_code": {
+      "description": "Why an ACCEPTED command failed during execution. not_found also covers an object owned by another tenant (no enumeration). timeout does NOT guarantee the operation had no effect — the next state snapshot is the truth.",
+      "enum": [
+        "not_found",
+        "conflict",
+        "gvm_error",
+        "timeout",
+        "interrupted",
+        "unavailable",
+        "artifact_too_large",
+        "artifact_upload_failed",
+        "secret_lost",
+        "internal_error"
+      ]
+    },
+    "error": {
+      "type": "object",
+      "required": ["code", "message"],
+      "additionalProperties": false,
+      "properties": {
+        "code": { "$ref": "#/$defs/error_code" },
+        "message": { "type": "string", "minLength": 1, "maxLength": 512, "allOf": [ { "$ref": "fleet-command.schema.json#/$defs/no_control" } ], "description": "sanitized, no secret, no stack trace" }
+      }
+    },
+    "artifact": {
+      "description": "An artifact already uploaded with PUT /fleet/v1/artifacts/{command_id}/{name}. sha256/size describe the gzip bytes as uploaded; original_* describe the decompressed export (the hub can cap decompression at original_size).",
+      "type": "object",
+      "required": ["name", "content_encoding", "size", "sha256", "original_content_type", "original_size", "original_sha256"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-z0-9][a-z0-9._-]*$" },
+        "content_encoding": { "const": "gzip" },
+        "size": { "type": "integer", "minimum": 1, "maximum": 67108864 },
+        "sha256": { "$ref": "fleet-command.schema.json#/$defs/sha256_hex" },
+        "original_content_type": { "enum": ["application/pdf", "application/xml", "text/csv"] },
+        "original_size": { "type": "integer", "minimum": 0 },
+        "original_sha256": { "$ref": "fleet-command.schema.json#/$defs/sha256_hex" }
+      }
+    },
+
+    "output_state_resync": {
+      "type": "object",
+      "required": ["kinds"],
+      "additionalProperties": false,
+      "properties": {
+        "kinds": { "type": "array", "maxItems": 12, "uniqueItems": true, "items": { "$ref": "fleet-state.schema.json#/$defs/state_kind" }, "description": "kinds actually re-sent (kinds this node kind does not have are ignored)" }
+      }
+    },
+    "output_task_action": {
+      "description": "task.start | task.stop | task.resume",
+      "type": "object",
+      "required": ["task_id", "status"],
+      "additionalProperties": false,
+      "properties": {
+        "task_id": { "$ref": "fleet-command.schema.json#/$defs/uuid" },
+        "status": { "$ref": "fleet-state.schema.json#/$defs/gvm_status" },
+        "report_id": { "$ref": "fleet-command.schema.json#/$defs/uuid", "description": "report created by start/resume" }
+      }
+    },
+    "output_task_create": {
+      "type": "object",
+      "required": ["task_id"],
+      "additionalProperties": false,
+      "properties": { "task_id": { "$ref": "fleet-command.schema.json#/$defs/uuid" } }
+    },
+    "output_task_modify": {
+      "description": "before = previous values of the changed fields (comment excluded), for manual rollback and audit",
+      "type": "object",
+      "required": ["task_id", "changed", "before"],
+      "additionalProperties": false,
+      "properties": {
+        "task_id": { "$ref": "fleet-command.schema.json#/$defs/uuid" },
+        "changed": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "enum": ["name", "comment", "target_id", "scan_config_id", "schedule_id"] } },
+        "before": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "name": { "$ref": "fleet-command.schema.json#/$defs/gvm_name" },
+            "target_id": { "$ref": "fleet-command.schema.json#/$defs/uuid" },
+            "scan_config_id": { "$ref": "fleet-command.schema.json#/$defs/uuid" },
+            "schedule_id": { "anyOf": [ { "$ref": "fleet-command.schema.json#/$defs/uuid" }, { "const": "" } ] }
+          }
+        }
+      }
+    },
+    "output_task_clone": {
+      "type": "object",
+      "required": ["source_task_id", "task_id"],
+      "additionalProperties": false,
+      "properties": {
+        "source_task_id": { "$ref": "fleet-command.schema.json#/$defs/uuid" },
+        "task_id": { "$ref": "fleet-command.schema.json#/$defs/uuid" }
+      }
+    },
+    "output_trash": {
+      "description": "task.delete | target.delete | schedule.delete — always to the gvmd trash (ultimate=false); restoring is a LOCAL action in the GSA trashcan",
+      "type": "object",
+      "required": ["object_id", "trash"],
+      "additionalProperties": false,
+      "properties": {
+        "object_id": { "$ref": "fleet-command.schema.json#/$defs/uuid" },
+        "trash": { "const": true }
+      }
+    },
+    "output_target_create": {
+      "type": "object",
+      "required": ["target_id", "alive_test_effective"],
+      "additionalProperties": false,
+      "properties": {
+        "target_id": { "$ref": "fleet-command.schema.json#/$defs/uuid" },
+        "alive_test_effective": { "$ref": "fleet-command.schema.json#/$defs/alive_test", "description": "the value gvmd accepted (differs from the requested/default one when the documented fallback was used)" }
+      }
+    },
+    "output_target_modify": {
+      "description": "before = previous values of the changed fields (comment excluded; hosts as literal entries only + count of non-literal ones)",
+      "type": "object",
+      "required": ["target_id", "changed", "before"],
+      "additionalProperties": false,
+      "properties": {
+        "target_id": { "$ref": "fleet-command.schema.json#/$defs/uuid" },
+        "changed": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "enum": ["name", "comment", "hosts", "exclude_hosts", "port_list_id", "port_range", "alive_test"] } },
+        "before": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "name": { "$ref": "fleet-command.schema.json#/$defs/gvm_name" },
+            "hosts": { "type": "array", "maxItems": 256, "items": { "$ref": "fleet-command.schema.json#/$defs/ip_or_cidr" } },
+            "hosts_non_literal_entries": { "type": "integer", "minimum": 0 },
+            "exclude_hosts": { "type": "array", "maxItems": 256, "items": { "$ref": "fleet-command.schema.json#/$defs/ip_or_cidr" } },
+            "port_list_id": { "$ref": "fleet-command.schema.json#/$defs/uuid" },
+            "port_range": { "$ref": "fleet-command.schema.json#/$defs/port_range" },
+            "alive_test": { "type": "string", "maxLength": 64, "allOf": [ { "$ref": "fleet-command.schema.json#/$defs/no_control" } ] }
+          }
+        },
+        "alive_test_effective": { "$ref": "fleet-command.schema.json#/$defs/alive_test" }
+      }
+    },
+    "output_schedule_create": {
+      "type": "object",
+      "required": ["schedule_id", "linked_task_ids"],
+      "additionalProperties": false,
+      "properties": {
+        "schedule_id": { "$ref": "fleet-command.schema.json#/$defs/uuid" },
+        "linked_task_ids": { "type": "array", "maxItems": 16, "uniqueItems": true, "items": { "$ref": "fleet-command.schema.json#/$defs/uuid" } }
+      }
+    },
+    "output_schedule_modify": {
+      "type": "object",
+      "required": ["schedule_id", "changed", "before"],
+      "additionalProperties": false,
+      "properties": {
+        "schedule_id": { "$ref": "fleet-command.schema.json#/$defs/uuid" },
+        "changed": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "enum": ["name", "comment", "icalendar", "timezone"] } },
+        "before": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "name": { "$ref": "fleet-command.schema.json#/$defs/gvm_name" },
+            "icalendar": { "$ref": "fleet-command.schema.json#/$defs/icalendar" },
+            "timezone": { "$ref": "fleet-command.schema.json#/$defs/iana_timezone" }
+          }
+        }
+      }
+    },
+    "output_report_export": {
+      "type": "object",
+      "required": ["report_id", "report_format_id", "format", "lang", "variant", "artifact_name"],
+      "additionalProperties": false,
+      "properties": {
+        "report_id": { "$ref": "fleet-command.schema.json#/$defs/uuid" },
+        "report_format_id": { "$ref": "fleet-command.schema.json#/$defs/uuid", "description": "the local gvmd report format actually used" },
+        "format": { "$ref": "fleet-command.schema.json#/$defs/report_format" },
+        "lang": { "$ref": "fleet-command.schema.json#/$defs/report_lang" },
+        "variant": { "enum": ["full", "delta"] },
+        "artifact_name": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-z0-9][a-z0-9._-]*$" }
+      }
+    },
+    "output_report_summary": {
+      "description": "Aggregates only: counts by severity and QoD band, top findings by NVT (no per-host evidence, description or solution) and per-IP counts. Hostnames are never included.",
+      "type": "object",
+      "required": ["report_id", "task_id", "scan_status", "filter_applied", "counts", "qod_histogram", "top_findings", "hosts", "hosts_truncated"],
+      "additionalProperties": false,
+      "properties": {
+        "report_id": { "$ref": "fleet-command.schema.json#/$defs/uuid" },
+        "task_id": { "$ref": "fleet-command.schema.json#/$defs/uuid" },
+        "scan_status": { "$ref": "fleet-state.schema.json#/$defs/gvm_status" },
+        "scan_start": { "$ref": "fleet-command.schema.json#/$defs/utc_time" },
+        "scan_end": { "$ref": "fleet-command.schema.json#/$defs/utc_time" },
+        "filter_applied": { "$ref": "fleet-command.schema.json#/$defs/gmp_filter" },
+        "counts": { "$ref": "fleet-state.schema.json#/$defs/severity_counts" },
+        "qod_histogram": {
+          "type": "object",
+          "required": ["q0_29", "q30_69", "q70_100"],
+          "additionalProperties": false,
+          "properties": {
+            "q0_29": { "type": "integer", "minimum": 0 },
+            "q30_69": { "type": "integer", "minimum": 0 },
+            "q70_100": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "top_findings": {
+          "type": "array",
+          "maxItems": 50,
+          "items": {
+            "type": "object",
+            "required": ["oid", "name", "severity", "qod", "hosts_affected"],
+            "additionalProperties": false,
+            "properties": {
+              "oid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[0-9A-Za-z.:-]+$" },
+              "name": { "type": "string", "minLength": 1, "maxLength": 256, "allOf": [ { "$ref": "fleet-command.schema.json#/$defs/no_control" } ] },
+              "severity": { "type": "number", "minimum": 0, "maximum": 10 },
+              "qod": { "type": "integer", "minimum": 0, "maximum": 100 },
+              "hosts_affected": { "type": "integer", "minimum": 1 },
+              "cves": { "type": "array", "maxItems": 20, "uniqueItems": true, "items": { "type": "string", "maxLength": 32, "pattern": "^CVE-[0-9]{4}-[0-9]{4,}$" } }
+            }
+          }
+        },
+        "hosts": {
+          "type": "array",
+          "maxItems": 1000,
+          "items": {
+            "type": "object",
+            "required": ["ip", "critical", "high", "medium", "low", "log"],
+            "additionalProperties": false,
+            "properties": {
+              "ip": { "$ref": "fleet-command.schema.json#/$defs/ip_literal" },
+              "critical": { "type": "integer", "minimum": 0 },
+              "high": { "type": "integer", "minimum": 0 },
+              "medium": { "type": "integer", "minimum": 0 },
+              "low": { "type": "integer", "minimum": 0 },
+              "log": { "type": "integer", "minimum": 0 }
+            }
+          }
+        },
+        "hosts_truncated": { "type": "boolean" }
+      }
+    },
+    "output_agent_scan_now": {
+      "type": "object",
+      "required": ["agent_id", "queued"],
+      "additionalProperties": false,
+      "properties": {
+        "agent_id": { "$ref": "fleet-command.schema.json#/$defs/agent_id" },
+        "queued": { "const": true }
+      }
+    },
+    "output_agent_revoke": {
+      "type": "object",
+      "required": ["agent_id", "revoked_certs"],
+      "additionalProperties": false,
+      "properties": {
+        "agent_id": { "$ref": "fleet-command.schema.json#/$defs/agent_id" },
+        "revoked_certs": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "output_enroll_token_create": {
+      "description": "contains_secret=true: 'token' is the ONLY secret in the whole contract",
+      "type": "object",
+      "required": ["token_id", "token", "token_type", "policy", "max_uses", "expires_at", "ca_pin"],
+      "additionalProperties": false,
+      "properties": {
+        "token_id": { "$ref": "fleet-command.schema.json#/$defs/token_id" },
+        "token": { "type": "string", "minLength": 20, "maxLength": 200, "pattern": "^st_[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$", "description": "the scanner bootstrap token 'st_<id>.<secret>' (ADR-0004), shown ONCE" },
+        "token_type": { "enum": ["single_host", "deployment"] },
+        "policy": { "enum": ["agent-endpoint", "scanner-sensor"] },
+        "max_uses": { "type": "integer", "minimum": 1, "maximum": 1000 },
+        "expires_at": { "$ref": "fleet-command.schema.json#/$defs/utc_time" },
+        "ca_pin": { "$ref": "fleet-command.schema.json#/$defs/pin", "description": "fingerprint of the node's SCANNER enrollment CA, for the enrolling agent's --ca-pin" }
+      }
+    },
+    "output_enroll_token_revoke": {
+      "type": "object",
+      "required": ["token_id", "revoked_certs"],
+      "additionalProperties": false,
+      "properties": {
+        "token_id": { "$ref": "fleet-command.schema.json#/$defs/token_id" },
+        "revoked_certs": { "type": "integer", "minimum": 0, "description": "certificates enrolled with this token that were revoked with it" }
+      }
+    },
+    "output_sensor_job_enqueue": {
+      "type": "object",
+      "required": ["job_id", "correlation_id"],
+      "additionalProperties": false,
+      "properties": {
+        "job_id": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[A-Za-z0-9_-]+$" },
+        "correlation_id": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[A-Za-z0-9_-]+$" }
+      }
+    },
+    "output_feed_sync_now": {
+      "description": "the sync runs asynchronously; completion shows up as feed.updated events",
+      "type": "object",
+      "required": ["status"],
+      "additionalProperties": false,
+      "properties": { "status": { "enum": ["started", "already_running"] } }
+    }
+  }
+}

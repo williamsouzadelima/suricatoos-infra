@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://suricatoos.dev/schema/fleet-enroll.schema.json",
+  "title": "Suricatoos — Fleet Node Enrollment and Renewal",
+  "description": "Identity lifecycle of a fleet node (ADR-0011). POST /fleet/v1/enroll: the node presents a single-use hub token ('ft_<id>.<secret>', opaque as in ADR-0004) plus a CSR whose CN is its node_id, over TLS that authenticates the HUB (no client certificate yet); the hub answers with a certificate CN=<node_id>, O=<org>, OU=fleet-node issued by the FLEET CA — a trust domain separate from the scanner's enrollment CA — the fleet CA certificate and the Ed25519 command public key. The node refuses the response unless sha256(fleet CA DER) == FLEET_CA_PIN and sha256(command key SPKI DER) == FLEET_COMMAND_KEY_PIN (both delivered out-of-band with the token), then pins both. POST /fleet/v1/renew: authenticated by the CURRENT node certificate (mTLS); the CSR must keep CN == node_id; the response has the same shape and its command_pubkey must equal the pinned one (no rotation in v1). The root accepts any of the three messages; implementations validate the specific $defs entry.",
+  "oneOf": [
+    { "$ref": "#/$defs/enroll_request" },
+    { "$ref": "#/$defs/renew_request" },
+    { "$ref": "#/$defs/enroll_response" }
+  ],
+  "$defs": {
+    "enroll_request": {
+      "type": "object",
+      "required": ["schema_version", "token", "node_id", "node_kind", "csr", "connector_version"],
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": { "type": "string", "const": "1.0.0" },
+        "token": { "type": "string", "minLength": 59, "maxLength": 196, "pattern": "^ft_[A-Za-z0-9_-]{12,64}\\.[A-Za-z0-9_-]{43,128}$", "description": "single-use, short-TTL hub token; the node discards it after a successful enroll and never logs it" },
+        "node_id": { "$ref": "fleet-command.schema.json#/$defs/node_id", "description": "FLEET_NODE_ID, or 'node-' + a UUIDv4 generated and persisted on first boot; must equal the CSR CN" },
+        "node_kind": { "enum": ["central", "standalone", "sensor"] },
+        "csr": { "$ref": "#/$defs/csr_pem" },
+        "connector_version": { "$ref": "fleet-command.schema.json#/$defs/version_string" }
+      }
+    },
+    "renew_request": {
+      "type": "object",
+      "required": ["schema_version", "node_id", "csr"],
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": { "type": "string", "const": "1.0.0" },
+        "node_id": { "$ref": "fleet-command.schema.json#/$defs/node_id", "description": "cross-check only: identity comes from the presented certificate (CN)" },
+        "csr": { "$ref": "#/$defs/csr_pem" }
+      }
+    },
+    "enroll_response": {
+      "description": "200 body of both /enroll and /renew",
+      "type": "object",
+      "required": ["schema_version", "node_id", "certificate", "ca_cert", "command_pubkey", "server_time", "heartbeat_interval_s", "poll_wait_s"],
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": { "type": "string", "const": "1.0.0" },
+        "node_id": { "$ref": "fleet-command.schema.json#/$defs/node_id" },
+        "certificate": { "$ref": "#/$defs/cert_pem", "description": "CN=<node_id>, O=<org>, OU=fleet-node; issued by the fleet CA; short TTL (30 days recommended)" },
+        "ca_cert": { "$ref": "#/$defs/cert_pem", "description": "the fleet CA certificate (checked against FLEET_CA_PIN at enroll)" },
+        "command_pubkey": { "$ref": "#/$defs/pubkey_pem", "description": "Ed25519 command verification key, PKIX PEM (checked against FLEET_COMMAND_KEY_PIN at enroll; must stay identical at renew)" },
+        "server_time": { "$ref": "fleet-command.schema.json#/$defs/utc_time" },
+        "heartbeat_interval_s": { "type": "integer", "minimum": 15, "maximum": 600 },
+        "poll_wait_s": { "type": "integer", "minimum": 0, "maximum": 30 }
+      }
+    },
+    "csr_pem": {
+      "type": "string",
+      "minLength": 100,
+      "maxLength": 16384,
+      "pattern": "^-----BEGIN CERTIFICATE REQUEST-----\\r?\\n([A-Za-z0-9+/=]{1,76}\\r?\\n)+-----END CERTIFICATE REQUEST-----\\r?\\n?$",
+      "description": "PKCS#10 PEM; key generated on the node (Ed25519 or ECDSA P-256), private key never leaves it (0600 in FLEET_STATE_DIR)"
+    },
+    "cert_pem": {
+      "type": "string",
+      "minLength": 100,
+      "maxLength": 16384,
+      "pattern": "^-----BEGIN CERTIFICATE-----\\r?\\n([A-Za-z0-9+/=]{1,76}\\r?\\n)+-----END CERTIFICATE-----\\r?\\n?$"
+    },
+    "pubkey_pem": {
+      "type": "string",
+      "minLength": 60,
+      "maxLength": 1024,
+      "pattern": "^-----BEGIN PUBLIC KEY-----\\r?\\n([A-Za-z0-9+/=]{1,76}\\r?\\n)+-----END PUBLIC KEY-----\\r?\\n?$"
+    }
+  }
+}
