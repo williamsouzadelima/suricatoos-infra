@@ -122,8 +122,9 @@ jobs:
           test -s build/index.html
 
       # Os testes que o patch traz (cliente HTTP e polling das telas da
-      # Suricatoos): só esses arquivos, uns segundos. A suíte inteira do GSA
-      # não é portão deste workflow. Teste novo no patch entra na lista.
+      # Suricatoos; idioma padrão, detecção do navegador e datas no idioma):
+      # só esses arquivos, uns segundos. A suíte inteira do GSA não é portão
+      # deste workflow. Teste novo no patch entra na lista.
       - name: Testes do patch (vitest)
         id: tests
         # Roda mesmo com o type-check ou o build quebrados (o job continua
@@ -133,7 +134,8 @@ jobs:
         run: |
           set -eu
           npx vitest run --project web \
-            src/web/utils/__tests__/suricatoosApi.test.ts
+            src/web/utils/__tests__/suricatoosApi.test.ts \
+            src/web/utils/__tests__/suricatoosLocale.test.ts
 
       # O Vite copia public/ sem validar: um JSON quebrado ou com chave repetida
       # num catálogo só apareceria no navegador.

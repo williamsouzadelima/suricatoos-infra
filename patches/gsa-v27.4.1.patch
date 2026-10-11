@@ -10800,10 +10800,10 @@ index 0000000..37be1ae
 +svg .axis-label, svg text.axis-label { fill:var(--sur-text-dim)!important; font-size:11px!important; font-weight:500!important; }
 +
 diff --git a/src/gmp/locale/languages.ts b/src/gmp/locale/languages.ts
-index 4d337bd..60048e5 100644
+index 4d337bd..78a4f27 100644
 --- a/src/gmp/locale/languages.ts
 +++ b/src/gmp/locale/languages.ts
-@@ -17,21 +17,17 @@ export type LanguagesType = {
+@@ -17,22 +17,34 @@ export type LanguagesType = {
  };
  
  const Languages: LanguagesType = {
@@ -10831,6 +10831,23 @@ index 4d337bd..60048e5 100644
    },
  } as const;
  
++/**
++ * Suricatoos: the code of the catalog that serves a language tag of the
++ * browser, or undefined when no catalog does. pt, pt-BR and pt-PT are served
++ * by pt_BR, es-* by es and en-* by en: a code of the list wins (pt_BR, also
++ * written pt-BR), then the code with the same base language.
++ */
++export const getCatalogLanguage = (tag: string): string | undefined => {
++  const wanted = tag.trim().replace(/-/g, '_').toLowerCase();
++  const base = wanted.split('_')[0];
++  const codes = getLanguageCodes();
++  return (
++    codes.find(code => code.toLowerCase() === wanted) ??
++    codes.find(code => code.split('_')[0].toLowerCase() === base)
++  );
++};
++
+ export default Languages;
 diff --git a/src/gmp/models/task.ts b/src/gmp/models/task.ts
 index b29d8fd..3338a74 100644
 --- a/src/gmp/models/task.ts
@@ -15499,3 +15516,401 @@ index 0000000..b309818
 +
 +  return {error, setError, refresh};
 +};
+diff --git a/src/gmp/locale/date.ts b/src/gmp/locale/date.ts
+index 6713da3..74e4a2e 100644
+--- a/src/gmp/locale/date.ts
++++ b/src/gmp/locale/date.ts
+@@ -74,7 +74,9 @@ export const dateTimeFormatOptions: {
+ 
+ export const setDateLocale = (lang: string): void => {
+   log.debug('Setting date locale to', lang);
+-  setLocaleDayjs(lang);
++  // Suricatoos: dayjs names its locales pt-br and zh-cn, the UI codes are
++  // pt_BR and zh_CN; a code dayjs does not know keeps the previous locale.
++  setLocaleDayjs(lang.replace('_', '-').toLowerCase());
+ };
+ 
+ export const getDateLocale = () => setLocaleDayjs();
+diff --git a/src/gmp/locale/detector.ts b/src/gmp/locale/detector.ts
+index 1b9d72b..3ce5228 100644
+--- a/src/gmp/locale/detector.ts
++++ b/src/gmp/locale/detector.ts
+@@ -3,7 +3,7 @@
+  * SPDX-License-Identifier: AGPL-3.0-or-later
+  */
+ 
+-import {BROWSER_LANGUAGE} from 'gmp/locale/languages';
++import {BROWSER_LANGUAGE, getCatalogLanguage} from 'gmp/locale/languages';
+ import logger from 'gmp/log';
+ import {isArray, isDefined} from 'gmp/utils/identity';
+ 
+@@ -66,11 +66,27 @@ class LanguageDetector {
+         lang = cleaned;
+         break;
+       }
++      // Suricatoos: pt-BR, pt and pt-PT are served by the pt_BR catalog, es-*
++      // by es and en-* by en (i18next does not match pt-BR with pt_BR).
++      const catalog = getCatalogLanguage(l);
++      if (
++        isDefined(catalog) &&
++        this.services.languageUtils.isSupportedCode(catalog)
++      ) {
++        lang = catalog;
++        break;
++      }
+     }
+ 
+     if (!isDefined(lang)) {
+-      const {fallbackLng} = this.options;
+-      lang = isArray(fallbackLng) ? fallbackLng[0] : fallbackLng;
++      // Suricatoos: the default language of the UI (detection option
++      // defaultLanguage) comes before the fallback language of the catalogs.
++      const {defaultLanguage, fallbackLng} = this.options;
++      if (isDefined(defaultLanguage)) {
++        lang = defaultLanguage;
++      } else {
++        lang = isArray(fallbackLng) ? fallbackLng[0] : fallbackLng;
++      }
+     }
+ 
+     log.debug('Detected language', lang);
+diff --git a/src/gmp/locale/lang.ts b/src/gmp/locale/lang.ts
+index f2459b8..3d00711 100644
+--- a/src/gmp/locale/lang.ts
++++ b/src/gmp/locale/lang.ts
+@@ -6,6 +6,7 @@
+ import i18next, {type InitOptions, type TFunction} from 'i18next';
+ import HttpBackend from 'i18next-http-backend';
+ import {initReactI18next} from 'react-i18next';
++import {setDateLocale} from 'gmp/locale/date';
+ import Detector from 'gmp/locale/detector';
+ import {BROWSER_LANGUAGE, getLanguageCodes} from 'gmp/locale/languages';
+ import logger from 'gmp/log';
+@@ -47,7 +48,12 @@ const notifyLanguageChangeListeners = (lang: string, initial = false): void => {
+   }
+ };
+ 
+-export const DEFAULT_LANGUAGE = 'en';
++// Suricatoos: pt-BR is the language of the UI when the user has not chosen one
++// and no language of the browser has a catalog. The keys of the catalogs are
++// the English texts, so a key without translation falls back to English
++// (FALLBACK_LANGUAGE), never to the default language.
++export const DEFAULT_LANGUAGE = 'pt_BR';
++export const FALLBACK_LANGUAGE = 'en';
+ const whitelist = getLanguageCodes();
+ 
+ // We need to use unknown type for the localStorage access since it's not properly typed in Node environment
+@@ -56,7 +62,9 @@ const I18N_OPTIONS: InitOptions = {
+   storage: typeof window !== 'undefined' ? window.localStorage : undefined,
+   nsSeparator: false, // don't use a namespace separator in keys
+   keySeparator: false as const, // don't use a key separator in keys
+-  fallbackLng: DEFAULT_LANGUAGE,
++  fallbackLng: FALLBACK_LANGUAGE,
++  // read by the language detector (gmp/locale/detector)
++  detection: {defaultLanguage: DEFAULT_LANGUAGE},
+   ns: ['gsa'], // use gsa as namespace
+   defaultNS: 'gsa',
+   fallbackNS: 'gsa',
+@@ -76,9 +84,17 @@ i18next.on('languageChanged', (lang: string) => {
+   if (currentLocale !== lang) {
+     log.debug('Language changed to', lang);
+ 
++    // Suricatoos: the first language is the detected one (the browser's or
++    // the default), not a choice of the user: listeners get initial = true.
++    const initial = !isDefined(currentLocale);
++
+     currentLocale = lang;
+ 
+-    notifyLanguageChangeListeners(lang);
++    // Suricatoos: the dates follow the language from the first detection on
++    // (the LanguageProvider sets them only on a later change).
++    setDateLocale(lang);
++
++    notifyLanguageChangeListeners(lang, initial);
+   }
+ });
+ 
+diff --git a/src/gmp/models/date.ts b/src/gmp/models/date.ts
+index 44176d5..5fb6807 100644
+--- a/src/gmp/models/date.ts
++++ b/src/gmp/models/date.ts
+@@ -19,6 +19,7 @@ import utc from 'dayjs/plugin/utc';
+ import 'dayjs/locale/af';
+ import 'dayjs/locale/ar';
+ import 'dayjs/locale/de';
++import 'dayjs/locale/es';
+ import 'dayjs/locale/fr';
+ import 'dayjs/locale/pt-br';
+ import 'dayjs/locale/ru';
+diff --git a/src/web/components/provider/LanguageProvider.tsx b/src/web/components/provider/LanguageProvider.tsx
+index a417b0b..851647d 100644
+--- a/src/web/components/provider/LanguageProvider.tsx
++++ b/src/web/components/provider/LanguageProvider.tsx
+@@ -44,7 +44,7 @@ const LanguageProvider = ({children}: LanguageProviderProps) => {
+   );
+ 
+   const handleLanguageChange = useCallback(
+-    (newLang: string) => {
++    (newLang: string, initial = false) => {
+       setLanguageState(currentLang => {
+         if (currentLang !== newLang) {
+           // Explicitly set date locale
+@@ -53,13 +53,17 @@ const LanguageProvider = ({children}: LanguageProviderProps) => {
+           // store language in the session
+           session.setLocale(newLang);
+ 
+-          void (async () => {
+-            try {
+-              await gmp.user.saveSetting(SETTING_ID_LOCALE, newLang);
+-            } catch (error) {
+-              console.error('Error saving language setting:', error);
+-            }
+-          })();
++          // Suricatoos: the language detected at start (the browser's, or the
++          // default pt-BR) is shown, not saved as the setting of the user.
++          if (!initial) {
++            void (async () => {
++              try {
++                await gmp.user.saveSetting(SETTING_ID_LOCALE, newLang);
++              } catch (error) {
++                console.error('Error saving language setting:', error);
++              }
++            })();
++          }
+ 
+           return newLang;
+         }
+diff --git a/src/web/utils/__tests__/suricatoosLocale.test.ts b/src/web/utils/__tests__/suricatoosLocale.test.ts
+new file mode 100644
+index 0000000..70d8cad
+--- /dev/null
++++ b/src/web/utils/__tests__/suricatoosLocale.test.ts
+@@ -0,0 +1,228 @@
++/* SPDX-FileCopyrightText: 2026 Suricatoos
++ *
++ * SPDX-License-Identifier: AGPL-3.0-or-later
++ */
++
++/* Suricatoos: language of the UI — pt-BR by default, the browser language
++ * mapped to the catalog that serves it, English as the fallback of a key
++ * without translation, and the dates in the language of the UI. */
++
++import {afterEach, describe, expect, test, testing} from '@gsa/testing';
++import i18next from 'i18next';
++import {getDateLocale, setDateLocale} from 'gmp/locale/date';
++import LanguageDetector from 'gmp/locale/detector';
++import {
++  _,
++  DEFAULT_LANGUAGE,
++  FALLBACK_LANGUAGE,
++  getLocale,
++} from 'gmp/locale/lang';
++import {getCatalogLanguage} from 'gmp/locale/languages';
++import date from 'gmp/models/date';
++
++interface DetectInput {
++  stored?: string;
++  languages?: string[];
++}
++
++// The detector of the GSA with the language utils of the i18next instance the
++// UI initializes (supportedLngs = the codes of the catalogs).
++const detect = ({stored, languages = []}: DetectInput): string | undefined => {
++  const detector = new LanguageDetector();
++  detector.init(
++    i18next.services,
++    {
++      storage: {locale: stored},
++      navigator: {languages},
++      defaultLanguage: DEFAULT_LANGUAGE,
++    },
++    i18next.options,
++  );
++  return detector.detect();
++};
++
++afterEach(async () => {
++  await i18next.changeLanguage('en');
++});
++
++describe('default language', () => {
++  test('is pt-BR, and English is only the fallback of the catalogs', () => {
++    expect(DEFAULT_LANGUAGE).toEqual('pt_BR');
++    expect(FALLBACK_LANGUAGE).toEqual('en');
++    expect(i18next.options.fallbackLng).toEqual(['en']);
++  });
++
++  test('a key without translation shows English, never the default', async () => {
++    i18next.addResourceBundle('pt_BR', 'gsa', {Hello: 'Olá'}, true, true);
++    try {
++      await i18next.changeLanguage('en');
++      expect(_('Hello')).toEqual('Hello');
++      await i18next.changeLanguage('es');
++      expect(_('Hello')).toEqual('Hello');
++      await i18next.changeLanguage('pt_BR');
++      expect(_('Hello')).toEqual('Olá');
++      expect(_('Not translated yet')).toEqual('Not translated yet');
++    } finally {
++      i18next.removeResourceBundle('pt_BR', 'gsa');
++    }
++  });
++});
++
++describe('getCatalogLanguage', () => {
++  test.each([
++    ['pt-BR', 'pt_BR'],
++    ['pt', 'pt_BR'],
++    ['pt-PT', 'pt_BR'],
++    ['pt_BR', 'pt_BR'],
++    ['PT-br', 'pt_BR'],
++    ['es', 'es'],
++    ['es-ES', 'es'],
++    ['es-419', 'es'],
++    ['es-MX', 'es'],
++    ['en', 'en'],
++    ['en-US', 'en'],
++    ['en-GB', 'en'],
++  ])('%s is served by %s', (tag, code) => {
++    expect(getCatalogLanguage(tag)).toEqual(code);
++  });
++
++  test.each(['de-DE', 'fr', 'zh-CN', '', 'Browser Language'])(
++    '%s has no catalog',
++    tag => {
++      expect(getCatalogLanguage(tag)).toBeUndefined();
++    },
++  );
++});
++
++describe('language detection', () => {
++  test.each([
++    [['pt-BR', 'pt', 'en-US', 'en'], 'pt_BR'],
++    [['pt'], 'pt_BR'],
++    [['pt-PT'], 'pt_BR'],
++    [['es-MX', 'es', 'en'], 'es'],
++    [['es-419'], 'es'],
++    [['en-US'], 'en'],
++    [['en-US', 'en', 'pt-BR'], 'en'],
++    [['de-DE', 'fr-FR'], 'pt_BR'],
++    [[], 'pt_BR'],
++  ])('browser %j -> %s', (languages, lang) => {
++    expect(detect({languages})).toEqual(lang);
++  });
++
++  test('the language of the last session wins over the browser', () => {
++    expect(detect({stored: 'en', languages: ['pt-BR']})).toEqual('en');
++    expect(detect({stored: 'es', languages: ['pt-BR']})).toEqual('es');
++  });
++
++  test('"Browser Language" and a code without catalog go to the browser', () => {
++    expect(
++      detect({stored: 'Browser Language', languages: ['es-AR']}),
++    ).toEqual('es');
++    expect(detect({stored: 'de', languages: ['pt-BR']})).toEqual('pt_BR');
++    expect(detect({stored: 'zh_CN'})).toEqual('pt_BR');
++  });
++});
++
++describe('dates follow the language of the UI', () => {
++  test('setDateLocale maps the UI codes to the dayjs locales', () => {
++    setDateLocale('pt_BR');
++    expect(getDateLocale()).toEqual('pt-br');
++    setDateLocale('es');
++    expect(getDateLocale()).toEqual('es');
++    setDateLocale('en');
++    expect(getDateLocale()).toEqual('en');
++  });
++
++  test('changing the language changes the date locale', async () => {
++    // A dayjs object keeps the locale it was created with: each one here is
++    // created after the change, as the pages do on every render.
++    const sunday = () => date('2026-10-11').format('dddd, D MMMM');
++    const fiveMinutesAgo = () => date().subtract(5, 'minute').fromNow();
++
++    await i18next.changeLanguage('pt_BR');
++    expect(getLocale()).toEqual('pt_BR');
++    expect(getDateLocale()).toEqual('pt-br');
++    expect(sunday()).toEqual('domingo, 11 outubro');
++    expect(fiveMinutesAgo()).toEqual('há 5 minutos');
++
++    await i18next.changeLanguage('es');
++    expect(getDateLocale()).toEqual('es');
++    expect(sunday()).toEqual('domingo, 11 octubre');
++    expect(fiveMinutesAgo()).toEqual('hace 5 minutos');
++
++    await i18next.changeLanguage('en');
++    expect(getDateLocale()).toEqual('en');
++    expect(sunday()).toEqual('Sunday, 11 October');
++    expect(fiveMinutesAgo()).toEqual('5 minutes ago');
++  });
++});
++
++describe('the language detected at start is not a choice of the user', () => {
++  test('LanguageProvider saves the setting only on a later change', async () => {
++    // Fresh modules: no language seen yet, as when the page loads.
++    testing.resetModules();
++    const {default: i18n} = await import('i18next');
++    const {onLanguageChange} = await import('gmp/locale/lang');
++    const {default: LanguageProvider} = await import(
++      'web/components/provider/LanguageProvider'
++    );
++    const {default: GmpContext} = await import(
++      'web/components/provider/GmpProvider'
++    );
++    const {createElement} = await import('react');
++    const {act, render} = await import('@testing-library/react');
++
++    const seen: Array<[string, boolean | undefined]> = [];
++    const unsubscribe = onLanguageChange((lang, initial) => {
++      seen.push([lang, initial]);
++    });
++    const saveSetting = testing.fn().mockResolvedValue(undefined);
++    const setLocale = testing.fn();
++    const gmp = {user: {saveSetting}, session: {setLocale}};
++    render(
++      createElement(
++        GmpContext.Provider,
++        {value: gmp as never},
++        createElement(LanguageProvider, null, 'page'),
++      ),
++    );
++
++    try {
++      // the detection (the browser language, or the default)
++      await act(async () => {
++        await i18n.changeLanguage('es');
++      });
++      expect(seen).toEqual([['es', true]]);
++      expect(setLocale).toHaveBeenCalledWith('es');
++      expect(saveSetting).not.toHaveBeenCalled();
++
++      // a later change: the choice of the user, saved as before
++      await act(async () => {
++        await i18n.changeLanguage('en');
++      });
++      expect(seen).toEqual([
++        ['es', true],
++        ['en', false],
++      ]);
++      expect(saveSetting).toHaveBeenCalledWith(
++        '6765549a-934e-11e3-b358-406186ea4fc5',
++        'en',
++      );
++    } finally {
++      unsubscribe();
++    }
++  });
++});
++
++describe('interpolation of free text', () => {
++  // i18next escapes {{x}} as HTML (a date 11/10/2026 would show &#x2F;):
++  // dates, hosts and server messages go in {{- x}}.
++  test('{{- x}} keeps the text as is', () => {
++    expect(_('at {{- time}}', {time: '11/10/2026 02:00'})).toEqual(
++      'at 11/10/2026 02:00',
++    );
++    expect(_('at {{time}}', {time: '11/10/2026'})).toEqual(
++      'at 11&#x2F;10&#x2F;2026',
++    );
++  });
++});
