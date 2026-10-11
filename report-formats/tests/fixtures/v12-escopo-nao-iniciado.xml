@@ -8,9 +8,13 @@ Secao 6 (escopo, metodologia e limitacoes), a tarefa que NUNCA INICIOU: o gvmd
 so' grava o inicio do scan quando o scanner comeca, entao <scan_start> e
 <scan_end> vem vazios, sem host, sem resultado e com zero erros. A secao tem de
 dizer que a tarefa nao chegou a iniciar, e inicio, fim e duracao saem como "nao
-informado"; o alvo nao vem no <task> (tambem "nao informado"); o filtro e' o
-padrao de uma GSA de fabrica (min_qod=70, todos os niveis); <errors> existe com
-contagem 0, que e' dado (zero erros), nao ausencia.
+informado"; o alvo nao vem no <task> (tambem "nao informado"); <errors> existe
+com contagem 0, que e' dado (zero erros), nao ausencia. O resumo executivo
+(secao 1) da' a MESMA causa: "este scan nao chegou a rodar", sem o conselho de
+corrigir um alive test que nunca rodou.
+O termo do filtro e' o de auditoria da GSA, com compliance_levels=yniu e SEM
+levels=: a chave ancorada num token nao pode achar "levels=" dentro de
+"compliance_levels=", entao os niveis saem "nao informado".
 -->
 <report extension="pdf" content_type="application/pdf" id="00000000-0000-4000-8000-000000000042">
   <task id="00000000-0000-4000-8000-000000000001">
@@ -24,7 +28,7 @@ contagem 0, que e' dado (zero erros), nao ausencia.
   <hosts><count>0</count></hosts>
   <result_count>0<full>0</full><filtered>0</filtered><critical><full>0</full><filtered>0</filtered></critical><high><full>0</full><filtered>0</filtered></high><medium><full>0</full><filtered>0</filtered></medium><low><full>0</full><filtered>0</filtered></low><log><full>0</full><filtered>0</filtered></log><false_positive><full>0</full><filtered>0</filtered></false_positive></result_count>
   <filters id="00000000-0000-4000-8000-000000000002">
-    <term>apply_overrides=0 levels=chmlgf rows=-1 min_qod=70 first=1 sort-reverse=severity</term>
+    <term>apply_overrides=0 compliance_levels=yniu rows=-1 min_qod=70 first=1 sort-reverse=severity</term>
   </filters>
   <ports start="1" max="-1"></ports>
   <results start="1" max="-1"></results>

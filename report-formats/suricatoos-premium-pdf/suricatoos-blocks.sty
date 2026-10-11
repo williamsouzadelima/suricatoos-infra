@@ -1122,9 +1122,14 @@
   \suri@rowclose\endlastfoot
 }{\endlongtable}
 % \authrow{host}{protocolo}{ok|falha} — uma linha da authtable.
+% O \suri@rowfill (a profundidade que fixa o ar sob a linha) fecha TODA celula,
+% e nao so' a ultima: cada celula e' um \vtop, e a fundura da linha e' a maior
+% delas. Com o strut so' na ultima coluna, uma celula de outra coluna que
+% quebrasse em varias linhas descia com a profundidade natural da ultima linha
+% dela, e o texto encostava no fio de baixo.
 \newcommand{\authrow}[3]{%
-  {\dat{\suriFS{9.5}{12}\color{ink}#1}}&
-  {\dat{\suriFS{9.5}{12}\color{ink}#2}}&
+  {\dat{\suriFS{9.5}{12}\color{ink}#1}}\suri@rowfill{26}&
+  {\dat{\suriFS{9.5}{12}\color{ink}#2}}\suri@rowfill{26}&
   {\suriFS{10.5}{12}\ifstrequal{#3}{ok}{\color{ink}\suriLblAuthOk}{\color{warnfg}\suriLblAuthFail}}\suri@rowfill{26}\\
   \suri@rowhair}
 
@@ -1147,11 +1152,13 @@
   \suri@ethead\endhead
   \suri@rowclose\endlastfoot
 }{\endlongtable}
-% \errorrow{host}{porta}{descricao}{nvt} — uma linha da errortable.
+% \errorrow{host}{porta}{descricao}{nvt} — uma linha da errortable. O
+% \suri@rowfill fecha toda celula, como no \authrow: a descricao e o nome do
+% NVT quebram em varias linhas com frequencia, e o host (IPv6) tambem pode.
 \newcommand{\errorrow}[4]{%
-  {\dat{\suriFS{9.5}{12}\color{ink}#1}}&
-  {\dat{\suriFS{9.5}{12}\color{muted}#2}}&
-  {\suriFS{10}{13}\color{ink}#3}&
+  {\dat{\suriFS{9.5}{12}\color{ink}#1}}\suri@rowfill{26}&
+  {\dat{\suriFS{9.5}{12}\color{muted}#2}}\suri@rowfill{26}&
+  {\suriFS{10}{13}\color{ink}#3}\suri@rowfill{26}&
   {\suriFS{10}{13}\color{body}#4}\suri@rowfill{26}\\
   \suri@rowhair}
 

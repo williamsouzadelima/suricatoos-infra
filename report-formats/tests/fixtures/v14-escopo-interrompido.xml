@@ -1,0 +1,130 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+Fixture SINTETICA do CI de veracidade do Suricatoos Premium PDF
+(report-formats/ci/check-veracity.py roda sobre o .tex desta fixture nos 3
+idiomas). Enderecos RFC 5737, nomes genericos sob .example, OIDs da faixa
+sintetica 1.3.6.1.4.1.25623.1.0.99xxxx (nao existem no feed); nenhum dado de
+scan real.
+
+Secao 6 (escopo, metodologia e limitacoes), o scan que COMECOU E NAO TERMINOU:
+- scan_run_status Interrupted: a secao diz que a cobertura e' parcial, numa
+  nota e numa limitacao;
+- export SEM scan_start e sem scan_end, mas com hosts e resultados: um so'
+  desses sinais nao basta para "a tarefa nao chegou a iniciar" (houve
+  medicao), entao essa nota NAO sai; inicio, fim e duracao saem "nao
+  informado";
+- termo do filtro com compliance_levels=yniu ANTES de levels=hml: os niveis sao
+  os do levels=, e nao as letras de conformidade; e o termo passa de 300
+  caracteres (uma lista de host= da GSA), entao sai cortado em fronteira de
+  palavra, com o corte declarado;
+- versao do feed sem o tipo do feed e sem a versao do scanner: so' a data da
+  versao, e nenhuma linha de scanner.
+-->
+<report extension="pdf" content_type="application/pdf" id="00000000-0000-4000-8000-000000000044">
+  <task id="00000000-0000-4000-8000-000000000001">
+    <name>Example Interrupted Branch Scan</name>
+    <comment></comment>
+    <target id="00000000-0000-4000-8000-000000000003">
+      <trash>0</trash>
+      <name>Example Branch Hosts</name>
+      <comment></comment>
+    </target>
+  </task>
+  <scan_run_status>Interrupted</scan_run_status>
+  <timezone>Coordinated Universal Time</timezone>
+  <timezone_abbrev>UTC</timezone_abbrev>
+  <scan_start></scan_start>
+  <scan_end></scan_end>
+  <hosts><count>2</count></hosts>
+  <result_count>3<full>3</full><filtered>3</filtered><critical><full>0</full><filtered>0</filtered></critical><high><full>1</full><filtered>1</filtered></high><medium><full>1</full><filtered>1</filtered></medium><low><full>1</full><filtered>1</filtered></low><log><full>0</full><filtered>0</filtered></log><false_positive><full>0</full><filtered>0</filtered></false_positive></result_count>
+  <filters id="00000000-0000-4000-8000-000000000002">
+    <term>apply_overrides=0 compliance_levels=yniu levels=hml rows=-1 min_qod=70 first=1 sort-reverse=severity host=192.0.2.31 or host=192.0.2.32 or host=192.0.2.33 or host=192.0.2.34 or host=192.0.2.35 or host=192.0.2.36 or host=192.0.2.37 or host=192.0.2.38 or host=192.0.2.39 or host=192.0.2.40 or host=192.0.2.41 or host=192.0.2.42 or host=192.0.2.43 or host=192.0.2.44 or host=192.0.2.45</term>
+  </filters>
+  <ports start="1" max="-1">
+    <port>22/tcp<host>192.0.2.31</host></port>
+    <port>443/tcp<host>192.0.2.31</host></port>
+    <port>general/tcp<host>192.0.2.32</host></port>
+  </ports>
+  <host>
+    <ip>192.0.2.31</ip>
+    <start>2026-09-03T14:00:05Z</start>
+    <end>2026-09-03T14:25:40Z</end>
+    <detail><name>hostname</name><value>host31.example.com</value></detail>
+    <detail><name>scanned_with_feedversion</name><value>202609010455</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991470</name><description>Example Host Scan End</description></source><extra></extra></detail>
+  </host>
+  <host>
+    <ip>192.0.2.32</ip>
+    <start>2026-09-03T14:00:05Z</start>
+    <end>2026-09-03T14:31:10Z</end>
+    <detail><name>hostname</name><value>host32.example.com</value></detail>
+    <detail><name>scanned_with_feedversion</name><value>202609010455</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991470</name><description>Example Host Scan End</description></source><extra></extra></detail>
+  </host>
+  <results start="1" max="-1">
+    <result id="v-0001">
+      <host>192.0.2.31<hostname>host31.example.com</hostname></host>
+      <port>443/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.991401">
+        <type>nvt</type>
+        <name>Example Web Server Outdated TLS Library</name>
+        <family>Synthetic</family>
+        <cvss_base>7.5</cvss_base>
+        <tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=VendorFix</tags>
+        <solution type="VendorFix">Upgrade the TLS library to the release that fixes the advisory.</solution>
+        <refs></refs>
+      </nvt>
+      <threat>High</threat>
+      <severity>7.5</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for the TLS library advisory.</description>
+    </result>
+    <result id="v-0002">
+      <host>192.0.2.31<hostname>host31.example.com</hostname></host>
+      <port>22/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.991402">
+        <type>nvt</type>
+        <name>Example SSH Server Weak MAC Algorithms</name>
+        <family>Synthetic</family>
+        <cvss_base>5.3</cvss_base>
+        <tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags>
+        <solution type="Mitigation">Restrict the MAC algorithms offered by the service.</solution>
+        <refs></refs>
+      </nvt>
+      <threat>Medium</threat>
+      <severity>5.3</severity>
+      <qod><value>95</value><type>remote_active</type></qod>
+      <description>Synthetic detection output for the SSH MAC advisory.</description>
+    </result>
+    <result id="v-0003">
+      <host>192.0.2.32<hostname>host32.example.com</hostname></host>
+      <port>general/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.991403">
+        <type>nvt</type>
+        <name>Example TCP Timestamps Information Disclosure</name>
+        <family>Synthetic</family>
+        <cvss_base>2.6</cvss_base>
+        <tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags>
+        <solution type="Mitigation">Disable TCP timestamps where operationally acceptable.</solution>
+        <refs></refs>
+      </nvt>
+      <threat>Low</threat>
+      <severity>2.6</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for the TCP timestamps advisory.</description>
+    </result>
+  </results>
+  <errors>
+    <count>1</count>
+    <error>
+      <host>192.0.2.32<asset asset_id=""/><hostname>host32.example.com</hostname></host>
+      <port>general/tcp</port>
+      <description>Scan process interrupted before the remaining checks for this host ran.</description>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.991490">
+        <type>nvt</type>
+        <name>Example Host Scan Scheduler</name>
+        <cvss_base>0.0</cvss_base>
+      </nvt>
+      <scan_nvt_version>2026-08-01T00:00:00Z</scan_nvt_version>
+      <severity>-3.0</severity>
+    </error>
+  </errors>
+</report>

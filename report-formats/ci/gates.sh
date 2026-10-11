@@ -103,14 +103,17 @@ overfull_baseline() {
     es/tortura)    echo 0 ;;
     # Fixtures de veracidade (report-formats/tests/fixtures/), nos 3 idiomas:
     # nascem com 0, a mesma regua das outras. v10-navegacao (secao 3 em varias
-    # paginas, host em dois cards, marcador acima do teto) tambem, e as tres
-    # da secao 6 (v11 autenticacao e erros, v12 tarefa que nao iniciou, v13
-    # tabelas acima do teto).
+    # paginas, host em dois cards, marcador acima do teto) tambem, e as da
+    # secao 6 (v11 autenticacao, erros e feed; v12 tarefa que nao iniciou; v13
+    # tabelas acima do teto, celulas que quebram e cortes declarados; v14 scan
+    # interrompido; v15/v16 inventario do agente; v17 concluido sem host).
     */v1-numeracao | */v2-indicadores-vazios | */v3-consolidado-qod | \
     */v4-instancias | */v5-acao-traduzida | */v6-vulns-unicas | \
     */v7a-faixas | */v7b-lowconf | */v7c-todos-lowconf | \
     */v8-ancora | */v9-nome-capa | */v10-navegacao | \
-    */v11-escopo-autenticado | */v12-escopo-nao-iniciado | */v13-escopo-cortes) echo 0 ;;
+    */v11-escopo-autenticado | */v12-escopo-nao-iniciado | */v13-escopo-cortes | \
+    */v14-escopo-interrompido | */v15-escopo-agente | */v16-escopo-agente-limpo | \
+    */v17-escopo-concluido-vazio) echo 0 ;;
     *) return 1 ;;
   esac
 }

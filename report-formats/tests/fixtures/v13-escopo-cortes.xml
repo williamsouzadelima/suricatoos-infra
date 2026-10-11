@@ -14,9 +14,16 @@ contagens que o gvmd declara diferentes das que o relatorio carrega:
   Auth-SNMP-Pending, que nao e' Success nem Failure e nao conta;
 - <hosts><count> 15 contra 12 <host>, e <errors><count> 27 contra 25 <error>:
   as duas contagens do gvmd aparecem ao lado das do relatorio;
-- 25 erros em 5 hosts: 20 linhas e "+ 5" declarado; um erro sem porta e um com
-  NVT sem nome (sai o OID); descricoes longas e com caracteres especiais do
-  LaTeX;
+- 25 erros em 6 hosts: 20 linhas e "+ 5" declarado; um erro sem porta e um com
+  NVT sem nome (sai o OID); descricoes com caracteres especiais do LaTeX;
+  uma descricao com mais de 300 caracteres e um nome de NVT com mais de 120
+  (os dois cortados em fronteira de palavra, com o corte declarado); e um erro
+  num endereco IPv6 de documentacao (2001:db8::/32), que quebra em varias
+  linhas na coluna estreita do host: as linhas que quebram tem de manter o ar
+  sob elas (o strut de profundidade fecha toda celula);
+- versoes do feed DIFERENTES entre os hosts (192.0.2.31 e 192.0.2.32 foram
+  varridos com o feed e o scanner do dia anterior): a linha do feed e a do
+  scanner listam cada valor distinto;
 - scan de 47 s ("47 s"); filtro SEM min_qod e SEM levels (os dois "nao
   informado"), overrides desligados, export completo (3 de 3).
 -->
@@ -53,6 +60,11 @@ contagens que o gvmd declara diferentes das que o relatorio carrega:
     <detail><name>Auth-SSH-Success</name><value>Protocol SSH, Port 22, User scanuser</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991380</name><description>Example SSH Authorization</description></source><extra></extra></detail>
     <detail><name>Auth-SMB-Failure</name><value>Protocol SMB, Port 445, User scanuser: Login failure</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991381</name><description>Example SMB Authorization</description></source><extra></extra></detail>
     <detail><name>Auth-SSH-Success</name><value>Protocol SSH, Port 2222, User scanuser</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991380</name><description>Example SSH Authorization</description></source><extra></extra></detail>
+    <detail><name>scanned_with_scanner</name><value>Example Scanner 9.1</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991370</name><description>Example Host Scan End</description></source><extra></extra></detail>
+    <detail><name>scanned_with_feedversion</name><value>202609010455</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991370</name><description>Example Host Scan End</description></source><extra></extra></detail>
+    <detail><name>scanned_with_feedtype</name><value>Example Community Feed</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991370</name><description>Example Host Scan End</description></source><extra></extra></detail>
+    <detail><name>scanned_with_feedname</name><value>Example Feed</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991370</name><description>Example Host Scan End</description></source><extra></extra></detail>
+    <detail><name>scanned_with_feedvendor</name><value>Example Vendor</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991370</name><description>Example Host Scan End</description></source><extra></extra></detail>
   </host>
   <host>
     <ip>192.0.2.22</ip>
@@ -62,6 +74,11 @@ contagens que o gvmd declara diferentes das que o relatorio carrega:
     <detail><name>Auth-SNMP-Pending</name><value>Protocol SNMP, Port 161</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991382</name><description>Example SNMP Authorization</description></source><extra></extra></detail>
     <detail><name>Auth-SSH-Success</name><value>Protocol SSH, Port 22, User scanuser</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991380</name><description>Example SSH Authorization</description></source><extra></extra></detail>
     <detail><name>Auth-SMB-Failure</name><value>Protocol SMB, Port 445, User scanuser: Login failure</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991381</name><description>Example SMB Authorization</description></source><extra></extra></detail>
+    <detail><name>scanned_with_scanner</name><value>Example Scanner 9.1</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991370</name><description>Example Host Scan End</description></source><extra></extra></detail>
+    <detail><name>scanned_with_feedversion</name><value>202609010455</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991370</name><description>Example Host Scan End</description></source><extra></extra></detail>
+    <detail><name>scanned_with_feedtype</name><value>Example Community Feed</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991370</name><description>Example Host Scan End</description></source><extra></extra></detail>
+    <detail><name>scanned_with_feedname</name><value>Example Feed</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991370</name><description>Example Host Scan End</description></source><extra></extra></detail>
+    <detail><name>scanned_with_feedvendor</name><value>Example Vendor</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991370</name><description>Example Host Scan End</description></source><extra></extra></detail>
   </host>
   <host>
     <ip>192.0.2.23</ip>
@@ -70,6 +87,11 @@ contagens que o gvmd declara diferentes das que o relatorio carrega:
     <detail><name>hostname</name><value>host23.example.com</value></detail>
     <detail><name>Auth-SSH-Success</name><value>Protocol SSH, Port 22, User scanuser</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991380</name><description>Example SSH Authorization</description></source><extra></extra></detail>
     <detail><name>Auth-SMB-Failure</name><value>Protocol SMB, Port 445, User scanuser: Login failure</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991381</name><description>Example SMB Authorization</description></source><extra></extra></detail>
+    <detail><name>scanned_with_scanner</name><value>Example Scanner 9.1</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991370</name><description>Example Host Scan End</description></source><extra></extra></detail>
+    <detail><name>scanned_with_feedversion</name><value>202609010455</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991370</name><description>Example Host Scan End</description></source><extra></extra></detail>
+    <detail><name>scanned_with_feedtype</name><value>Example Community Feed</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991370</name><description>Example Host Scan End</description></source><extra></extra></detail>
+    <detail><name>scanned_with_feedname</name><value>Example Feed</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991370</name><description>Example Host Scan End</description></source><extra></extra></detail>
+    <detail><name>scanned_with_feedvendor</name><value>Example Vendor</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991370</name><description>Example Host Scan End</description></source><extra></extra></detail>
   </host>
   <host>
     <ip>192.0.2.24</ip>
@@ -78,6 +100,11 @@ contagens que o gvmd declara diferentes das que o relatorio carrega:
     <detail><name>hostname</name><value>host24.example.com</value></detail>
     <detail><name>Auth-SSH-Success</name><value>Protocol SSH, Port 22, User scanuser</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991380</name><description>Example SSH Authorization</description></source><extra></extra></detail>
     <detail><name>Auth-SMB-Failure</name><value>Protocol SMB, Port 445, User scanuser: Login failure</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991381</name><description>Example SMB Authorization</description></source><extra></extra></detail>
+    <detail><name>scanned_with_scanner</name><value>Example Scanner 9.1</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991370</name><description>Example Host Scan End</description></source><extra></extra></detail>
+    <detail><name>scanned_with_feedversion</name><value>202609010455</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991370</name><description>Example Host Scan End</description></source><extra></extra></detail>
+    <detail><name>scanned_with_feedtype</name><value>Example Community Feed</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991370</name><description>Example Host Scan End</description></source><extra></extra></detail>
+    <detail><name>scanned_with_feedname</name><value>Example Feed</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991370</name><description>Example Host Scan End</description></source><extra></extra></detail>
+    <detail><name>scanned_with_feedvendor</name><value>Example Vendor</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991370</name><description>Example Host Scan End</description></source><extra></extra></detail>
   </host>
   <host>
     <ip>192.0.2.25</ip>
@@ -86,6 +113,11 @@ contagens que o gvmd declara diferentes das que o relatorio carrega:
     <detail><name>hostname</name><value>host25.example.com</value></detail>
     <detail><name>Auth-SSH-Success</name><value>Protocol SSH, Port 22, User scanuser</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991380</name><description>Example SSH Authorization</description></source><extra></extra></detail>
     <detail><name>Auth-SMB-Failure</name><value>Protocol SMB, Port 445, User scanuser: Login failure</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991381</name><description>Example SMB Authorization</description></source><extra></extra></detail>
+    <detail><name>scanned_with_scanner</name><value>Example Scanner 9.1</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991370</name><description>Example Host Scan End</description></source><extra></extra></detail>
+    <detail><name>scanned_with_feedversion</name><value>202609010455</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991370</name><description>Example Host Scan End</description></source><extra></extra></detail>
+    <detail><name>scanned_with_feedtype</name><value>Example Community Feed</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991370</name><description>Example Host Scan End</description></source><extra></extra></detail>
+    <detail><name>scanned_with_feedname</name><value>Example Feed</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991370</name><description>Example Host Scan End</description></source><extra></extra></detail>
+    <detail><name>scanned_with_feedvendor</name><value>Example Vendor</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991370</name><description>Example Host Scan End</description></source><extra></extra></detail>
   </host>
   <host>
     <ip>192.0.2.26</ip>
@@ -94,6 +126,11 @@ contagens que o gvmd declara diferentes das que o relatorio carrega:
     <detail><name>hostname</name><value>host26.example.com</value></detail>
     <detail><name>Auth-SSH-Success</name><value>Protocol SSH, Port 22, User scanuser</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991380</name><description>Example SSH Authorization</description></source><extra></extra></detail>
     <detail><name>Auth-SMB-Failure</name><value>Protocol SMB, Port 445, User scanuser: Login failure</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991381</name><description>Example SMB Authorization</description></source><extra></extra></detail>
+    <detail><name>scanned_with_scanner</name><value>Example Scanner 9.1</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991370</name><description>Example Host Scan End</description></source><extra></extra></detail>
+    <detail><name>scanned_with_feedversion</name><value>202609010455</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991370</name><description>Example Host Scan End</description></source><extra></extra></detail>
+    <detail><name>scanned_with_feedtype</name><value>Example Community Feed</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991370</name><description>Example Host Scan End</description></source><extra></extra></detail>
+    <detail><name>scanned_with_feedname</name><value>Example Feed</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991370</name><description>Example Host Scan End</description></source><extra></extra></detail>
+    <detail><name>scanned_with_feedvendor</name><value>Example Vendor</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991370</name><description>Example Host Scan End</description></source><extra></extra></detail>
   </host>
   <host>
     <ip>192.0.2.27</ip>
@@ -102,6 +139,11 @@ contagens que o gvmd declara diferentes das que o relatorio carrega:
     <detail><name>hostname</name><value>host27.example.com</value></detail>
     <detail><name>Auth-SSH-Success</name><value>Protocol SSH, Port 22, User scanuser</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991380</name><description>Example SSH Authorization</description></source><extra></extra></detail>
     <detail><name>Auth-SMB-Failure</name><value>Protocol SMB, Port 445, User scanuser: Login failure</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991381</name><description>Example SMB Authorization</description></source><extra></extra></detail>
+    <detail><name>scanned_with_scanner</name><value>Example Scanner 9.1</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991370</name><description>Example Host Scan End</description></source><extra></extra></detail>
+    <detail><name>scanned_with_feedversion</name><value>202609010455</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991370</name><description>Example Host Scan End</description></source><extra></extra></detail>
+    <detail><name>scanned_with_feedtype</name><value>Example Community Feed</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991370</name><description>Example Host Scan End</description></source><extra></extra></detail>
+    <detail><name>scanned_with_feedname</name><value>Example Feed</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991370</name><description>Example Host Scan End</description></source><extra></extra></detail>
+    <detail><name>scanned_with_feedvendor</name><value>Example Vendor</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991370</name><description>Example Host Scan End</description></source><extra></extra></detail>
   </host>
   <host>
     <ip>192.0.2.28</ip>
@@ -110,6 +152,11 @@ contagens que o gvmd declara diferentes das que o relatorio carrega:
     <detail><name>hostname</name><value>host28.example.com</value></detail>
     <detail><name>Auth-SSH-Success</name><value>Protocol SSH, Port 22, User scanuser</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991380</name><description>Example SSH Authorization</description></source><extra></extra></detail>
     <detail><name>Auth-SMB-Failure</name><value>Protocol SMB, Port 445, User scanuser: Login failure</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991381</name><description>Example SMB Authorization</description></source><extra></extra></detail>
+    <detail><name>scanned_with_scanner</name><value>Example Scanner 9.1</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991370</name><description>Example Host Scan End</description></source><extra></extra></detail>
+    <detail><name>scanned_with_feedversion</name><value>202609010455</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991370</name><description>Example Host Scan End</description></source><extra></extra></detail>
+    <detail><name>scanned_with_feedtype</name><value>Example Community Feed</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991370</name><description>Example Host Scan End</description></source><extra></extra></detail>
+    <detail><name>scanned_with_feedname</name><value>Example Feed</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991370</name><description>Example Host Scan End</description></source><extra></extra></detail>
+    <detail><name>scanned_with_feedvendor</name><value>Example Vendor</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991370</name><description>Example Host Scan End</description></source><extra></extra></detail>
   </host>
   <host>
     <ip>192.0.2.29</ip>
@@ -118,6 +165,11 @@ contagens que o gvmd declara diferentes das que o relatorio carrega:
     <detail><name>hostname</name><value>host29.example.com</value></detail>
     <detail><name>Auth-SSH-Success</name><value>Protocol SSH, Port 22, User scanuser</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991380</name><description>Example SSH Authorization</description></source><extra></extra></detail>
     <detail><name>Auth-SMB-Failure</name><value>Protocol SMB, Port 445, User scanuser: Login failure</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991381</name><description>Example SMB Authorization</description></source><extra></extra></detail>
+    <detail><name>scanned_with_scanner</name><value>Example Scanner 9.1</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991370</name><description>Example Host Scan End</description></source><extra></extra></detail>
+    <detail><name>scanned_with_feedversion</name><value>202609010455</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991370</name><description>Example Host Scan End</description></source><extra></extra></detail>
+    <detail><name>scanned_with_feedtype</name><value>Example Community Feed</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991370</name><description>Example Host Scan End</description></source><extra></extra></detail>
+    <detail><name>scanned_with_feedname</name><value>Example Feed</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991370</name><description>Example Host Scan End</description></source><extra></extra></detail>
+    <detail><name>scanned_with_feedvendor</name><value>Example Vendor</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991370</name><description>Example Host Scan End</description></source><extra></extra></detail>
   </host>
   <host>
     <ip>192.0.2.30</ip>
@@ -126,6 +178,11 @@ contagens que o gvmd declara diferentes das que o relatorio carrega:
     <detail><name>hostname</name><value>host30.example.com</value></detail>
     <detail><name>Auth-SSH-Success</name><value>Protocol SSH, Port 22, User scanuser</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991380</name><description>Example SSH Authorization</description></source><extra></extra></detail>
     <detail><name>Auth-SMB-Failure</name><value>Protocol SMB, Port 445, User scanuser: Login failure</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991381</name><description>Example SMB Authorization</description></source><extra></extra></detail>
+    <detail><name>scanned_with_scanner</name><value>Example Scanner 9.1</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991370</name><description>Example Host Scan End</description></source><extra></extra></detail>
+    <detail><name>scanned_with_feedversion</name><value>202609010455</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991370</name><description>Example Host Scan End</description></source><extra></extra></detail>
+    <detail><name>scanned_with_feedtype</name><value>Example Community Feed</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991370</name><description>Example Host Scan End</description></source><extra></extra></detail>
+    <detail><name>scanned_with_feedname</name><value>Example Feed</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991370</name><description>Example Host Scan End</description></source><extra></extra></detail>
+    <detail><name>scanned_with_feedvendor</name><value>Example Vendor</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991370</name><description>Example Host Scan End</description></source><extra></extra></detail>
   </host>
   <host>
     <ip>192.0.2.31</ip>
@@ -134,6 +191,11 @@ contagens que o gvmd declara diferentes das que o relatorio carrega:
     <detail><name>hostname</name><value>host31.example.com</value></detail>
     <detail><name>Auth-SSH-Success</name><value>Protocol SSH, Port 22, User scanuser</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991380</name><description>Example SSH Authorization</description></source><extra></extra></detail>
     <detail><name>Auth-SMB-Failure</name><value>Protocol SMB, Port 445, User scanuser: Login failure</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991381</name><description>Example SMB Authorization</description></source><extra></extra></detail>
+    <detail><name>scanned_with_scanner</name><value>Example Scanner 9.0</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991370</name><description>Example Host Scan End</description></source><extra></extra></detail>
+    <detail><name>scanned_with_feedversion</name><value>202608310455</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991370</name><description>Example Host Scan End</description></source><extra></extra></detail>
+    <detail><name>scanned_with_feedtype</name><value>Example Community Feed</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991370</name><description>Example Host Scan End</description></source><extra></extra></detail>
+    <detail><name>scanned_with_feedname</name><value>Example Feed</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991370</name><description>Example Host Scan End</description></source><extra></extra></detail>
+    <detail><name>scanned_with_feedvendor</name><value>Example Vendor</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991370</name><description>Example Host Scan End</description></source><extra></extra></detail>
   </host>
   <host>
     <ip>192.0.2.32</ip>
@@ -142,6 +204,11 @@ contagens que o gvmd declara diferentes das que o relatorio carrega:
     <detail><name>hostname</name><value>host32.example.com</value></detail>
     <detail><name>Auth-SSH-Success</name><value>Protocol SSH, Port 22, User scanuser</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991380</name><description>Example SSH Authorization</description></source><extra></extra></detail>
     <detail><name>Auth-SMB-Failure</name><value>Protocol SMB, Port 445, User scanuser: Login failure</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991381</name><description>Example SMB Authorization</description></source><extra></extra></detail>
+    <detail><name>scanned_with_scanner</name><value>Example Scanner 9.0</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991370</name><description>Example Host Scan End</description></source><extra></extra></detail>
+    <detail><name>scanned_with_feedversion</name><value>202608310455</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991370</name><description>Example Host Scan End</description></source><extra></extra></detail>
+    <detail><name>scanned_with_feedtype</name><value>Example Community Feed</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991370</name><description>Example Host Scan End</description></source><extra></extra></detail>
+    <detail><name>scanned_with_feedname</name><value>Example Feed</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991370</name><description>Example Host Scan End</description></source><extra></extra></detail>
+    <detail><name>scanned_with_feedvendor</name><value>Example Vendor</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991370</name><description>Example Host Scan End</description></source><extra></extra></detail>
   </host>
   <results start="1" max="-1">
     <result id="v-0001">
@@ -213,10 +280,10 @@ contagens que o gvmd declara diferentes das que o relatorio carrega:
     <error>
       <host>192.0.2.21<asset asset_id=""/><hostname>host21.example.com</hostname></host>
       <port>22/tcp</port>
-      <description>SSH login succeeded but the package inventory command returned an unexpected format; the local security checks that depend on that inventory were skipped for this host.</description>
+      <description>SSH login succeeded but the package inventory command returned an unexpected format; the local security checks that depend on that inventory were skipped for this host. The command printed a header the parser does not know, followed by a list of packages in a different column order, so every version comparison that relies on it was abandoned instead of being guessed, and the scanner logged this error for the host once per affected check.</description>
       <nvt oid="1.3.6.1.4.1.25623.1.0.991391">
         <type>nvt</type>
-        <name>Example Package Inventory (dpkg_status)</name>
+        <name>Example Package Inventory Collection and Local Security Check Dispatcher for Debian-family Hosts with Extended Repository Metadata (dpkg_status)</name>
         <cvss_base>0.0</cvss_base>
       </nvt>
       <scan_nvt_version>2026-08-01T00:00:00Z</scan_nvt_version>
@@ -331,7 +398,7 @@ contagens que o gvmd declara diferentes das que o relatorio carrega:
       <severity>-3.0</severity>
     </error>
     <error>
-      <host>192.0.2.24<asset asset_id=""/><hostname>host24.example.com</hostname></host>
+      <host>2001:db8:aaaa:bbbb:cccc:dddd:eeee:1<asset asset_id=""/><hostname>host-v6.example.com</hostname></host>
       <port>80/tcp</port>
       <description>HTTP server answered with an empty reply.</description>
       <nvt oid="1.3.6.1.4.1.25623.1.0.991398">
