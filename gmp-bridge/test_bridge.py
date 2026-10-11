@@ -1,15 +1,18 @@
 """Unit tests for the GMP bridge — no live gvmd required."""
 
+import inspect
 import json
 import unittest
 from xml.etree import ElementTree as ET
 
 from bridge import (
+    INVENTORY_MARKER_OID,
     NVTMeta,
     _find_task_id,
     fetch_nvt_meta,
     finding_report_to_xml,
     network_report_to_xml,
+    run_import,
     safe_host_id,
     severity_to_threat,
     valid_scan_time,
@@ -527,3 +530,85 @@ class TestHardeningFindings(unittest.TestCase):
         self.assertNotEqual(res.find("threat").text, "Log")
         self.assertIn("Hardening", res.find("nvt/name").text)
         self.assertIn("Expected", res.find("description").text)
+
+
+class TestReportFormatContract(unittest.TestCase):
+    """Contract with the Premium PDF report format: the two markers it keys on.
+
+    The Premium PDF report (report-formats/suricatoos-premium-pdf/latex.xsl, variable
+    $agent-import, and its oracle report-formats/ci/check-veracity.py) must tell an
+    endpoint-agent inventory import apart from a network scan. It detects an agent
+    inventory import by these two markers, both emitted by THIS bridge:
+
+      1. INVENTORY_MARKER_OID, the NVT OID of the synthetic "inventory collected"
+         result that finding_report_to_xml() emits for a host with no findings;
+      2. the container-task comment prefix "Suricatoos Agent findings for host ",
+         which run_import() sets in agent mode;
+
+    and it only trusts them when the report carries NO host <detail> named Auth-* or
+    scanned_with_* (those come from a real network scan; an operator-edited task
+    comment must not turn a scan into an "agent import"). So the agent-import XML
+    this bridge emits must never carry such details.
+
+    The report-format CI is path-filtered and does not run when only gmp-bridge/
+    changes, so these tests are the tripwire on this side. Changing either marker
+    here requires changing the same marker in latex.xsl and check-veracity.py in the
+    SAME PR; do not just update the expected values below.
+    """
+
+    # The expected literals are spelled out here, not derived from bridge.py: the
+    # point is that a change in bridge.py stops matching them.
+    MARKER_OID = "1.3.6.1.4.1.55683.1.0.1"
+    # Source-text needle: the f-string prefix of the agent-mode task comment.
+    COMMENT_SRC = 'f"Suricatoos Agent findings for host {'
+
+    HOW_TO_FIX = (
+        "A marker the Premium PDF report format keys on changed in bridge.py. Change "
+        "the same marker in report-formats/suricatoos-premium-pdf/latex.xsl "
+        "($agent-import) and report-formats/ci/check-veracity.py in the SAME PR, "
+        "then update the expected value here."
+    )
+
+    def test_inventory_marker_oid_constant(self):
+        self.assertEqual(
+            INVENTORY_MARKER_OID,
+            self.MARKER_OID,
+            f"INVENTORY_MARKER_OID changed. {self.HOW_TO_FIX}",
+        )
+
+    def test_empty_findings_result_carries_marker_oid(self):
+        # The XML is what the report format actually sees: a host with no findings
+        # yields ONE result whose <nvt oid> is the marker.
+        xml = finding_report_to_xml({**SAMPLE_REPORT, "findings": []})
+        results = ET.fromstring(xml).findall("results/result")
+        self.assertEqual(len(results), 1)
+        nvt = results[0].find("nvt")
+        self.assertIsNotNone(nvt)
+        self.assertEqual(
+            nvt.get("oid"),
+            self.MARKER_OID,
+            f"The inventory-marker result lost the pinned <nvt oid>. {self.HOW_TO_FIX}",
+        )
+
+    def test_agent_task_comment_prefix_in_run_import(self):
+        # The comment is built inside run_import()'s live `with Gmp(...)` block, so it
+        # cannot be observed without a gvmd connection: pin the f-string in the source.
+        self.assertTrue(
+            self.COMMENT_SRC in inspect.getsource(run_import),
+            f"run_import() no longer contains {self.COMMENT_SRC!r}. {self.HOW_TO_FIX}",
+        )
+
+    def test_agent_import_xml_has_no_scan_details(self):
+        # The report vetoes the agent-import reading when a host carries Auth-* or
+        # scanned_with_* details; if this bridge ever emitted them, agent imports
+        # would silently be described as network scans.
+        for report in (SAMPLE_REPORT, {**SAMPLE_REPORT, "findings": []}):
+            root = ET.fromstring(finding_report_to_xml(report))
+            names = [d.findtext("name") or "" for d in root.iter("detail")]
+            vetoing = [n for n in names if n.startswith(("Auth-", "scanned_with_"))]
+            self.assertEqual(
+                vetoing,
+                [],
+                f"The agent-import XML now carries {vetoing!r}; the Premium PDF report "
+                f"would stop recognizing agent imports. {self.HOW_TO_FIX}",
+            )
