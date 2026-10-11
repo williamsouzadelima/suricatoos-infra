@@ -20,14 +20,14 @@ func gatedReq(method, target string) *http.Request {
 
 func TestQueueEnqueuePendingAck(t *testing.T) {
 	q := NewQueue()
-	if _, ok := q.Pending("a"); ok {
+	if _, ok := pending(q, "a"); ok {
 		t.Fatal("empty queue should have no pending command")
 	}
-	c := q.Enqueue("a", CmdScanNow)
+	c := mustEnqueue(t, q, "a")
 	if c.ID == "" || c.Type != CmdScanNow {
 		t.Fatalf("bad command: %+v", c)
 	}
-	got, ok := q.Pending("a")
+	got, ok := pending(q, "a")
 	if !ok || got.ID != c.ID {
 		t.Fatalf("Pending = %+v ok=%v, want %s", got, ok, c.ID)
 	}
@@ -35,23 +35,23 @@ func TestQueueEnqueuePendingAck(t *testing.T) {
 	if q.Ack("a", "wrong") {
 		t.Fatal("ack with wrong id must not remove")
 	}
-	if _, ok := q.Pending("a"); !ok {
+	if _, ok := pending(q, "a"); !ok {
 		t.Fatal("command should still be pending after a wrong-id ack")
 	}
 	// correct ack removes it
 	if !q.Ack("a", c.ID) {
 		t.Fatal("ack with the right id must remove")
 	}
-	if _, ok := q.Pending("a"); ok {
+	if _, ok := pending(q, "a"); ok {
 		t.Fatal("command should be gone after ack")
 	}
 }
 
 func TestEnqueueSupersedes(t *testing.T) {
 	q := NewQueue()
-	c1 := q.Enqueue("a", CmdScanNow)
-	c2 := q.Enqueue("a", CmdScanNow)
-	got, _ := q.Pending("a")
+	c1 := mustEnqueue(t, q, "a")
+	c2 := mustEnqueue(t, q, "a")
+	got, _ := pending(q, "a")
 	if got.ID != c2.ID || got.ID == c1.ID {
 		t.Fatalf("a fresh enqueue must supersede the previous: got %s, want %s", got.ID, c2.ID)
 	}
@@ -78,7 +78,7 @@ func TestAgentCN(t *testing.T) {
 
 func TestPollHandler(t *testing.T) {
 	q := NewQueue()
-	svc := NewService(q)
+	svc := NewService(q, nil)
 
 	// no client cert -> 403
 	r := httptest.NewRequest("GET", "/commands", nil)
@@ -98,7 +98,7 @@ func TestPollHandler(t *testing.T) {
 	}
 
 	// enqueue then poll -> 200 + the command
-	enq := q.Enqueue("agent-1", CmdScanNow)
+	enq := mustEnqueue(t, q, "agent-1")
 	r = httptest.NewRequest("GET", "/commands", nil)
 	r.Header.Set("X-Client-Cert-DN", "CN=agent-1,O=suricatoos")
 	w = httptest.NewRecorder()
@@ -123,7 +123,7 @@ func TestPollHandler(t *testing.T) {
 
 func TestEnqueueHandlerAuthAndType(t *testing.T) {
 	q := NewQueue()
-	svc := NewService(q)
+	svc := NewService(q, nil)
 	h := svc.EnqueueHandler("s3cret")
 
 	req := func(auth, body string) *httptest.ResponseRecorder {
@@ -150,25 +150,25 @@ func TestEnqueueHandlerAuthAndType(t *testing.T) {
 	if w.Code != http.StatusAccepted {
 		t.Fatalf("valid enqueue = %d, want 202", w.Code)
 	}
-	if _, ok := q.Pending("agent-1"); !ok {
+	if _, ok := pending(q, "agent-1"); !ok {
 		t.Fatal("enqueue should leave a pending command for agent-1")
 	}
 	// empty body defaults to scan_now
 	q2 := NewQueue()
-	h2 := NewService(q2).EnqueueHandler("s3cret")
+	h2 := NewService(q2, nil).EnqueueHandler("s3cret")
 	r := httptest.NewRequest("POST", "/x", strings.NewReader(""))
 	r.SetPathValue("id", "agent-9")
 	r.Header.Set("Authorization", "Bearer s3cret")
 	w2 := httptest.NewRecorder()
 	h2(w2, r)
-	if got, ok := q2.Pending("agent-9"); !ok || got.Type != CmdScanNow {
+	if got, ok := pending(q2, "agent-9"); !ok || got.Type != CmdScanNow {
 		t.Fatalf("empty body should default to scan_now: %+v ok=%v", got, ok)
 	}
 }
 
 func TestSessionEnqueueHandler(t *testing.T) {
 	q := NewQueue()
-	h := NewService(q).SessionEnqueueHandler()
+	h := NewService(q, nil).SessionEnqueueHandler()
 
 	// no id -> 400
 	w := httptest.NewRecorder()
@@ -182,7 +182,7 @@ func TestSessionEnqueueHandler(t *testing.T) {
 	if w.Code != http.StatusAccepted {
 		t.Fatalf("valid = %d, want 202", w.Code)
 	}
-	if got, ok := q.Pending("agent-7"); !ok || got.Type != CmdScanNow {
+	if got, ok := pending(q, "agent-7"); !ok || got.Type != CmdScanNow {
 		t.Fatalf("expected pending scan_now for agent-7: %+v ok=%v", got, ok)
 	}
 }
@@ -192,7 +192,7 @@ func TestSessionEnqueueHandler(t *testing.T) {
 // not be able to trigger scans).
 func TestSessionEnqueueHandlerRequiresGate(t *testing.T) {
 	q := NewQueue()
-	h := NewService(q).SessionEnqueueHandler()
+	h := NewService(q, nil).SessionEnqueueHandler()
 
 	for _, gate := range []string{"", "1", "GSAD-SESSION"} {
 		r := httptest.NewRequest("POST", "/agents/scan?id=agent-7", nil)
@@ -204,7 +204,7 @@ func TestSessionEnqueueHandlerRequiresGate(t *testing.T) {
 		if w.Code != http.StatusForbidden {
 			t.Fatalf("marker %q = %d, want 403", gate, w.Code)
 		}
-		if _, ok := q.Pending("agent-7"); ok {
+		if _, ok := pending(q, "agent-7"); ok {
 			t.Fatalf("marker %q: a command was enqueued despite the 403", gate)
 		}
 	}

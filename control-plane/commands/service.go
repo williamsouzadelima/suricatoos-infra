@@ -3,6 +3,7 @@ package commands
 import (
 	"crypto/subtle"
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
 	"strings"
@@ -14,11 +15,15 @@ import (
 type Service struct {
 	q           *Queue
 	allowedType map[string]bool
+	known       func(agentID string) bool
 }
 
-// NewService returns a Service over q.
-func NewService(q *Queue) *Service {
-	return &Service{q: q, allowedType: map[string]bool{CmdScanNow: true}}
+// NewService returns a Service over q. known, when set, says whether an agent id is
+// an enrolled agent; the Agents UI route (SessionEnqueueHandler) refuses ids it does
+// not recognize. nil means no check (use it when there is no durable enrollment
+// record to ask). The admin-bearer route never consults it.
+func NewService(q *Queue, known func(agentID string) bool) *Service {
+	return &Service{q: q, allowedType: map[string]bool{CmdScanNow: true}, known: known}
 }
 
 // adminOK reports whether r carries "Authorization: Bearer <secret>". The compare is
@@ -89,11 +94,20 @@ func (s *Service) AckHandler() http.HandlerFunc {
 	}
 }
 
-// enqueue queues cmdType for agentID and answers 202 with the Command, or 500 when
-// it could not be persisted: a 202 always means "durably queued".
+// enqueue queues cmdType for agentID and answers 202 with the Command, or: 400 for an
+// id that could not be an agent's, 503 when the queue is full, 500 when the command
+// could not be persisted. A 202 always means "queued, durably if the queue is".
 func (s *Service) enqueue(w http.ResponseWriter, agentID, cmdType string) {
-	c, err := s.q.EnqueueDurable(agentID, cmdType)
-	if err != nil {
+	c, err := s.q.Enqueue(agentID, cmdType)
+	switch {
+	case errors.Is(err, ErrInvalidAgentID):
+		http.Error(w, "invalid agent id", http.StatusBadRequest)
+		return
+	case errors.Is(err, ErrQueueFull):
+		log.Printf("commands: fila cheia — agente %q recusado (limite de agentes distintos)", agentID)
+		http.Error(w, "command queue is full", http.StatusServiceUnavailable)
+		return
+	case err != nil:
 		log.Printf("commands: enfileirar %s para o agente %q: %v", cmdType, agentID, err)
 		http.Error(w, "could not persist the command", http.StatusInternalServerError)
 		return
@@ -110,11 +124,23 @@ func (s *Service) enqueue(w http.ResponseWriter, agentID, cmdType string) {
 // UI-triggerable command) on the SAME queue the admin/CLI handler uses. As defense in
 // depth it is wrapped in sessiongate.Require: a request without the marker nginx sets
 // only on session-gated locations is refused (403) before anything is enqueued.
+//
+// That gate is weaker than a bearer, so this route is also the one that cannot be
+// allowed to create queue entries out of thin air: the id must be well formed (400)
+// and, when the service has an enrollment lookup, an enrolled agent (404).
 func (s *Service) SessionEnqueueHandler() http.HandlerFunc {
 	return sessiongate.Require(func(w http.ResponseWriter, r *http.Request) {
 		agentID := strings.TrimSpace(r.URL.Query().Get("id"))
 		if agentID == "" {
 			http.Error(w, "agent id required", http.StatusBadRequest)
+			return
+		}
+		if !validAgentID(agentID) {
+			http.Error(w, "invalid agent id", http.StatusBadRequest)
+			return
+		}
+		if s.known != nil && !s.known(agentID) {
+			http.Error(w, "unknown agent", http.StatusNotFound)
 			return
 		}
 		s.enqueue(w, agentID, CmdScanNow)

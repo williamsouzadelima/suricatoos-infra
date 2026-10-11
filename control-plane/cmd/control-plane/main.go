@@ -53,6 +53,11 @@
 //	                      restart drops the pending commands).
 //	COMMANDS_TTL          how long a pending/delivered command stays deliverable before
 //	                      it expires (Go duration; default 24h).
+//	COMMANDS_MAX_AGENTS   how many distinct agents the command queue holds (default
+//	                      5000); a new agent beyond it gets 503 once idle ones are
+//	                      reclaimed. The Agents UI route ("Escanear agora") only accepts
+//	                      agents found in the token store, so it needs TOKEN_DB_PATH;
+//	                      without it that check is off.
 //
 // When CA_CERT_FILE/CA_KEY_FILE are set the CA survives restarts (agents keep
 // their mTLS certificates). Without them a new ephemeral CA is generated on
@@ -217,25 +222,38 @@ func main() {
 	// requests; what became of each command is readable at
 	// GET /api/v1/agents/{id}/commands. A corrupt or unwritable file is fatal here
 	// rather than silently replaced by an empty queue.
-	cmdTTL := cpcommands.DefaultTTL
-	if v := os.Getenv("COMMANDS_TTL"); v != "" {
-		if d, err := time.ParseDuration(v); err == nil && d > 0 {
-			cmdTTL = d
-		} else {
-			log.Printf("commands: COMMANDS_TTL inválido (%q) — usando o padrão %s", v, cmdTTL)
-		}
-	}
+	cmdTTL := envDuration("COMMANDS_TTL", cpcommands.DefaultTTL)
+	cmdMaxAgents := envPositiveInt("COMMANDS_MAX_AGENTS", cpcommands.DefaultMaxAgents)
 	commandsFile := os.Getenv("COMMANDS_FILE")
-	cmdQueue, err := cpcommands.Open(cpcommands.Config{Path: commandsFile, TTL: cmdTTL})
+	cmdQueue, err := cpcommands.Open(cpcommands.Config{Path: commandsFile, TTL: cmdTTL, MaxAgents: cmdMaxAgents})
 	if err != nil {
 		log.Fatalf("commands: %v", err)
 	}
 	if commandsFile != "" {
-		log.Printf("commands: fila de comandos DURÁVEL (%s, ttl=%s)", commandsFile, cmdTTL)
+		log.Printf("commands: fila de comandos DURÁVEL (%s, ttl=%s, até %d agentes)", commandsFile, cmdTTL, cmdMaxAgents)
 	} else {
-		log.Printf("commands: fila de comandos EM MEMÓRIA — defina COMMANDS_FILE para os pedidos sobreviverem a um restart (ttl=%s)", cmdTTL)
+		log.Printf("commands: fila de comandos EM MEMÓRIA — defina COMMANDS_FILE para os pedidos sobreviverem a um restart (ttl=%s, até %d agentes)", cmdTTL, cmdMaxAgents)
 	}
-	cmdSvc := cpcommands.NewService(cmdQueue)
+	// The Agents UI route ("Escanear agora") sits behind a gate that today only checks
+	// that a cookie exists, so it must not be able to create queue entries for ids
+	// nobody enrolled: it asks the token store. That needs a DURABLE enrollment record —
+	// the in-memory store forgets every enrollment on restart, and the check would then
+	// refuse real agents — so with TOKEN_DB_PATH unset the check is off.
+	var knownAgent func(string) bool
+	if tokenDBPath != "" {
+		knownAgent = func(id string) bool {
+			ok, err := store.HasAgentID(id)
+			if err != nil {
+				log.Printf("commands: consultar o agente %q no token store: %v", id, err)
+				return false
+			}
+			return ok
+		}
+		log.Printf("commands: 'Escanear agora' só aceita agentes enrolados (token store persistente)")
+	} else {
+		log.Printf("commands: 'Escanear agora' SEM checagem de agente enrolado — TOKEN_DB_PATH vazio (o store em memória esquece os enrollments a cada restart)")
+	}
+	cmdSvc := cpcommands.NewService(cmdQueue, knownAgent)
 
 	// Sensor dispatch + tenant registry (ADR-0007). The tenant admin API is always
 	// available (bearer-gated); the sensor-facing scan-job routes are mounted only
@@ -443,6 +461,34 @@ func mustEnv(key string) string {
 		log.Fatalf("required environment variable %s is not set", key)
 	}
 	return v
+}
+
+// envDuration parses a positive Go duration env var. Unset gives def; an invalid or
+// non-positive value gives def too, with a warning, because a typo in an optional
+// knob must not take the control-plane down with it.
+func envDuration(key string, def time.Duration) time.Duration {
+	v := os.Getenv(key)
+	if v == "" {
+		return def
+	}
+	if d, err := time.ParseDuration(v); err == nil && d > 0 {
+		return d
+	}
+	log.Printf("%s inválido (%q) — usando o padrão %s", key, v, def)
+	return def
+}
+
+// envPositiveInt is envDuration for a positive integer.
+func envPositiveInt(key string, def int) int {
+	v := os.Getenv(key)
+	if v == "" {
+		return def
+	}
+	if n, err := strconv.Atoi(v); err == nil && n > 0 {
+		return n
+	}
+	log.Printf("%s inválido (%q) — usando o padrão %d", key, v, def)
+	return def
 }
 
 // envFloat parses a float env var, returning 0 when unset or unparseable.
