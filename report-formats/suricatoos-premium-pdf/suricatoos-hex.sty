@@ -278,7 +278,7 @@
 \newcount\hex@i \newcount\hex@r \newcount\hex@c
 \newlength{\hex@avail}
 
-% \hexport{SERVIÇO}{80/TCP}{162.241.63.40}{alto} — one hexagonal cell.
+% \hexport{SERVIÇO}{80/TCP}{198.51.100.25}{alto} — one hexagonal cell.
 % Inside a `hexboard' it is queued and laid out by the board; used on its own it
 % draws a single free-standing cell.
 \newcommand{\hexport}[4]{%
@@ -394,14 +394,14 @@
 % ===========================================================================
 % 7. Card.
 % ===========================================================================
-% \hexcard{loga.com.br}{1 host · 19 portas únicas · qua, 1 jul 2026}{board}
+% \hexcard{exemplo.com.br}{1 host · 19 portas únicas · qua, 1 jul 2026}{board}
 % White card with a hairline border: domain in Mono bold on the left, the scope
 % line in Mono grey on the right, then whatever the third argument draws
 % (normally a hexboard followed by a \hexlegend).
 % The domain is tracked at 145/1000em, not at the \suritrack of the upper-case
 % labels: it is lower case and it is the only tracked run in the design that is
-% not a label.  145 is measured, not guessed — "loga.com.br" sets 83px wide on
-% the model, and 143..147 is the whole range that rasterises to 83px.
+% not a label.  145 is measured, not guessed — the model's sample domain sets
+% 83px wide, and 143..147 is the whole range that rasterises to 83px.
 \newcommand{\hexcard}[3]{%
   \par\begingroup
     \setlength{\fboxrule}{\suripx{1}}%

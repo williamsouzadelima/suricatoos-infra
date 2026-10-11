@@ -4,7 +4,7 @@
 % semantic macro calls carrying DATA.  There is not a single colour, length or
 % \vspace below — if one were needed, the macro is missing from a .sty.
 %
-% Data: project loga.com.br, host 162.241.63.40 / webmail.loga.com.br.
+% Data: project exemplo.com.br, host 198.51.100.25 / app.exemplo.com.br (synthetic identifiers, RFC 5737).
 % Build: pdflatex main.tex (twice, for \pageref{LastPage}).
 \documentclass[10pt,a4paper]{article}
 \usepackage{suricatoos-report}
@@ -18,7 +18,7 @@
   kicker={Avalia\c{c}\~ao de Vulnerabilidades},
   title={Relat\'orio de Avalia\c{c}\~ao\\de Vulnerabilidades},
   subtitle={Elaborado pela Plataforma de Seguran\c{c}a Suricatoos},
-  projeto={loga.com.br},
+  projeto={exemplo.com.br},
   hosts={1},
   inicio={ter, 30 jun 2026 00:00 UTC},
   fim={qua, 1 jul 2026 00:02 UTC},
@@ -33,7 +33,7 @@
 
 \suriPara{Este relat\'orio apresenta os resultados de uma avalia\c{c}\~ao de
 vulnerabilidades realizada pela Plataforma de Seguran\c{c}a Suricatoos.
-O projeto \textbf{``loga.com.br''} avaliou 1 host(s) e produziu 797
+O projeto \textbf{``exemplo.com.br''} avaliou 1 host(s) e produziu 797
 resultado(s), descrevendo 98 vulnerabilidade(s) \'unica(s). Destas,
 \textbf{62 achado(s) s\~ao de severidade Alta ou Cr\'itica} e exigem
 remedia\c{c}\~ao imediata --- 62 de baixa confian\c{c}a (valida\c{c}\~ao
@@ -64,28 +64,28 @@ a chave da c\'elula \'e o par (transporte, porta). Cor e preenchimento carregam
 a \textbf{maior severidade observada} naquela porta em todos os hosts que a
 exp\~oem.}
 
-\hexcard{loga.com.br}{1 host \textperiodcentered\ 19 portas \'unicas
+\hexcard{exemplo.com.br}{1 host \textperiodcentered\ 19 portas \'unicas
                       \textperiodcentered\ qua, 1 jul 2026 00:02 UTC}{%
   \begin{hexboard}
-    \hexport{FTP}{21/TCP}{162.241.63.40}{medio}
-    \hexport{SSH}{22/TCP}{162.241.63.40}{medio}
-    \hexport{DOMAIN}{53/TCP}{162.241.63.40}{medio}
-    \hexport{HTTP}{80/TCP}{162.241.63.40}{alto}
-    \hexport{POP3}{110/TCP}{162.241.63.40}{medio}
-    \hexport{IMAP}{143/TCP}{162.241.63.40}{medio}
-    \hexport{HTTPS}{443/TCP}{162.241.63.40}{alto}
-    \hexport{IMAPS}{993/TCP}{162.241.63.40}{exposto}
-    \hexport{POP3S}{995/TCP}{162.241.63.40}{exposto}
-    \hexport{TCP}{2077/TCP}{162.241.63.40}{medio}
-    \hexport{TCP}{2078/TCP}{162.241.63.40}{medio}
-    \hexport{TCP}{2082/TCP}{162.241.63.40}{medio}
-    \hexport{TCP}{2083/TCP}{162.241.63.40}{medio}
-    \hexport{TCP}{2086/TCP}{162.241.63.40}{medio}
-    \hexport{TCP}{2087/TCP}{162.241.63.40}{medio}
-    \hexport{TCP}{2095/TCP}{162.241.63.40}{medio}
-    \hexport{TCP}{2096/TCP}{162.241.63.40}{medio}
-    \hexport{TCP}{2222/TCP}{162.241.63.40}{medio}
-    \hexport{MYSQL}{3306/TCP}{162.241.63.40}{medio}
+    \hexport{FTP}{21/TCP}{198.51.100.25}{medio}
+    \hexport{SSH}{22/TCP}{198.51.100.25}{medio}
+    \hexport{DOMAIN}{53/TCP}{198.51.100.25}{medio}
+    \hexport{HTTP}{80/TCP}{198.51.100.25}{alto}
+    \hexport{POP3}{110/TCP}{198.51.100.25}{medio}
+    \hexport{IMAP}{143/TCP}{198.51.100.25}{medio}
+    \hexport{HTTPS}{443/TCP}{198.51.100.25}{alto}
+    \hexport{IMAPS}{993/TCP}{198.51.100.25}{exposto}
+    \hexport{POP3S}{995/TCP}{198.51.100.25}{exposto}
+    \hexport{TCP}{2077/TCP}{198.51.100.25}{medio}
+    \hexport{TCP}{2078/TCP}{198.51.100.25}{medio}
+    \hexport{TCP}{2082/TCP}{198.51.100.25}{medio}
+    \hexport{TCP}{2083/TCP}{198.51.100.25}{medio}
+    \hexport{TCP}{2086/TCP}{198.51.100.25}{medio}
+    \hexport{TCP}{2087/TCP}{198.51.100.25}{medio}
+    \hexport{TCP}{2095/TCP}{198.51.100.25}{medio}
+    \hexport{TCP}{2096/TCP}{198.51.100.25}{medio}
+    \hexport{TCP}{2222/TCP}{198.51.100.25}{medio}
+    \hexport{MYSQL}{3306/TCP}{198.51.100.25}{medio}
   \end{hexboard}
   \hexlegend{0}{2}{15}{0}{2}{0}}
 
@@ -99,25 +99,25 @@ aparecem na se\c{c}\~ao \emph{Hosts e Portas Abertas}.}
 \clearpage
 \blocklabel{\suriLblPortsMapped}
 \begin{porttable}
-  \portrow{21}{\ddag}{tcp}{ftp\portmark{\dag}}{medio}{7.5}{1}{162.241.63.40}
-  \portrow{22}{\ddag}{tcp}{ssh\portmark{\dag}}{medio}{7.5}{1}{162.241.63.40}
-  \portrow{53}{\ddag}{tcp}{domain\portmark{\dag}}{medio}{8.6}{1}{162.241.63.40}
-  \portrow{80}{\ddag}{tcp}{http\portmark{\dag}}{alto}{9.9}{1}{162.241.63.40}
-  \portrow{110}{}{tcp}{pop3\portmark{\dag}}{medio}{4.8}{1}{162.241.63.40}
-  \portrow{143}{}{tcp}{imap\portmark{\dag}}{medio}{4.8}{1}{162.241.63.40}
-  \portrow{443}{\ddag}{tcp}{https\portmark{\dag}}{alto}{9.9}{1}{162.241.63.40}
-  \portrow{993}{}{tcp}{imaps\portmark{\dag}}{exposto}{0.0}{1}{162.241.63.40}
-  \portrow{995}{}{tcp}{pop3s\portmark{\dag}}{exposto}{0.0}{1}{162.241.63.40}
-  \portrow{2077}{}{tcp}{tcp}{medio}{4.8}{1}{162.241.63.40}
-  \portrow{2078}{\ddag}{tcp}{tcp}{medio}{7.5}{1}{162.241.63.40}
-  \portrow{2082}{}{tcp}{tcp}{medio}{4.8}{1}{162.241.63.40}
-  \portrow{2083}{\ddag}{tcp}{tcp}{medio}{7.5}{1}{162.241.63.40}
-  \portrow{2086}{}{tcp}{tcp}{medio}{4.8}{1}{162.241.63.40}
-  \portrow{2087}{\ddag}{tcp}{tcp}{medio}{7.5}{1}{162.241.63.40}
-  \portrow{2095}{}{tcp}{tcp}{medio}{4.8}{1}{162.241.63.40}
-  \portrow{2096}{\ddag}{tcp}{tcp}{medio}{7.5}{1}{162.241.63.40}
-  \portrow{2222}{\ddag}{tcp}{tcp}{medio}{7.5}{1}{162.241.63.40}
-  \portrow{3306}{\ddag}{tcp}{mysql\portmark{\dag}}{medio}{7.5}{1}{162.241.63.40}
+  \portrow{21}{\ddag}{tcp}{ftp\portmark{\dag}}{medio}{7.5}{1}{198.51.100.25}
+  \portrow{22}{\ddag}{tcp}{ssh\portmark{\dag}}{medio}{7.5}{1}{198.51.100.25}
+  \portrow{53}{\ddag}{tcp}{domain\portmark{\dag}}{medio}{8.6}{1}{198.51.100.25}
+  \portrow{80}{\ddag}{tcp}{http\portmark{\dag}}{alto}{9.9}{1}{198.51.100.25}
+  \portrow{110}{}{tcp}{pop3\portmark{\dag}}{medio}{4.8}{1}{198.51.100.25}
+  \portrow{143}{}{tcp}{imap\portmark{\dag}}{medio}{4.8}{1}{198.51.100.25}
+  \portrow{443}{\ddag}{tcp}{https\portmark{\dag}}{alto}{9.9}{1}{198.51.100.25}
+  \portrow{993}{}{tcp}{imaps\portmark{\dag}}{exposto}{0.0}{1}{198.51.100.25}
+  \portrow{995}{}{tcp}{pop3s\portmark{\dag}}{exposto}{0.0}{1}{198.51.100.25}
+  \portrow{2077}{}{tcp}{tcp}{medio}{4.8}{1}{198.51.100.25}
+  \portrow{2078}{\ddag}{tcp}{tcp}{medio}{7.5}{1}{198.51.100.25}
+  \portrow{2082}{}{tcp}{tcp}{medio}{4.8}{1}{198.51.100.25}
+  \portrow{2083}{\ddag}{tcp}{tcp}{medio}{7.5}{1}{198.51.100.25}
+  \portrow{2086}{}{tcp}{tcp}{medio}{4.8}{1}{198.51.100.25}
+  \portrow{2087}{\ddag}{tcp}{tcp}{medio}{7.5}{1}{198.51.100.25}
+  \portrow{2095}{}{tcp}{tcp}{medio}{4.8}{1}{198.51.100.25}
+  \portrow{2096}{\ddag}{tcp}{tcp}{medio}{7.5}{1}{198.51.100.25}
+  \portrow{2222}{\ddag}{tcp}{tcp}{medio}{7.5}{1}{198.51.100.25}
+  \portrow{3306}{\ddag}{tcp}{mysql\portmark{\dag}}{medio}{7.5}{1}{198.51.100.25}
 \end{porttable}
 \portnotes{%
   \portnote{\dag}{nome IANA da porta: o scan N\~AO identificou o servi\c{c}o em
@@ -136,7 +136,7 @@ aparecem na se\c{c}\~ao \emph{Hosts e Portas Abertas}.}
 \suriPara{Servi\c{c}os de rede descobertos em cada host avaliado, com o n\'umero
 de achados e a maior severidade observada em cada porta.}
 
-\hostcard{162.241.63.40}{webmail.loga.com.br}{Linux/Unix}{19}{%
+\hostcard{198.51.100.25}{app.exemplo.com.br}{Linux/Unix}{19}{%
   \hostcols{%
     \hostrow{21/tcp}{55}{alto}{7.5}
     \hostrow{22/tcp}{12}{alto}{7.5}
@@ -234,7 +234,7 @@ severidade exibida como um \textbf{teto}, n\~ao como fato confirmado.}
 \suriSection{5}{Achados Detalhados}
 
 \consolidatedcard{alto}{Atualiza\c{c}\~ao pendente: ISC BIND}{Consolidado}{%
-    \chipsev{alto}{8.6}\chip{22 ADVISORIES}\chip{HOST 162.241.63.40}}{%
+    \chipsev{alto}{8.6}\chip{22 ADVISORIES}\chip{HOST 198.51.100.25}}{%
     O scanner reportou 22 advisories separados para este produto. Eles se
     acumulam um por vers\~ao do fornecedor e s\~ao resolvidos por uma
     \textbf{\'unica a\c{c}\~ao}: atualizar o produto para uma vers\~ao
@@ -266,7 +266,7 @@ severidade exibida como um \textbf{teto}, n\~ao como fato confirmado.}
   \fieldlabel{\suriLblFldVector}%
   \cvssvector{AV:L/AC:H/Au:S/C:P/I:P/A:N}}{%
   \fieldlabel{\suriLblFldAffected}%
-  \affectedchips{\chiphost{162.241.63.40:22/tcp}\chiphost{162.241.63.40:2222/tcp}}}
+  \affectedchips{\chiphost{198.51.100.25:22/tcp}\chiphost{198.51.100.25:2222/tcp}}}
 
 \fieldlabel{\suriLblFldSummary}
 \suriPara{OpenBSD OpenSSH is prone to multiple vulnerabilities.}
@@ -299,7 +299,7 @@ Installation path / port: 22/tcp
 % Back cover.
 % ===========================================================================
 \suriBackCover{
-  projeto={loga.com.br},
+  projeto={exemplo.com.br},
   data={20 de agosto de 2026}
 }
 
