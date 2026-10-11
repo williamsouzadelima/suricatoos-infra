@@ -151,9 +151,87 @@ func TestMaxUsesOneIsSingleHost(t *testing.T) {
 }
 
 func TestBadTarget400(t *testing.T) {
+	s, tm := newSvc(knownAcme)
+	// "macos" e "Darwin" tambem sao invalidos: o valor aceito e exatamente "darwin".
+	for _, target := range []string{"bogus", "macos", "Darwin"} {
+		w := do(s, "GET", "/api/v1/tenants/acme/enroll-command?target="+target, "sekret")
+		if w.Code != http.StatusBadRequest {
+			t.Fatalf("target %q inválido deveria 400, got %d", target, w.Code)
+		}
+		// A mensagem lista os alvos validos, incluindo darwin (macOS).
+		if want := "target deve ser docker, linux, darwin ou windows"; !strings.Contains(w.Body.String(), want) {
+			t.Errorf("target %q: mensagem do 400 deveria conter %q, got %q", target, want, w.Body.String())
+		}
+	}
+	// Recusa ANTES de mintar: alvo invalido nao gasta token.
+	if recs, _ := tm.List(); len(recs) != 0 {
+		t.Fatalf("alvo inválido mintou token: %+v", recs)
+	}
+}
+
+// macOS: o install.sh ja detecta o SO ('uname -s' → darwin, instala em /usr/local/bin),
+// entao o one-liner e o mesmo do linux. Antes, target=darwin (botao macOS da pagina
+// "Ativar Agente") sempre dava 400.
+func TestDarwinTargetUsesInstallScript(t *testing.T) {
+	s, tm := newSvc(knownAcme)
+	w := do(s, "GET", "/api/v1/tenants/acme/enroll-command?target=darwin", "sekret")
+	if w.Code != http.StatusOK {
+		t.Fatalf("target=darwin deveria 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var r response
+	if err := json.Unmarshal(w.Body.Bytes(), &r); err != nil {
+		t.Fatal(err)
+	}
+	if r.Tenant != "acme" || r.Target != "darwin" {
+		t.Fatalf("tenant/target errados: %+v", r)
+	}
+	for _, want := range []string{
+		"curl -fsSL https://scanner.suricatoos.com/install.sh | sudo sh -s --",
+		"--server https://scanner.suricatoos.com/agent/v1",
+		"--token st_",
+		"--ca-pin sha256:abc123",
+	} {
+		if !strings.Contains(r.Command, want) {
+			t.Errorf("comando darwin nao contem %q:\n%s", want, r.Command)
+		}
+	}
+	for _, bad := range []string{"docker", "powershell"} {
+		if strings.Contains(r.Command, bad) {
+			t.Errorf("comando darwin nao deveria conter %q:\n%s", bad, r.Command)
+		}
+	}
+	if r.Image != "" {
+		t.Errorf("darwin nao usa imagem de container, got image=%q", r.Image)
+	}
+	// Mesmo one-liner do linux (so o token muda).
+	if got, want := s.command("darwin", "st_x"), s.command("linux", "st_x"); got != want {
+		t.Errorf("darwin deveria ter o mesmo one-liner do linux:\n got: %s\nwant: %s", got, want)
+	}
+	// O token e do tenant e com a mesma politica dos demais alvos.
+	recs, _ := tm.List()
+	if len(recs) != 1 || recs[0].Scope.Tenant != "acme" || recs[0].Scope.Policy != "agent-endpoint" {
+		t.Fatalf("token mintado com escopo errado: %+v", recs)
+	}
+}
+
+// O botao macOS da UI chama a rota de SESSAO (atras do portao do nginx), nao a de
+// bearer: target=darwin precisa dar 200 tambem ali.
+func TestSessionHandlerAcceptsDarwin(t *testing.T) {
 	s, _ := newSvc(knownAcme)
-	if w := do(s, "GET", "/api/v1/tenants/acme/enroll-command?target=bogus", "sekret"); w.Code != http.StatusBadRequest {
-		t.Fatalf("target inválido deveria 400, got %d", w.Code)
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /provision/enroll-command", s.SessionHandler())
+	req := gated(httptest.NewRequest("GET", "/provision/enroll-command?tenant=acme&target=darwin", nil))
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("sessao com target=darwin deveria 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var r response
+	if err := json.Unmarshal(w.Body.Bytes(), &r); err != nil {
+		t.Fatal(err)
+	}
+	if r.Target != "darwin" || !strings.Contains(r.Command, "https://scanner.suricatoos.com/install.sh") {
+		t.Fatalf("resposta errada: %+v", r)
 	}
 }
 

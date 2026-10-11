@@ -58,7 +58,7 @@ const (
 
 type response struct {
 	Tenant    string    `json:"tenant"`
-	Target    string    `json:"target"` // docker | linux | windows
+	Target    string    `json:"target"` // docker | linux | darwin | windows
 	Command   string    `json:"command"`
 	Server    string    `json:"server"`
 	CAPin     string    `json:"ca_pin"`
@@ -69,8 +69,8 @@ type response struct {
 }
 
 // Handler serves GET /api/v1/tenants/{t}/enroll-command (ADMIN-BEARER). The tenant
-// comes from the {t} path. Query params: target (docker|linux|windows), max_uses,
-// ttl_hours. For automation/CLI.
+// comes from the {t} path. Query params: target (docker|linux|darwin|windows),
+// max_uses, ttl_hours. For automation/CLI.
 func (s *Service) Handler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if !s.bearerOK(r) {
@@ -124,7 +124,7 @@ func (s *Service) SessionTenantsHandler() http.HandlerFunc {
 }
 
 // serve is the shared core: validate tenant, mint a scoped token, render the command.
-// Query params (both handlers): target=docker|linux|windows, max_uses, ttl_hours.
+// Query params (both handlers): target=docker|linux|darwin|windows, max_uses, ttl_hours.
 func (s *Service) serve(w http.ResponseWriter, r *http.Request, tenant string) {
 	if tenant == "" {
 		http.Error(w, "tenant obrigatório", http.StatusBadRequest)
@@ -141,9 +141,9 @@ func (s *Service) serve(w http.ResponseWriter, r *http.Request, tenant string) {
 		target = "docker"
 	}
 	switch target {
-	case "docker", "linux", "windows":
+	case "docker", "linux", "darwin", "windows":
 	default:
-		http.Error(w, "target deve ser docker, linux ou windows", http.StatusBadRequest)
+		http.Error(w, "target deve ser docker, linux, darwin ou windows", http.StatusBadRequest)
 		return
 	}
 
@@ -205,7 +205,7 @@ func (s *Service) command(target, token string) string {
 		return fmt.Sprintf(
 			`powershell -ExecutionPolicy Bypass -Command "iwr -useb %s/install.ps1 -OutFile C:\Windows\Temp\suricatoos-install.ps1; & C:\Windows\Temp\suricatoos-install.ps1 -Server '%s' -Token '%s' -CaPin '%s'"`,
 			base, s.cfg.ServerURL, token, s.cfg.CAPin)
-	default: // linux (binary installer)
+	default: // linux, darwin (binary installer; install.sh picks the OS by `uname -s`)
 		base := publicBase(s.cfg.ServerURL)
 		return fmt.Sprintf(
 			`curl -fsSL %s/install.sh | sudo sh -s -- --server %s --token %s --ca-pin %s`,
