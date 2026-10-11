@@ -1,0 +1,134 @@
+{
+  "x-nota": "Fixture ESCRITA A MAO no formato de `docker compose config --format json` (so as chaves que a politica de redes le). NAO e saida real do compose: serve de controle positivo e de base p/ as mutacoes de test_check_networks.py. A conferencia de verdade roda no CI sobre o compose resolvido (check_networks.py --resolve).",
+  "name": "greenbone-community-edition",
+  "services": {
+    "cert-bund-data": {
+      "image": "registry.community.greenbone.net/community/cert-bund-data",
+      "networks": { "default": null }
+    },
+    "configure-openvas": {
+      "image": "registry.community.greenbone.net/community/openvas-scanner:stable",
+      "networks": { "default": null }
+    },
+    "control-plane": {
+      "image": "ghcr.io/williamsouzadelima/suricatoos-control-plane:stable",
+      "networks": { "backend": null, "egress": null },
+      "volumes": [{ "type": "bind", "source": "/var/lib/suricatoos-cp", "target": "/data", "bind": { "create_host_path": true } }]
+    },
+    "data-objects": {
+      "image": "registry.community.greenbone.net/community/data-objects",
+      "networks": { "default": null }
+    },
+    "dfn-cert-data": {
+      "image": "registry.community.greenbone.net/community/dfn-cert-data",
+      "networks": { "default": null }
+    },
+    "docker-socket-proxy": {
+      "image": "tecnativa/docker-socket-proxy:latest",
+      "networks": { "docker-api": null },
+      "volumes": [{ "type": "bind", "source": "/var/run/docker.sock", "target": "/var/run/docker.sock", "read_only": true, "bind": { "create_host_path": true } }]
+    },
+    "feed-updater": {
+      "networks": { "backend": null, "docker-api": null, "egress": null },
+      "volumes": [
+        { "type": "bind", "source": "/srv/exemplo/compose", "target": "/compose", "read_only": true, "bind": { "create_host_path": true } },
+        { "type": "volume", "source": "feed_updater_state", "target": "/state", "volume": {} }
+      ]
+    },
+    "gpg-data": {
+      "image": "registry.community.greenbone.net/community/gpg-data",
+      "networks": { "default": null }
+    },
+    "gsa": {
+      "image": "ghcr.io/williamsouzadelima/suricatoos-gsa:stable",
+      "networks": { "default": null }
+    },
+    "gsad": {
+      "image": "ghcr.io/williamsouzadelima/suricatoos-gsad:stable",
+      "networks": { "default": null }
+    },
+    "gvm-config": {
+      "image": "registry.community.greenbone.net/community/gvm-config:latest",
+      "networks": { "default": null }
+    },
+    "gvm-tools": {
+      "image": "registry.community.greenbone.net/community/gvm-tools",
+      "networks": { "default": null }
+    },
+    "gvmd": {
+      "image": "registry.community.greenbone.net/community/gvmd:stable",
+      "networks": { "default": null },
+      "volumes": [
+        { "type": "volume", "source": "gvmd_socket_vol", "target": "/run/gvmd", "volume": {} },
+        { "type": "volume", "source": "psql_socket_vol", "target": "/var/run/postgresql", "volume": {} }
+      ]
+    },
+    "ingest": {
+      "image": "ghcr.io/williamsouzadelima/suricatoos-ingest:stable",
+      "networks": { "backend": null, "egress": null },
+      "volumes": [
+        { "type": "volume", "source": "gvmd_socket_vol", "target": "/run/gvmd", "volume": {} },
+        { "type": "bind", "source": "/var/lib/suricatoos-cp", "target": "/cp", "read_only": true, "bind": { "create_host_path": true } }
+      ]
+    },
+    "nginx": {
+      "image": "registry.community.greenbone.net/community/nginx:latest",
+      "networks": { "backend": null, "default": null },
+      "ports": [
+        { "mode": "ingress", "host_ip": "127.0.0.1", "target": 443, "published": "8443", "protocol": "tcp" },
+        { "mode": "ingress", "host_ip": "127.0.0.1", "target": 9392, "published": "9392", "protocol": "tcp" }
+      ],
+      "volumes": [
+        { "type": "volume", "source": "nginx_config_vol", "target": "/etc/nginx/conf.d", "volume": {} },
+        { "type": "bind", "source": "/etc/letsencrypt", "target": "/etc/letsencrypt", "read_only": true, "bind": { "create_host_path": true } },
+        { "type": "bind", "source": "/var/log/suricatoos-nginx", "target": "/var/log/nginx-sur", "bind": { "create_host_path": true } }
+      ]
+    },
+    "notus-data": {
+      "image": "registry.community.greenbone.net/community/notus-data",
+      "networks": { "default": null }
+    },
+    "openvas": {
+      "image": "registry.community.greenbone.net/community/openvas-scanner:stable",
+      "networks": { "default": null }
+    },
+    "openvasd": {
+      "image": "registry.community.greenbone.net/community/openvas-scanner:stable",
+      "networks": { "default": { "aliases": ["openvasd"] } }
+    },
+    "ospd-openvas": {
+      "image": "registry.community.greenbone.net/community/ospd-openvas:stable",
+      "networks": { "default": null }
+    },
+    "pg-gvm": {
+      "image": "registry.community.greenbone.net/community/pg-gvm:stable",
+      "networks": { "default": null }
+    },
+    "pg-gvm-migrator": {
+      "image": "registry.community.greenbone.net/community/pg-gvm-migrator:stable",
+      "networks": { "default": null }
+    },
+    "redis-server": {
+      "image": "registry.community.greenbone.net/community/redis-server",
+      "networks": { "default": null }
+    },
+    "report-formats": {
+      "image": "ghcr.io/williamsouzadelima/suricatoos-report-formats:stable",
+      "networks": { "default": null }
+    },
+    "scap-data": {
+      "image": "registry.community.greenbone.net/community/scap-data",
+      "networks": { "default": null }
+    },
+    "vulnerability-tests": {
+      "image": "registry.community.greenbone.net/community/vulnerability-tests",
+      "networks": { "default": null }
+    }
+  },
+  "networks": {
+    "backend": { "name": "greenbone-community-edition_backend", "internal": true },
+    "default": { "name": "greenbone-community-edition_default" },
+    "docker-api": { "name": "greenbone-community-edition_docker-api", "internal": true },
+    "egress": { "name": "greenbone-community-edition_egress" }
+  }
+}
