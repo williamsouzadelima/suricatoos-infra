@@ -7,8 +7,9 @@ The node's fleet connector (Go, slice F2.6) execs this file ONCE per operation:
 
     python3 fleet_ops.py  < request.json  > response.json
 
-stdin   ONE JSON object (UTF-8, no BOM, no duplicate key, nothing after it) with
-        EXACTLY the keys its op takes — an unknown or extra key is an error:
+stdin   ONE JSON object (UTF-8, no BOM, no duplicate key, no unpaired surrogate, nothing
+        after it) with EXACTLY the keys its op takes — an unknown or extra key is an
+        error (the connector must use one struct per shape, not one with every key):
           catalog ops  op, command_id (uuid), tenant, tenant_gmp_user, payload
                        (+ artifact_path for report.export only)
           inspect.*    op, command_id (uuid of the command being verified), tenant,
@@ -27,11 +28,14 @@ stdout  ONE compact JSON object (UTF-8, ensure_ascii off, no HTML escaping) + "\
 exit    0 for every handled outcome, ok or not; 1 only for an unexpected failure (the
         connector reports it as failed) — still one JSON error on stdout.
 
-Environment (credentials only here: never argv, stdout, stderr or a log):
+Environment (credentials only here: never argv, stdout, stderr or a log). The connector
+must exec this with a MINIMAL, explicit environment — never the inherited one (the
+ingest container, for one, exports GMP_USERNAME=admin):
   GMP_USERNAME, GMP_PASSWORD  the gvmd user the connector chose (ADR-0011 D6): the
-                              node's current user for reads and task.start/stop/resume,
-                              report.*; the tenant's user (== tenant_gmp_user) for
-                              every create/modify/clone/delete
+                              node's current user (with Super over the tenants' users)
+                              for reads, inspect.*, task.start/stop/resume and report.*;
+                              the tenant's user (== tenant_gmp_user) for every
+                              create/modify/clone/delete
   GVMD_SOCKET                 gvmd Unix socket (default /run/gvmd/gvmd.sock)
 
 Rules (ADR-0011 "Catálogo de comandos v1" + F2.3 brief):
@@ -46,14 +50,23 @@ Rules (ADR-0011 "Catálogo de comandos v1" + F2.3 brief):
     answer as a missing one (no cross-tenant enumeration);
   * deletes go to the trash: ultimate=0, always;
   * every object created or altered carries the comment prefix 'fleet:<command_id> ';
+  * every text that reaches gvmd's XML holds only XML 1.0 characters (no C0 control
+    beyond what the field allows, no U+FFFE/U+FFFF, no unpaired surrogate) — refused
+    as an invalid request, never a crash inside the XML builder;
   * targets: IP/CIDR literal hosts only (re-checked here), no credentials, no
-    asset_hosts_filter, reverse lookup off, exactly one of port_list_id | port_range;
-  * alive test default 'ICMP, TCP-SYN Service & ARP Ping', sent as the LITERAL text of
-    <alive_tests> through python-gvm's XmlCommand; gvmd refusing it => one retry with
-    'ICMP, TCP-ACK Service & ARP Ping', reported in alive_test_effective; never
-    'Consider Alive' nor 'Scan Config Default';
-  * report.summary: counts only, from the filter the node builds out of min_qod,
-    apply_overrides and levels — no free filter, no OID/name/CVE ever leaves;
+    asset_hosts_filter, reverse lookup off; target.create takes exactly one of
+    port_list_id | port_range, target.modify changes ports only by port_list_id;
+  * alive test: the contract value is the NAME of a set of gvmd methods and is never
+    sent to gvmd; each method goes as one <alive_test> sub-element of <alive_tests>,
+    built with python-gvm's XmlCommand (ALIVE_TEST_METHODS). Default set
+    'ICMP, TCP-SYN Service & ARP Ping'; ONLY if gvmd refuses it, one retry with the
+    'ICMP, TCP-ACK Service & ARP Ping' set; alive_test_effective = the set applied,
+    by name; never 'Consider Alive' nor 'Scan Config Default' by fallback. Read back,
+    a set is reported by its contract name, else as the methods joined with ', ';
+  * report.export: the hub's filter must pin apply_overrides=, min_qod= and levels=
+    (ADR export_filter rule); report.summary: counts only, from the filter the node
+    builds out of min_qod, apply_overrides and levels — no free filter, no
+    OID/name/CVE ever leaves;
   * state.*: metadata and counts only; comments and hostnames never leave; an object
     whose owner is not in `owners` (or maps to an invalid tenant name), or that cannot
     be represented within the schema, is only counted (unattributed_count).
@@ -96,6 +109,48 @@ SCANNER_OPENVAS_DEFAULT = "08b69003-5fc2-4037-a479-93b440211c73"
 
 ALIVE_TEST_DEFAULT = "ICMP, TCP-SYN Service & ARP Ping"
 ALIVE_TEST_FALLBACK = "ICMP, TCP-ACK Service & ARP Ping"
+
+# Contract alive_test value = NAME of a set of gvmd methods (ADR-0011 table). The name
+# never goes to gvmd: gvmd 26 refuses a combined literal as one <alive_tests> value
+# (alive_test_from_string) and accepts the methods as <alive_test> sub-elements
+# (alive_test_from_array).
+ALIVE_TEST_METHODS = {
+    "ICMP, TCP-SYN Service & ARP Ping": ("ICMP Ping", "TCP-SYN Service Ping", "ARP Ping"),
+    "ICMP, TCP-ACK Service & ARP Ping": ("ICMP Ping", "TCP-ACK Service Ping", "ARP Ping"),
+    "ICMP & TCP-ACK Service Ping": ("ICMP Ping", "TCP-ACK Service Ping"),
+    "ICMP & ARP Ping": ("ICMP Ping", "ARP Ping"),
+    "TCP-ACK Service & ARP Ping": ("TCP-ACK Service Ping", "ARP Ping"),
+    "ICMP Ping": ("ICMP Ping",),
+    "TCP-ACK Service Ping": ("TCP-ACK Service Ping",),
+    "TCP-SYN Service Ping": ("TCP-SYN Service Ping",),
+    "ARP Ping": ("ARP Ping",),
+    "Consider Alive": ("Consider Alive",),
+    "Scan Config Default": ("Scan Config Default",),
+}
+_ALIVE_TEST_BY_SET = {frozenset(methods): name for name, methods in ALIVE_TEST_METHODS.items()}
+# gvmd 26.31.1's exact status_text when it refuses an alive test (create_target 7,
+# modify_target 10): the only refusal that triggers the documented fallback.
+ALIVE_TEST_REFUSED = "Error in alive test"
+
+# gvmd 26.31.1 status_texts that mean "the object's state or a name collision
+# prevents this" (status 400): conflict. Every other 4xx/5xx text is gvm_error, except
+# 404 (not_found, fixed text) and 409/503 (busy / service down: unavailable).
+CONFLICT_TEXTS = frozenset({
+    "Task is active already",                                   # start_task, resume_task
+    "Task must be in Stopped or Interrupted state",             # resume_task
+    "Task must have a target",                                  # start_task (container task)
+    "Status must be New to edit Target",                        # modify_task
+    "Status must be New to edit config",
+    "Status must be New to edit scanner",
+    "For import tasks only name, comment and observers can be modified",
+    "Target is in use",                                         # modify_target, delete_target
+    "Schedule is in use",                                       # delete_schedule
+    "Resource is in use",                                       # generic delete
+    "Target exists already",                                    # create/modify_target name
+    "Task exists already",                                      # create_task copy + name
+    "Schedule exists already",                                  # create_schedule name
+    "Schedule with new name exists already",                    # modify_schedule name
+})
 
 # Explicit filters (asserted verbatim by the tests). By-id gets reuse the list
 # filter of their kind: gvmd ignores rows/first/sort when an id is given, and the
@@ -163,23 +218,26 @@ COMMAND_TYPES = (
 )
 STATE_KINDS = ("node", "tasks", "targets", "schedules", "reports", "agents", "tokens",
                "sensors", "scan_requests", "remediation", "scope", "audit_tail")
-ALIVE_TESTS = (
-    "ICMP, TCP-SYN Service & ARP Ping",
-    "ICMP, TCP-ACK Service & ARP Ping",
-    "ICMP & TCP-ACK Service Ping",
-    "ICMP & ARP Ping",
-    "TCP-ACK Service & ARP Ping",
-    "ICMP Ping",
-    "TCP-ACK Service Ping",
-    "TCP-SYN Service Ping",
-    "ARP Ping",
-    "Consider Alive",
-    "Scan Config Default",
-)
+ALIVE_TESTS = tuple(ALIVE_TEST_METHODS)
 FEED_TYPES = {"NVT": "nvt", "SCAP": "scap", "CERT": "cert", "GVMD_DATA": "gvmd_data"}
 
-_CTRL_RE = re.compile(r"[\x00-\x1f\x7f]")
-_ICAL_BAD_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
+# report.export filter (ADR-0011 normative rule; the example validator's export_filter
+# check): tokens = the filter split on ' ' (quotes do not group); a token belongs to one
+# of these keys when it starts with the key followed by = < > ~ or :; each key exactly
+# once, with '=' and a valid value (levels: no letter repeated).
+EXPORT_FILTER_KEYS = {
+    "apply_overrides": re.compile(r"[01]"),
+    "min_qod": re.compile(r"0|[1-9][0-9]?|100"),
+    "levels": re.compile(r"[chmlgf]{1,6}"),
+}
+
+# no_control of the schemas: C0, DEL and the noncharacters U+FFFE/U+FFFF (not XML 1.0).
+_CTRL_RE = re.compile(r"[\x00-\x1f\x7f\ufffe\uffff]")
+# iCalendar: TAB, LF and CR allowed; nothing else outside XML 1.0.
+_ICAL_BAD_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f\ufffe\uffff]")
+# Never valid in an XML 1.0 document, whatever the field: refused in every string of a
+# request before anything is built (a lone surrogate also fails UTF-8 encoding).
+_NOT_XML_RE = re.compile(r"[\ud800-\udfff\ufffe\uffff]")
 _UUID_RE = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
 _TENANT_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}")
 _IP_OR_CIDR_RE = re.compile(r"[0-9A-Fa-f:.]+(?:/[0-9]{1,3})?")
@@ -189,7 +247,7 @@ _TZ_RE = re.compile(r"[A-Za-z][A-Za-z0-9_+-]*(?:/[A-Za-z0-9_+-]+)*")
 _LEVELS_RE = re.compile(r"c?h?m?l?g?")
 _VERSION_RE = re.compile(r"[0-9A-Za-z][0-9A-Za-z.+_-]*")
 _SHA256_RE = re.compile(r"[0-9a-f]{64}")
-_UTC_RE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z")
+_UTC_RE = re.compile(r"[0-9]{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]Z")
 _STATUS_RE = re.compile(r"[A-Za-z][A-Za-z ]*")
 _FLEET_PREFIX_RE = re.compile(
     r"(?:fleet:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12} )+")
@@ -219,28 +277,44 @@ class _GmpStatus(Exception):
         self.text = text
 
 
+MAX_MESSAGE = 512            # fleet-result error.message maxLength
+NOT_FOUND_GVMD = "object not found"
+
+# Secrets of the request being handled (handle() sets them): redacted from any external
+# text (gvmd status_text, request key names) BEFORE it is cleaned or truncated, so no
+# truncation can ever leave a piece of a secret behind.
+_SECRETS = []
+
+
+def _redact(text: str) -> str:
+    for secret in _SECRETS:
+        if secret:
+            text = text.replace(secret, "[redacted]")
+    return text
+
+
 def _bad(message: str) -> OpError:
     # A request the connector should never send (it validates first): a contract bug.
     return OpError("internal_error", f"invalid request: {message}")
 
 
-def _clean(text: str, limit: int) -> str:
-    out = _CTRL_RE.sub(" ", text or "").strip()
-    return out[:limit]
+def _clean(text: str) -> str:
+    """Control characters (and U+FFFE/U+FFFF) out. No truncation: that is the last step."""
+    return _CTRL_RE.sub(" ", text or "").strip()
 
 
 def _from_status(e: _GmpStatus) -> OpError:
-    """Map a gvmd refusal. 404 is not_found with a FIXED message (it may mean another
-    tenant's object); the status_text of other refusals is a short gvmd system message."""
+    """Map a gvmd refusal precisely. 404 is not_found with a FIXED text (it may be another
+    tenant's object); 409/503 (busy, service down) are unavailable; a 400 is conflict only
+    for the exact gvmd texts of CONFLICT_TEXTS; anything else is gvm_error."""
     if e.status == "404":
-        return OpError("not_found", "object not found")
-    if e.status == "503":
-        return OpError("unavailable", f"gvmd service unavailable ({e.command})")
-    text = _clean(e.text, 200) or "no detail"
-    lowered = text.lower()
-    if e.status == "400" and any(k in lowered for k in ("in use", "already", "must be")):
+        return OpError("not_found", NOT_FOUND_GVMD)
+    if e.status in ("409", "503"):
+        return OpError("unavailable", f"gvmd busy or unavailable ({e.command})")
+    text = _clean(_redact(e.text)) or "no detail"
+    if e.status == "400" and text in CONFLICT_TEXTS:
         return OpError("conflict", f"gvmd refused {e.command}: {text}")
-    return OpError("gvm_error", f"gvmd refused {e.command} ({_clean(e.status, 8)}): {text}")
+    return OpError("gvm_error", f"gvmd refused {e.command} ({_clean(e.status)[:8]}): {text}")
 
 
 def _is_timeout(e: BaseException) -> bool:
@@ -267,24 +341,30 @@ def _reject_constant(name):
 
 
 def _show(key) -> str:
-    text = "".join(c if " " <= c <= "~" else "?" for c in str(key))[:64]
+    text = "".join(c if " " <= c <= "~" else "?" for c in _redact(str(key)))[:64]
     return repr(text)
 
 
-def _check_strings(value, path="request"):
-    """Every string must be encodable as UTF-8 (no lone surrogate from a \\u escape)."""
+MAX_DEPTH = 32               # ADR-0011 "Codificação JSON": nesting, top-level value = level 1
+
+
+def _check_strings(value, path="request", depth=1):
+    """Every string of the request holds only characters XML 1.0 can carry (no unpaired
+    surrogate from a \\u escape, no U+FFFE/U+FFFF) — what gvmd's XML builder would choke
+    on; C0 controls are refused per field. Nesting deeper than 32 levels is refused."""
     if isinstance(value, str):
-        try:
-            value.encode("utf-8")
-        except UnicodeEncodeError:
-            raise _bad(f"{path} is not valid Unicode") from None
-    elif isinstance(value, dict):
-        for k, v in value.items():
-            _check_strings(k, path)
-            _check_strings(v, f"{path}.{_show(k)}")
-    elif isinstance(value, list):
-        for v in value:
-            _check_strings(v, path)
+        if _NOT_XML_RE.search(value):
+            raise _bad(f"{path} holds a character XML 1.0 cannot carry")
+    elif isinstance(value, (dict, list)):
+        if depth > MAX_DEPTH:
+            raise _bad(f"nesting deeper than {MAX_DEPTH} levels")
+        if isinstance(value, dict):
+            for k, v in value.items():
+                _check_strings(k, path, depth)
+                _check_strings(v, f"{path}.{_show(k)}", depth + 1)
+        else:
+            for v in value:
+                _check_strings(v, path, depth + 1)
 
 
 def parse_request(raw: bytes) -> dict:
@@ -481,16 +561,46 @@ def _post_target_create(payload, path):
         raise _bad(f"{path} needs exactly one of port_list_id and port_range")
 
 
-def _post_target_modify(payload, path):
-    _post_min_properties(payload, path)
-    if "port_list_id" in payload and "port_range" in payload:
-        raise _bad(f"{path} takes at most one of port_list_id and port_range")
+def export_filter_problem(flt: str):
+    """None when a report.export filter pins apply_overrides, min_qod and levels
+    explicitly (ADR-0011 normative rule, the example validator's export_filter check),
+    else why not. Tokens = the filter split on ' ' (quotes do not group); a token belongs
+    to a key when it starts with the key followed by a relation (= < > ~ :); each key
+    exactly once, with '=' and a valid value."""
+    seen = {}
+    for token in flt.split(" "):
+        key = re.split(r"[=<>~:]", token, maxsplit=1)[0]
+        if key not in EXPORT_FILTER_KEYS:
+            continue
+        value = token[len(key) + 1:]
+        if key in seen:
+            return f"{key} more than once"
+        if (not token.startswith(key + "=") or not EXPORT_FILTER_KEYS[key].fullmatch(value)
+                or (key == "levels" and len(set(value)) != len(value))):
+            return f"{key} is not {key}=<valid value>"
+        seen[key] = value
+    missing = [key for key in EXPORT_FILTER_KEYS if key not in seen]
+    return f"missing {', '.join(missing)}" if missing else None
 
 
 def _post_report_export(payload, path):
     if payload["format"] != "suricatoos-pdf" and (
             payload["lang"] != "en" or payload["variant"] != "technical"):
         raise _bad(f"{path}: gvm-* formats only exist as lang en + variant technical")
+    problem = export_filter_problem(payload["filter"])
+    if problem:
+        # Never gvmd's hidden defaults (min_qod=70, apply_overrides=0) in an export.
+        raise _bad(f"{path}.filter must pin apply_overrides=, min_qod= and levels= ({problem})")
+
+
+def _c_utc(value, path):
+    """utc_time: the exact 20-character form AND a real calendar instant."""
+    _c_pattern(_UTC_RE, 20, 20)(value, path)
+    try:
+        datetime.datetime.strptime(value, "%Y-%m-%dT%H:%M:%SZ")
+    except ValueError:
+        raise _bad(f"{path} is not a real instant") from None
+    return value
 
 
 def _post_levels(payload, path):
@@ -523,11 +633,12 @@ _PAYLOADS = {
                        "port_list_id": _c_uuid, "port_range": _port_range,
                        "alive_test": _c_enum(ALIVE_TESTS)},
                       _post_target_create),
+    # Ports change only through port_list_id: gvmd's modify_target has no port_range.
     "target.modify": ({"target_id": _c_uuid},
                       {"name": _name, "comment": _comment, "hosts": _hosts,
                        "exclude_hosts": _exclude_hosts, "port_list_id": _c_uuid,
-                       "port_range": _port_range, "alive_test": _c_enum(ALIVE_TESTS)},
-                      _post_target_modify),
+                       "alive_test": _c_enum(ALIVE_TESTS)},
+                      _post_min_properties),
     "target.delete": ({"target_id": _c_uuid}, {}, None),
     "schedule.create": ({"name": _name, "icalendar": _c_icalendar, "timezone": _timezone},
                         {"comment": _comment, "task_ids": _c_list(_c_uuid, 0, 16)}, None),
@@ -555,7 +666,7 @@ _PAYLOADS = {
                     "connector_version": _version,
                     "policy": _POLICY,
                     "policy_sha256": _c_pattern(_SHA256_RE, 64, 64),
-                    "replay_floor": _c_pattern(_UTC_RE, 20, 20),
+                    "replay_floor": _c_utc,
                     "supported_types": _c_list(_c_enum(COMMAND_TYPES)),
                     "state_kinds": _c_list(_c_enum(STATE_KINDS))},
                    {"versions": _c_object({}, {"gvmd": _version, "openvas_scanner": _version,
@@ -811,19 +922,40 @@ def _tenant_of(owner: str, owners: dict):
     return None
 
 
-def _alive_text(target_el) -> str:
+def _add_alive_tests(cmd, name: str) -> None:
+    """<alive_tests> with one <alive_test> sub-element per method of the contract set
+    `name`, through python-gvm's XmlCommand (never a formatted string; the contract name
+    itself never goes to gvmd)."""
+    node = cmd.add_element("alive_tests")
+    for method in ALIVE_TEST_METHODS[name]:
+        node.add_element("alive_test", method)
+
+
+def _alive_read(target_el):
+    """The alive test of a target as the contract reports it: the set's contract name
+    when the <alive_test> methods gvmd lists match one, else those methods joined with
+    ', ' (gvmd without sub-elements: its own string). None if not representable."""
     node = target_el.find("alive_tests")
-    return ((node.text or "") if node is not None else "").strip()
+    if node is None:
+        return None
+    methods = [m for m in ((sub.text or "").strip() for sub in node.findall("alive_test")) if m]
+    if methods:
+        name = _ALIVE_TEST_BY_SET.get(frozenset(methods)) if len(set(methods)) == len(methods) else None
+        text = name or ", ".join(methods)
+    else:
+        text = (node.text or "").strip()
+    return text if text and len(text) <= 64 and not _CTRL_RE.search(text) else None
 
 
 def _send_with_alive(s: _Session, build, requested: str, command: str):
-    """Send a create/modify_target carrying `requested` as the literal <alive_tests>
-    text; when it is the ADR default and gvmd refuses it, retry ONCE with the
-    documented fallback. Returns (response root, alive test applied)."""
+    """Send a create/modify_target carrying the `requested` set as sub-elements; when it is
+    the ADR default and gvmd refuses exactly the alive test, retry ONCE with the documented
+    fallback set. Returns (response root, contract name of the set applied)."""
     try:
         return s.call(build(requested), command), requested
     except _GmpStatus as e:
-        if not (requested == ALIVE_TEST_DEFAULT and e.status == "400" and "alive" in e.text.lower()):
+        if not (requested == ALIVE_TEST_DEFAULT and e.status == "400"
+                and e.text.strip() == ALIVE_TEST_REFUSED):
             raise
     return s.call(build(ALIVE_TEST_FALLBACK), command), ALIVE_TEST_FALLBACK
 
@@ -954,9 +1086,9 @@ def op_target_create(s: _Session, req: dict, now) -> dict:
             reverse_lookup_only=False,
             reverse_lookup_unify=False,
         )
-        # Literal element text through the builder: python-gvm's AliveTest enum has
-        # no 'ICMP, TCP-SYN Service & ARP Ping'.
-        cmd.add_element("alive_tests", alive_test)
+        # python-gvm's alive_test parameter takes ONE AliveTest value: the set goes as
+        # sub-elements added through the same XmlCommand instead.
+        _add_alive_tests(cmd, alive_test)
         return cmd
 
     root, applied = _send_with_alive(s, build, p.get("alive_test", ALIVE_TEST_DEFAULT), "create_target")
@@ -966,10 +1098,6 @@ def op_target_create(s: _Session, req: dict, now) -> dict:
 def op_target_modify(s: _Session, req: dict, now) -> dict:
     p = req["payload"]
     target_id = p["target_id"]
-    if "port_range" in p:
-        # gvmd's modify_target has no PORT_RANGE element (only PORT_LIST): refuse
-        # instead of creating a port list behind the catalog's back.
-        raise OpError("gvm_error", "gvmd cannot change a target's port_range in place; use port_list_id")
     target = _owned(s, "target", target_id, req["tenant_gmp_user"])
     cur_hosts = _host_entries(target.findtext("hosts"))
     cur_exclude = _host_entries(target.findtext("exclude_hosts"))
@@ -998,7 +1126,7 @@ def op_target_modify(s: _Session, req: dict, now) -> dict:
             port_list_id=p.get("port_list_id"),
         )
         if alive_test is not None:
-            cmd.add_element("alive_tests", alive_test)
+            _add_alive_tests(cmd, alive_test)
         return cmd
 
     if "alive_test" in p:
@@ -1019,10 +1147,8 @@ def op_target_modify(s: _Session, req: dict, now) -> dict:
         before["exclude_hosts"] = [lit for lit in (_literal(h) for h in cur_exclude) if lit][:MAX_LISTED_HOSTS]
     if "port_list_id" in p and _uuid_attr(target, "port_list"):
         before["port_list_id"] = _uuid_attr(target, "port_list")
-    if "alive_test" in p:
-        alive = _alive_text(target)
-        if alive and len(alive) <= 64 and not _CTRL_RE.search(alive):
-            before["alive_test"] = alive
+    if "alive_test" in p and _alive_read(target):
+        before["alive_test"] = _alive_read(target)
     out = {"target_id": target_id, "changed": changed, "before": before}
     if applied is not None:
         out["alive_test_effective"] = applied
@@ -1234,8 +1360,13 @@ def op_report_summary(s: _Session, req: dict, now) -> dict:
     _owned(s, "report", report_id, req["tenant_gmp_user"])
     filter_applied = SUMMARY_FILTER.format(
         apply_overrides=1 if p["apply_overrides"] else 0, min_qod=p["min_qod"], levels=p["levels"])
-    root = s.call(Reports.get_report(
-        report_id, filter_string=filter_applied, ignore_pagination=True, details=True), "get_reports")
+    # details=1 is required: gvmd only lists results (host, severity, QoD — the per-IP
+    # counts and the QoD histogram) with details. lean=1 drops what the counts never read
+    # (owners, timestamps, threat, empty placeholders); the NVT block and description stay —
+    # gvmd 26 has no switch for them (size to measure in LAB).
+    cmd = Reports.get_report(report_id, filter_string=filter_applied, ignore_pagination=True, details=True)
+    cmd.set_attribute("lean", "1")
+    root = s.call(cmd, "get_reports")
     outer = _find_report(root, report_id)
     inner = outer.find("report")
     if inner is None:
@@ -1407,8 +1538,8 @@ def _target_item(el, tenant):
     port_list = _uuid_attr(el, "port_list")
     if port_list:
         item["port_list_id"] = port_list
-    alive = _alive_text(el)
-    if alive and len(alive) <= 64 and not _CTRL_RE.search(alive):
+    alive = _alive_read(el)
+    if alive:
         item["alive_test"] = alive
     item["in_use"] = (el.findtext("in_use") or "0").strip() == "1"
     return item
@@ -1427,6 +1558,8 @@ def _schedule_item(el, tenant):
         task_id = node.get("id", "")
         if _UUID_RE.fullmatch(task_id) and task_id not in task_ids:
             task_ids.append(task_id)
+    # next_run only when gvmd provides it (ADR-0011): gvmd 26's get_schedules does not,
+    # so it is omitted — never computed here from the iCalendar.
     return {"schedule_id": schedule_id, "tenant": tenant, "name": _gvm_name(el.findtext("name")),
             "timezone": tz, "icalendar": ical, "task_ids": sorted(task_ids)[:MAX_SCHEDULE_TASKS]}
 
@@ -1680,10 +1813,9 @@ def execute(req: dict, env, connect=None, now=None) -> dict:
             pass
 
 
-def _error(code: str, message: str, password: str) -> dict:
-    text = _clean(message, 512) or "error"
-    if password and password in text:
-        text = text.replace(password, "[redacted]")
+def _error(code: str, message: str) -> dict:
+    # Redact FIRST, then clean, then truncate: a cut can never leave a piece of a secret.
+    text = _clean(_redact(message))[:MAX_MESSAGE] or "error"
     return {"ok": False, "error": {"code": code, "message": text}}
 
 
@@ -1691,14 +1823,16 @@ def handle(raw: bytes, env, connect=None, now=None):
     """(response object, exit code) for one raw request. `connect(env, timeout)` returns
     the context manager whose __enter__ yields an object with send_command (python-gvm's
     Gmp in production, a fake gvmd in the tests)."""
-    password = env.get("GMP_PASSWORD") or ""
+    _SECRETS[:] = [env.get("GMP_PASSWORD") or ""]
     try:
         req = parse_request(raw)
         return {"ok": True, **execute(req, env, connect, now)}, 0
     except OpError as e:
-        return _error(e.code, e.message, password), 0
+        return _error(e.code, e.message), 0
     except Exception as e:  # noqa: BLE001 - never a traceback: one JSON error, exit 1
-        return _error("internal_error", f"unexpected failure ({type(e).__name__})", password), 1
+        return _error("internal_error", f"unexpected failure ({type(e).__name__})"), 1
+    finally:
+        _SECRETS[:] = []
 
 
 def dumps(obj) -> bytes:

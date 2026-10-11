@@ -2,15 +2,19 @@
 
 FakeGvmd answers the GMP commands fleet_ops sends with gvmd 26.31.1-shaped XML and
 reproduces the gvmd behaviours the implementation depends on (verified in the gvmd
-v26.31.1 sources): the legacy <alive_tests> string 'ICMP, TCP-SYN Service & ARP Ping'
-is refused ("Error in alive test"), rows=-1 is capped at "Max Rows Per Page" unless
-ignore_pagination=1 (tasks, reports, results) and targets/schedules page with first=N,
-modify_task applies name/comment BEFORE refusing a target change on a non-New task,
-modify_target needs HOSTS and EXCLUDE_HOSTS together and refuses host changes on a
-target in use, modify_schedule requires ICALENDAR.
+v26.31.1 sources): alive tests are a bitfield of methods — <alive_test> sub-elements
+parsed like alive_test_from_array, a text value like alive_test_from_string (which
+refuses the combined 'ICMP, TCP-SYN Service & ARP Ping'), read back as gvmd's legacy
+string plus one sub-element per method; rows=-1 is capped at "Max Rows Per Page"
+unless ignore_pagination=1 (tasks, reports, results) and targets/schedules page with
+first=N; modify_task applies name/comment BEFORE refusing a target change on a non-New
+task; modify_target needs HOSTS and EXCLUDE_HOSTS together and refuses host changes on
+a target in use; modify_schedule requires ICALENDAR; lean=1 trims result fields.
 
 Every output is validated OFFLINE against schema/fleet-*.schema.json (local registry,
 no network): the $defs entry AND the full result / state body the connector will send.
+The request validation is also run against every command example of the contract
+(schema/examples/fleet), so fleet_ops and the example validator give the same verdict.
 """
 
 import base64
@@ -37,6 +41,7 @@ import fleet_ops
 
 HERE = Path(__file__).resolve().parent
 SCHEMA_DIR = HERE.parent / "schema"
+EXAMPLES_DIR = SCHEMA_DIR / "examples" / "fleet"
 BASE = "https://suricatoos.dev/schema/"
 
 SENTINEL = "Sentinela-S3nh4-9f2c-only-in-env"   # the gvmd password: ONLY in the environment
@@ -65,11 +70,44 @@ ICAL2 = ICAL.replace("WEEKLY", "DAILY")
 PDF_BYTES = b"%PDF-1.7\n" + bytes(range(256)) * 900 + b"\n%%EOF\n"   # > one gvmd base64 chunk
 CSV_BYTES = "IP,Hostname,Port\n192.0.2.10,,443\n".encode("utf-8")
 TECHNICAL_IDS = set(fleet_ops.REPORT_FORMAT_IDS.values())
-LEGACY_ALIVE = {  # gvmd 26.31.1 alive_test_from_string
-    "", "Scan Config Default", "ICMP, TCP-ACK Service & ARP Ping", "TCP-ACK Service & ARP Ping",
-    "ICMP & ARP Ping", "ICMP & TCP-ACK Service Ping", "ARP Ping", "TCP-ACK Service Ping",
-    "TCP-SYN Service Ping", "ICMP Ping", "Consider Alive",
+# gvmd 26.31.1 alive tests: a bitfield of methods, or 'default' (Scan Config Default, 0)
+# or 'consider' (Consider Alive).
+ICMP, ACK, SYN, ARP = "ICMP", "TCP-ACK Service", "TCP-SYN Service", "ARP"
+STR_ORDER = (ICMP, ACK, SYN, ARP)        # send_alive_tests_str order
+SUB_ORDER = (ARP, ICMP, ACK, SYN)        # send_alive_tests_subelems order
+ARRAY_ITEMS = {"arp": ARP, "arp ping": ARP, "icmp": ICMP, "icmp ping": ICMP,          # alive_test_from_array
+               "tcp-ack service": ACK, "tcp-ack service ping": ACK,
+               "tcp-syn service": SYN, "tcp-syn service ping": SYN}
+LEGACY_STRINGS = {  # alive_test_from_string: NO 'ICMP, TCP-SYN Service & ARP Ping'
+    "": "default", "Scan Config Default": "default", "Consider Alive": "consider",
+    "ICMP, TCP-ACK Service & ARP Ping": frozenset({ICMP, ACK, ARP}),
+    "TCP-ACK Service & ARP Ping": frozenset({ACK, ARP}), "ICMP & ARP Ping": frozenset({ICMP, ARP}),
+    "ICMP & TCP-ACK Service Ping": frozenset({ICMP, ACK}), "ARP Ping": frozenset({ARP}),
+    "TCP-ACK Service Ping": frozenset({ACK}), "TCP-SYN Service Ping": frozenset({SYN}),
+    "ICMP Ping": frozenset({ICMP}),
 }
+# The ADR-0011 table, transcribed here independently of fleet_ops.ALIVE_TEST_METHODS.
+ADR_ALIVE_TABLE = {
+    "ICMP, TCP-SYN Service & ARP Ping": ["ICMP Ping", "TCP-SYN Service Ping", "ARP Ping"],
+    "ICMP, TCP-ACK Service & ARP Ping": ["ICMP Ping", "TCP-ACK Service Ping", "ARP Ping"],
+    "ICMP & TCP-ACK Service Ping": ["ICMP Ping", "TCP-ACK Service Ping"],
+    "ICMP & ARP Ping": ["ICMP Ping", "ARP Ping"],
+    "TCP-ACK Service & ARP Ping": ["TCP-ACK Service Ping", "ARP Ping"],
+    "ICMP Ping": ["ICMP Ping"], "TCP-ACK Service Ping": ["TCP-ACK Service Ping"],
+    "TCP-SYN Service Ping": ["TCP-SYN Service Ping"], "ARP Ping": ["ARP Ping"],
+    "Consider Alive": ["Consider Alive"], "Scan Config Default": ["Scan Config Default"],
+}
+
+
+def alive_strings(alive):
+    """gvmd's rendering of an alive-test value: (legacy string, sub-element texts)."""
+    if alive == "default":
+        return "Scan Config Default", ["Scan Config Default"]
+    if alive == "consider":
+        return "Consider Alive", ["Consider Alive"]
+    names = [m for m in STR_ORDER if m in alive]
+    text = names[0] if len(names) == 1 else ", ".join(names[:-1]) + " & " + names[-1]
+    return text + " Ping", [f"{m} Ping" for m in SUB_ORDER if m in alive]
 LEVEL_OF = {"c": lambda s: s >= 9.0, "h": lambda s: 7.0 <= s < 9.0, "m": lambda s: 4.0 <= s < 7.0,
             "l": lambda s: 0.0 < s < 4.0, "g": lambda s: s == 0.0, "f": lambda s: s == -1.0}
 
@@ -87,6 +125,8 @@ def _registry():
 
 
 REGISTRY = _registry()
+MESSAGE_MAX = json.loads((SCHEMA_DIR / "fleet-result.schema.json").read_text(encoding="utf-8"))[
+    "$defs"]["error"]["properties"]["message"]["maxLength"]
 
 
 def validate(ref, instance):
@@ -193,7 +233,8 @@ class FakeGvmd:
         self.raw = []
         self.user = None
         self.auth_ok = True
-        self.accept_syn_literal = False      # gvmd 26.31.1 refuses the D9 literal
+        self.refuse_methods = set()          # LAB switch: refuse a set holding these methods
+        self.honor_lean = True               # lean=1 trims result fields, like gvmd
         self.max_rows = 1000                 # "Max Rows Per Page"
         self.connect_error = None
         self.timeouts = []
@@ -256,7 +297,7 @@ class FakeGvmd:
     def add_target(self, target_id, owner=TENANT_USER, **kw):
         target = dict(id=target_id, owner=owner, name=f"alvo-{target_id[-4:]}", comment="",
                       hosts="192.0.2.0/24", exclude_hosts="", port_list=PORT_LIST,
-                      alive="ICMP, TCP-ACK Service & ARP Ping", in_use="0", port_range="T:1-65535")
+                      alive=frozenset({ICMP, ACK, ARP}), in_use="0", port_range="T:1-65535")
         target.update(kw)
         self.targets[target_id] = target
         return target
@@ -338,8 +379,10 @@ class FakeGvmd:
         sub(el, "reverse_lookup_only", "0")
         sub(el, "reverse_lookup_unify", "0")
         sub(el, "allow_simultaneous_ips", "1")
-        alive = sub(el, "alive_tests", t["alive"])
-        sub(alive, "alive_test", "ICMP Ping")
+        legacy, methods = alive_strings(t["alive"])
+        alive = sub(el, "alive_tests", legacy)
+        for method in methods:
+            sub(alive, "alive_test", method)
         if details:
             sub(el, "port_range", t["port_range"])
         return el
@@ -356,18 +399,24 @@ class FakeGvmd:
                 sub(t, "name", "tarefa")
         return el
 
-    def _result_el(self, r):
+    def _result_el(self, r, lean=False):
         el = E("result", id=r.get("id", self.new_id()))
         sub(el, "name", r.get("name", "OpenSSL Heartbleed"))
+        if not lean:                                   # gvmd: lean drops owner and times
+            sub(sub(el, "owner"), "name", TENANT_USER)
+            sub(el, "modification_time", "2026-10-10T03:00:00Z")
         host = sub(el, "host", r["host"])
-        sub(host, "asset", asset_id="")
+        if not lean:                                   # ...and the empty asset placeholder
+            sub(host, "asset", asset_id="")
         sub(host, "hostname", r.get("hostname", "web01.example.com"))
         sub(el, "port", r.get("port", "443/tcp"))
         nvt = sub(el, "nvt", oid=r.get("oid", "1.3.6.1.4.1.25623.1.0.103936"))
         sub(nvt, "name", r.get("name", "OpenSSL Heartbleed"))
         refs = sub(nvt, "refs")
         sub(refs, "ref", type="cve", id=r.get("cve", "CVE-2014-0160"))
-        sub(el, "threat", "High")
+        if not lean:                                   # ...and scan_nvt_version / threat
+            sub(el, "scan_nvt_version", "2026-10-01T00:00:00Z")
+            sub(el, "threat", "High")
         sub(el, "severity", f"{r['severity']:.1f}")
         qod = sub(el, "qod")
         sub(qod, "value", r.get("qod", 80))
@@ -375,7 +424,7 @@ class FakeGvmd:
         sub(el, "description", r.get("description", "evidence: TLS heartbeat leaked memory"))
         return el
 
-    def _inner_report(self, r, results):
+    def _inner_report(self, r, results, lean=False):
         el = E("report", id=r["id"])
         sub(sub(el, "gmp"), "version", "22.7")
         sub(el, "scan_run_status", r["status"])
@@ -389,7 +438,7 @@ class FakeGvmd:
         if results is not None:
             res = sub(el, "results", start="1", max="-1")
             for item in results:
-                res.append(self._result_el(item))
+                res.append(self._result_el(item, lean))
         rc = sub(el, "result_count", sum(r["counts"].values()))
         sub(rc, "full", sum(r["counts"].values()))
         sub(rc, "filtered", sum(r["counts"].values()))
@@ -576,18 +625,36 @@ class FakeGvmd:
         page, count = self._page(el, self.targets.values(), "target")
         return self._response("get_targets", [self._target_el(t, False) for t in page], count=count)
 
-    def _alive_ok(self, el):
+    def _parse_alive(self, el):
+        """(alive value or None if absent, gvmd refusal text or None)."""
         node = el.find("alive_tests")
         if node is None:
-            return True
+            return None, None
+        subs = [(sub.text or "").strip() for sub in node.findall("alive_test")]
         text = (node.text or "").strip()
-        if text == fleet_ops.ALIVE_TEST_DEFAULT:
-            return self.accept_syn_literal
-        return text in LEGACY_ALIVE
+        if subs and text:
+            return None, "ALIVE_TESTS can contain either a string or sub-elements, but not both."
+        if not subs:
+            value = LEGACY_STRINGS.get(text)
+            return (value, None) if value is not None else (None, "Error in alive test")
+        if self.refuse_methods & set(subs):
+            return None, "Error in alive test"
+        flags = set()
+        for item in subs:
+            low = item.lower()
+            if low == "scan config default":
+                return "default", None
+            if low == "consider alive":
+                return "consider", None
+            if low not in ARRAY_ITEMS:
+                return None, "Error in alive test"
+            flags.add(ARRAY_ITEMS[low])
+        return frozenset(flags), None
 
     def _create_target(self, el):
-        if not self._alive_ok(el):
-            return refusal("create_target", "400", "Error in alive test")
+        alive, refused = self._parse_alive(el)
+        if refused:
+            return refusal("create_target", "400", refused)
         has_list, has_range = el.find("port_list") is not None, el.find("port_range") is not None
         if not has_list and not has_range:
             return refusal("create_target", "400", "One of PORT_LIST and PORT_RANGE are required")
@@ -600,7 +667,7 @@ class FakeGvmd:
                    hosts=", ".join(h.strip() for h in el.findtext("hosts").split(",")),
                    exclude_hosts=", ".join(h.strip() for h in (el.findtext("exclude_hosts") or "").split(",") if h.strip()),
                    port_list=el.find("port_list").get("id") if has_list else self.new_id(),
-                   alive=(el.findtext("alive_tests") or "Scan Config Default").strip(),
+                   alive=alive if alive is not None else "default",
                    in_use="0", port_range=el.findtext("port_range") or "T:1-65535")
         self.targets[new["id"]] = new
         return self._response("create_target", status="201", text="OK, resource created").replace(
@@ -619,8 +686,9 @@ class FakeGvmd:
             return refusal("modify_target", "400", "Unexpected element PORT_RANGE")
         if target["in_use"] == "1" and (hosts is not None or el.find("port_list") is not None):
             return refusal("modify_target", "400", "Target is in use")
-        if not self._alive_ok(el):
-            return refusal("modify_target", "400", "Error in alive test")
+        alive, refused = self._parse_alive(el)
+        if refused:
+            return refusal("modify_target", "400", refused)
         # gvmd runs modify_target in one transaction: all or nothing.
         if el.find("name") is not None:
             target["name"] = el.findtext("name")
@@ -631,8 +699,8 @@ class FakeGvmd:
             target["exclude_hosts"] = ", ".join(h.strip() for h in (exclude.text or "").split(",") if h.strip())
         if el.find("port_list") is not None:
             target["port_list"] = el.find("port_list").get("id")
-        if el.find("alive_tests") is not None:
-            target["alive"] = el.findtext("alive_tests").strip()
+        if alive is not None:
+            target["alive"] = alive
         return self._response("modify_target")
 
     def _delete_target(self, el):
@@ -709,8 +777,9 @@ class FakeGvmd:
         if format_id and format_id not in self.report_formats:
             return refusal("get_reports", "404", f"Failed to find report format '{format_id}'")
         results = self._filtered_results(r, el) if el.get("details") == "1" else None
+        lean = self.honor_lean and el.get("lean") == "1"
         if not format_id:
-            return self._response("get_reports", [self._outer_report(r, self._inner_report(r, results))])
+            return self._response("get_reports", [self._outer_report(r, self._inner_report(r, results, lean))])
         if format_id == fleet_ops.REPORT_FORMAT_IDS[("gvm-xml", "en", "technical")]:
             outer = self._outer_report(r, self._inner_report(r, results), format_id)
             return self._response("get_reports", [outer])
@@ -742,8 +811,12 @@ def run(gvmd, request, env=None, raw=None):
     data = raw if raw is not None else json.dumps(request, ensure_ascii=False).encode("utf-8")
     response, code = fleet_ops.handle(data, env, connect=gvmd.connect, now=lambda: NOW)
     out = fleet_ops.dumps(response)
-    assert SENTINEL.encode() not in out                       # never, on any path
+    # Never the password, and never a piece of it either: no prefix of >= 4 characters
+    # (a truncation done before the redaction would leave exactly that).
+    assert SENTINEL[:4].encode() not in out
     assert json.loads(out.decode("utf-8")) == response
+    if not response.get("ok"):
+        assert 1 <= len(response["error"]["message"]) <= MESSAGE_MAX
     return response, code
 
 
@@ -911,7 +984,29 @@ class TestSentinelPassword:
     def test_gvmd_status_text_echoing_the_password_is_redacted(self, gvmd):
         gvmd.refuse["start_task"] = ("400", f"Task is active already {SENTINEL}")
         resp, code = run(gvmd, cmd("task.start", {"task_id": TASK}))
-        assert "[redacted]" in assert_error(resp, code, "conflict")
+        assert "[redacted]" in assert_error(resp, code, "gvm_error")   # not the exact gvmd text
+
+    # "gvmd refused start_task (400): " is 31 characters: pads 170-195 put the password
+    # across a 200-character cut of the text, pads 455-478 across the 512 cut of the message.
+    @pytest.mark.parametrize("pad", [170, 185, 195, 455, 470, 478])
+    def test_password_across_any_cut_never_leaves_a_piece(self, gvmd, pad):
+        gvmd.refuse["start_task"] = ("400", "A" * pad + SENTINEL + " tail")
+        resp, code = run(gvmd, cmd("task.start", {"task_id": TASK}))   # run() checks the prefix
+        assert len(assert_error(resp, code, "gvm_error")) <= MESSAGE_MAX
+
+    @pytest.mark.parametrize("pad", [490, 500, 505])
+    def test_error_itself_redacts_before_it_cuts(self, monkeypatch, pad):
+        # Second layer: every source redacts already, but a future message carrying an
+        # unredacted secret must still come out clean whatever the cut.
+        monkeypatch.setattr(fleet_ops, "_SECRETS", [SENTINEL])
+        message = fleet_ops._error("gvm_error", "x" * pad + SENTINEL + " tail")["error"]["message"]
+        assert len(message) <= MESSAGE_MAX and SENTINEL[:4] not in message
+
+    def test_password_in_a_request_key_is_redacted_before_the_key_is_cut(self, gvmd):
+        req = cmd("task.start", {"task_id": TASK})
+        req["x" * 58 + SENTINEL] = 1
+        resp, code = run(gvmd, req)
+        assert "unknown key" in assert_error(resp, code, "internal_error")
 
     def test_auth_refusal_text_is_never_used(self, gvmd):
         gvmd.refuse["authenticate"] = ("400", f"Authentication failed for {SENTINEL}")
@@ -1204,28 +1299,53 @@ def target_payload(**kw):
     return payload
 
 
+def alive_sent(command_el):
+    """The <alive_test> sub-elements of a create/modify_target; its <alive_tests> carries
+    no text of its own (the contract set NAME never goes to gvmd)."""
+    node = command_el.find("alive_tests")
+    assert node is not None and not (node.text or "").strip()
+    return [m.text for m in node.findall("alive_test")]
+
+
 class TestTargets:
-    def test_create_default_alive_test_falls_back_when_gvmd_refuses_the_literal(self, gvmd):
+    def test_create_default_alive_set_goes_as_sub_elements(self, gvmd):
+        resp, code = run(gvmd, cmd("target.create", target_payload()))
+        out = assert_ok("target.create", resp, code)
+        assert gvmd.tags() == ["authenticate", "create_target"]
+        create = gvmd.sent("create_target")[0]
+        assert alive_sent(create) == ["ICMP Ping", "TCP-SYN Service Ping", "ARP Ping"]
+        assert "<alive_tests><alive_test>ICMP Ping</alive_test><alive_test>TCP-SYN Service Ping" in gvmd.raw[1]
+        assert "ICMP, TCP-SYN" not in gvmd.raw[1]                 # the contract name never reaches gvmd
+        assert out["alive_test_effective"] == "ICMP, TCP-SYN Service & ARP Ping"
+        assert gvmd.targets[out["target_id"]]["alive"] == frozenset({ICMP, SYN, ARP})
+
+    def test_create_default_refused_falls_back_to_the_ack_set(self, gvmd):
+        gvmd.refuse_methods = {"TCP-SYN Service Ping"}            # what LAB must rule out
         resp, code = run(gvmd, cmd("target.create", target_payload()))
         out = assert_ok("target.create", resp, code)
         first, second = gvmd.sent("create_target")
         assert gvmd.tags() == ["authenticate", "create_target", "create_target"]
-        # the D9 default goes as the LITERAL element text, built by XmlCommand
-        assert first.findtext("alive_tests") == "ICMP, TCP-SYN Service & ARP Ping"
-        assert "ICMP, TCP-SYN Service &amp; ARP Ping</alive_tests>" in gvmd.raw[1]
-        assert second.findtext("alive_tests") == "ICMP, TCP-ACK Service & ARP Ping"
+        assert alive_sent(first) == ["ICMP Ping", "TCP-SYN Service Ping", "ARP Ping"]
+        assert alive_sent(second) == ["ICMP Ping", "TCP-ACK Service Ping", "ARP Ping"]
         assert out["alive_test_effective"] == "ICMP, TCP-ACK Service & ARP Ping"
-        assert gvmd.targets[out["target_id"]]["alive"] == "ICMP, TCP-ACK Service & ARP Ping"
+        assert gvmd.targets[out["target_id"]]["alive"] == frozenset({ICMP, ACK, ARP})
 
-    def test_create_default_alive_test_accepted(self, gvmd):
-        gvmd.accept_syn_literal = True
-        resp, code = run(gvmd, cmd("target.create", target_payload()))
+    @pytest.mark.parametrize("name", list(ADR_ALIVE_TABLE))
+    def test_every_contract_set_goes_as_its_adr_methods_and_reads_back_by_name(self, gvmd, name):
+        resp, code = run(gvmd, cmd("target.create", target_payload(alive_test=name)))
         out = assert_ok("target.create", resp, code)
-        assert len(gvmd.sent("create_target")) == 1
-        assert out["alive_test_effective"] == "ICMP, TCP-SYN Service & ARP Ping"
+        assert alive_sent(gvmd.sent("create_target")[0]) == ADR_ALIVE_TABLE[name]
+        assert list(fleet_ops.ALIVE_TEST_METHODS[name]) == ADR_ALIVE_TABLE[name]
+        assert out["alive_test_effective"] == name
+        resp, code = run(gvmd, state_req("targets"))
+        item = next(i for i in assert_state("targets", resp, code)["items"] if i["target_id"] == out["target_id"])
+        assert item["alive_test"] == name
+
+    def test_contract_table_covers_exactly_the_schema_enum(self):
+        schema = json.loads((SCHEMA_DIR / "fleet-command.schema.json").read_text(encoding="utf-8"))
+        assert set(schema["$defs"]["alive_test"]["enum"]) == set(ADR_ALIVE_TABLE) == set(fleet_ops.ALIVE_TESTS)
 
     def test_create_sends_only_literal_hosts_and_nothing_else(self, gvmd):
-        gvmd.accept_syn_literal = True
         resp, code = run(gvmd, cmd("target.create", target_payload()))
         assert_ok("target.create", resp, code)
         create = gvmd.sent("create_target")[0]
@@ -1271,36 +1391,46 @@ class TestTargets:
         resp, code = run(gvmd, cmd("target.create", target_payload(exclude_hosts=["printer.lan"])))
         assert_error(resp, code, "internal_error", "target.create")
 
-    def test_explicit_alive_test_is_sent_and_never_replaced(self, gvmd):
-        resp, code = run(gvmd, cmd("target.create", target_payload(alive_test="ICMP Ping")))
-        assert assert_ok("target.create", resp, code)["alive_test_effective"] == "ICMP Ping"
-        gvmd.refuse["create_target"] = ("400", "Error in alive test")
-        resp, code = run(gvmd, cmd("target.create", target_payload(name="b", alive_test="ARP Ping")))
+    def test_explicit_set_is_never_replaced(self, gvmd):
+        gvmd.refuse_methods = {"ARP Ping"}
+        resp, code = run(gvmd, cmd("target.create", target_payload(name="b", alive_test="ICMP & ARP Ping")))
         assert_error(resp, code, "gvm_error", "target.create")
-        assert [c.findtext("alive_tests") for c in gvmd.sent("create_target")][-1] == "ARP Ping"
-        assert len(gvmd.sent("create_target")) == 2                  # no fallback for an explicit value
+        assert [alive_sent(c) for c in gvmd.sent("create_target")] == [["ICMP Ping", "ARP Ping"]]
 
     def test_fallback_never_goes_to_consider_alive_or_scan_config_default(self, gvmd):
         gvmd.refuse["create_target"] = ("400", "Error in alive test")
         resp, code = run(gvmd, cmd("target.create", target_payload()))
         assert_error(resp, code, "gvm_error", "target.create")
-        sent = [c.findtext("alive_tests") for c in gvmd.sent("create_target")]
-        assert sent == ["ICMP, TCP-SYN Service & ARP Ping", "ICMP, TCP-ACK Service & ARP Ping"]
+        assert [alive_sent(c) for c in gvmd.sent("create_target")] == [
+            ["ICMP Ping", "TCP-SYN Service Ping", "ARP Ping"], ["ICMP Ping", "TCP-ACK Service Ping", "ARP Ping"]]
 
-    def test_other_refusal_is_not_retried(self, gvmd):
-        gvmd.refuse["create_target"] = ("400", "Error in port range")
+    @pytest.mark.parametrize("text", ["Error in port range",
+                                      "ALIVE_TESTS can contain either a string or sub-elements, but not both.",
+                                      "Error in alive tests", "error in alive test"])
+    def test_only_gvmds_exact_alive_refusal_triggers_the_fallback(self, gvmd, text):
+        gvmd.refuse["create_target"] = ("400", text)
         resp, code = run(gvmd, cmd("target.create", target_payload()))
         assert_error(resp, code, "gvm_error", "target.create")
         assert len(gvmd.sent("create_target")) == 1
 
+    def test_reading_reports_a_set_outside_the_table_as_its_methods(self, gvmd):
+        gvmd.add_target(TARGET2, alive=frozenset({ICMP, SYN}))
+        gvmd.add_target(U(40), alive=frozenset({ICMP, ACK, SYN, ARP}))
+        gvmd.add_target(U(41), alive="default")
+        resp, code = run(gvmd, state_req("targets"))
+        alive = {i["target_id"]: i["alive_test"] for i in assert_state("targets", resp, code)["items"]}
+        assert alive[TARGET2] == "ICMP Ping, TCP-SYN Service Ping"
+        assert alive[U(40)] == "ARP Ping, ICMP Ping, TCP-ACK Service Ping, TCP-SYN Service Ping"
+        assert alive[U(41)] == "Scan Config Default"
+        assert alive[TARGET] == "ICMP, TCP-ACK Service & ARP Ping"
+
     def test_name_collision_is_conflict(self, gvmd):
-        gvmd.accept_syn_literal = True
         gvmd.targets[TARGET]["name"] = "LAN acme"
         resp, code = run(gvmd, cmd("target.create", target_payload()))
         assert_error(resp, code, "conflict", "target.create")
 
     def test_modify_hosts_keeps_current_exclusions(self, gvmd):
-        gvmd.targets[TARGET].update(exclude_hosts="192.0.2.1, 192.0.2.2", alive="ICMP Ping")
+        gvmd.targets[TARGET].update(exclude_hosts="192.0.2.1, 192.0.2.2", alive=frozenset({ICMP}))
         resp, code = run(gvmd, cmd("target.modify", {"target_id": TARGET, "hosts": ["198.51.100.0/24"]}))
         out = assert_ok("target.modify", resp, code)
         assert gvmd.tags() == ["authenticate", "get_targets", "modify_target"]
@@ -1335,12 +1465,24 @@ class TestTargets:
         assert out["before"]["hosts_non_literal_entries"] == 2
         assert "intranet" not in json.dumps(out)
 
-    def test_modify_alive_test_with_fallback(self, gvmd):
+    def test_modify_alive_test(self, gvmd):
+        gvmd.targets[TARGET]["alive"] = frozenset({ICMP, SYN})        # not a contract set
         resp, code = run(gvmd, cmd("target.modify", {"target_id": TARGET,
                                                      "alive_test": "ICMP, TCP-SYN Service & ARP Ping"}))
         out = assert_ok("target.modify", resp, code)
-        assert [c.findtext("alive_tests") for c in gvmd.sent("modify_target")] == [
-            "ICMP, TCP-SYN Service & ARP Ping", "ICMP, TCP-ACK Service & ARP Ping"]
+        assert [alive_sent(c) for c in gvmd.sent("modify_target")] == [
+            ["ICMP Ping", "TCP-SYN Service Ping", "ARP Ping"]]
+        assert out["alive_test_effective"] == "ICMP, TCP-SYN Service & ARP Ping"
+        assert out["before"] == {"alive_test": "ICMP Ping, TCP-SYN Service Ping"}
+        assert gvmd.targets[TARGET]["alive"] == frozenset({ICMP, SYN, ARP})
+
+    def test_modify_alive_test_with_fallback(self, gvmd):
+        gvmd.refuse_methods = {"TCP-SYN Service Ping"}
+        resp, code = run(gvmd, cmd("target.modify", {"target_id": TARGET,
+                                                     "alive_test": "ICMP, TCP-SYN Service & ARP Ping"}))
+        out = assert_ok("target.modify", resp, code)
+        assert [alive_sent(c) for c in gvmd.sent("modify_target")] == [
+            ["ICMP Ping", "TCP-SYN Service Ping", "ARP Ping"], ["ICMP Ping", "TCP-ACK Service Ping", "ARP Ping"]]
         assert out["alive_test_effective"] == "ICMP, TCP-ACK Service & ARP Ping"
         assert out["before"] == {"alive_test": "ICMP, TCP-ACK Service & ARP Ping"}
 
@@ -1351,10 +1493,15 @@ class TestTargets:
         resp, code = run(gvmd, cmd("target.modify", {"target_id": TARGET, "name": "ok em uso"}))
         assert_ok("target.modify", resp, code)
 
-    def test_modify_port_range_is_refused_without_side_effects(self, gvmd):
+    def test_modify_has_no_port_range(self, gvmd):
+        # ports change only by port_list_id: gvmd's modify_target has no port_range
         resp, code = run(gvmd, cmd("target.modify", {"target_id": TARGET, "port_range": "T:22"}))
-        assert "port_range" in assert_error(resp, code, "gvm_error", "target.modify")
-        assert gvmd.writes() == []
+        assert "port_range" in assert_error(resp, code, "internal_error", "target.modify")
+        assert gvmd.calls == []
+        resp, code = run(gvmd, cmd("target.modify", {"target_id": TARGET, "port_list_id": U(55),
+                                                     "port_range": "T:22"}))
+        assert_error(resp, code, "internal_error", "target.modify")
+        assert gvmd.calls == []
 
     def test_modify_port_list(self, gvmd):
         resp, code = run(gvmd, cmd("target.modify", {"target_id": TARGET, "port_list_id": U(55)}))
@@ -1859,6 +2006,13 @@ class TestStateNode:
         resp, code = run(gvmd, state_req("node", NODE_PAYLOAD))
         assert assert_state("node", resp, code)["health"]["status"] == "degraded"
 
+    @pytest.mark.parametrize("floor", ["2026-02-30T00:00:00Z", "2026-10-11T24:00:00Z", "2026-10-11T12:00:60Z",
+                                       "2026-10-11T12:00:00.5Z", "2026-10-11T12:00:00+00:00"])
+    def test_replay_floor_must_be_a_real_utc_instant(self, gvmd, floor):
+        resp, code = run(gvmd, state_req("node", dict(NODE_PAYLOAD, replay_floor=floor)))
+        assert_error(resp, code, "internal_error")
+        assert gvmd.calls == []
+
     def test_connector_cannot_supply_gvmd_owned_fields(self, gvmd):
         for payload in (dict(NODE_PAYLOAD, versions={"gmp_protocol": "22.7"}),
                         dict(NODE_PAYLOAD, health={"status": "ok"}),
@@ -1990,3 +2144,252 @@ class TestStateLists:
         resp, code = run(gvmd, state_req("tasks", owners={}))
         data = assert_state("tasks", resp, code)
         assert data == {"items": [], "truncated": False, "unattributed_count": 1}
+
+
+# --------------------------------------------------------------------------- #
+# Fix round 1: owner check of a linked schedule, refusal classifier, fixed
+# not_found texts, XML 1.0 text, export filter, lean summary, contract parity
+# --------------------------------------------------------------------------- #
+
+class TestOwnerChecksAndNotFoundTexts:
+    def test_task_modify_linked_schedule_is_owner_checked(self, gvmd):
+        gvmd.add_schedule(SCHED, owner=OTHER_USER)
+        foreign, c1 = run(gvmd, cmd("task.modify", {"task_id": TASK, "schedule_id": SCHED}))
+        missing, c2 = run(gvmd, cmd("task.modify", {"task_id": TASK, "schedule_id": MISSING}))
+        assert assert_error(foreign, c1, "not_found", "task.modify") == "schedule not found"
+        assert foreign == missing and c1 == c2 == 0
+        assert gvmd.sent("modify_task") == []
+
+    @pytest.mark.parametrize("op,payload,kind", [
+        ("task.start", {"task_id": "X"}, "task"),
+        ("task.delete", {"task_id": "X"}, "task"),
+        ("target.delete", {"target_id": "X"}, "target"),
+        ("schedule.delete", {"schedule_id": "X"}, "schedule"),
+        ("report.summary", {"report_id": "X", "min_qod": 70, "apply_overrides": True, "levels": "chml"}, "report"),
+    ])
+    def test_owner_check_text_is_fixed_and_identical(self, gvmd, op, payload, kind):
+        getattr(gvmd, f"add_{kind}")(U(77), owner=OTHER_USER)
+        answers = []
+        for obj in (U(77), MISSING):
+            body = {k: (obj if v == "X" else v) for k, v in payload.items()}
+            resp, code = run(gvmd, cmd(op, body))
+            answers.append(resp)
+            assert assert_error(resp, code, "not_found", op) == f"{kind} not found"
+        assert answers[0] == answers[1]
+        assert U(77) not in json.dumps(answers) and MISSING not in json.dumps(answers)
+
+    def test_gvmd_404_text_is_fixed(self, gvmd):
+        gvmd.refuse["start_task"] = ("404", f"Failed to find task '{TASK}'")
+        resp, code = run(gvmd, cmd("task.start", {"task_id": TASK}))
+        assert assert_error(resp, code, "not_found") == "object not found"
+
+
+class TestRefusalClassifier:
+    @pytest.mark.parametrize("text", sorted(fleet_ops.CONFLICT_TEXTS))
+    def test_exact_gvmd_conflict_texts(self, gvmd, text):
+        gvmd.refuse["start_task"] = ("400", text)
+        resp, code = run(gvmd, cmd("task.start", {"task_id": TASK}))
+        assert assert_error(resp, code, "conflict") == f"gvmd refused start_task: {text}"
+
+    @pytest.mark.parametrize("status,text,expected", [
+        ("400", "Report format must be trusted", "gvm_error"),
+        ("400", "Report format must be active", "gvm_error"),
+        ("400", "Report format is not compatible with the report type", "gvm_error"),
+        ("400", "Permission denied", "gvm_error"),
+        ("400", "Error in alive test", "gvm_error"),
+        ("400", "Error in port range", "gvm_error"),
+        ("400", "Attempt to delete a hidden task", "gvm_error"),
+        ("400", "Task is active already, and more", "gvm_error"),       # not the exact text
+        ("400", "target is in use", "gvm_error"),                       # case matters
+        ("500", "Internal error", "gvm_error"),
+        ("409", "Reports database is busy. Please try again later.", "unavailable"),
+        ("503", "Service temporarily down", "unavailable"),
+        ("404", "Failed to find task 'x'", "not_found"),
+    ])
+    def test_everything_else(self, gvmd, status, text, expected):
+        gvmd.refuse["start_task"] = (status, text)
+        resp, code = run(gvmd, cmd("task.start", {"task_id": TASK}))
+        assert_error(resp, code, expected)
+
+    def test_untrusted_report_format_on_export_is_gvm_error(self, gvmd, tmp_path):
+        gvmd.add_report(REPORT, content={PDF_PT: PDF_BYTES})
+        original = gvmd._get_reports
+
+        def untrusted(el):
+            if el.get("format_id"):
+                return refusal("get_reports", "400", "Report format must be trusted")
+            return original(el)
+        gvmd._get_reports = untrusted
+        resp, code = run(gvmd, export_req(tmp_path))
+        assert "must be trusted" in assert_error(resp, code, "gvm_error", "report.export")
+        assert not (tmp_path / "artefato.bin").exists()
+
+
+class TestXmlText:
+    @pytest.mark.parametrize("op,payload", [
+        ("task.create", {"name": "Varredura\ufffe", "target_id": TARGET, "scan_config_id": CONFIG}),
+        ("task.create", {"name": "n", "comment": "fim\uffff", "target_id": TARGET, "scan_config_id": CONFIG}),
+        ("task.modify", {"task_id": TASK, "name": "\ufffe"}),
+        ("task.clone", {"task_id": TASK, "name": "c\uffff"}),
+        ("schedule.create", {"name": "s", "icalendar": ICAL + "X-NOTE:\ufffe\r\n", "timezone": "UTC"}),
+        ("schedule.modify", {"schedule_id": SCHED, "comment": "c\x0b"}),
+        ("target.create", {"name": "t\x00", "hosts": ["192.0.2.0/24"], "port_range": "T:1-10"}),
+    ])
+    def test_non_xml_text_is_refused_before_gvmd(self, gvmd, op, payload):
+        resp, code = run(gvmd, cmd(op, payload))
+        assert_error(resp, code, "internal_error", op)                  # exit 0: no crash
+        assert gvmd.calls == []
+
+    def test_export_filter_with_a_noncharacter(self, gvmd, tmp_path):
+        resp, code = run(gvmd, export_req(tmp_path, filter=EXPORT_FILTER + " \ufffe"))
+        assert_error(resp, code, "internal_error", "report.export")
+        assert gvmd.calls == []
+
+    @pytest.mark.parametrize("raw_name", [b'"\\ud800"', b'"a\\udfffb"', b'"\\ud83d"'])
+    def test_unpaired_surrogate_escape_is_refused(self, gvmd, raw_name):
+        raw = (b'{"op":"task.create","command_id":"' + CID.encode() + b'","tenant":"acme",'
+               b'"tenant_gmp_user":"acme-gmp","payload":{"name":' + raw_name +
+               b',"target_id":"' + TARGET.encode() + b'","scan_config_id":"' + CONFIG.encode() + b'"}}')
+        resp, code = run(gvmd, None, raw=raw)
+        assert_error(resp, code, "internal_error", "task.create")
+        assert gvmd.calls == []
+
+    def test_surrogate_in_a_key_is_refused(self, gvmd):
+        raw = (b'{"op":"task.start","command_id":"' + CID.encode() + b'","tenant":"acme",'
+               b'"tenant_gmp_user":"acme-gmp","payload":{"task_id":"' + TASK.encode() + b'"},"\\ud800":1}')
+        resp, code = run(gvmd, None, raw=raw)
+        assert_error(resp, code, "internal_error")
+
+    def test_paired_surrogates_and_astral_text_are_fine(self, gvmd):
+        raw = (b'{"op":"task.create","command_id":"' + CID.encode() + b'","tenant":"acme",'
+               b'"tenant_gmp_user":"acme-gmp","payload":{"name":"Varredura \\ud83d\\udee1 S\xc3\xa3o Paulo",'
+               b'"target_id":"' + TARGET.encode() + b'","scan_config_id":"' + CONFIG.encode() + b'"}}')
+        resp, code = run(gvmd, None, raw=raw, env=ENV_TENANT)
+        out = assert_ok("task.create", resp, code)
+        assert gvmd.tasks[out["task_id"]]["name"] == "Varredura \U0001F6E1 São Paulo"
+
+    def test_field_checks_match_the_schema_patterns_character_by_character(self):
+        # fleet_ops' no_control and iCalendar checks are the schema's, not a lookalike.
+        defs = json.loads((SCHEMA_DIR / "fleet-command.schema.json").read_text(encoding="utf-8"))["$defs"]
+        no_control = re.compile(defs["no_control"]["not"]["pattern"])
+        ical_bad = re.compile(defs["icalendar"]["not"]["pattern"])
+        points = list(range(0x00, 0x21)) + [0x7e, 0x7f, 0x80, 0x9f, 0xa0, 0xd7ff, 0xe000, 0xfffd, 0xfffe,
+                                            0xffff, 0x10000, 0x10ffff]
+        for point in points:
+            ch = chr(point)
+            assert bool(fleet_ops._CTRL_RE.search(ch)) == bool(no_control.search(ch)), hex(point)
+            assert bool(fleet_ops._ICAL_BAD_RE.search(ch)) == bool(ical_bad.search(ch)), hex(point)
+
+    def test_nesting_deeper_than_32_levels_is_refused(self, gvmd):
+        deep = "1"
+        for _ in range(32):
+            deep = '{"a":' + deep + "}"
+        raw = (b'{"op":"task.start","command_id":"' + CID.encode() + b'","tenant":"acme",'
+               b'"tenant_gmp_user":"acme-gmp","payload":' + deep.encode() + b"}")
+        resp, code = run(gvmd, None, raw=raw)
+        assert "nesting" in assert_error(resp, code, "internal_error")
+
+
+class TestExportFilter:
+    @pytest.mark.parametrize("flt", [
+        "apply_overrides=1 min_qod=70 levels=chmlg",
+        "levels=hmlf min_qod=0 apply_overrides=0 rows=100 first=1",
+        "min_qod=100 levels=f apply_overrides=1 sort-reverse=severity",
+        "rows=-1  apply_overrides=0   levels=gc min_qod=9",            # empty tokens are ignored
+        "apply_overrides=1 min_qod=70 levels=chmlgf levelsx=1 x_levels=c",  # other keys
+    ])
+    def test_explicit_filters_are_accepted_and_sent_verbatim(self, gvmd, tmp_path, flt):
+        gvmd.add_report(REPORT, content={PDF_PT: PDF_BYTES})
+        resp, code = run(gvmd, export_req(tmp_path, filter=flt))
+        assert_ok("report.export", resp, code)
+        assert gvmd.sent("get_reports")[-1].get("filter") == flt
+
+    @pytest.mark.parametrize("flt", [
+        " ",                                                    # blank
+        "levels=chmlg rows=-1",                                 # no apply_overrides, no min_qod
+        "apply_overrides=1 levels=chmlg",                       # no min_qod (gvmd would use 70)
+        "min_qod=70 levels=chmlg",                              # no apply_overrides (gvmd: 0)
+        "apply_overrides=1 min_qod=70",                         # no levels
+        "apply_overrides=1 min_qod=101 levels=chmlg",
+        "apply_overrides=1 min_qod=070 levels=chmlg",           # leading zero
+        "apply_overrides=1 min_qod=-1 levels=chmlg",
+        "apply_overrides=2 min_qod=70 levels=chmlg",
+        "apply_overrides=1 min_qod=70 levels=cc",               # letter repeated
+        "apply_overrides=1 min_qod=70 levels=chmlgx",
+        "apply_overrides=1 min_qod=70 levels=",
+        "apply_overrides=1 min_qod>50 levels=chmlg",            # relation other than '='
+        "apply_overrides=1 min_qod~70 levels=chmlg",
+        "apply_overrides:1 min_qod=70 levels=chmlg",
+        "apply_overrides=1 min_qod=70 levels=chmlg levels=f",   # key twice
+        "apply_overrides=1 apply_overrides=1 min_qod=70 levels=c",
+        "apply_overrides=1 min_qod=70 levels",                  # bare key, as the validator reads it
+        '"apply_overrides=1 min_qod=70 levels=chmlg"',          # quotes do not group
+    ])
+    def test_implicit_filters_are_refused_before_gvmd(self, gvmd, tmp_path, flt):
+        gvmd.add_report(REPORT, content={PDF_PT: PDF_BYTES})
+        resp, code = run(gvmd, export_req(tmp_path, filter=flt))
+        assert "must pin" in assert_error(resp, code, "internal_error", "report.export")
+        assert gvmd.calls == [] and not (tmp_path / "artefato.bin").exists()
+
+
+class TestSummaryLean:
+    def test_lean_is_asked_and_counts_are_identical_without_it(self, gvmd):
+        gvmd.add_report(REPORT, results=RESULTS)
+        lean, code = run(gvmd, summary_req(min_qod=0, levels="chmlg"))
+        assert gvmd.sent("get_reports")[-1].get("lean") == "1"
+        gvmd.honor_lean = False                                  # the same report, full results
+        full, code2 = run(gvmd, summary_req(min_qod=0, levels="chmlg"))
+        assert assert_ok("report.summary", lean, code) == assert_ok("report.summary", full, code2)
+
+
+def _contract_command_cases():
+    index = json.loads((EXAMPLES_DIR / "index.json").read_text(encoding="utf-8"))
+    return [case for case in index["cases"]
+            if case["file"].startswith(("valid/command/", "invalid/command/"))
+            and "--" not in case["file"].rsplit("/", 1)[1]]       # '<def>--' cases target $defs
+
+
+# Root-level JSON rules of the contract that live INSIDE the payload.
+PAYLOAD_JSON_CASES = {"duplicate-key-in-payload.json", "task-create-name-unpaired-surrogate.json",
+                      "payload-nesting-depth-33.json"}
+GVM_TYPES = {op for op in fleet_ops._OPS if op in fleet_ops.COMMAND_TYPES}
+
+
+def _request_around(case):
+    """A fleet_ops request around the example's payload, its bytes exactly as in the file."""
+    text = (EXAMPLES_DIR / case["file"]).read_text(encoding="utf-8")
+    start = text.index('"payload":') + len('"payload":')
+    _, end = json.JSONDecoder().raw_decode(text, start)
+    op = re.search(r'"type":"([^"]*)"', text).group(1)
+    extra = ',"artifact_path":"/var/lib/suricatoos-fleet/artifacts/x.bin"' if op == "report.export" else ""
+    return op, ('{"op":' + json.dumps(op) + ',"command_id":"' + CID + '","tenant":"acme",'
+                '"tenant_gmp_user":"acme-gmp","payload":' + text[start:end] + extra + "}").encode("utf-8")
+
+
+@pytest.mark.parametrize("case", _contract_command_cases(), ids=lambda c: c["file"])
+def test_request_validation_agrees_with_the_contract_examples(case):
+    op, raw = _request_around(case)
+    name = case["file"].rsplit("/", 1)[1]
+    if op not in GVM_TYPES:
+        with pytest.raises(fleet_ops.OpError) as refused:             # never executed here
+            fleet_ops.parse_request(raw)
+        assert refused.value.code == "internal_error" and "allowlist" in refused.value.message
+        return
+    if case["file"].startswith("valid/"):
+        fleet_ops.parse_request(raw)                                  # must not raise
+        return
+    path = case["expect"].get("path", "")
+    if not (path.startswith("/payload") or name in PAYLOAD_JSON_CASES):
+        pytest.skip("envelope-level rule (the connector's verification lines 0-2)")
+    with pytest.raises(fleet_ops.OpError) as refused:
+        fleet_ops.parse_request(raw)
+    assert refused.value.code == "internal_error"
+
+
+def test_contract_examples_cover_the_new_rules():
+    names = {c["file"].rsplit("/", 1)[1] for c in _contract_command_cases()}
+    assert {"report-export-filter-blank.json", "report-export-filter-levels-repeated.json",
+            "report-export-filter-min-qod-101.json", "report-export-filter-without-overrides-and-qod.json",
+            "report-export-filter-any-order.json", "target-modify-port-range.json",
+            "target-modify-unknown-alive-test.json", "task-create-name-noncharacter.json",
+            "task-create-name-unpaired-surrogate.json", "target-modify-port-list.json"} <= names
