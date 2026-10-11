@@ -174,11 +174,10 @@ func (r *Registry) Upsert(in UpsertInput, by string) (PublicProvider, error) {
 	// The stored key belongs to the recipient it was pasted for: the kind AND the
 	// endpoint. Without a new api_key, neither may change — whatever the rule — or
 	// an update would send that write-only key to another router or host. The one
-	// move that keeps the key is pinning the SAME kind's official endpoint (a record
-	// saved before the rule, or with a custom endpoint while the rule was off).
+	// move that keeps the key is re-pinning the SAME kind's official endpoint on the
+	// SAME host the key was pasted for (rePinsOnTheKeysHost).
 	moved := p != nil && (p.Kind != in.Kind || !sameEndpoint(p.BaseURL, in.BaseURL))
-	if moved && len(p.KeyCipher) > 0 && in.APIKey == "" &&
-		(p.Kind != in.Kind || !IsOfficialEndpoint(in.Kind, in.BaseURL)) {
+	if moved && len(p.KeyCipher) > 0 && in.APIKey == "" && !rePinsOnTheKeysHost(p, in) {
 		return PublicProvider{}, fmt.Errorf("%w: a chave guardada é do tipo %q em %s", ErrKeyRebind, p.Kind, p.BaseURL)
 	}
 	if p == nil {
@@ -315,7 +314,7 @@ func (r *Registry) modelsSource(id string) (catalogSource, error) {
 	if !IsOfficialEndpoint(p.Kind, p.BaseURL) {
 		hint := ""
 		if r.freeOnly {
-			hint = " — salve o provedor de novo para fixá-la (com só modelos gratuitos a base vem do tipo)"
+			hint = " — salve o provedor de novo para fixá-la (com só modelos gratuitos a base vem do tipo; sem chave nova, só se a base antiga já estiver no host oficial — senão, cole a chave de novo)"
 		}
 		return catalogSource{}, fmt.Errorf("%w: base_url %q não é %s%s", ErrNotOfficialEndpoint, p.BaseURL, official, hint)
 	}
@@ -359,6 +358,24 @@ func (r *Registry) saveLocked() error {
 // slash does not change where the requests go).
 func sameEndpoint(a, b string) bool {
 	return strings.TrimRight(a, "/") == strings.TrimRight(b, "/")
+}
+
+// rePinsOnTheKeysHost reports whether an update of p only re-pins the official
+// endpoint of the SAME kind, while p's stored endpoint already sat on that official
+// HOST (e.g. a legacy path on openrouter.ai): the stored key then keeps going to the
+// host it was pasted for. A record on any other host — a proxy, the other router
+// (a unorouter record on openrouter.ai holding an OpenRouter key), the official
+// host on another port — needs the key pasted again.
+func rePinsOnTheKeysHost(p *Provider, in UpsertInput) bool {
+	return p.Kind == in.Kind && IsOfficialEndpoint(in.Kind, in.BaseURL) &&
+		sameHost(p.BaseURL, OfficialBaseURL(in.Kind))
+}
+
+// sameHost reports whether two URLs address the same host[:port] (case-insensitive).
+func sameHost(a, b string) bool {
+	ua, errA := url.Parse(a)
+	ub, errB := url.Parse(b)
+	return errA == nil && errB == nil && ua.Host != "" && strings.EqualFold(ua.Host, ub.Host)
 }
 
 func randID() string {

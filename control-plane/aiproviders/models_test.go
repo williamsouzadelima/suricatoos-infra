@@ -639,16 +639,24 @@ func TestModels_RefusesLegacyForeignEndpoint(t *testing.T) {
 		t.Fatalf("recusa não pode ir à rede: evil=%d oficial=%d", evil.count(), up.count())
 	}
 
-	// Saving the router again (no new key) pins its base; the listing then reaches
-	// the official API with the stored key, and still never the foreign host.
+	// Saving the router again WITHOUT a new key does not move its key: the key was
+	// pasted for another host (one chosen through the API), so the save is refused
+	// (422) and nothing is contacted. With a new key the save pins the official
+	// endpoint, and the listing reaches it with the NEW key only — still never the
+	// foreign host.
 	resp, b := do(t, srv, "POST", "/api/v1/ai/providers", "s3cret", `{"id":"`+orID+`","name":"OR antigo","kind":"openrouter","model":"openrouter/free"}`)
+	if resp.StatusCode != http.StatusUnprocessableEntity || !strings.Contains(decodeModels(t, b).Error, msgKeyRebind) {
+		t.Fatalf("salvar de novo sem chave nova = %d %s, want 422 (%s)", resp.StatusCode, b, msgKeyRebind)
+	}
+	const newKey = "sk-or-v1-CHAVE-NOVA-0042"
+	resp, b = do(t, srv, "POST", "/api/v1/ai/providers", "s3cret", `{"id":"`+orID+`","name":"OR antigo","kind":"openrouter","model":"openrouter/free","api_key":"`+newKey+`"}`)
 	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("salvar de novo = %d: %s", resp.StatusCode, b)
+		t.Fatalf("salvar com chave nova = %d: %s", resp.StatusCode, b)
 	}
 	if resp, b := do(t, srv, "GET", "/api/v1/ai/providers/"+orID+"/models", "s3cret", ""); resp.StatusCode != http.StatusOK {
-		t.Fatalf("após salvar de novo = %d: %s", resp.StatusCode, b)
+		t.Fatalf("após salvar com chave nova = %d: %s", resp.StatusCode, b)
 	}
-	if evil.count() != 0 || up.count() != 1 || up.lastAuth() != "Bearer "+testKey {
+	if evil.count() != 0 || up.count() != 1 || up.lastAuth() != "Bearer "+newKey {
 		t.Fatalf("após salvar: evil=%d oficial=%d auth=%q", evil.count(), up.count(), up.lastAuth())
 	}
 }

@@ -137,18 +137,95 @@ func TestUpsert_RuleOffRepointWithoutNewKeyIsRefused(t *testing.T) {
 	}
 }
 
-// The documented exception: a record of the SAME kind may be saved again to pin
-// its official endpoint, keeping the key (rule off here; rule on in
-// TestModels_RefusesLegacyForeignEndpoint).
-func TestUpsert_PinningTheSameKindsOfficialEndpointKeepsTheKey(t *testing.T) {
+// The documented exception, narrowed: a record of the SAME kind may be saved again
+// to pin its official endpoint, keeping the key, ONLY when its old endpoint already
+// sat on that official host (case-insensitive, same port) — the key keeps going to
+// the host it was pasted for. From any other host (a proxy, the other router, the
+// official host on another port) the key stays where it is: 422. Rule off here;
+// rule on in TestModels_LegacyRecordOnTheOtherRoutersHostKeepsItsKeyThere and
+// TestModels_RefusesLegacyForeignEndpoint.
+func TestUpsert_PinningTheOfficialEndpointKeepsTheKeyOnlyFromTheOfficialHost(t *testing.T) {
 	r := newReg(t) // rule off: a custom endpoint is allowed
-	id := mustUpsert(t, r, UpsertInput{Name: "Proxy", Kind: KindOpenRouter, BaseURL: "https://proxy.example/v1", Model: "openai/gpt-5.5", APIKey: testKey})
-	pub, err := r.Upsert(UpsertInput{ID: id, Name: "Proxy", Kind: KindOpenRouter, Model: "openai/gpt-5.5"}, "op")
-	if err != nil {
-		t.Fatalf("salvar de novo fixando o endpoint oficial do mesmo tipo deveria passar: %v", err)
+	for _, base := range []string{"https://openrouter.ai/v1", "https://OPENROUTER.AI/api/v1"} {
+		id := mustUpsert(t, r, UpsertInput{Name: "Host oficial", Kind: KindOpenRouter, BaseURL: base, Model: "openai/gpt-5.5", APIKey: testKey})
+		pub, err := r.Upsert(UpsertInput{ID: id, Name: "Host oficial", Kind: KindOpenRouter, Model: "openai/gpt-5.5"}, "op")
+		if err != nil {
+			t.Fatalf("%s: mesmo host oficial, salvar de novo fixando o endpoint deveria passar: %v", base, err)
+		}
+		if pub.BaseURL != OfficialBaseURL(KindOpenRouter) || !pub.HasKey || pub.KeyLast4 != last4(testKey) {
+			t.Fatalf("%s: deveria fixar o oficial e manter a chave: %+v", base, pub)
+		}
 	}
-	if pub.BaseURL != OfficialBaseURL(KindOpenRouter) || !pub.HasKey || pub.KeyLast4 != last4(testKey) {
-		t.Fatalf("deveria fixar o oficial e manter a chave: %+v", pub)
+
+	for _, c := range []struct{ name, kind, base string }{
+		{"proxy", KindOpenRouter, "https://proxy.example/v1"},
+		{"host do outro roteador", KindUnoRouter, "https://openrouter.ai/api/v1"},
+		{"host oficial em outra porta", KindOpenRouter, "https://openrouter.ai:8443/api/v1"},
+	} {
+		id := mustUpsert(t, r, UpsertInput{Name: c.name, Kind: c.kind, BaseURL: c.base, Model: "x:free", APIKey: testKey})
+		before, _ := r.Get(id)
+		if _, err := r.Upsert(UpsertInput{ID: id, Name: c.name, Kind: c.kind, Model: "x:free"}, "op"); !errors.Is(err, ErrKeyRebind) {
+			t.Errorf("%s: fixar o oficial vindo de outro host sem chave nova deveria dar ErrKeyRebind, veio %v", c.name, err)
+		}
+		if after, _ := r.Get(id); !reflect.DeepEqual(after, before) {
+			t.Errorf("%s: pedido recusado mudou o registro:\n antes  %+v\n depois %+v", c.name, before, after)
+		}
+	}
+}
+
+// The legacy shape the narrowed exception exists for: a record of kind unorouter
+// whose base_url sits on OpenRouter's host and holds an OpenRouter key (saved while
+// the rule was off). With the rule on, saving it again without a new key would pin
+// api.unorouter.com and send that key there: refused (422), the record and the
+// store stay as they were, and no router is contacted. With a new key the save pins
+// the official endpoint and only the NEW key travels — to UnoRouter.
+func TestModels_LegacyRecordOnTheOtherRoutersHostKeepsItsKeyThere(t *testing.T) {
+	const orKey = "sk-or-v1-CHAVE-DO-OPENROUTER-0001"
+	const unoKey = "sk-uno-CHAVE-NOVA-0002"
+	up := newUpstream(t, serveCatalog) // answers for BOTH official hosts and records each Host
+	path := filepath.Join(t.TempDir(), "providers.json")
+	kek, _ := randBytes(kekSize)
+	old, err := NewRegistry(path, kek) // rule off, as before the rule
+	if err != nil {
+		t.Fatalf("NewRegistry: %v", err)
+	}
+	id := mustUpsert(t, old, UpsertInput{Name: "Uno antigo", Kind: KindUnoRouter, BaseURL: OfficialBaseURL(KindOpenRouter), Model: "deepseek-v4-flash:free", APIKey: orKey})
+
+	reg, err := NewRegistry(path, kek, WithFreeModelsOnly(true)) // same store, rule on
+	if err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+	srv, _, _ := serveModels(t, reg, up)
+	before, _ := reg.Get(id)
+	stored := readFile(t, path)
+
+	resave := `{"id":"` + id + `","name":"Uno antigo","kind":"unorouter","model":"deepseek-v4-flash:free"}`
+	resp, b := do(t, srv, "POST", "/api/v1/ai/providers", "s3cret", resave)
+	if resp.StatusCode != http.StatusUnprocessableEntity || !strings.Contains(decodeModels(t, b).Error, msgKeyRebind) {
+		t.Fatalf("salvar de novo sem chave nova = %d %s, want 422 (%s)", resp.StatusCode, b, msgKeyRebind)
+	}
+	if after, _ := reg.Get(id); !reflect.DeepEqual(after, before) {
+		t.Fatalf("o registro mudou:\n antes  %+v\n depois %+v", before, after)
+	}
+	if !bytes.Equal(readFile(t, path), stored) {
+		t.Fatal("o pedido recusado regravou o store")
+	}
+	if resp, b := do(t, srv, "GET", "/api/v1/ai/providers/"+id+"/models", "s3cret", ""); resp.StatusCode != http.StatusUnprocessableEntity {
+		t.Fatalf("lista de modelos do registro antigo = %d %s, want 422", resp.StatusCode, b)
+	}
+	if n := up.count(); n != 0 {
+		t.Fatalf("nenhum roteador pode ser contatado: %d chamada(s), hosts %q", n, up.seenHosts())
+	}
+
+	repaste := `{"id":"` + id + `","name":"Uno antigo","kind":"unorouter","model":"deepseek-v4-flash:free","api_key":"` + unoKey + `"}`
+	if resp, b := do(t, srv, "POST", "/api/v1/ai/providers", "s3cret", repaste); resp.StatusCode != http.StatusOK {
+		t.Fatalf("salvar com chave nova = %d: %s", resp.StatusCode, b)
+	}
+	if resp, b := do(t, srv, "GET", "/api/v1/ai/providers/"+id+"/models", "s3cret", ""); resp.StatusCode != http.StatusOK {
+		t.Fatalf("lista de modelos após colar a chave = %d: %s", resp.StatusCode, b)
+	}
+	if h := up.seenHosts(); h != "api.unorouter.com" || up.lastAuth() != "Bearer "+unoKey {
+		t.Fatalf("só a chave nova vai, e só ao UnoRouter: hosts %q auth %q", h, up.lastAuth())
 	}
 }
 
