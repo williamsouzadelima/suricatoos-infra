@@ -153,10 +153,31 @@ def test_known_blind_spots_are_not_detected_yet(form):
     assert h.find_public_ips("host " + text) != []
 
 
+@pytest.mark.xfail(strict=True, reason="limite conhecido: a limpeza de d=/points= e' lexical (regex, nao parser)")
+@pytest.mark.parametrize("attr", ["d", "points"])
+@pytest.mark.parametrize("ext_text", ["{ip}", "M0,0 {ip} z"])
+def test_an_ip_inside_a_geometry_attribute_is_skipped(attr, ext_text):
+    # Vale para .svg e .patch: o IP escrito no valor desses atributos some junto com a geometria.
+    text = h.blank_svg_geometry(f'<g {attr}="{ext_text.format(ip=PUBLIC)}"/>')
+    assert h.find_public_ips(text) != []
+
+
 def test_every_blind_spot_form_is_named_in_the_docstring():
     doc = h.__doc__.lower()
-    for word in ("defang", "tracej", "inteiro", "hex", "percent", "regex", "ipv6", "base64"):
+    for word in ("defang", "tracej", "inteiro", "hex", "percent", "regex", "ipv6", "base64", "léxica"):
         assert word in doc, word
+    # a limpeza lexical vale para os dois tipos de arquivo, e o texto diz isso
+    assert ".svg" in doc and ".patch" in doc and "d=`/`points=" in doc
+
+
+def _feed_sync_job():
+    """Texto do job `feed-sync` do report-formats-ci.yml (do `  feed-sync:` ate o proximo job)."""
+    wf = (h.ROOT / ".github" / "workflows" / "report-formats-ci.yml").read_bytes().decode("utf-8").replace("\r\n", "\n")
+    assert "\njobs:\n" in wf, "o workflow perdeu a chave `jobs:`"
+    jobs = wf.split("\njobs:\n", 1)[1]
+    m = re.search(r"(?m)^  feed-sync:\s*\n((?:(?:    .*)?\n)*)", jobs)       # recuo de 4 = dentro do job
+    assert m, "o workflow nao define mais o job `feed-sync`"
+    return m.group(1)
 
 
 def test_docstring_names_the_workflow_that_keeps_the_feed_in_sync():
@@ -165,6 +186,10 @@ def test_docstring_names_the_workflow_that_keeps_the_feed_in_sync():
     assert "feed-sync" in h.__doc__
     for ref in refs:                                  # nome citado => arquivo existe
         assert (h.ROOT / ref).is_file(), ref
+    # ... e o job citado existe e faz o que a docstring diz: regenera o XML e reprova a divergencia
+    job = _feed_sync_job()
+    assert "build-feed-xml.py" in job
+    assert "git diff --exit-code" in job and "pdf-suricatoos-" in job
 
 
 # --- allowlist ------------------------------------------------------------------

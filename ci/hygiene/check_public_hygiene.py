@@ -61,6 +61,11 @@ LIMITE CONHECIDO
   hostname), IP como inteiro ou hex (`134744072`, `0x08080808`), pontos escapados
   (percent `%2E`; regex `8\\.8\\.8\\.8`) e IPv6. Cada uma tem um teste xfail estrito:
   quando uma passar a ser detectada, o teste reprova e esta lista é atualizada.
+  A limpeza de `d=`/`points=` é léxica: uma regex, não um parser de SVG. Vale para
+  toda ocorrência desses atributos com valor entre aspas, em qualquer linha de um
+  `.svg` ou de um `.patch` (inclusive código ou texto que o patch carrega), então um
+  IP escrito dentro do valor de um deles é ignorado (`d="... <ip> ..."`). Também
+  tem teste xfail estrito.
 
 Só biblioteca padrão (Python >= 3.9). Testes: python -m pytest ci/hygiene -q
 """
