@@ -1,8 +1,8 @@
 {
   "format": "suricatoos-fleet-examples/1",
   "contract": "docs/adr/0011-gestao-remota-da-frota.md",
-  "naming": "valid|invalid/<schema>/<case>.json holds ONE JSON value for schema/fleet-<schema>.schema.json (schema = command|enroll|heartbeat|state|event|result). A case named '<def>--<rest>' targets that schema's #/$defs/<def>; any other case targets the schema root; 'target' repeats that $ref. An invalid case must fail exactly as 'expect' says, and only for that reason: {keyword, path} = a JSON Schema error with that keyword at that instance path (JSON pointer, '' = root); {check, path} = json_syntax (not exactly one JSON value, e.g. data after it), duplicate_key (any level), integer_lexical (an integer written with a fraction or exponent, e.g. 70.0 or 7e1: JSON Schema alone accepts it, the ADR refuses it lexically), payload_sha256 / signature of the signed envelope at that path, or content_sha256 of the state snapshot.",
-  "values": "All values are fictitious: tenant 'acme', node 'node-lab-0001', RFC 5737 documentation IPs, exemplo.com.br, made-up ids. Command envelopes are COMPACT (the exact bytes a conforming hub sends) and REALLY signed with the PUBLIC golden test key of ADR-0011 (seed = SHA-256 of 'suricatoos-fleet-command-v1/golden-test-key'), each with its own command_id and nonce; valid/command/task-start.json is the ADR worked example verbatim. Never a production key. State documents are COMPACT too: content_sha256 is the SHA-256 of the raw 'data' span exactly as it is in the file (what a verifier hashes), and each valid/state/audit_entry--*.json is a line of the audit_tail chains, byte for byte.",
+  "naming": "valid|invalid/<schema>/<case>.json holds ONE JSON value for schema/fleet-<schema>.schema.json (schema = command|enroll|heartbeat|state|event|result). A case named '<def>--<rest>' targets that schema's #/$defs/<def>; any other case targets the schema root; 'target' repeats that $ref. An invalid case must fail exactly as 'expect' says, and only for that reason: {keyword, path} = a JSON Schema error with that keyword at that instance path (JSON pointer, '' = root); {check, path} = json_syntax (not exactly one JSON value, e.g. data after it), duplicate_key (any level), integer_lexical (an integer written with a fraction or exponent, e.g. 70.0 or 7e1: JSON Schema alone accepts it, the ADR refuses it lexically), payload_sha256 / signature of the signed envelope at that path, content_sha256 of the state snapshot, or audit_chain (the first line of an audit_tail stream whose seq, prev_sha256 or head_sha256 breaks the chain).",
+  "values": "All values are fictitious: tenant 'acme', node 'node-lab-0001', RFC 5737 documentation IPs, exemplo.com.br, made-up ids. Command envelopes are COMPACT (the exact bytes a conforming hub sends) and REALLY signed with the PUBLIC golden test key of ADR-0011 (seed = SHA-256 of 'suricatoos-fleet-command-v1/golden-test-key'), each with its own command_id and nonce; valid/command/task-start.json is the ADR worked example verbatim. Never a production key. State documents are COMPACT too: content_sha256 is the SHA-256 of the raw 'data' span exactly as it is in the file (what a verifier hashes), and each valid/state/audit_entry--*.json is a line of the audit_tail chains, byte for byte (the validator checks both the chains and the membership).",
   "cases": [
     {
       "file": "invalid/command/duplicate-key-in-payload.json",
@@ -875,6 +875,15 @@
       "expect": {
         "keyword": "additionalProperties",
         "path": "/data/items/0"
+      }
+    },
+    {
+      "file": "invalid/state/audit-tail-broken-chain.json",
+      "target": "fleet-state.schema.json",
+      "description": "a line rewritten on the node after the hub saw the chain (content_sha256 recomputed): the next line's prev_sha256 no longer matches — the hub's witness check",
+      "expect": {
+        "check": "audit_chain",
+        "path": "/data/exec/lines/4"
       }
     },
     {

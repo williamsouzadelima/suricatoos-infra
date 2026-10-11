@@ -18,7 +18,7 @@ being fetched over the network.
                                 after it) | duplicate_key | integer_lexical (an
                                 integer written with a fraction or exponent, which
                                 JSON Schema alone accepts) | payload_sha256 |
-                                signature | content_sha256
+                                signature | content_sha256 | audit_chain
 
 A case named '<def>--<rest>.json' targets fleet-<schema>.schema.json#/$defs/<def>;
 any other case targets the schema root.
@@ -26,7 +26,13 @@ any other case targets the schema root.
 Hashes cover the EXACT transmitted bytes (ADR-0011 "Codificação JSON"): the raw span
 of 'payload' inside a command envelope and of 'data' inside a state snapshot, as
 they are in the file -- never a re-serialization. One defect per case: an invalid
-case that fails on the schema must still carry correct hashes and signature.
+case that fails on the schema (or on integer_lexical / audit_chain) must still carry
+correct hashes and signature.
+
+An audit_tail snapshot must chain the way the hub witnesses it (audit_chain): every
+line an audit_entry of its stream, seq = first_seq + i, prev_sha256 = SHA-256 of the
+previous line (64 zeros before seq 1), last_seq and head_sha256 closing the run. Each
+valid/state/audit_entry--*.json must be one of those lines, byte for byte.
 
 Signed envelopes are checked with an independent Python implementation of the
 ADR-0011 canonical form and the PUBLIC golden test key (seed = SHA-256 of
@@ -206,6 +212,37 @@ def second_defect(target, text, inst):
     return None
 
 
+def chain_problem(doc, entry_errors):
+    """None if both streams of an audit_tail snapshot chain like the hub's witness rule checks them, else the
+    JSON pointer of the first break: each line is one audit_entry of its stream with seq = first_seq + i, its
+    prev_sha256 is the SHA-256 of the previous line's bytes (64 zeros before seq 1), last_seq closes the run and
+    head_sha256 is the SHA-256 of the last line."""
+    for stream in ("exec", "reject"):
+        tail = doc["data"][stream]
+        lines, prev = tail["lines"], None
+        for i, line in enumerate(lines):
+            ptr = f"/data/{stream}/lines/{i}"
+            try:
+                entry = parse(line)
+            except ValueError:
+                return ptr
+            if (not isinstance(entry, dict) or entry_errors(entry) or entry.get("stream") != stream
+                    or entry.get("seq") != tail["first_seq"] + i):
+                return ptr
+            if prev is not None:
+                expected_prev = hashlib.sha256(prev.encode("utf-8")).hexdigest()
+            else:
+                expected_prev = "0" * 64 if tail["first_seq"] == 1 else entry.get("prev_sha256")
+            if entry.get("prev_sha256") != expected_prev:
+                return ptr
+            prev = line
+        if lines and tail["last_seq"] != tail["first_seq"] + len(lines) - 1:
+            return f"/data/{stream}/last_seq"
+        if lines and tail["head_sha256"] != hashlib.sha256(lines[-1].encode("utf-8")).hexdigest():
+            return f"/data/{stream}/head_sha256"
+    return None
+
+
 def adr_anchor(task_start_text):
     """Re-derive the ADR-0011 worked example byte for byte; return a list of drifts."""
     try:
@@ -313,8 +350,12 @@ def main():
     alternatives = {n: [r["$ref"].rsplit("/", 1)[-1] for r in schemas[n].get("oneOf", [])] for n in SCHEMAS}
     seen = {n: set() for n in SCHEMAS}
     tally = {n: {"valid": [0, 0], "invalid": [0, 0]} for n in SCHEMAS}
-    signed_ok = snapshots_ok = 0
+    signed_ok = snapshots_ok = chains_ok = 0
     task_start_text = None
+    chain_lines, entry_texts = set(), {}  # lines of the valid audit_tail chains; valid audit_entry examples
+
+    def entry_errors(entry):
+        return any(True for _ in validator("fleet-state.schema.json#/$defs/audit_entry").iter_errors(entry))
 
     for rel in sorted(set(cases) & on_disk):
         if not CASE_RE.match(rel):
@@ -357,6 +398,11 @@ def main():
                 if problem:
                     failure = {"check": problem, "path": ptr, "detail": f"{problem} mismatch at '{ptr}'"}
                     break
+        audit_tail = failure is None and not errors and target == "fleet-state.schema.json" and inst["kind"] == "audit_tail"
+        if audit_tail:
+            broken = chain_problem(inst, entry_errors)
+            if broken:
+                failure = {"check": "audit_chain", "path": broken, "detail": f"audit chain broken at '{broken}'"}
         if kind == "valid":
             if failure:
                 surprises.append(f"{rel}: expected VALID, got {failure['detail']}")
@@ -366,6 +412,11 @@ def main():
                 tally[schema]["valid"][0] += 1
                 signed_ok += len(envelopes(target, text))
                 snapshots_ok += target == "fleet-state.schema.json"
+                if audit_tail:
+                    chains_ok += 1
+                    chain_lines.update(inst["data"]["exec"]["lines"] + inst["data"]["reject"]["lines"])
+                if target.endswith("#/$defs/audit_entry"):
+                    entry_texts[rel] = text.strip()
                 root = "#" not in target
                 if schema == "command" and root:
                     seen[schema].add(inst["type"])
@@ -384,21 +435,26 @@ def main():
             continue
         expect = case.get("expect") or {}
         if failure:
-            if (expect.get("check"), expect.get("path")) == (failure["check"], failure["path"]):
-                tally[schema]["invalid"][0] += 1
-            else:
-                surprises.append(f"{rel}: fails with {failure['detail']}, but expect is {expect}")
+            matched = (expect.get("check"), expect.get("path")) == (failure["check"], failure["path"])
+            # a check that runs before the raw-byte hashes leaves them unchecked: check them now (one defect per case)
+            extra = second_defect(target, text, inst) if failure["check"] in ("integer_lexical", "audit_chain") else None
         elif not errors:
-            surprises.append(f"{rel}: expected INVALID, but it validates (schema and raw-byte hashes)")
-        elif (expect.get("keyword"), expect.get("path")) in set(flat_errors(errors)):
-            extra = second_defect(target, text, inst)
-            if extra:
-                surprises.append(f"{rel}: fails as expected, but carries a second defect ({extra}): one defect per case")
-            else:
-                tally[schema]["invalid"][0] += 1
+            surprises.append(f"{rel}: expected INVALID, but it validates (schema, raw-byte hashes and audit chains)")
+            continue
         else:
-            got = sorted(set(flat_errors(errors)))[:5]
+            matched = (expect.get("keyword"), expect.get("path")) in set(flat_errors(errors))
+            extra = second_defect(target, text, inst)
+        if not matched:
+            got = failure["detail"] if failure else sorted(set(flat_errors(errors)))[:5]
             surprises.append(f"{rel}: fails, but not with {expect or 'an expect entry'}; got {got}")
+        elif extra:
+            surprises.append(f"{rel}: fails as expected, but carries a second defect ({extra}): one defect per case")
+        else:
+            tally[schema]["invalid"][0] += 1
+
+    for rel, text in sorted(entry_texts.items()):
+        if text not in chain_lines:
+            surprises.append(f"{rel}: not a line of any valid audit_tail chain (the examples are chain lines, byte for byte)")
 
     surprises.extend(adr_anchor(task_start_text))
 
@@ -431,6 +487,8 @@ def main():
     print("coverage: " + "; ".join(coverage))
     print(f"signed envelopes verified (payload sha256 + Ed25519, golden test key): {signed_ok}")
     print(f"state snapshots verified (content_sha256 over the raw data span): {snapshots_ok}")
+    print(f"audit_tail chains verified (seq, prev_sha256, head_sha256): {chains_ok}; "
+          f"audit_entry examples found in them: {len(entry_texts)}")
     print(f"jsonschema {version('jsonschema')}, referencing {version('referencing')}, "
           f"cryptography {version('cryptography')}, offline registry")
     if surprises:
@@ -438,8 +496,8 @@ def main():
         for s in surprises:
             print("  - " + s)
         return 1
-    print("OK: valid examples validate (signed envelopes and state hashes verify), invalid ones fail for the"
-          " expected reason only, and the ADR-0011 worked example is reproduced byte for byte")
+    print("OK: valid examples validate (signed envelopes, state hashes and audit chains verify), invalid ones fail"
+          " for the expected reason only, and the ADR-0011 worked example is reproduced byte for byte")
     return 0
 
 

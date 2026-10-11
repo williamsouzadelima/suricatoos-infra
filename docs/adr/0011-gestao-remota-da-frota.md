@@ -258,9 +258,10 @@ fonte da verdade dos corpos; este capítulo fixa a semântica. Os **primitivos c
 `node_id`, `tenant`, `utc_time`, `sha256_hex`, `ip_or_cidr`, `alive_test`, `command_type`…) vivem em
 `fleet-command.schema.json#/$defs` e são referenciados pelos demais. Os exemplos válidos e inválidos de
 `schema/examples/fleet/` (índice em `index.json`) são o teste de contrato executável: o
-`schema/examples/validate_fleet_examples.py` roda no CI, confere hash e assinatura dos envelopes e o
-`content_sha256` dos retratos de estado sobre os bytes crus (os exemplos são compactos, como no fio) e reproduz o
-exemplo trabalhado deste ADR byte a byte.
+`schema/examples/validate_fleet_examples.py` roda no CI, confere hash e assinatura dos envelopes, o
+`content_sha256` dos retratos de estado sobre os bytes crus (os exemplos são compactos, como no fio) e as cadeias
+do `audit_tail` (a mesma conferência que o hub faz como testemunha), e reproduz o exemplo trabalhado deste ADR
+byte a byte.
 
 ### Versões e evolução
 
