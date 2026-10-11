@@ -1,0 +1,90 @@
+name: report-formats-ci
+
+# Compila o "Suricatoos Premium PDF" na imagem de PRODUCAO do gvmd em todo PR
+# que toca report-formats/. O report-formats-publish so' roda no push da main e
+# so' confere os feed XMLs; nunca rodou xsltproc/pdflatex, entao um PR que
+# quebrava o LaTeX so' aparecia em producao.
+#
+# Jobs:
+#   feed-sync  os 3 feed XMLs versionados batem com o bundle (build-feed-xml.py);
+#   compile    por idioma: `sh ./generate` ponta a ponta + compilacao de
+#              diagnostico (sample e tortura) com os portoes de log/fontes/links
+#              (report-formats/ci/gates.sh), o controle negativo (o generate tem
+#              de falhar alto) e os artefatos (PDFs, .log, .tex, PNG das 3
+#              primeiras paginas).
+on:
+  pull_request:
+    paths:
+      - 'report-formats/**'
+      - '.github/workflows/report-formats-ci.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'report-formats/**'
+      - '.github/workflows/report-formats-ci.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: report-formats-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GVMD_IMAGE: registry.community.greenbone.net/community/gvmd:stable
+
+jobs:
+  feed-sync:
+    name: feed XML em sincronia com o bundle
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Regenerar os feed XMLs a partir do bundle e comparar
+        run: |
+          set -eux
+          python3 report-formats/build-feed-xml.py
+          # Falha se o XML versionado divergir do bundle: regenere e commite.
+          git diff --exit-code report-formats/pdf-suricatoos-*.xml
+
+  compile:
+    name: compila no gvmd:stable (${{ matrix.lang }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        lang: [en, pt_BR, es]
+    env:
+      REPORT_LANG: ${{ matrix.lang }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: poppler-utils no runner (pdffonts, pdfinfo, pdftoppm)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends poppler-utils
+
+      - name: Compilar (sample + tortura) e aplicar os portoes
+        run: report-formats/ci/compile.sh "$REPORT_LANG" "$RUNNER_TEMP/artefatos"
+
+      - name: Controle negativo (o generate tem de falhar alto)
+        if: ${{ !cancelled() }}
+        run: report-formats/ci/negative-control.sh "$REPORT_LANG" "$RUNNER_TEMP/artefatos"
+
+      - name: Publicar PDFs, logs e previews
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: report-formats-${{ matrix.lang }}
+          path: ${{ runner.temp }}/artefatos/
+          if-no-files-found: warn
+          retention-days: 14
