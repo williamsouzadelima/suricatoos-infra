@@ -774,14 +774,32 @@ Regras transversais:
   (exceto `comment`) para reverter à mão.
 - **Rastreabilidade na GSA.** O nó prefixa o `comment` de objeto criado/alterado com `fleet:<command_id> `.
 - **Target sem nada além de hosts literais:** sem credenciais, sem `asset_hosts_filter`, sem reverse lookup;
-  exatamente um entre `port_list_id` e `port_range` (`^[TU]:[0-9,-]+$`, a gramática do `scan_bridge.py`).
-- **Alive test.** Padrão quando omitido: `ICMP, TCP-SYN Service & ARP Ping`. O enum `AliveTest` do python-gvm
-  27.x (verificado no 27.10.0) **não** tem essa combinação — o `fleet_ops.py` a envia como valor literal do
-  elemento `alive_tests` (montado pelo builder XML do python-gvm, nunca string formatada). **Fallback
-  documentado:** se o gvmd recusar o valor, o nó refaz com `ICMP, TCP-ACK Service & ARP Ping` (a combinação
-  mais próxima suportada) e reporta o valor aplicado em `alive_test_effective`; **nunca** cai em silêncio para
-  `Consider Alive` (varre host morto: lento e barulhento) nem para `Scan Config Default`. Se o gvmd 26.x aceita
-  o padrão é confirmado na F2.3, em LAB.
+  no `target.create`, exatamente um entre `port_list_id` e `port_range` (`^[TU]:[0-9,-]+$`, a gramática do
+  `scan_bridge.py`); no `target.modify`, só `port_list_id` muda as portas — o `modify_target` do gvmd não tem
+  `port_range`.
+- **Alive test (decisão D9 do plano).** O valor de `alive_test` no contrato é o **nome de um conjunto** de
+  métodos do gvmd, e o `fleet_ops.py` nunca manda esse nome ao gvmd. O gvmd 26 recusa o literal combinado
+  (`ICMP, TCP-SYN Service & ARP Ping`) num valor único de `alive_tests` e aceita a combinação como **vários
+  sub-elementos** `<alive_test>` de `<alive_tests>`. O `fleet_ops.py` monta um sub-elemento por método com o
+  `XmlCommand` do python-gvm (nunca string formatada):
+
+  | `alive_test` (contrato) | sub-elementos `<alive_test>` enviados |
+  |---|---|
+  | `ICMP, TCP-SYN Service & ARP Ping` (padrão quando omitido) | `ICMP Ping`, `TCP-SYN Service Ping`, `ARP Ping` |
+  | `ICMP, TCP-ACK Service & ARP Ping` (fallback) | `ICMP Ping`, `TCP-ACK Service Ping`, `ARP Ping` |
+  | `ICMP & TCP-ACK Service Ping` | `ICMP Ping`, `TCP-ACK Service Ping` |
+  | `ICMP & ARP Ping` | `ICMP Ping`, `ARP Ping` |
+  | `TCP-ACK Service & ARP Ping` | `TCP-ACK Service Ping`, `ARP Ping` |
+  | `ICMP Ping`, `TCP-ACK Service Ping`, `TCP-SYN Service Ping`, `ARP Ping`, `Consider Alive`, `Scan Config Default` | um só, o próprio valor |
+
+  - **Fallback documentado:** só se o gvmd recusar o padrão, o nó refaz com o conjunto
+    `ICMP, TCP-ACK Service & ARP Ping`, também em sub-elementos.
+  - `alive_test_effective` reporta, pelo nome do contrato, o conjunto de fato aplicado.
+  - O nó **nunca** cai em silêncio para `Consider Alive` (varre host morto: lento e barulhento) nem para
+    `Scan Config Default`.
+  - Na leitura (estado `targets`, `before.alive_test`), o nó reporta o nome do contrato quando o conjunto lido
+    casa um da tabela; senão, os métodos lidos unidos por `, `.
+  - Que o gvmd 26.x aceita o padrão em sub-elementos continua item de confirmação em LAB (F2.3).
 - **`report.export`.** `format`, `lang` e `variant` são sempre explícitos. `variant` é a **edição** do
   relatório (decisão D10 do plano): `technical` (o Premium PDF de hoje), `client` (sem falsos positivos; Log só
   como contagem; QoD baixo como "a validar") e `executive` (sumário). Cada edição × idioma é um objeto de report
@@ -970,8 +988,9 @@ sensibilidade por dado: [docs/data-inventory.md — Canal de gestão da frota (A
   `GET /api/v1/remediation/jobs`); superfície do operador local (status, política, auditoria) atrás do gate de
   sessão gsad do nginx — sem porta nova. DARK.
 - **F2.3 — `gmp-bridge/fleet_ops.py`.** Um subcomando por operação GVM do catálogo + leituras de estado;
-  python-gvm; filtro explícito; checagem de dono; alive test com o fallback documentado (confirmar em LAB se o
-  gvmd 26.x aceita o padrão); testes sem gvmd, no estilo de `test_scan_bridge.py`.
+  python-gvm; filtro explícito; checagem de dono; alive test em sub-elementos `<alive_test>`, com o fallback
+  documentado (confirmar em LAB que o gvmd 26.x aceita o padrão assim); `target.modify` muda portas só por
+  `port_list_id`; testes sem gvmd, no estilo de `test_scan_bridge.py`.
 - **F2.4 — política, escopo, anti-replay e auditoria.** `policy.json` + padrão; portão de escopo extraído de
   `sensor/internal/scope` para pacote compartilhado (sem cópia divergente; `scope_test.go` e
   `degenerate_test.go` migram junto) e com a regra de CIDR que **contém** IP próprio ou do hub (o `scope.go`

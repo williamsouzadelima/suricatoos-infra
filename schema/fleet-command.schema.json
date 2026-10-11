@@ -96,7 +96,7 @@
     "ip_or_cidr": { "type": "string", "minLength": 2, "maxLength": 43, "pattern": "^[0-9A-Fa-f:.]+(/[0-9]{1,3})?$", "allOf": [ { "$ref": "#/$defs/no_control" } ], "description": "IPv4/IPv6 or CIDR LITERAL — never a hostname (no scan-time DNS rebinding). The node re-checks it with its local scope gate (a CIDR containing a self/hub IP is denied)" },
     "port_range": { "type": "string", "minLength": 3, "maxLength": 1024, "pattern": "^[TU]:[0-9,-]+$", "allOf": [ { "$ref": "#/$defs/no_control" } ], "description": "GVM port_range, same grammar scan_bridge.py accepts, e.g. T:1-65535" },
     "alive_test": {
-      "description": "GVM alive test. Default when omitted: 'ICMP, TCP-SYN Service & ARP Ping'. Fallback (ADR-0011): if the local gvmd refuses that value, the node uses 'ICMP, TCP-ACK Service & ARP Ping' and reports the value actually applied as alive_test_effective; it never silently falls back to 'Consider Alive' or 'Scan Config Default'.",
+      "description": "Contract NAME of a set of gvmd alive-test methods (ADR-0011 table); fleet_ops never sends this name to gvmd. gvmd 26 refuses a combined literal as one alive_tests value, so the node sends each method of the set as one <alive_test> sub-element of <alive_tests>, built with python-gvm's XmlCommand: 'ICMP, TCP-SYN Service & ARP Ping' = ICMP Ping + TCP-SYN Service Ping + ARP Ping (the default when omitted); 'ICMP, TCP-ACK Service & ARP Ping' = ICMP Ping + TCP-ACK Service Ping + ARP Ping (the fallback, ONLY if gvmd refuses the default); 'ICMP & TCP-ACK Service Ping', 'ICMP & ARP Ping' and 'TCP-ACK Service & ARP Ping' = their two methods; any other value = one sub-element, itself. alive_test_effective reports the set actually applied, by name. Never a silent fall back to 'Consider Alive' or 'Scan Config Default'. That gvmd 26.x accepts the default this way is a LAB confirmation item (F2.3).",
       "enum": [
         "ICMP, TCP-SYN Service & ARP Ping",
         "ICMP, TCP-ACK Service & ARP Ping",
@@ -204,7 +204,7 @@
       "oneOf": [ { "required": ["port_list_id"] }, { "required": ["port_range"] } ]
     },
     "payload_target_modify": {
-      "description": "The RESULTING hosts pass the same scope gate as target.create on every target.modify: the new ones, or the current ones read from gvmd when hosts is absent. So shrinking exclude_hosts only widens the target inside the checked scope (exclude_hosts: literals only, never a rescue for a CIDR that contains a self/hub IP). At most one of port_list_id | port_range.",
+      "description": "The RESULTING hosts pass the same scope gate as target.create on every target.modify: the new ones, or the current ones read from gvmd when hosts is absent. So shrinking exclude_hosts only widens the target inside the checked scope (exclude_hosts: literals only, never a rescue for a CIDR that contains a self/hub IP). Ports change ONLY through port_list_id: gvmd's modify_target has no port_range.",
       "type": "object",
       "required": ["target_id"],
       "minProperties": 2,
@@ -216,10 +216,8 @@
         "hosts": { "type": "array", "minItems": 1, "maxItems": 256, "uniqueItems": true, "items": { "$ref": "#/$defs/ip_or_cidr" } },
         "exclude_hosts": { "type": "array", "maxItems": 256, "uniqueItems": true, "items": { "$ref": "#/$defs/ip_or_cidr" } },
         "port_list_id": { "$ref": "#/$defs/uuid" },
-        "port_range": { "$ref": "#/$defs/port_range" },
         "alive_test": { "$ref": "#/$defs/alive_test" }
-      },
-      "not": { "required": ["port_list_id", "port_range"] }
+      }
     },
     "payload_target_ref": {
       "description": "target.delete (trash, never ultimate)",

@@ -419,6 +419,24 @@
       }
     },
     {
+      "file": "invalid/command/target-modify-port-range.json",
+      "target": "fleet-command.schema.json",
+      "description": "gvmd's modify_target has no port_range: ports change only through port_list_id",
+      "expect": {
+        "keyword": "additionalProperties",
+        "path": "/payload"
+      }
+    },
+    {
+      "file": "invalid/command/target-modify-unknown-alive-test.json",
+      "target": "fleet-command.schema.json",
+      "description": "alive_test is one of the contract names of a method set (ADR table), never a free combination",
+      "expect": {
+        "keyword": "enum",
+        "path": "/payload/alive_test"
+      }
+    },
+    {
       "file": "invalid/command/task-modify-nothing-to-change.json",
       "target": "fleet-command.schema.json",
       "description": "a modify must change something",
@@ -905,6 +923,15 @@
       }
     },
     {
+      "file": "invalid/result/target-modify-port-range-changed.json",
+      "target": "fleet-result.schema.json",
+      "description": "a target.modify never changes port_range (only port_list_id)",
+      "expect": {
+        "keyword": "enum",
+        "path": "/output/changed/0"
+      }
+    },
+    {
       "file": "invalid/result/task-start-flagged-secret.json",
       "target": "fleet-result.schema.json",
       "description": "only enroll_token.create may be secret",
@@ -1309,7 +1336,7 @@
     {
       "file": "valid/command/target-create.json",
       "target": "fleet-command.schema.json",
-      "description": "target.create with RFC 5737 literals and a port_range"
+      "description": "target.create with RFC 5737 literals and a port_range (alive_test omitted: the default set, sent as <alive_test> sub-elements)"
     },
     {
       "file": "valid/command/target-delete.json",
@@ -1317,9 +1344,14 @@
       "description": "target.delete (trash)"
     },
     {
+      "file": "valid/command/target-modify-port-list.json",
+      "target": "fleet-command.schema.json",
+      "description": "target.modify changes ports only through port_list_id (gvmd's modify_target has no port_range)"
+    },
+    {
       "file": "valid/command/target-modify.json",
       "target": "fleet-command.schema.json",
-      "description": "target.modify of hosts + alive test (the documented fallback value)"
+      "description": "target.modify of hosts + alive test (by contract name: the fallback set ICMP + TCP-ACK Service + ARP, sent as sub-elements)"
     },
     {
       "file": "valid/command/task-clone.json",

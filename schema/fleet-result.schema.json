@@ -220,7 +220,7 @@
       "additionalProperties": false,
       "properties": {
         "target_id": { "$ref": "fleet-command.schema.json#/$defs/uuid" },
-        "alive_test_effective": { "$ref": "fleet-command.schema.json#/$defs/alive_test", "description": "the value gvmd accepted (differs from the requested/default one when the documented fallback was used)" }
+        "alive_test_effective": { "$ref": "fleet-command.schema.json#/$defs/alive_test", "description": "the set gvmd accepted, by contract name (the fallback set when gvmd refused the requested/default one)" }
       }
     },
     "output_target_modify": {
@@ -230,7 +230,7 @@
       "additionalProperties": false,
       "properties": {
         "target_id": { "$ref": "fleet-command.schema.json#/$defs/uuid" },
-        "changed": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "enum": ["name", "comment", "hosts", "exclude_hosts", "port_list_id", "port_range", "alive_test"] } },
+        "changed": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "enum": ["name", "comment", "hosts", "exclude_hosts", "port_list_id", "alive_test"] } },
         "before": {
           "type": "object",
           "additionalProperties": false,
@@ -240,8 +240,7 @@
             "hosts_non_literal_entries": { "type": "integer", "minimum": 0 },
             "exclude_hosts": { "type": "array", "maxItems": 256, "items": { "$ref": "fleet-command.schema.json#/$defs/ip_or_cidr" } },
             "port_list_id": { "$ref": "fleet-command.schema.json#/$defs/uuid" },
-            "port_range": { "$ref": "fleet-command.schema.json#/$defs/port_range" },
-            "alive_test": { "type": "string", "maxLength": 64, "allOf": [ { "$ref": "fleet-command.schema.json#/$defs/no_control" } ] }
+            "alive_test": { "type": "string", "maxLength": 64, "allOf": [ { "$ref": "fleet-command.schema.json#/$defs/no_control" } ], "description": "the set read from gvmd: its contract name when it matches one, else the methods read joined with ', '" }
           }
         },
         "alive_test_effective": { "$ref": "fleet-command.schema.json#/$defs/alive_test" }

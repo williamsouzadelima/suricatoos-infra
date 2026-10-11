@@ -191,7 +191,7 @@
               "non_literal_entries": { "type": "integer", "minimum": 0, "description": "hostname entries: counted, never sent" },
               "exclude_entries": { "type": "integer", "minimum": 0 },
               "port_list_id": { "$ref": "fleet-command.schema.json#/$defs/uuid" },
-              "alive_test": { "type": "string", "maxLength": 64, "allOf": [ { "$ref": "fleet-command.schema.json#/$defs/no_control" } ], "description": "verbatim from gvmd (a locally created target may use any value)" },
+              "alive_test": { "type": "string", "maxLength": 64, "allOf": [ { "$ref": "fleet-command.schema.json#/$defs/no_control" } ], "description": "the set read from gvmd: its contract name (fleet-command.schema.json#/$defs/alive_test) when it matches one, else the methods read joined with ', ' (a locally created target may use any)" },
               "in_use": { "type": "boolean" }
             }
           }
