@@ -3,6 +3,7 @@ package aiproviders
 import (
 	"bytes"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -15,10 +16,10 @@ import (
 	"time"
 )
 
-// Sentinel errors the service maps to HTTP status codes.
+// Sentinel errors the service maps to HTTP status codes (ErrFreeOnly: free.go).
 var (
 	ErrNotFound   = errors.New("provedor não encontrado")
-	ErrGovernance = errors.New("provedor fora da régua (exige UE + ZDR para habilitar)")
+	ErrGovernance = errors.New("provedor fora da régua: habilitar exige UE + ZDR, ou modelo gratuito com ciência da política de dados (data_policy_ack)")
 	ErrValidation = errors.New("configuração de provedor inválida")
 )
 
@@ -28,20 +29,34 @@ type Registry struct {
 	mu        sync.Mutex
 	path      string
 	kek       []byte
+	freeOnly  bool // AI_FREE_MODELS_ONLY: only free models of openrouter/unorouter
 	providers map[string]*Provider
 	now       func() time.Time
 	newID     func() string
 }
 
+// Option configures a Registry.
+type Option func(*Registry)
+
+// WithFreeModelsOnly turns the free-models-only rule on or off (free.go). The
+// control-plane turns it on by default (AI_FREE_MODELS_ONLY); a Registry built
+// without this option keeps the rule off.
+func WithFreeModelsOnly(on bool) Option {
+	return func(r *Registry) { r.freeOnly = on }
+}
+
 // NewRegistry loads the store from path (missing file = fresh). kek is the host
 // key-encryption-key (see LoadOrCreateKEK).
-func NewRegistry(path string, kek []byte) (*Registry, error) {
+func NewRegistry(path string, kek []byte, opts ...Option) (*Registry, error) {
 	r := &Registry{
 		path:      path,
 		kek:       kek,
 		providers: map[string]*Provider{},
 		now:       time.Now,
 		newID:     randID,
+	}
+	for _, o := range opts {
+		o(r)
 	}
 	if path == "" {
 		return r, nil
@@ -65,32 +80,38 @@ func NewRegistry(path string, kek []byte) (*Registry, error) {
 
 // UpsertInput is the operator-supplied config. APIKey == "" on an update keeps the
 // stored key (metadata-only change); on a create it means "no key yet".
+// DataPolicyAck is the operator's acknowledgment of a free model's data policy;
+// who/when are recorded by the server (Upsert's by + clock), never supplied here.
 type UpsertInput struct {
-	ID       string
-	Name     string
-	Kind     string
-	BaseURL  string
-	Model    string
-	EURegion bool
-	ZDR      bool
-	Enabled  bool
-	APIKey   string
+	ID            string
+	Name          string
+	Kind          string
+	BaseURL       string
+	Model         string
+	EURegion      bool
+	ZDR           bool
+	Enabled       bool
+	DataPolicyAck bool
+	APIKey        string
 }
 
 // Upsert creates or updates a provider and persists it. The API key is encrypted
-// before storage and never returned. A provider may be ENABLED only if it meets the
-// governance bar (EU region + ZDR).
+// before storage and never returned. With the free-models-only rule on, only the
+// openrouter/unorouter kinds and only free models are accepted (ErrFreeOnly). A
+// provider may be ENABLED only if it meets the governance bar: (EU region && ZDR)
+// || (free model && data-policy acknowledgment).
 func (r *Registry) Upsert(in UpsertInput, by string) (PublicProvider, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	in.Name = strings.TrimSpace(in.Name)
 	in.BaseURL = strings.TrimSpace(in.BaseURL)
+	in.Model = strings.TrimSpace(in.Model)
 	if in.Name == "" {
 		return PublicProvider{}, fmt.Errorf("%w: name obrigatório", ErrValidation)
 	}
 	if !validKind(in.Kind) {
-		return PublicProvider{}, fmt.Errorf("%w: kind %q (esperado openrouter|openai_compatible)", ErrValidation, in.Kind)
+		return PublicProvider{}, fmt.Errorf("%w: kind %q (esperado openrouter|unorouter|openai_compatible)", ErrValidation, in.Kind)
 	}
 	if in.BaseURL == "" {
 		in.BaseURL = defaultBaseURL(in.Kind) // preset for named routers; "" for openai_compatible
@@ -98,10 +119,26 @@ func (r *Registry) Upsert(in UpsertInput, by string) (PublicProvider, error) {
 	if err := validateBaseURL(in.BaseURL); err != nil {
 		return PublicProvider{}, fmt.Errorf("%w: %v", ErrValidation, err)
 	}
-	// Governance (decision #3): enabling a provider that is not EU-region AND ZDR
-	// would route attested data to a processor outside the privacy contract. Allow
-	// it to be STORED (disabled) but never ENABLED.
-	if in.Enabled && (!in.EURegion || !in.ZDR) {
+	free := IsFreeModel(in.Kind, in.Model)
+	if r.freeOnly {
+		// Zero-cost contract: neither a generic gateway nor a paid model may even be
+		// stored while the rule is on (a stored one could be enabled later).
+		if !freeOnlyKind(in.Kind) {
+			return PublicProvider{}, fmt.Errorf("%w: tipo %q não permitido — use openrouter ou unorouter", ErrFreeOnly, in.Kind)
+		}
+		if !free {
+			if in.Model == "" {
+				return PublicProvider{}, fmt.Errorf("%w: informe um modelo gratuito (%s)", ErrFreeOnly, FreeRule)
+			}
+			return PublicProvider{}, fmt.Errorf("%w: modelo %q não é gratuito (%s)", ErrFreeOnly, in.Model, FreeRule)
+		}
+	}
+	// Governance (decision #3): enabling a provider outside the privacy contract
+	// would route attested data to a processor that may retain it. Allow it to be
+	// STORED (disabled) but never ENABLED unless it is EU-region AND ZDR, or it is a
+	// FREE model whose data policy (may log/train on prompts) the operator has
+	// explicitly acknowledged. The planner only ever sends pseudonymized data.
+	if in.Enabled && !((in.EURegion && in.ZDR) || (free && in.DataPolicyAck)) {
 		return PublicProvider{}, ErrGovernance
 	}
 
@@ -115,9 +152,18 @@ func (r *Registry) Upsert(in UpsertInput, by string) (PublicProvider, error) {
 		p = &Provider{ID: r.newID()}
 		r.providers[p.ID] = p
 	}
+	now := r.now()
 	p.Name, p.Kind, p.BaseURL, p.Model = in.Name, in.Kind, in.BaseURL, in.Model
 	p.EURegion, p.ZDR, p.Enabled = in.EURegion, in.ZDR, in.Enabled
-	p.UpdatedBy, p.UpdatedAt = by, r.now()
+	p.UpdatedBy, p.UpdatedAt = by, now
+	switch {
+	case !in.DataPolicyAck:
+		p.DataPolicyAck, p.DataPolicyAckBy, p.DataPolicyAckAt = false, "", time.Time{}
+	case !p.DataPolicyAck:
+		// A new acknowledgment: record who gave it and when. While it stays given,
+		// later edits do not rewrite who acknowledged.
+		p.DataPolicyAck, p.DataPolicyAckBy, p.DataPolicyAckAt = true, by, now
+	}
 	if in.APIKey != "" {
 		ct, err := encrypt(r.kek, []byte(in.APIKey))
 		if err != nil {
@@ -193,6 +239,47 @@ func (r *Registry) DecryptedKey(id string) (string, PublicProvider, error) {
 		return "", p.Public(), fmt.Errorf("decifrar chave: %w", err)
 	}
 	return string(key), p.Public(), nil
+}
+
+// FreeModelsOnly reports whether the free-models-only rule is on.
+func (r *Registry) FreeModelsOnly() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.freeOnly
+}
+
+// catalogSource is what the free-models listing needs to query a provider's catalog.
+type catalogSource struct {
+	kind    string
+	baseURL string
+	key     string // plaintext; "" when none is stored. NEVER returned or logged.
+	sig     string // changes whenever kind, endpoint or key changes (cache validity)
+}
+
+// modelsSource returns the catalog endpoint and the decrypted key of provider id.
+// Unlike DecryptedKey it does NOT require the provider to be enabled: the operator
+// lists the models to PICK one before enabling. SERVER-SIDE ONLY — the key goes
+// only to the provider's own <base_url>/models, never into a response.
+func (r *Registry) modelsSource(id string) (catalogSource, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	p, ok := r.providers[id]
+	if !ok {
+		return catalogSource{}, ErrNotFound
+	}
+	src := catalogSource{kind: p.Kind, baseURL: p.BaseURL}
+	keySig := "sem-chave"
+	if len(p.KeyCipher) > 0 {
+		key, err := decrypt(r.kek, p.KeyCipher)
+		if err != nil {
+			return catalogSource{}, fmt.Errorf("decifrar chave: %w", err)
+		}
+		src.key = string(key)
+		sum := sha256.Sum256(p.KeyCipher) // fingerprint of the CIPHERTEXT (random nonce), not of the key
+		keySig = hex.EncodeToString(sum[:8])
+	}
+	src.sig = p.Kind + "\x00" + p.BaseURL + "\x00" + keySig
+	return src, nil
 }
 
 func (r *Registry) saveLocked() error {

@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"sync"
+	"time"
 
 	"github.com/williamsouzadelima/suricatoos-infra/control-plane/sessiongate"
 )
@@ -12,24 +14,38 @@ import (
 // Service exposes the admin API for managing AI providers. Two gates reach the
 // SAME logic:
 //
-//   - the /api/v1/ai/providers routes are gated by the shared admin bearer
-//     (ADMIN_SECRET) — for direct/machine admin;
-//   - the /ai/providers session routes carry NO bearer and are safe ONLY behind
-//     nginx's STRONG gsad-session gate (auth_request → gsad, token-validated, like
-//     /feed-sync) — for the logged-in operator in the GSA UI. They must NEVER be
-//     exposed through a cookie-only gate (that gate is forgeable). As defense in
-//     depth they also refuse (403) any request without the sessiongate marker, which
-//     nginx sets only on session-gated locations.
+//   - the /api/v1/ai/providers and /api/v1/ai/policy routes are gated by the shared
+//     admin bearer (ADMIN_SECRET) — for direct/machine admin;
+//   - the /ai/providers and /ai/policy session routes carry NO bearer and are safe
+//     ONLY behind nginx's STRONG gsad-session gate (auth_request → gsad,
+//     token-validated, like /feed-sync) — for the logged-in operator in the GSA UI.
+//     They must NEVER be exposed through a cookie-only gate (that gate is
+//     forgeable). As defense in depth they also refuse (403) any request without
+//     the sessiongate marker, which nginx sets only on session-gated locations.
 //
 // The API key is WRITE-ONLY on every route: accepted on upsert, never returned.
 type Service struct {
 	reg   *Registry
 	admin string
+
+	// Free-models listing (models.go): outbound client, body cap, clock, cache.
+	modelsHC  *http.Client
+	modelsMax int64
+	now       func() time.Time
+	cacheMu   sync.Mutex
+	cache     map[string]modelsCacheEntry
 }
 
 // NewService builds the service over reg; adminSecret gates the bearer routes.
 func NewService(reg *Registry, adminSecret string) *Service {
-	return &Service{reg: reg, admin: adminSecret}
+	return &Service{
+		reg:       reg,
+		admin:     adminSecret,
+		modelsHC:  newModelsClient(nil),
+		modelsMax: modelsMaxBody,
+		now:       time.Now,
+		cache:     map[string]modelsCacheEntry{},
+	}
 }
 
 // Register wires all routes onto mux. Mounted DARK (behind AI_CONFIG_ENABLED) by
@@ -40,12 +56,16 @@ func (s *Service) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/ai/providers", s.upsertHandler())
 	mux.HandleFunc("GET /api/v1/ai/providers", s.listHandler())
 	mux.HandleFunc("DELETE /api/v1/ai/providers/{id}", s.deleteHandler())
+	mux.HandleFunc("GET /api/v1/ai/providers/{id}/models", s.modelsHandler())
+	mux.HandleFunc("GET /api/v1/ai/policy", s.policyHandler())
 	// Session-gated by nginx (GSA UI). No bearer here — the nginx auth_request→gsad
 	// in front is the security boundary; the control-plane is internal-only. The
 	// handlers also require the sessiongate marker nginx sets only on those locations.
 	mux.HandleFunc("GET /ai/providers", s.SessionListHandler())
 	mux.HandleFunc("POST /ai/providers", s.SessionUpsertHandler())
 	mux.HandleFunc("DELETE /ai/providers/{id}", s.SessionDeleteHandler())
+	mux.HandleFunc("GET /ai/providers/{id}/models", s.SessionModelsHandler())
+	mux.HandleFunc("GET /ai/policy", s.SessionPolicyHandler())
 	// Private static admin page (inert HTML; the API is the security boundary).
 	mux.HandleFunc("GET /admin/ai-providers", s.AdminPageHandler())
 }
@@ -69,16 +89,19 @@ func operator(r *http.Request) string {
 }
 
 // upsertRequest is the accepted body. api_key is write-only (never echoed back).
+// data_policy_ack is the operator's acknowledgment; who/when acknowledged are set
+// by the server (any data_policy_ack_by/_at in the body is ignored).
 type upsertRequest struct {
-	ID       string `json:"id,omitempty"`
-	Name     string `json:"name"`
-	Kind     string `json:"kind"`
-	BaseURL  string `json:"base_url"`
-	Model    string `json:"model,omitempty"`
-	EURegion bool   `json:"eu_region"`
-	ZDR      bool   `json:"zdr"`
-	Enabled  bool   `json:"enabled"`
-	APIKey   string `json:"api_key,omitempty"`
+	ID            string `json:"id,omitempty"`
+	Name          string `json:"name"`
+	Kind          string `json:"kind"`
+	BaseURL       string `json:"base_url"`
+	Model         string `json:"model,omitempty"`
+	EURegion      bool   `json:"eu_region"`
+	ZDR           bool   `json:"zdr"`
+	Enabled       bool   `json:"enabled"`
+	DataPolicyAck bool   `json:"data_policy_ack"`
+	APIKey        string `json:"api_key,omitempty"`
 }
 
 // --- bearer-gated handlers ---
@@ -110,6 +133,24 @@ func (s *Service) deleteHandler() http.HandlerFunc {
 	}
 }
 
+func (s *Service) modelsHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !s.adminOK(w, r) {
+			return
+		}
+		s.doModels(w, r)
+	}
+}
+
+func (s *Service) policyHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !s.adminOK(w, r) {
+			return
+		}
+		s.doPolicy(w, r)
+	}
+}
+
 // --- session-gated handlers (nginx gsad gate is the boundary; no bearer) ---
 //
 // Each one is wrapped in sessiongate.Require (defense in depth): a request that does
@@ -131,6 +172,17 @@ func (s *Service) SessionDeleteHandler() http.HandlerFunc {
 	return sessiongate.Require(s.doDelete)
 }
 
+// SessionModelsHandler serves GET /ai/providers/{id}/models (the provider's live
+// FREE models) for the GSA UI.
+func (s *Service) SessionModelsHandler() http.HandlerFunc {
+	return sessiongate.Require(s.doModels)
+}
+
+// SessionPolicyHandler serves GET /ai/policy (the free-models policy) for the GSA UI.
+func (s *Service) SessionPolicyHandler() http.HandlerFunc {
+	return sessiongate.Require(s.doPolicy)
+}
+
 // --- shared logic (auth already enforced by the wrapper or by nginx) ---
 
 func (s *Service) doUpsert(w http.ResponseWriter, r *http.Request) {
@@ -142,11 +194,11 @@ func (s *Service) doUpsert(w http.ResponseWriter, r *http.Request) {
 	p, err := s.reg.Upsert(UpsertInput{
 		ID: body.ID, Name: body.Name, Kind: body.Kind, BaseURL: body.BaseURL,
 		Model: body.Model, EURegion: body.EURegion, ZDR: body.ZDR,
-		Enabled: body.Enabled, APIKey: body.APIKey,
+		Enabled: body.Enabled, DataPolicyAck: body.DataPolicyAck, APIKey: body.APIKey,
 	}, operator(r))
 	if err != nil {
 		switch {
-		case errors.Is(err, ErrGovernance):
+		case errors.Is(err, ErrGovernance), errors.Is(err, ErrFreeOnly):
 			writeJSON(w, http.StatusUnprocessableEntity, map[string]any{"error": err.Error()})
 		case errors.Is(err, ErrValidation):
 			writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
@@ -165,7 +217,9 @@ func (s *Service) doList(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Service) doDelete(w http.ResponseWriter, r *http.Request) {
-	if s.reg.Delete(r.PathValue("id")) {
+	id := r.PathValue("id")
+	if s.reg.Delete(id) {
+		s.dropModels(id)
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
