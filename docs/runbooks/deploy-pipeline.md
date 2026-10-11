@@ -72,7 +72,7 @@ rede interna do docker (sem porta publicada).
 
 ⚠️ **Gotcha:** o nginx lê o `compose/nginx/default.conf` por **bind-mount de arquivo
 único** (o `nginx_config_vol` fica por baixo e só fornece o resto de `conf.d`, como o
-`headers.conf`). O `git pull` troca o arquivo por rename — inode novo — e o container em
+`headers.conf`). O `git pull` apaga e recria o arquivo (unlink + create), inode novo; o container em
 execução segue com o antigo: `nginx -s reload` relê o conteúdo VELHO, sem erro e sem aviso;
 e `up -d` sozinho não recria o nginx, porque a config do serviço não mudou, só o arquivo.
 Por isso **não** se copia nada para o volume e **não** se usa reload: valide e **recrie** o

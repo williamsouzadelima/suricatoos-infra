@@ -389,7 +389,8 @@ dentro do cooldown; `correlation_id` é a âncora ponta a ponta; o `scanrun` loc
   allowlist env + **separação das 3 chaves** + rename `scan_id`. Branches+PRs, CI verde, imagens `save`.
   **Nenhuma mutação em prod.**
 - **P1 — nuvem, no escuro.** `load` das imagens novas (flags `SENSOR_JOBS_ENABLED=false`); locations nginx
-  (`nginx -t` → `--no-deps` reload) **incluindo a limpeza de `X-Client-Cert-*` nas genéricas**; **gerar as 3
+  (`nginx -t` → `--no-deps` reload; *hoje* `--no-deps --force-recreate`, pois o mount é de arquivo único —
+  ver `docs/runbooks/deploy-pipeline.md` §4) **incluindo a limpeza de `X-Client-Cert-*` nas genéricas**; **gerar as 3
   chaves** (feed/update separadas, pubkeys no enroll); criar usuário gvmd `tenant-<piloto>` + `Super`. *(cada
   = 1 ação autorizada)* Verificar: agente + `scanlaunch` + GSA intactos; 403 sem cert; 503 feature-off.
 - **P2 — sensor de lab (NOSSA rede, não do cliente).** Mintar token `scanner-sensor` **via API admin-bearer**;
@@ -470,7 +471,10 @@ verificação). 16 defeitos distintos; veredito **go-with-fixes**. Estado:
   telemetria real do heartbeat (`gvmd_up`/`active_jobs`); scan em goroutine separada p/
   não bloquear heartbeats; `ssl_crl` no nginx como defesa-em-profundidade (a CRL do
   control-plane já é autoritativa); `USER` não-root + rootfs read-only no container do
-  sensor. Follow-up.
+  sensor. Follow-up. *Atualização:* o `active_jobs` real e o heartbeat que não bloqueia durante o scan
+  já estão feitos — o heartbeat roda em goroutine própria (`sensor/internal/supervisor`) e informa
+  `active_jobs=1` enquanto há job em andamento; o scan segue inline no laço de poll, um por vez. Segue
+  pendente o `gvmd_up`: continua a constante `true` (`Config.GvmdUp` não é ligado no `main.go` do sensor).
 
 ## Questões abertas (para a implementação / P5, não agora)
 

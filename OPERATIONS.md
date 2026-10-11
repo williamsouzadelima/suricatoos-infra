@@ -29,9 +29,9 @@ COMPOSE_FILE=compose.yaml:docker-compose.override.yml:docker-compose.shared-host
 #                        feed-updater passa a operar sobre o nada
 ```
 
-**Rode `docker compose` sempre de dentro de `compose/`.** O `COMPOSE_FILE` usa caminhos relativos e
-`--project-directory` não resolve isso. Sem o `.env` o compose assume outro nome de projeto: um
-`up -d` assim já criou um stack duplicado, com volumes vazios.
+**Rode `docker compose` sempre de dentro de `compose/`.** O `COMPOSE_FILE` usa caminhos relativos. Sem
+o `.env` ao lado o compose assume outro nome de projeto, e um `up -d` assim sobe um segundo stack em
+vez de atualizar o existente.
 
 ```sh
 cd <clone>/compose
@@ -68,16 +68,19 @@ na porta publicada não o envia). Sem proxy na frente, use o perfil standalone.
    ```
    (`docs/runbooks/ospd-admission-control-e-watchdog.md` §0 traz também a checagem por processo.)
 3. **Arquivo único em bind-mount exige `--force-recreate`.** O nginx lê `nginx/default.conf` (ou
-   `standalone.conf`) por bind-mount de arquivo único. O `git pull` troca o arquivo por rename — inode
-   novo — e o container em execução segue com o antigo: `nginx -s reload` relê o conteúdo velho, **sem
-   erro**; e `up -d` sozinho não recria, porque a config do serviço não mudou, só o arquivo. Depois de um
-   pull que mude o nginx:
+   `standalone.conf`) por bind-mount de arquivo único. Ao atualizar o arquivo, o `git pull` o apaga e
+   recria (unlink + create) — inode novo — e o container em execução segue com o antigo: `nginx -s reload`
+   relê o conteúdo velho, **sem erro**; e `up -d` sozinho não recria, porque a config do serviço não
+   mudou, só o arquivo. Depois de um pull que mude o nginx:
    ```sh
    git pull
    docker compose run --rm --no-deps --entrypoint nginx nginx -t   # valida o arquivo NOVO, num container descartável na rede do projeto
    docker compose up -d --no-deps --force-recreate nginx           # o mount passa a apontar para o arquivo novo
    ```
-   (Para renovar certificado o `reload` continua certo: `/etc/letsencrypt` é um diretório montado.)
+   Recriar o nginx derruba um import de `sensor-report` em voo: faça quando nenhum estiver em andamento
+   (um sensor com job em andamento informa `jobs=1` nos heartbeats do log do control-plane). O job é
+   reentregue em até ~5 min, sem perda, mas o import recomeça. (Para renovar certificado o `reload`
+   continua certo: `/etc/letsencrypt` é um diretório montado.)
 4. **Teste o vhost pelo nome, não por `localhost`.** Com roteador SNI na frente, `localhost` ou o IP podem
    cair em outro vhost do host:
    ```sh
@@ -111,8 +114,11 @@ arquivo e recriar o `ingest` (`--no-deps`) quebra a autenticação do import de 
   ```
   **Sem** `--force-recreate`: recriar os feeds em paralelo causa corrida no `openvas --update-vt-info`
   (lê NVT incompleto) e o scanner fica sem NVTs.
-- O `gvmd` reimporta os data objects depois do sync. Às vezes um objeto novo (um formato de relatório,
-  por exemplo) só aparece depois de reiniciar o `gvmd` — **só com zero scans rodando** (regra 2).
+- Os data objects chegam ao `gvmd` pelo volume `data_objects_vol`, preenchido pelos containers de feed
+  `data-objects` e `report-formats`; é o sync do próprio `gvmd` que os instala — o formato "Suricatoos
+  Premium PDF" entra assim e aparece no GSA sem mudança de frontend (`report-formats/Dockerfile`). O
+  `feed-updater` atualiza os feeds com o comando acima (`up -d --no-deps --pull always`) e não reinicia
+  o `gvmd`.
 - Status do feed: Administration > Feed Status (VT/SCAP/CERT = Current).
 - **Poda de imagens:** só as *dangling* — `docker image prune -f`. **Nunca** `-a` num host compartilhado:
   apaga toda imagem sem container em execução, inclusive as de outras plataformas.

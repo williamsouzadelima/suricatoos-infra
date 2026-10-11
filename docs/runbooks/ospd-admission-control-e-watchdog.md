@@ -163,8 +163,8 @@ re-inclui o `headers.conf` **antes** do `add_header`. O `always` também é obri
 senão o header não sai nas respostas `401`/`403`/`429`.
 
 ⚠️ **Gotcha do bind-mount de arquivo único:** o nginx lê o `default.conf` por bind-mount de
-arquivo único. O `git pull` troca o arquivo por rename (inode novo) e o container em execução
-segue com o antigo: `nginx -s reload` relê o conteúdo VELHO, sem erro — e `up -d` sozinho não
+arquivo único. O `git pull` apaga e recria o arquivo (unlink + create; inode novo) e o container em
+execução segue com o antigo: `nginx -s reload` relê o conteúdo VELHO, sem erro — e `up -d` sozinho não
 recria o nginx. Não se copia nada para o volume: valide num container descartável e **recrie**
 o nginx (detalhes em `deploy-pipeline.md` §4):
 
