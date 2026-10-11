@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/x509"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -293,7 +294,7 @@ func revokeSetup(t *testing.T, dir string, serials ...string) (*Handler, *ca.CA,
 		}
 	}
 	tm := tokens.NewManager(tokens.NewMemStore())
-	minted, err := tm.Mint(tokens.MintRequest{Type: tokens.Deployment, Scope: tokens.Scope{Tenant: "acme"}, TTL: time.Hour, MaxUses: 10})
+	minted, err := tm.Mint(tokens.MintRequest{Type: tokens.Deployment, Scope: tokens.Scope{Tenant: "acme"}, TTL: time.Hour, MaxUses: len(serials) + 10})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -319,8 +320,112 @@ type revokeBody struct {
 	TokenRevoked  bool     `json:"token_revoked"`
 	CertsRevoked  int      `json:"certs_revoked"`
 	FailedSerials []string `json:"failed_serials"`
+	FailedCount   int      `json:"failed_count"`
 	Persisted     *bool    `json:"persisted"`
 	Error         string   `json:"error"`
+}
+
+// A token without certificates whose DELETE could not save the revocation list (it
+// may still hold an earlier revocation that was never saved): 200 with "persisted":
+// false as before, but no longer silently — the save error is logged.
+func TestRevokeToken_SaveFailureWithoutCertificatesIsLogged(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "state")
+	if err := os.Mkdir(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	h, _, id := revokeSetup(t, dir) // a token nobody enrolled with
+	var logs []string
+	h.logf = func(format string, args ...any) { logs = append(logs, fmt.Sprintf(format, args...)) }
+	if err := os.RemoveAll(dir); err != nil {
+		t.Fatal(err)
+	}
+	rr := deleteToken(h, id)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("DELETE = %d, want 200: %s", rr.Code, rr.Body)
+	}
+	if b := decodeRevoke(t, rr); b.Persisted == nil || *b.Persisted {
+		t.Fatalf("body = %s, want \"persisted\": false", rr.Body)
+	}
+	if len(logs) != 1 || !strings.Contains(logs[0], id) || !strings.Contains(logs[0], "não foi gravada") {
+		t.Fatalf("want one log line naming the token and the failed save, got %q", logs)
+	}
+}
+
+// failingStore is a token store whose writes of an existing token fail.
+type failingStore struct{ *tokens.MemStore }
+
+func (failingStore) Update(tokens.Record) error {
+	return errors.New("bolt: /data/tokens.db: no space left on device")
+}
+
+// The token store could not record the revocation: the 500 is JSON like every other
+// revocation answer — "persisted": false, "token_revoked": false — the cause goes to
+// the log, and no server path goes to the client.
+func TestRevokeToken_TokenStoreFailureIsJSON(t *testing.T) {
+	authority, err := ca.NewEphemeral(time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	tm := tokens.NewManager(failingStore{tokens.NewMemStore()})
+	minted, err := tm.Mint(tokens.MintRequest{Type: tokens.SingleHost, Scope: tokens.Scope{Tenant: "acme"}, TTL: time.Hour, MaxUses: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := New(tm, authority, "https://test.example.com", "https://test.example.com/ingest/v1/inventory", testSecret)
+	var logs []string
+	h.logf = func(format string, args ...any) { logs = append(logs, fmt.Sprintf(format, args...)) }
+
+	rr := deleteToken(h, minted.ID)
+	if rr.Code != http.StatusInternalServerError {
+		t.Fatalf("DELETE with a failing token store = %d, want 500: %s", rr.Code, rr.Body)
+	}
+	b := decodeRevoke(t, rr)
+	if b.Status != "failed" || b.ID != minted.ID || b.TokenRevoked || b.Persisted == nil || *b.Persisted {
+		t.Fatalf("body = %s, want status=failed, the id, token_revoked=false, persisted=false", rr.Body)
+	}
+	if strings.Contains(rr.Body.String(), "/data/tokens.db") {
+		t.Fatalf("the 500 body leaks the server path: %s", rr.Body)
+	}
+	if len(logs) != 1 || !strings.Contains(logs[0], minted.ID) || !strings.Contains(logs[0], "no space left") {
+		t.Fatalf("want one log line with the token and the cause, got %q", logs)
+	}
+}
+
+// A failed save for a big token logs ONE summary line (the count and the first 20
+// serials) and caps the body: failed_serials holds the first 100, failed_count all —
+// not one line and one array element per certificate (100k of them: 100k log lines
+// and a ~3 MB answer).
+func TestRevokeToken_FailureReportIsBounded(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "state")
+	if err := os.Mkdir(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	serials := make([]string, 250)
+	for i := range serials {
+		serials[i] = fmt.Sprintf("ab%04x", i)
+	}
+	h, _, id := revokeSetup(t, dir, serials...)
+	var logs []string
+	h.logf = func(format string, args ...any) { logs = append(logs, fmt.Sprintf(format, args...)) }
+	if err := os.RemoveAll(dir); err != nil {
+		t.Fatal(err)
+	}
+
+	rr := deleteToken(h, id)
+	if rr.Code != http.StatusInternalServerError {
+		t.Fatalf("DELETE = %d, want 500", rr.Code)
+	}
+	b := decodeRevoke(t, rr)
+	if b.FailedCount != 250 || len(b.FailedSerials) != 100 || b.FailedSerials[0] != serials[0] || b.FailedSerials[99] != serials[99] {
+		t.Fatalf("failed_count=%d, %d failed_serials (first %q), want 250 and the first 100 in order", b.FailedCount, len(b.FailedSerials), b.FailedSerials[:1])
+	}
+	if len(logs) != 1 {
+		t.Fatalf("want ONE summary log line, got %d", len(logs))
+	}
+	l := logs[0]
+	if !strings.Contains(l, id) || !strings.Contains(l, "250") || !strings.Contains(l, serials[19]) || strings.Contains(l, serials[20]) {
+		t.Fatalf("summary line must name the token, the count and the first 20 serials only: %q", l)
+	}
 }
 
 // decodeRevoke reads a DELETE answer as JSON, failing the test otherwise.
