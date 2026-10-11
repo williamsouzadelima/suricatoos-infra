@@ -18,9 +18,15 @@ import (
 
 // Sentinel errors the service maps to HTTP status codes (ErrFreeOnly: free.go).
 var (
-	ErrNotFound   = errors.New("provedor não encontrado")
-	ErrGovernance = errors.New("provedor fora da régua: habilitar exige UE + ZDR, ou modelo gratuito com ciência da política de dados (data_policy_ack)")
+	ErrNotFound = errors.New("provedor não encontrado")
+	// ErrGovernance: enabling outside the governance bar (GovernanceRefusal; the
+	// error message carries the reason). Mapped to HTTP 422.
+	ErrGovernance = errors.New("provedor fora da régua de governança da IA")
 	ErrValidation = errors.New("configuração de provedor inválida")
+	// ErrKeyRebind: an update would send the STORED key to another recipient — the
+	// kind changed, or the endpoint changed to anything but the same kind's
+	// official one — without a new api_key. Mapped to HTTP 422; nothing changes.
+	ErrKeyRebind = errors.New("cole a chave de novo ao trocar o tipo/endpoint")
 	// ErrNotOfficialEndpoint: the models listing only queries the routers' official
 	// endpoints (models.go). Mapped to HTTP 422.
 	ErrNotOfficialEndpoint = errors.New("a lista de modelos só consulta o endpoint oficial do OpenRouter/UnoRouter")
@@ -101,8 +107,10 @@ type UpsertInput struct {
 // Upsert creates or updates a provider and persists it. The API key is encrypted
 // before storage and never returned. With the free-models-only rule on, only the
 // openrouter/unorouter kinds and only free models are accepted (ErrFreeOnly). A
-// provider may be ENABLED only if it meets the governance bar: (EU region && ZDR)
-// || (free model && data-policy acknowledgment).
+// provider may be ENABLED only if it meets the governance bar (GovernanceRefusal).
+// The stored key and the acknowledgment belong to the recipient they were given
+// for — the kind AND the endpoint: moving a key-bearing provider elsewhere takes a
+// new api_key (ErrKeyRebind), and a move restarts the acknowledgment.
 func (r *Registry) Upsert(in UpsertInput, by string) (PublicProvider, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -116,7 +124,6 @@ func (r *Registry) Upsert(in UpsertInput, by string) (PublicProvider, error) {
 	if !validKind(in.Kind) {
 		return PublicProvider{}, fmt.Errorf("%w: kind %q (esperado openrouter|unorouter|openai_compatible)", ErrValidation, in.Kind)
 	}
-	free := IsFreeModel(in.Kind, in.Model)
 	if r.freeOnly {
 		// Zero-cost contract: neither a generic gateway nor a paid model may even be
 		// stored while the rule is on (a stored one could be enabled later).
@@ -128,7 +135,7 @@ func (r *Registry) Upsert(in UpsertInput, by string) (PublicProvider, error) {
 		// provider could repoint one that already holds a key at a host they control
 		// and have the server send that write-only key there.
 		in.BaseURL = OfficialBaseURL(in.Kind)
-		if !free {
+		if !IsFreeModel(in.Kind, in.Model) {
 			if in.Model == "" {
 				return PublicProvider{}, fmt.Errorf("%w: informe um modelo gratuito (%s)", ErrFreeOnly, FreeRule)
 			}
@@ -143,11 +150,18 @@ func (r *Registry) Upsert(in UpsertInput, by string) (PublicProvider, error) {
 	}
 	// Governance (decision #3): enabling a provider outside the privacy contract
 	// would route attested data to a processor that may retain it. Allow it to be
-	// STORED (disabled) but never ENABLED unless it is EU-region AND ZDR, or it is a
-	// FREE model whose data policy (may log/train on prompts) the operator has
-	// explicitly acknowledged. The planner only ever sends pseudonymized data.
-	if in.Enabled && !((in.EURegion && in.ZDR) || (free && in.DataPolicyAck)) {
-		return PublicProvider{}, ErrGovernance
+	// STORED (disabled) but never ENABLED outside the bar (GovernanceRefusal): with
+	// the free rule on, a free model with the operator's acknowledgment of its data
+	// policy (may log/train on prompts) — always; with it off, EU region AND ZDR, or
+	// such a free model (on its router's official endpoint) acknowledged.
+	if in.Enabled {
+		terms := Terms{
+			Kind: in.Kind, BaseURL: in.BaseURL, Model: in.Model,
+			EURegion: in.EURegion, ZDR: in.ZDR, DataPolicyAck: in.DataPolicyAck,
+		}
+		if why := GovernanceRefusal(terms, r.freeOnly); why != "" {
+			return PublicProvider{}, fmt.Errorf("%w: %s", ErrGovernance, why)
+		}
 	}
 
 	var p *Provider
@@ -156,7 +170,18 @@ func (r *Registry) Upsert(in UpsertInput, by string) (PublicProvider, error) {
 		if p == nil {
 			return PublicProvider{}, ErrNotFound
 		}
-	} else {
+	}
+	// The stored key belongs to the recipient it was pasted for: the kind AND the
+	// endpoint. Without a new api_key, neither may change — whatever the rule — or
+	// an update would send that write-only key to another router or host. The one
+	// move that keeps the key is pinning the SAME kind's official endpoint (a record
+	// saved before the rule, or with a custom endpoint while the rule was off).
+	moved := p != nil && (p.Kind != in.Kind || !sameEndpoint(p.BaseURL, in.BaseURL))
+	if moved && len(p.KeyCipher) > 0 && in.APIKey == "" &&
+		(p.Kind != in.Kind || !IsOfficialEndpoint(in.Kind, in.BaseURL)) {
+		return PublicProvider{}, fmt.Errorf("%w: a chave guardada é do tipo %q em %s", ErrKeyRebind, p.Kind, p.BaseURL)
+	}
+	if p == nil {
 		p = &Provider{ID: r.newID()}
 		r.providers[p.ID] = p
 	}
@@ -167,9 +192,10 @@ func (r *Registry) Upsert(in UpsertInput, by string) (PublicProvider, error) {
 	switch {
 	case !in.DataPolicyAck:
 		p.DataPolicyAck, p.DataPolicyAckBy, p.DataPolicyAckAt = false, "", time.Time{}
-	case !p.DataPolicyAck:
-		// A new acknowledgment: record who gave it and when. While it stays given,
-		// later edits do not rewrite who acknowledged.
+	case !p.DataPolicyAck || moved:
+		// A new acknowledgment — or one now given for another recipient (the kind or
+		// the endpoint changed): record who gave it and when. While it stays given
+		// for the same recipient, later edits do not rewrite who acknowledged.
 		p.DataPolicyAck, p.DataPolicyAckBy, p.DataPolicyAckAt = true, by, now
 	}
 	if in.APIKey != "" {
@@ -327,6 +353,12 @@ func (r *Registry) saveLocked() error {
 		return err
 	}
 	return os.Rename(tmp, r.path)
+}
+
+// sameEndpoint reports whether two base URLs are the same destination (a trailing
+// slash does not change where the requests go).
+func sameEndpoint(a, b string) bool {
+	return strings.TrimRight(a, "/") == strings.TrimRight(b, "/")
 }
 
 func randID() string {

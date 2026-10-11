@@ -158,7 +158,7 @@ func (s *Service) fetchModels(ctx context.Context, src catalogSource) ([]ModelIn
 	models := make([]ModelInfo, 0, len(catalog.Data))
 	seen := map[string]bool{}
 	for _, m := range catalog.Data {
-		if !IsFreeModel(src.kind, m.ID) || seen[m.ID] {
+		if !IsFree(src.kind, src.baseURL, m.ID) || seen[m.ID] {
 			continue
 		}
 		seen[m.ID] = true

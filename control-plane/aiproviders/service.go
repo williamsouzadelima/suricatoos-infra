@@ -79,13 +79,21 @@ func (s *Service) adminOK(w http.ResponseWriter, r *http.Request) bool {
 	return true
 }
 
-// operator returns the identity set by nginx (auth_request → gsad), or a default.
-// nginx strips any client-supplied X-Operator, so this is trustworthy.
+// unknownOperator is who a change is attributed to when the request carries no
+// identity — today, EVERY request behind nginx: nginx clears any client-supplied
+// X-Operator and no location derives the gsad user yet (pending). So the server
+// records WHEN (updated_at, data_policy_ack_at), and WHO is this marker, which the
+// UI does not show as a name.
+const unknownOperator = "operator"
+
+// operator returns the X-Operator identity, or the unknownOperator marker. Behind
+// nginx the header is always cleared (see unknownOperator); only a caller inside
+// the control-plane's network could set it.
 func operator(r *http.Request) string {
 	if o := r.Header.Get("X-Operator"); o != "" {
 		return o
 	}
-	return "operator"
+	return unknownOperator
 }
 
 // upsertRequest is the accepted body. api_key is write-only (never echoed back).
@@ -198,7 +206,7 @@ func (s *Service) doUpsert(w http.ResponseWriter, r *http.Request) {
 	}, operator(r))
 	if err != nil {
 		switch {
-		case errors.Is(err, ErrGovernance), errors.Is(err, ErrFreeOnly):
+		case errors.Is(err, ErrGovernance), errors.Is(err, ErrFreeOnly), errors.Is(err, ErrKeyRebind):
 			writeJSON(w, http.StatusUnprocessableEntity, map[string]any{"error": err.Error()})
 		case errors.Is(err, ErrValidation):
 			writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})

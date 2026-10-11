@@ -39,7 +39,7 @@
 <body>
 <header>
   <h1>Provedores de IA</h1>
-  <div class="sub">Chaves cifradas em repouso · <b>write-only</b> (nunca exibidas) · só habilita provedor <b>UE + ZDR</b> ou <b>modelo gratuito com ciência</b> da política de dados (governança). Admin.</div>
+  <div class="sub">Chaves cifradas em repouso · <b>write-only</b> (nunca exibidas) · só habilita <b>modelo gratuito com ciência</b> da política de dados (com <code>AI_FREE_MODELS_ONLY=false</code>, também provedor <b>UE + ZDR</b>) (governança). Admin.</div>
 </header>
 <main>
   <div class="card">
@@ -85,7 +85,7 @@
       <button id="save" class="primary" type="button">Salvar</button>
       <button id="reset" type="button">Limpar</button>
     </div>
-    <div class="sub" style="margin-top:8px">Só é possível <b>habilitar</b> um provedor UE + ZDR, ou com modelo gratuito (id terminado em <code>:free</code>, ou <code>openrouter/free</code>) e a ciência marcada.</div>
+    <div class="sub" style="margin-top:8px">Só é possível <b>habilitar</b> com modelo gratuito (id terminado em <code>:free</code>, ou <code>openrouter/free</code>) no endpoint oficial do OpenRouter/UnoRouter e a ciência marcada — com <code>AI_FREE_MODELS_ONLY=true</code> (padrão) a ciência é sempre exigida, mesmo com UE/ZDR; com a regra desligada, também vale provedor UE + ZDR. Trocar o tipo ou o endpoint de um provedor com chave exige colar a chave de novo.</div>
   </div>
 </main>
 

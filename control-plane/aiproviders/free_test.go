@@ -119,14 +119,81 @@ func TestFreeOnly_EnableRequiresDataPolicyAck(t *testing.T) {
 	}
 }
 
-func TestFreeOnly_EUAndZDRStillEnableWithoutAck(t *testing.T) {
-	// The governance bar is (UE && ZDR) || (free && ack): a free model on a provider
-	// flagged UE + ZDR does not need the acknowledgment.
+func TestFreeOnly_EUAndZDRDoNotReplaceTheAck(t *testing.T) {
+	// With the rule on every provider is a router's ":free" endpoint, which by
+	// definition guarantees no ZDR: the self-declared UE/ZDR flags must not stand in
+	// for the operator's acknowledgment.
 	r := newFreeReg(t)
 	in := freeInput()
 	in.DataPolicyAck, in.EURegion, in.ZDR = false, true, true
+	_, err := r.Upsert(in, "op")
+	if !errors.Is(err, ErrGovernance) {
+		t.Fatalf("regra ligada: gratuito UE+ZDR sem ciência deveria dar ErrGovernance, veio %v", err)
+	}
+	if msg := err.Error(); !strings.Contains(msg, "data_policy_ack") || strings.Contains(msg, "UE + ZDR") {
+		t.Fatalf("a mensagem deveria pedir a ciência, sem oferecer UE + ZDR como saída: %v", err)
+	}
+	if n := len(r.List()); n != 0 {
+		t.Fatalf("nada deveria ser gravado, há %d provedor(es)", n)
+	}
+	// With the acknowledgment the same provider enables (the flags are kept as sent).
+	in.DataPolicyAck = true
+	if pub, err := r.Upsert(in, "op"); err != nil || !pub.Enabled {
+		t.Fatalf("com a ciência deveria habilitar: %+v err=%v", pub, err)
+	}
+}
+
+func TestFreeRuleOff_EUAndZDRStillEnableWithoutAck(t *testing.T) {
+	// The legacy bar (rule off) is unchanged: (UE && ZDR) || (free && ack).
+	r := newReg(t)
+	in := freeInput()
+	in.DataPolicyAck, in.EURegion, in.ZDR = false, true, true
 	if _, err := r.Upsert(in, "op"); err != nil {
-		t.Fatalf("gratuito UE+ZDR deveria habilitar sem ciência: %v", err)
+		t.Fatalf("regra desligada: UE+ZDR deveria habilitar sem ciência: %v", err)
+	}
+}
+
+func TestIsFree(t *testing.T) {
+	for _, c := range []struct {
+		kind, base, model string
+		want              bool
+	}{
+		{KindOpenRouter, "https://openrouter.ai/api/v1", "x:free", true},
+		{KindOpenRouter, "https://openrouter.ai/api/v1/", "openrouter/free", true},
+		{KindUnoRouter, "https://api.unorouter.com/v1", "deepseek-v4-flash:free", true},
+		// ":free" only means free (zero cost) on the router's official endpoint.
+		{KindOpenRouter, "https://proxy.example/v1", "x:free", false},
+		{KindUnoRouter, "https://openrouter.ai/api/v1", "x:free", false},
+		{KindOpenAICompatible, "https://gw.example/v1", "openai/gpt-5.5:free", false},
+		{KindOpenAICompatible, "https://openrouter.ai/api/v1", "x:free", false},
+		{KindOpenRouter, "https://openrouter.ai/api/v1", "openai/gpt-5.5", false},
+	} {
+		if got := IsFree(c.kind, c.base, c.model); got != c.want {
+			t.Errorf("IsFree(%q, %q, %q) = %v, want %v", c.kind, c.base, c.model, got, c.want)
+		}
+	}
+}
+
+// With the rule off, a ":free" id on a generic gateway or on a custom endpoint is
+// NOT a free model: the acknowledgment does not enable it — it needs UE + ZDR.
+func TestFreeRuleOff_FreeMeansTheOfficialEndpoint(t *testing.T) {
+	r := newReg(t)
+	for _, in := range []UpsertInput{
+		{Name: "Gateway", Kind: KindOpenAICompatible, BaseURL: "https://gw.example/v1", Model: "openai/gpt-5.5:free"},
+		{Name: "Proxy", Kind: KindOpenRouter, BaseURL: "https://proxy.example/v1", Model: "x:free"},
+	} {
+		in.Enabled, in.DataPolicyAck, in.APIKey = true, true, testKey
+		if _, err := r.Upsert(in, "op"); !errors.Is(err, ErrGovernance) {
+			t.Errorf("%s: :free fora do endpoint oficial com ciência deveria dar ErrGovernance, veio %v", in.Name, err)
+		}
+		in.EURegion, in.ZDR = true, true
+		if _, err := r.Upsert(in, "op"); err != nil {
+			t.Errorf("%s: com UE+ZDR deveria habilitar (régua antiga): %v", in.Name, err)
+		}
+	}
+	// On the official endpoint the free path (free + ack) still works with the rule off.
+	if _, err := r.Upsert(UpsertInput{Name: "Oficial", Kind: KindOpenRouter, Model: "x:free", Enabled: true, DataPolicyAck: true, APIKey: testKey}, "op"); err != nil {
+		t.Fatalf("regra desligada: gratuito no endpoint oficial com ciência deveria habilitar: %v", err)
 	}
 }
 

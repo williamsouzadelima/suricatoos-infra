@@ -2,11 +2,13 @@
 // scanner's AI features (e.g. the remediation-planner). Each provider's API key is
 // encrypted at rest with a host key-encryption-key (AES-256-GCM) and is NEVER
 // returned by the API — only a masked last-4 and a has-key flag. A provider may be
-// ENABLED only if it meets the AI-governance bar — EU region + zero data retention,
-// OR a FREE model with the operator's recorded acknowledgment of the free tier's
-// data policy (data_policy_ack) — so a key can be web-configured without weakening
-// the privacy contract (ADR-0010 / reports governance). With AI_FREE_MODELS_ONLY
-// (default on) only free models of OpenRouter/UnoRouter are accepted (free.go).
+// ENABLED only if it meets the AI-governance bar (GovernanceRefusal, free.go) — with
+// AI_FREE_MODELS_ONLY (default on), only a FREE model of OpenRouter/UnoRouter on its
+// official endpoint, ALWAYS with the operator's recorded acknowledgment of the free
+// tier's data policy (data_policy_ack); with it off, EU region + zero data
+// retention, OR such a free model acknowledged — so a key can be web-configured
+// without weakening the privacy contract (ADR-0010 / reports governance). The key
+// stays bound to the kind and endpoint it was pasted for (Registry.Upsert).
 // The plaintext key is read ONLY server-side, by the planner and by the free-models
 // listing (outbound to the provider itself).
 package aiproviders

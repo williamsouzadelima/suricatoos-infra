@@ -2,21 +2,24 @@ package aiproviders
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 )
 
 // The FREE-models rule (AI_FREE_MODELS_ONLY, default on). The scanner's AI runs
 // on the free tiers of the two routers, at zero cost:
 //
-//   - a model is FREE when its id ends in ":free" with something before the suffix
+//   - a model id is free when it ends in ":free" with something before the suffix
 //     (both routers mark their free variants this way), or when it is the
 //     "openrouter/free" router on OpenRouter (it picks an available free model);
+//     and a provider's model is FREE only when, besides, the provider sits on its
+//     router's official endpoint (IsFree): ":free" means nothing elsewhere;
 //   - with the rule on, the registry accepts only the openrouter/unorouter kinds and
 //     only free models, and the planner refuses to call any other model.
 //
 // Free models do NOT guarantee zero data retention (the free providers may log or
 // train on prompts), so enabling one takes the operator's explicit acknowledgment
-// of that data policy (data_policy_ack) — see Registry.Upsert.
+// of that data policy (data_policy_ack) — see GovernanceRefusal.
 const (
 	// FreeSuffix marks a free model id on both routers.
 	FreeSuffix = ":free"
@@ -49,6 +52,15 @@ func IsFreeModel(kind, model string) bool {
 	return ok && base != ""
 }
 
+// IsFree reports whether a provider's model is FREE: a free model id
+// (IsFreeModel) served by its router's OFFICIAL endpoint. ":free" — and zero cost —
+// only means something there: a generic gateway or a custom endpoint may name a
+// model "x:free" and charge for it, or keep the prompts. Governance (enabling and
+// using a provider) and the planner's budget decide on this, never on the id alone.
+func IsFree(kind, baseURL, model string) bool {
+	return IsFreeModel(kind, model) && IsOfficialEndpoint(kind, baseURL)
+}
+
 // freeOnlyKind reports whether kind is allowed under the rule (the two routers
 // whose catalogs define the ":free" convention).
 func freeOnlyKind(kind string) bool {
@@ -72,6 +84,42 @@ func OfficialBaseURL(kind string) string {
 func IsOfficialEndpoint(kind, baseURL string) bool {
 	official := OfficialBaseURL(kind)
 	return official != "" && strings.TrimRight(baseURL, "/") == official
+}
+
+// Terms are the provider settings the governance bar reads.
+type Terms struct {
+	Kind, BaseURL, Model         string
+	EURegion, ZDR, DataPolicyAck bool
+}
+
+// GovernanceRefusal says why a provider with these terms may NOT be enabled — nor
+// used: the planner applies this same bar at use time — or "" when it may.
+// freeOnly is the AI_FREE_MODELS_ONLY rule:
+//
+//   - on: only openrouter/unorouter, only on the router's official endpoint, only a
+//     free model, and ALWAYS with the operator's data-policy acknowledgment. The
+//     self-declared EU/ZDR flags do not replace it: a router's ":free" endpoint
+//     guarantees no ZDR.
+//   - off (legacy): (EU region && ZDR) || (IsFree && acknowledgment).
+func GovernanceRefusal(t Terms, freeOnly bool) string {
+	if freeOnly {
+		official := OfficialBaseURL(t.Kind)
+		switch {
+		case official == "":
+			return fmt.Sprintf("tipo %q não permitido", t.Kind)
+		case !IsFreeModel(t.Kind, t.Model):
+			return fmt.Sprintf("modelo não gratuito: %s", t.Model)
+		case !IsOfficialEndpoint(t.Kind, t.BaseURL):
+			return fmt.Sprintf("endpoint %s não é o oficial %s", t.BaseURL, official)
+		case !t.DataPolicyAck:
+			return "falta a ciência da política de dados (data_policy_ack) — com só modelos gratuitos ela é obrigatória, mesmo com UE/ZDR marcados"
+		}
+		return ""
+	}
+	if (t.EURegion && t.ZDR) || (IsFree(t.Kind, t.BaseURL, t.Model) && t.DataPolicyAck) {
+		return ""
+	}
+	return "falta UE + ZDR, ou modelo gratuito no endpoint oficial do OpenRouter/UnoRouter com a ciência da política de dados (data_policy_ack)"
 }
 
 // preset is one pre-configured provider: born DISABLED, without a key and without

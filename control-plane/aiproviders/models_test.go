@@ -13,20 +13,19 @@ import (
 	"sync"
 	"testing"
 	"time"
-
-	"github.com/williamsouzadelima/suricatoos-infra/control-plane/sessiongate"
 )
 
 // upstream is a fake provider catalog. It is TLS because a provider's base_url must
 // be https. It counts hits and records the last Authorization header, path and Host
-// (the host the request was ADDRESSED to — see officialRouter).
+// (the host the request was ADDRESSED to — see officialRouter), and every Host.
 type upstream struct {
-	srv  *httptest.Server
-	mu   sync.Mutex
-	hits int
-	auth string
-	path string
-	host string
+	srv   *httptest.Server
+	mu    sync.Mutex
+	hits  int
+	auth  string
+	path  string
+	host  string
+	hosts []string
 }
 
 func newUpstream(t *testing.T, h http.HandlerFunc) *upstream {
@@ -38,6 +37,7 @@ func newUpstream(t *testing.T, h http.HandlerFunc) *upstream {
 		u.auth = r.Header.Get("Authorization")
 		u.path = r.URL.Path
 		u.host = r.Host
+		u.hosts = append(u.hosts, r.Host)
 		u.mu.Unlock()
 		h(w, r)
 	}))
@@ -49,6 +49,13 @@ func (u *upstream) lastHost() string {
 	u.mu.Lock()
 	defer u.mu.Unlock()
 	return u.host
+}
+
+// seenHosts is every Host the upstream was addressed as, in order.
+func (u *upstream) seenHosts() string {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	return strings.Join(u.hosts, ",")
 }
 
 // officialRouter delivers requests addressed to the routers' OFFICIAL hosts to the
@@ -469,25 +476,6 @@ func TestPolicy_SessionAndBearer(t *testing.T) {
 	}
 }
 
-// doOperator sends a session request as nginx delivers it, with the operator
-// identity nginx sets after the gsad check.
-func doOperator(t *testing.T, srv *httptest.Server, method, path, operator, body string) (*http.Response, []byte) {
-	t.Helper()
-	req, err := http.NewRequest(method, srv.URL+path, strings.NewReader(body))
-	if err != nil {
-		t.Fatalf("%s %s: %v", method, path, err)
-	}
-	req.Header.Set(sessiongate.Header, sessiongate.Value)
-	req.Header.Set("X-Operator", operator)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("%s %s: %v", method, path, err)
-	}
-	b, _ := io.ReadAll(resp.Body)
-	resp.Body.Close()
-	return resp, b
-}
-
 func TestService_FreeOnlyUpsertIs422WithClearMessage(t *testing.T) {
 	srv, reg, _, _ := modelsHarness(t, true, nil)
 	for _, c := range []struct{ name, body, want string }{
@@ -525,10 +513,12 @@ func TestService_FreeOnlyUpsertIs422WithClearMessage(t *testing.T) {
 		t.Fatalf("nenhum pedido recusado deveria gravar: %d provedor(es)", n)
 	}
 
-	// With the acknowledgment the free provider is accepted and the server records
-	// WHO acknowledged (from the operator nginx set) — never from the body.
+	// With the acknowledgment the free provider is accepted and the SERVER records
+	// it — never from the body. The request arrives as nginx delivers it: nginx
+	// clears X-Operator and sets no identity (propagating the gsad user is pending),
+	// so WHEN is recorded and WHO is the "operator" marker the UI does not show.
 	body := `{"name":"OR","kind":"openrouter","model":"openrouter/free","enabled":true,"data_policy_ack":true,"data_policy_ack_by":"forjado","api_key":"sk-or-v1-TESTKEY-abcd1234"}`
-	resp, b := doOperator(t, srv, "POST", "/ai/providers", "alice", body)
+	resp, b := doSession(t, srv, "POST", "/ai/providers", body)
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("gratuito com ciência = %d, want 200: %s", resp.StatusCode, b)
 	}
@@ -536,11 +526,43 @@ func TestService_FreeOnlyUpsertIs422WithClearMessage(t *testing.T) {
 		Provider PublicProvider `json:"provider"`
 	}
 	_ = json.Unmarshal(b, &got)
-	if !got.Provider.Enabled || !got.Provider.DataPolicyAck || got.Provider.DataPolicyAckBy != "alice" || got.Provider.DataPolicyAckAt.IsZero() {
-		t.Fatalf("a ciência deveria ser gravada pelo servidor (alice, com hora): %+v", got.Provider)
+	if !got.Provider.Enabled || !got.Provider.DataPolicyAck || got.Provider.DataPolicyAckAt.IsZero() {
+		t.Fatalf("a ciência deveria ser gravada pelo servidor, com a hora: %+v", got.Provider)
+	}
+	if got.Provider.DataPolicyAckBy != "operator" || got.Provider.UpdatedBy != "operator" {
+		t.Fatalf("sem identidade do nginx, quem fica o marcador %q (nunca o do corpo): ack_by=%q updated_by=%q",
+			"operator", got.Provider.DataPolicyAckBy, got.Provider.UpdatedBy)
 	}
 	if bytes.Contains(b, []byte("sk-or-v1-TESTKEY-abcd1234")) {
 		t.Fatalf("resposta vazou a chave: %s", b)
+	}
+}
+
+// I3 over the wire: the session that switches the kind of a key-bearing provider
+// gets a 422, and the stored key keeps going only to the router it was pasted for
+// — the listing never takes it to the other router.
+func TestModels_KindSwitchNeverTakesTheKeyToTheOtherRouter(t *testing.T) {
+	up := newUpstream(t, serveCatalog) // answers for BOTH official hosts (see officialRouter)
+	srv, reg, _, _ := modelsHarness(t, true, up)
+	if _, err := reg.EnsurePresets(); err != nil {
+		t.Fatalf("EnsurePresets: %v", err)
+	}
+	paste := `{"id":"openrouter-free","name":"OpenRouter — modelos gratuitos","kind":"openrouter","model":"openrouter/free","enabled":true,"data_policy_ack":true,"api_key":"` + testKey + `"}`
+	if resp, b := doSession(t, srv, "POST", "/ai/providers", paste); resp.StatusCode != http.StatusOK {
+		t.Fatalf("colar a chave = %d: %s", resp.StatusCode, b)
+	}
+	switchKind := `{"id":"openrouter-free","name":"OpenRouter — modelos gratuitos","kind":"unorouter","model":"deepseek-v4-flash:free","enabled":true,"data_policy_ack":true}`
+	if resp, b := doSession(t, srv, "POST", "/ai/providers", switchKind); resp.StatusCode != http.StatusUnprocessableEntity {
+		t.Fatalf("trocar o tipo sem chave nova = %d, want 422: %s", resp.StatusCode, b)
+	}
+	if resp, b := doSession(t, srv, "GET", "/ai/providers/openrouter-free/models", ""); resp.StatusCode != http.StatusOK {
+		t.Fatalf("lista de modelos = %d: %s", resp.StatusCode, b)
+	}
+	if h := up.seenHosts(); h != "openrouter.ai" {
+		t.Fatalf("a chave do OpenRouter só pode ir ao OpenRouter; hosts contatados: %q", h)
+	}
+	if up.lastAuth() != "Bearer "+testKey {
+		t.Fatalf("a lista deveria usar a chave guardada no próprio OpenRouter, mandou %q", up.lastAuth())
 	}
 }
 
