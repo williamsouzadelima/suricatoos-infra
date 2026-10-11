@@ -34,19 +34,19 @@
 
 \suriPara{Este relat\'orio apresenta os resultados de uma avalia\c{c}\~ao de
 vulnerabilidades realizada pela Plataforma de Seguran\c{c}a Suricatoos.
-O projeto \textbf{``exemplo.com.br''} avaliou 1 host(s) e produziu 142
+O projeto \textbf{``exemplo.com.br''} avaliou 1 host(s) e produziu 141
 resultado(s), descrevendo 79 vulnerabilidade(s) \'unica(s). Destas,
-\textbf{19 achado(s) s\~ao de severidade Alta ou Cr\'itica} e exigem
-remedia\c{c}\~ao imediata --- 9 de baixa confian\c{c}a (valida\c{c}\~ao
+\textbf{17 achado(s) s\~ao de severidade Alta ou Cr\'itica} e exigem
+remedia\c{c}\~ao imediata --- 7 de baixa confian\c{c}a (valida\c{c}\~ao
 manual necess\'aria).}
 
 \kpirow{\suriLblRisk}{CR\'ITICO}%
        {Hosts avaliados}{1}%
-       {Total de achados}{142}%
+       {Total de achados}{141}%
        {Vulns \'unicas}{79}
 
 \blocklabel{\suriLblSeverityChart}
-\sevbars{\sevbar{critico}{3}\sevbar{alto}{16}\sevbar{medio}{25}\sevbar{baixo}{8}}
+\sevbars{\sevbar{critico}{2}\sevbar{alto}{15}\sevbar{medio}{26}\sevbar{baixo}{8}}
 
 \blocklabel{\suriLblTimeline}
 \timelinestrip{In\'icio do scan}{qua, 14 jan 2026\\13:00 UTC}%
@@ -68,18 +68,18 @@ exp\~oem.}
 \hexcard{exemplo.com.br}{1 host \textperiodcentered\ 19 portas \'unicas
                       \textperiodcentered\ qua, 14 jan 2026 15:22 UTC}{%
   \begin{hexboard}
-    \hexport{FTP}{21/TCP}{198.51.100.25}{medio}
+    \hexport{FTP}{21/TCP}{198.51.100.25}{baixo}
     \hexport{SSH}{22/TCP}{198.51.100.25}{exposto}
     \hexport{TELNET}{23/TCP}{198.51.100.25}{medio}
     \hexport{SMTP}{25/TCP}{198.51.100.25}{medio}
-    \hexport{HTTP}{80/TCP}{198.51.100.25}{alto}
+    \hexport{HTTP}{80/TCP}{198.51.100.25}{medio}
     \hexport{SUNRPC}{111/TCP}{198.51.100.25}{exposto}
-    \hexport{IMAP}{143/TCP}{198.51.100.25}{medio}
-    \hexport{HTTPS}{443/TCP}{198.51.100.25}{alto}
+    \hexport{IMAP}{143/TCP}{198.51.100.25}{baixo}
+    \hexport{HTTPS}{443/TCP}{198.51.100.25}{medio}
     \hexport{RSYNC}{873/TCP}{198.51.100.25}{baixo}
     \hexport{NFS}{2049/TCP}{198.51.100.25}{alto}
     \hexport{TCP}{3000/TCP}{198.51.100.25}{baixo}
-    \hexport{MYSQL}{3306/TCP}{198.51.100.25}{medio}
+    \hexport{MYSQL}{3306/TCP}{198.51.100.25}{alto}
     \hexport{RFB}{5900/TCP}{198.51.100.25}{medio}
     \hexport{TCP}{5984/TCP}{198.51.100.25}{medio}
     \hexport{REDIS}{6379/TCP}{198.51.100.25}{critico}
@@ -88,7 +88,7 @@ exp\~oem.}
     \hexport{TCP}{9090/TCP}{198.51.100.25}{alto}
     \hexport{TCP}{9200/TCP}{198.51.100.25}{medio}
   \end{hexboard}
-  \hexlegend{1}{5}{8}{3}{2}{0}}
+  \hexlegend{1}{4}{7}{5}{2}{0}}
 
 \blocknote{1 host(s) tamb\'em t\^em achados de n\'ivel de host (general/*).
 Esses n\~ao s\~ao portas de rede e est\~ao deliberadamente fora do tabuleiro;
@@ -100,18 +100,18 @@ aparecem na se\c{c}\~ao \emph{Hosts e Portas Abertas}.}
 \clearpage
 \blocklabel{\suriLblPortsMapped}
 \begin{porttable}
-  \portrow{21}{\ddag}{tcp}{ftp\portmark{\dag}}{medio}{7.5}{1}{198.51.100.25}
+  \portrow{21}{\ddag}{tcp}{ftp\portmark{\dag}}{baixo}{5.5}{1}{198.51.100.25}
   \portrow{22}{}{tcp}{ssh\portmark{\dag}}{exposto}{0.0}{1}{198.51.100.25}
   \portrow{23}{}{tcp}{telnet\portmark{\dag}}{medio}{4.8}{1}{198.51.100.25}
   \portrow{25}{\ddag}{tcp}{smtp\portmark{\dag}}{medio}{8.1}{1}{198.51.100.25}
-  \portrow{80}{\ddag}{tcp}{http\portmark{\dag}}{alto}{9.8}{1}{198.51.100.25}
+  \portrow{80}{\ddag}{tcp}{http\portmark{\dag}}{medio}{8.8}{1}{198.51.100.25}
   \portrow{111}{}{tcp}{sunrpc\portmark{\dag}}{exposto}{0.0}{1}{198.51.100.25}
-  \portrow{143}{\ddag}{tcp}{imap\portmark{\dag}}{medio}{8.1}{1}{198.51.100.25}
-  \portrow{443}{\ddag}{tcp}{https\portmark{\dag}}{alto}{9.8}{1}{198.51.100.25}
+  \portrow{143}{\ddag}{tcp}{imap\portmark{\dag}}{baixo}{5.3}{1}{198.51.100.25}
+  \portrow{443}{\ddag}{tcp}{https\portmark{\dag}}{medio}{8.8}{1}{198.51.100.25}
   \portrow{873}{\ddag}{tcp}{rsync\portmark{\dag}}{baixo}{5.9}{1}{198.51.100.25}
   \portrow{2049}{}{tcp}{nfs\portmark{\dag}}{alto}{7.5}{1}{198.51.100.25}
   \portrow{3000}{\ddag}{tcp}{tcp}{baixo}{6.1}{1}{198.51.100.25}
-  \portrow{3306}{\ddag}{tcp}{mysql\portmark{\dag}}{medio}{7.2}{1}{198.51.100.25}
+  \portrow{3306}{\ddag}{tcp}{mysql\portmark{\dag}}{alto}{9.1}{1}{198.51.100.25}
   \portrow{5900}{}{tcp}{rfb\portmark{\dag}}{medio}{6.8}{1}{198.51.100.25}
   \portrow{5984}{\ddag}{tcp}{tcp}{medio}{7.5}{1}{198.51.100.25}
   \portrow{6379}{}{tcp}{redis\portmark{\dag}}{critico}{9.8}{1}{198.51.100.25}
@@ -139,19 +139,19 @@ de achados e a maior severidade observada em cada porta.}
 
 \hostcard{198.51.100.25}{app.exemplo.com.br}{Linux/Unix}{19}{%
   \hostcols{%
-    \hostrow{21/tcp}{4}{alto}{7.5}
+    \hostrow{21/tcp}{4}{medio}{5.5}
     \hostrow{22/tcp}{8}{logsev}{}
     \hostrow{23/tcp}{4}{medio}{4.8}
     \hostrow{25/tcp}{5}{alto}{8.1}
-    \hostrow{80/tcp}{6}{critico}{9.8}
+    \hostrow{80/tcp}{6}{alto}{8.8}
     \hostrow{111/tcp}{3}{logsev}{}
-    \hostrow{143/tcp}{4}{alto}{8.1}
-    \hostrow{443/tcp}{16}{critico}{9.8}
+    \hostrow{143/tcp}{3}{medio}{5.3}
+    \hostrow{443/tcp}{16}{alto}{8.8}
     \hostrow{873/tcp}{2}{medio}{5.9}
     \hostrow{2049/tcp}{5}{alto}{7.5}
   }{%
     \hostrow{3000/tcp}{6}{medio}{6.1}
-    \hostrow{3306/tcp}{3}{alto}{7.2}
+    \hostrow{3306/tcp}{3}{critico}{9.1}
     \hostrow{5900/tcp}{3}{medio}{6.8}
     \hostrow{5984/tcp}{3}{alto}{7.5}
     \hostrow{6379/tcp}{5}{critico}{9.8}
@@ -210,16 +210,16 @@ manualmente antes de qualquer esfor\c{c}o de remedia\c{c}\~ao --- trate a
 severidade exibida como um \textbf{teto}, n\~ao como fato confirmado.}
 
 \begin{findingsummary}{indicadores}
-  \findingrow{1}{PHP: vers\~ao em fim de vida (EOL)}{2}{critico}{9.8}
-  \findingrow{2}{OpenSSL: vers\~ao desatualizada (banner)}{3}{alto}{8.1}
-  \findingrow{3}{ProFTPD: vers\~ao desatualizada (banner FTP)}{1}{alto}{7.5}
+  \findingrow{1}{MySQL: vers\~ao desatualizada (banner)}{1}{critico}{9.1}
+  \findingrow{2}{PHP: vers\~ao em fim de vida (EOL)}{2}{alto}{8.8}
+  \findingrow{3}{OpenSSL: vers\~ao desatualizada (banner)}{2}{alto}{8.1}
   \findingrow{4}{CouchDB: vers\~ao com vulnerabilidades conhecidas}{1}{alto}{7.5}
   \findingrow{5}{Elasticsearch: vers\~ao com vulnerabilidades conhecidas}{1}{alto}{7.5}
-  \findingrow{6}{MySQL: vers\~ao desatualizada (banner)}{1}{alto}{7.2}
-  \findingrow{7}{Spring Framework: vers\~ao com vulnerabilidades conhecidas}{1}{medio}{6.8}
-  \findingrow{8}{ActiveMQ: vers\~ao com vulnerabilidades conhecidas}{1}{medio}{6.5}
-  \findingrow{9}{Node.js: runtime em fim de vida (EOL)}{1}{medio}{6.1}
-  \findingrow{10}{rsync: vers\~ao desatualizada (banner)}{1}{medio}{5.9}
+  \findingrow{6}{Spring Framework: vers\~ao com vulnerabilidades conhecidas}{1}{medio}{6.8}
+  \findingrow{7}{ActiveMQ: vers\~ao com vulnerabilidades conhecidas}{1}{medio}{6.5}
+  \findingrow{8}{Node.js: runtime em fim de vida (EOL)}{1}{medio}{6.1}
+  \findingrow{9}{rsync: vers\~ao desatualizada (banner)}{1}{medio}{5.9}
+  \findingrow{10}{ProFTPD: vers\~ao desatualizada (banner FTP)}{1}{medio}{5.5}
   \findingrow{11}{Dovecot: vers\~ao desatualizada (banner IMAP)}{1}{medio}{5.3}
   \findingrow{12}{Postfix: vers\~ao desatualizada (banner SMTP)}{1}{medio}{5.3}
   \findingrow{13}{Redis: vers\~ao desatualizada (banner)}{1}{medio}{4.3}
@@ -260,7 +260,7 @@ severidade exibida como um \textbf{teto}, n\~ao como fato confirmado.}
 \clearpage
 \findingcard{baixo}{\#16}{nginx: vers\~ao anterior possivelmente afetada (banner)}{%
   \chipsev{baixo}{2.6}%
-  \chipwarn{QoD 30\% \textperiodcentered\ BAIXA CONFIAN\c{C}A}%
+  \chipwarn{QoD 50\% \textperiodcentered\ BAIXA CONFIAN\c{C}A}%
   \chip{2 INST\^ANCIAS}\chip{CVE-2099-0431}\chip{CVE-2099-0432}}
 
 \fieldcols{%

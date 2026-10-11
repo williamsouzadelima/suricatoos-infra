@@ -448,7 +448,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
     <s k="hx_th_proto" en="Proto" pt="Proto" es="Proto"/>
     <s k="hx_th_service" en="Service" pt="Serviço" es="Servicio"/>
     <s k="hx_th_state" en="State" pt="Estado" es="Estado"/>
-    <!-- DUAS chaves de proposito. Em prosa corrida ("... CVSS max. 8.6") o ponto
+    <!-- DUAS chaves de proposito. Em prosa corrida ("... CVSS max. 8.1") o ponto
          e' o ponto da ABREVIACAO e tem de ficar; no cabecalho da coluna o modelo
          nao tem ponto nenhum, e ali ele nao e' so' um caractere a mais: a celula
          e' caixa de largura zero alinhada a' direita, entao o ponto empurra o
@@ -656,7 +656,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
   <!-- ================================================================= -->
 
   <!-- Emit a scan timestamp in the active language. English keeps the original
-       "Mon Jun 28, 2026 09:00 UTC" layout; pt/es use "seg, 28 jun 2026 09:00
+       "Wed Jan 14, 2026 13:00 UTC" layout; pt/es use "qua, 14 jan 2026 13:00
        UTC" (day-first, no comma before the year). -->
   <xsl:template name="emit-date">
     <xsl:param name="date"/>
@@ -1961,7 +1961,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
       <xsl:value-of select="gvm:t('sample_b')"/>
       <xsl:text>\textbf{</xsl:text><xsl:value-of select="$total-full"/><xsl:text>}</xsl:text>
       <xsl:value-of select="gvm:t('sample_c')"/>
-      <!-- Name the QoD floor when the export carried one: "51 of 53" alone does
+      <!-- Name the QoD floor when the export carried one: "N of M" alone does
            not tell the reader that what was cut is precisely the low-confidence
            population that section 4 segregates. gvmd echoes the applied filter
            in <filters><term>. -->
@@ -3419,7 +3419,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
         <xsl:text>}{%
   </xsl:text><xsl:value-of select="gvm:t('grp_intro_a')"/>
         <!-- O numero sai em peso REGULAR: o card ja' o carrega em chip proprio
-             ("22 ADVISORIES") logo acima, e o negrito deste paragrafo e' um so',
+             ("15 ADVISORIES") logo acima, e o negrito deste paragrafo e' um so',
              reservado para a acao unica de remediacao em grp_intro_c. -->
         <xsl:value-of select="$ndist"/>
         <xsl:value-of select="gvm:t('grp_intro_b')"/>
