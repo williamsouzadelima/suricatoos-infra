@@ -1,0 +1,35 @@
+name: nginx-ci
+
+on:
+  push:
+    branches: [main]
+    paths: ["compose/nginx/**", ".github/workflows/nginx-ci.yml"]
+  pull_request:
+    paths: ["compose/nginx/**", ".github/workflows/nginx-ci.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  route-matrix:
+    name: matriz de rotas (nginx)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      # O run.sh deixa containers e rede para os passos abaixo (logs + limpeza).
+      NGINX_CI_KEEP: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - name: matriz de rotas + controle de mutação
+        run: compose/nginx/test/run.sh
+      - name: docker logs do nginx e do stub (em falha)
+        if: failure()
+        run: |
+          for c in $(docker ps -aq --filter label=suricatoos-nginx-ci); do
+            echo "::group::docker logs $(docker inspect -f '{{.Name}}' "$c")"
+            docker logs "$c" 2>&1 | tail -n 300
+            echo "::endgroup::"
+          done
+      - name: limpeza
+        if: always()
+        run: compose/nginx/test/run.sh --cleanup
