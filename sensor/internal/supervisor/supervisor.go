@@ -1,13 +1,16 @@
 // Package supervisor is the sensor-agent's control loop (ADR-0007): poll the cloud
 // for a scan job, run it locally (scope-gated) against the local gvmd, push the
-// findings back, ack, and heartbeat — all outbound. It is interface-driven so the
-// loop is testable without a network or a live gvmd.
+// findings back, ack, and heartbeat — all outbound. The heartbeat runs on its own
+// goroutine, so it keeps beating while a long scan is in progress. It is
+// interface-driven so the loop is testable without a network or a live gvmd.
 package supervisor
 
 import (
 	"context"
 	"encoding/json"
 	"log"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/williamsouzadelima/suricatoos-infra/sensor/internal/cloud"
@@ -27,13 +30,15 @@ type Scanner interface {
 	Run(ctx context.Context, job scanrun.Job) (findings []scanrun.Finding, dropped int, err error)
 }
 
-// Config tunes the loop cadence + sensor identity.
+// Config tunes the loop cadence + sensor identity. FeedVersion and GvmdUp are called
+// from both the heartbeat and the poll goroutine, so they must be safe for
+// concurrent use.
 type Config struct {
 	SensorID       string
 	FeedVersion    func() string // current local feed version (for heartbeat/report)
 	PollInterval   time.Duration // between polls when idle
-	HeartbeatEvery time.Duration
-	GvmdUp         func() bool // liveness probe of the local gvmd
+	HeartbeatEvery time.Duration // independent of PollInterval and of any scan in progress
+	GvmdUp         func() bool   // liveness probe of the local gvmd
 }
 
 // Supervisor ties the cloud client + scanner together.
@@ -42,6 +47,11 @@ type Supervisor struct {
 	cloud   CloudClient
 	scanner Scanner
 	now     func() time.Time
+
+	// active counts the jobs being handled right now (received and not yet acked or
+	// abandoned). The poll goroutine updates it and the heartbeat goroutine reads it;
+	// with one scan at a time it is 0 or 1.
+	active atomic.Int32
 }
 
 // New builds a Supervisor.
@@ -61,13 +71,27 @@ func New(cfg Config, cl CloudClient, sc Scanner) *Supervisor {
 	return &Supervisor{cfg: cfg, cloud: cl, scanner: sc, now: time.Now}
 }
 
-// Run drives the loop until ctx is cancelled. Poll and heartbeat run on separate
-// tickers; a poll that finds a job processes it inline (one scan at a time).
+// Run drives the loop until ctx is cancelled. The heartbeat has a goroutine of its
+// own, independent of the poll loop: a scan can take hours and runs inline in the
+// poll loop (one scan at a time), and a heartbeat sharing that loop went silent for
+// the whole scan — the cloud saw the sensor "gone" exactly while it was working.
+// Run returns only after BOTH goroutines have stopped.
 func (s *Supervisor) Run(ctx context.Context) {
-	s.heartbeat(ctx) // announce presence immediately
-	poll := time.NewTicker(s.cfg.PollInterval)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		s.heartbeatLoop(ctx)
+	}()
+	s.pollLoop(ctx)
+	wg.Wait()
+}
+
+// heartbeatLoop announces presence immediately, then on every HeartbeatEvery tick,
+// until ctx is cancelled.
+func (s *Supervisor) heartbeatLoop(ctx context.Context) {
+	s.heartbeat(ctx)
 	beat := time.NewTicker(s.cfg.HeartbeatEvery)
-	defer poll.Stop()
 	defer beat.Stop()
 	for {
 		select {
@@ -75,6 +99,19 @@ func (s *Supervisor) Run(ctx context.Context) {
 			return
 		case <-beat.C:
 			s.heartbeat(ctx)
+		}
+	}
+}
+
+// pollLoop polls on every PollInterval tick until ctx is cancelled. A poll that
+// finds a job processes it inline, so there is at most one scan at a time.
+func (s *Supervisor) pollLoop(ctx context.Context) {
+	poll := time.NewTicker(s.cfg.PollInterval)
+	defer poll.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
 		case <-poll.C:
 			s.pollOnce(ctx)
 		}
@@ -91,13 +128,17 @@ func (s *Supervisor) pollOnce(ctx context.Context) {
 	if !ok {
 		return
 	}
+	// From receipt until the job is acked (or abandoned) the heartbeat reports it as
+	// active — see heartbeat().
+	s.active.Add(1)
+	defer s.active.Add(-1)
 	log.Printf("supervisor: job %s (corr=%s) — %d alvo(s)", job.JobID, job.CorrelationID, len(job.Targets))
 	// Ack only AFTER the scan ran and the report was pushed. Acking on receipt made
 	// a crash or a transient PushReport failure silently lose that tenant's findings
 	// (the job was already terminal). Keeping the job DELIVERED-but-unacked lets the
 	// cloud re-deliver it after its window; scanrun's find-or-create makes the re-run
-	// idempotent, and this loop is single-goroutine so no concurrent poll runs during
-	// the scan.
+	// idempotent, and the poll loop is single-goroutine so no concurrent poll runs
+	// during the scan (the heartbeat goroutine never polls).
 	if err := s.processJob(ctx, job); err != nil {
 		log.Printf("supervisor: job %s não concluído — mantido p/ redelivery: %v", job.JobID, err)
 		return
@@ -137,11 +178,14 @@ func (s *Supervisor) processJob(ctx context.Context, job *cloud.Job) error {
 	return nil
 }
 
+// heartbeat sends one liveness ping. It runs on its own goroutine, concurrently with
+// job processing, and reports whether a scan is in progress right now.
 func (s *Supervisor) heartbeat(ctx context.Context) {
 	err := s.cloud.Heartbeat(ctx, cloud.Heartbeat{
 		SensorID:    s.cfg.SensorID,
 		FeedVersion: s.cfg.FeedVersion(),
 		GvmdUp:      s.cfg.GvmdUp(),
+		ActiveJobs:  int(s.active.Load()),
 	})
 	if err != nil {
 		log.Printf("supervisor: heartbeat falhou: %v", err)
