@@ -117,6 +117,10 @@ Coletamos apenas o mínimo necessário para **correlação de vulnerabilidade ba
 > valores de sistema ou de comando, também sem achado: `os`/`arch` do agente, `alive_test`, `policy` do token,
 > versões e os filtros GMP ecoados (`report.filter` na auditoria, `filter_applied` no sumário).
 >
+> **Leitura no gvmd:** o conector lê o gvmd com o usuário atual do nó, que precisa de permissão Super sobre os
+> usuários gvmd dos tenants (ou ser admin). Com ela, ele enxerga os objetos de todos os tenants do nó, mas o
+> canal só lista os atribuídos a tenant conhecido; o resto entra apenas em `unattributed_count`.
+>
 > **`issued_by`:** é **obrigatoriamente** um identificador pseudônimo do operador do hub — o schema recusa `@` e
 > espaço; o hub guarda o mapeamento para a pessoa. Um e-mail aqui seria dado pessoal replicado na auditoria de
 > cada nó.

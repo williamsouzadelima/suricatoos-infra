@@ -200,7 +200,7 @@ artefatos, rotas `/fleet/v1/*`.
 | `FLEET_NODE_ID` | `node-<uuid>` gerado e persistido | CN do certificado; `^[a-z0-9][a-z0-9-]{2,63}$` |
 | `FLEET_NODE_KIND` | — | `central` \| `standalone` \| `sensor` |
 | `FLEET_STATE_DIR` | `/var/lib/suricatoos-fleet` | chave/cert (`0600`), pins, anti-replay/journal, outbox, auditoria, política |
-| `FLEET_GMP_USER`, `FLEET_GMP_PASSWORD_FILE` | usuário gvmd atual do nó | leitura e operação (D6) |
+| `FLEET_GMP_USER`, `FLEET_GMP_PASSWORD_FILE` | usuário gvmd atual do nó | leitura e operação (D6); precisa de permissão **Super** sobre os usuários gvmd dos tenants, ou ser admin (ver Catálogo) |
 | `FLEET_TENANT`, `FLEET_SCAN_SCOPE`, `FLEET_TENANT_GMP_USER`, `FLEET_TENANT_GMP_PASSWORD_FILE` | — | standalone/sensor: o **único** tenant local, seu escopo e seu usuário gvmd de escrita (D2/D6) |
 | `TENANTS_FILE`, `SENSOR_TENANT_SECRETS` | os do compose | central: registro de tenants e senhas por tenant, montados **read-only** |
 | `FLEET_SELF_DENY_IPS` | — | IPs do próprio nó: nunca alvo (como `SCAN_SELF_DENY_IPS`); os IPs do hub o conector acrescenta sozinho (regra de escopo do Catálogo) |
@@ -701,7 +701,9 @@ seguem essa regra: cada um passa pelas linhas 0–9.
 Payloads em `fleet-command.schema.json#/$defs/<payload>`, saídas em `fleet-result.schema.json#/$defs/<saída>`.
 "Atual" = usuário gvmd atual do nó (D6), com checagem de que o **dono** do objeto é o usuário gvmd do tenant
 do envelope (senão `not_found`, sem enumerar); "tenant" = a operação roda **autenticada como** o usuário gvmd
-do tenant (o objeto nasce na partição dele).
+do tenant (o objeto nasce na partição dele). O usuário atual precisa de permissão **Super** sobre os usuários gvmd
+dos tenants (ou ser admin): sem ela, os objetos dos tenants ficam invisíveis para ele — a checagem de dono dá
+`not_found` e o estado não os lista sob o tenant. É **pré-requisito de deploy** (runbook da F2.8).
 
 | Tipo | Payload | Política padrão | Nós | Execução | Usuário gvmd | Saída |
 |---|---|---|---|---|---|---|
@@ -839,7 +841,8 @@ Regras transversais:
 Cada PUT é o **retrato completo** de um kind (`fleet-state.schema.json`, `data` em `#/$defs/data_<kind>`). O
 nó coleta a cada `FLEET_STATE_INTERVAL` (60 s), calcula `content_sha256` sobre os bytes de `data` e **só
 envia quando o hash muda**; o heartbeat leva os hashes atuais e o hub pede **resync** (resposta do heartbeat
-ou comando `state.resync`) quando os dele divergem. Todo kind de lista leva `items` + `truncated` +
+ou comando `state.resync`) quando os dele divergem. A leitura usa o usuário gvmd atual, que só enxerga os objetos
+dos tenants com a permissão Super do Catálogo. Todo kind de lista leva `items` + `truncated` +
 `unattributed_count`: objeto cujo dono gvmd (ou `O` do certificado) não mapeia para tenant conhecido é só
 **contado**, nunca listado.
 
@@ -946,7 +949,7 @@ Eventos de escopo **nó** não levam `tenant`; os de escopo **tenant** levam sem
 | Propriedade | Mecanismo |
 |---|---|
 | **Tenant explícito e assinado** | `tenant` está na forma canônica; o nó só aceita tenant conhecido **e habilitado** localmente (`tenant_unknown`) |
-| **Partição gvmd** | escrita autenticada como o usuário gvmd do tenant (D6); operação em objeto existente exige dono == usuário do tenant, senão `not_found` (sem enumeração cross-tenant) |
+| **Partição gvmd** | escrita autenticada como o usuário gvmd do tenant (D6); operação em objeto existente exige dono == usuário do tenant, senão `not_found` (sem enumeração cross-tenant); leitura e checagem de dono pelo usuário atual, que precisa de Super sobre os usuários dos tenants (ou ser admin) — sem isso, os objetos dos tenants não aparecem |
 | **Estado atribuído** | cada item leva o `tenant` derivado do dono; objeto sem tenant conhecido só entra em `unattributed_count` |
 | **Escopo por tenant** | target/sensor job ⊆ escopo **daquele** tenant (registro central ou `FLEET_SCAN_SCOPE`) |
 | **Agentes, tokens, sensores** | tenant = `O` do certificado do agente/sensor; token = `Scope.Tenant`; divergência do envelope ⇒ `not_found` |
@@ -1007,7 +1010,8 @@ sensibilidade por dado: [docs/data-inventory.md — Canal de gestão da frota (A
   molde de `signkeys`, fila, stores, artefatos), só para E2E em CI e para o canário — **não** é o
   commandcenter. O E2E cobre todo o catálogo contra um gvmd de teste e os ataques (replay, nó errado, tenant
   desconhecido, fora do escopo, payload trocado).
-- **F2.8 — runbook + canário.** `docs/runbooks/gestao-remota-frota.md` (enroll com pins, política, kill switch,
+- **F2.8 — runbook + canário.** `docs/runbooks/gestao-remota-frota.md` (pré-requisito de deploy: usuário gvmd
+  atual com Super sobre os usuários gvmd dos tenants, ou admin; enroll com pins, política, kill switch,
   revogação, teardown, leitura da auditoria). Canário com o hub de referência no host do commandcenter,
   alcançado **só pela tailnet**, contra um nó de **LAB** (nunca de cliente); cada degrau com autorização por
   ação e critério de saída:
