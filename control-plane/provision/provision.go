@@ -12,12 +12,11 @@ package provision
 
 import (
 	"encoding/json"
-	"fmt"
+	"log"
 	"net/http"
-	"net/url"
-	"strings"
 	"time"
 
+	"github.com/williamsouzadelima/suricatoos-infra/control-plane/installcmd"
 	"github.com/williamsouzadelima/suricatoos-infra/control-plane/sessiongate"
 	"github.com/williamsouzadelima/suricatoos-infra/control-plane/tokens"
 )
@@ -28,24 +27,16 @@ const tokenTTL = 1 * time.Hour
 
 // Service builds install commands backed by freshly-minted tokens.
 type Service struct {
-	tm         *tokens.Manager
-	caPin      string // CA fingerprint (--ca-pin), from authority.Fingerprint()
-	serverURL  string // CONTROL_PLANE_URL handed to the agent (ends in /v1)
-	publicBase string // scheme+host for the install scripts (derived from serverURL)
+	tm        *tokens.Manager
+	caPin     string // CA fingerprint (--ca-pin), from authority.Fingerprint()
+	serverURL string // CONTROL_PLANE_URL handed to the agent (ends in /v1)
 }
 
 // New returns a provision Service. serverURL is CONTROL_PLANE_URL (e.g.
-// https://scanner.suricatoos.com/agent/v1); the install-script base is derived
-// from its scheme+host.
+// https://scanner.suricatoos.com/agent/v1); the install scripts are fetched from its
+// scheme+host (see installcmd.PublicBase).
 func New(tm *tokens.Manager, caPin, serverURL string) *Service {
-	return &Service{tm: tm, caPin: caPin, serverURL: serverURL, publicBase: publicBase(serverURL)}
-}
-
-func publicBase(serverURL string) string {
-	if u, err := url.Parse(serverURL); err == nil && u.Host != "" {
-		return u.Scheme + "://" + u.Host
-	}
-	return ""
+	return &Service{tm: tm, caPin: caPin, serverURL: serverURL}
 }
 
 type response struct {
@@ -59,7 +50,8 @@ type response struct {
 
 // Handler serves GET /provision/install?os=<linux|darwin|windows>. It is wrapped in
 // sessiongate.Require: a request without the marker nginx sets only on session-gated
-// locations is refused (403) before any token is minted.
+// locations is refused (403) before any token is minted. When the command cannot be
+// rendered safely (see installcmd) the minted token is revoked and the answer is 500.
 func (s *Service) Handler() http.HandlerFunc {
 	return sessiongate.Require(func(w http.ResponseWriter, r *http.Request) {
 		goos := r.URL.Query().Get("os")
@@ -82,9 +74,18 @@ func (s *Service) Handler() http.HandlerFunc {
 			return
 		}
 
+		cmd, err := s.command(goos, minted.Token)
+		if err != nil {
+			// Nothing was handed out, so do not leave a live token behind.
+			_ = s.tm.Revoke(minted.ID, "provision (comando recusado)")
+			log.Printf("provision: comando %s recusado: %v", goos, err)
+			http.Error(w, "falha ao montar o comando de instalação", http.StatusInternalServerError)
+			return
+		}
+
 		resp := response{
 			OS:        goos,
-			Command:   s.command(goos, minted.Token),
+			Command:   cmd,
 			Server:    s.serverURL,
 			CAPin:     s.caPin,
 			TokenID:   minted.ID,
@@ -96,39 +97,16 @@ func (s *Service) Handler() http.HandlerFunc {
 	})
 }
 
-// command renders the one-liner the operator pastes. Linux/macOS pipe install.sh
-// into sh (it picks the binary by `uname -s`); Windows downloads install.ps1 to a
-// fixed path and runs it with params.
-func (s *Service) command(goos, token string) string {
+// command renders the one-liner the operator pastes. The builders live in installcmd,
+// shared with enrollcmd, so both endpoints hand out the same command: Linux/macOS pipe
+// install.sh into sh (it picks the binary by `uname -s`); Windows downloads install.ps1
+// to the invoking user's own temp directory and runs it with params. See the
+// installcmd package comment for why the Windows command looks the way it does.
+func (s *Service) command(goos, token string) (string, error) {
 	switch goos {
 	case "windows":
-		// NO '$' variables: a '$f'/'$env:TEMP' inside the double-quoted -Command
-		// gets expanded by the OUTER shell when the user pastes this at a
-		// PowerShell prompt (not nested), producing "=Join-Path ..." / empty
-		// -OutFile. A fixed path under C:\Windows\Temp (the installer needs an
-		// elevated shell anyway) keeps the one-liner robust whether pasted in
-		// cmd.exe or PowerShell. Same form as enrollcmd's windows command — keep
-		// the two in sync.
-		return fmt.Sprintf(
-			`powershell -ExecutionPolicy Bypass -Command "iwr -useb %s/install.ps1 -OutFile C:\Windows\Temp\suricatoos-install.ps1; & C:\Windows\Temp\suricatoos-install.ps1 -Server '%s' -Token '%s' -CaPin '%s'"`,
-			s.publicBase, s.serverURL, token, s.caPin)
+		return installcmd.Windows(s.serverURL, token, s.caPin)
 	default: // linux, darwin
-		return fmt.Sprintf(
-			`curl -fsSL %s/install.sh | sudo sh -s -- --server %s --token %s --ca-pin %s`,
-			s.publicBase, s.serverURL, token, escapeShell(s.caPin))
+		return installcmd.Unix(s.serverURL, token, s.caPin)
 	}
-}
-
-// escapeShell guards against odd characters in the pin (it is hex+colons, but be
-// safe): wrap in single quotes if it contains anything outside the safe set.
-func escapeShell(v string) string {
-	if v == "" {
-		return "''"
-	}
-	for _, c := range v {
-		if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == ':' || c == '.' || c == '_' || c == '-') {
-			return "'" + strings.ReplaceAll(v, "'", `'\''`) + "'"
-		}
-	}
-	return v
 }

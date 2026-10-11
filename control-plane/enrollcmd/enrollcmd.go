@@ -15,11 +15,13 @@ import (
 	"crypto/subtle"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/williamsouzadelima/suricatoos-infra/control-plane/installcmd"
 	"github.com/williamsouzadelima/suricatoos-infra/control-plane/sessiongate"
 	"github.com/williamsouzadelima/suricatoos-infra/control-plane/tokens"
 )
@@ -125,6 +127,8 @@ func (s *Service) SessionTenantsHandler() http.HandlerFunc {
 
 // serve is the shared core: validate tenant, mint a scoped token, render the command.
 // Query params (both handlers): target=docker|linux|darwin|windows, max_uses, ttl_hours.
+// When the command cannot be rendered safely (see installcmd) the minted token is
+// revoked and the answer is 500.
 func (s *Service) serve(w http.ResponseWriter, r *http.Request, tenant string) {
 	if tenant == "" {
 		http.Error(w, "tenant obrigatório", http.StatusBadRequest)
@@ -166,10 +170,19 @@ func (s *Service) serve(w http.ResponseWriter, r *http.Request, tenant string) {
 		return
 	}
 
+	cmd, err := s.command(target, minted.Token)
+	if err != nil {
+		// Nothing was handed out, so do not leave a live token behind.
+		_ = s.cfg.TM.Revoke(minted.ID, "enroll-command ("+tenant+") comando recusado")
+		log.Printf("enrollcmd: tenant %q, target %s: comando recusado: %v", tenant, target, err)
+		http.Error(w, "falha ao montar o comando de instalação", http.StatusInternalServerError)
+		return
+	}
+
 	resp := response{
 		Tenant:    tenant,
 		Target:    target,
-		Command:   s.command(target, minted.Token),
+		Command:   cmd,
 		Server:    s.cfg.ServerURL,
 		CAPin:     s.cfg.CAPin,
 		TokenID:   minted.ID,
@@ -184,8 +197,10 @@ func (s *Service) serve(w http.ResponseWriter, r *http.Request, tenant string) {
 	_ = json.NewEncoder(w).Encode(resp)
 }
 
-// command renders the paste-ready command with the token embedded.
-func (s *Service) command(target, token string) string {
+// command renders the paste-ready command with the token embedded. The linux, darwin
+// and windows commands come from installcmd, shared with provision, so both endpoints
+// hand out the same one-liners (see its package comment for the Windows design).
+func (s *Service) command(target, token string) (string, error) {
 	switch target {
 	case "docker":
 		// One container that auto-enrolls into the tenant and inventories the HOST.
@@ -194,52 +209,13 @@ func (s *Service) command(target, token string) string {
 				`--hostname "$(hostname)" `+
 				`-e ENROLL_TOKEN=%s -e CLOUD_BASE_URL=%s -e CA_PIN=%s -e AGENT_ID="$(hostname)" `+
 				`-v /:/host:ro -v suricatoos-agent:/var/lib/suricatoos-agent %s`,
-			shq(token), shq(s.cfg.ServerURL), shq(s.cfg.CAPin), s.cfg.Image)
+			installcmd.ShellQuote(token), installcmd.ShellQuote(s.cfg.ServerURL),
+			installcmd.ShellQuote(s.cfg.CAPin), s.cfg.Image), nil
 	case "windows":
-		base := publicBase(s.cfg.ServerURL)
-		// NO '$' variables: a '$f'/'$env:TEMP' inside the double-quoted -Command
-		// gets expanded by the OUTER shell when the user pastes this at a
-		// PowerShell prompt (not nested), producing "=Join-Path ..." / empty
-		// -OutFile. A fixed, admin-writable temp path keeps the one-liner robust
-		// whether pasted in cmd.exe or PowerShell. The script requires admin.
-		return fmt.Sprintf(
-			`powershell -ExecutionPolicy Bypass -Command "iwr -useb %s/install.ps1 -OutFile C:\Windows\Temp\suricatoos-install.ps1; & C:\Windows\Temp\suricatoos-install.ps1 -Server '%s' -Token '%s' -CaPin '%s'"`,
-			base, s.cfg.ServerURL, token, s.cfg.CAPin)
+		return installcmd.Windows(s.cfg.ServerURL, token, s.cfg.CAPin)
 	default: // linux, darwin (binary installer; install.sh picks the OS by `uname -s`)
-		base := publicBase(s.cfg.ServerURL)
-		return fmt.Sprintf(
-			`curl -fsSL %s/install.sh | sudo sh -s -- --server %s --token %s --ca-pin %s`,
-			base, s.cfg.ServerURL, shq(token), shq(s.cfg.CAPin))
+		return installcmd.Unix(s.cfg.ServerURL, token, s.cfg.CAPin)
 	}
-}
-
-// publicBase strips the path from serverURL → scheme://host (for install scripts).
-func publicBase(serverURL string) string {
-	if i := strings.Index(serverURL, "://"); i >= 0 {
-		rest := serverURL[i+3:]
-		if j := strings.IndexByte(rest, '/'); j >= 0 {
-			return serverURL[:i+3] + rest[:j]
-		}
-		return serverURL
-	}
-	return serverURL
-}
-
-// shq single-quotes a value for POSIX sh only when it contains anything outside the
-// safe set (tokens are base64url + "st_." — safe; be defensive anyway).
-func shq(v string) string {
-	safe := true
-	for _, c := range v {
-		if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' ||
-			c == ':' || c == '.' || c == '_' || c == '-' || c == '/') {
-			safe = false
-			break
-		}
-	}
-	if safe && v != "" {
-		return v
-	}
-	return "'" + strings.ReplaceAll(v, "'", `'\''`) + "'"
 }
 
 func clampInt(s string, def, lo, hi int) int {

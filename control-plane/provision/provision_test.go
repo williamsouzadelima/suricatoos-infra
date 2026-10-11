@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/williamsouzadelima/suricatoos-infra/control-plane/installcmd"
 	"github.com/williamsouzadelima/suricatoos-infra/control-plane/sessiongate"
 	"github.com/williamsouzadelima/suricatoos-infra/control-plane/tokens"
 )
@@ -67,15 +68,16 @@ func TestProvisionWindowsUsesPowershell(t *testing.T) {
 	}
 }
 
-// installerPath is the fixed path the Windows one-liner downloads install.ps1 to and
-// then runs. It is a literal on purpose: no '$f', no '$env:TEMP' (see command).
-const installerPath = `C:\Windows\Temp\suricatoos-install.ps1`
-
-// REGRESSAO: o one-liner do Windows nao pode depender do shell de FORA. Colado num
-// prompt do PowerShell (ja aberto, sem aninhar), um '$f' / '$env:TEMP' dentro do
-// -Command entre aspas duplas e expandido pelo shell externo ANTES de o powershell
-// interno rodar: sobra "=Join-Path ..." e "-OutFile" vazio, e a instalacao quebra.
-// O comando robusto usa um caminho fixo e nao tem '$' (nem crase, nem '%' do cmd.exe).
+// REGRESSAO: o one-liner do Windows nao pode depender do shell de FORA nem gravar o
+// instalador onde outros usuarios escrevem.
+//   - Colado num prompt do PowerShell (ja aberto, sem aninhar), um '$f' / '$env:TEMP'
+//     dentro do -Command entre aspas duplas e expandido pelo shell externo ANTES de o
+//     powershell interno rodar: sobra "=Join-Path ..." e "-OutFile" vazio.
+//   - Um caminho fixo em C:\Windows\Temp aceita arquivos de qualquer usuario local, que
+//     poderia pre-criar ou trocar o arquivo entre o download e a execucao elevada. O
+//     instalador vai para o TEMP do usuario que roda o comando.
+//
+// A forma exata e as demais invariantes estao travadas no installcmd.
 func TestProvisionWindowsCommandIsRobust(t *testing.T) {
 	svc := newService()
 	rec := httptest.NewRecorder()
@@ -96,8 +98,7 @@ func TestProvisionWindowsCommandIsRobust(t *testing.T) {
 		"-Server 'https://scanner.suricatoos.com/agent/v1'",
 		"-Token 'st_",
 		"-CaPin 'sha256:deadbeef'",
-		"-OutFile " + installerPath, // baixa para o caminho fixo...
-		"& " + installerPath,        // ...e executa exatamente esse arquivo
+		"(Get-Item env:TEMP).Value", // TEMP de quem roda o comando, nao um caminho fixo
 	} {
 		if !strings.Contains(r.Command, want) {
 			t.Errorf("comando windows nao contem %q:\n%s", want, r.Command)
@@ -106,22 +107,68 @@ func TestProvisionWindowsCommandIsRobust(t *testing.T) {
 	if strings.ContainsAny(r.Command, "$`%") {
 		t.Errorf("comando windows nao pode conter '$', crase ou '%%' (o shell de fora expande ao colar):\n%s", r.Command)
 	}
+	if strings.Contains(r.Command, `Windows\Temp`) {
+		t.Errorf("comando windows nao pode gravar em C:\\Windows\\Temp (qualquer usuario local escreve la):\n%s", r.Command)
+	}
 }
 
-// Forma exata de cada one-liner. Linux e macOS compartilham o install.sh (ele escolhe
-// o binario por 'uname -s'); travados para o ramo do Windows nao mexer neles. O
-// Windows e idem ao do enrollcmd (caminho fixo, sem '$').
-func TestProvisionCommandForms(t *testing.T) {
+// provision nao monta comando proprio: devolve o do installcmd, o MESMO que o enrollcmd
+// devolve (a forma exata esta travada la). Linux e macOS saem iguais: o install.sh
+// escolhe o binario por 'uname -s'.
+func TestProvisionCommandComesFromInstallcmd(t *testing.T) {
 	svc := newService()
-	const unix = `curl -fsSL https://scanner.suricatoos.com/install.sh | sudo sh -s -- ` +
-		`--server https://scanner.suricatoos.com/agent/v1 --token st_TESTE --ca-pin sha256:deadbeef`
-	const windows = `powershell -ExecutionPolicy Bypass -Command "` +
-		`iwr -useb https://scanner.suricatoos.com/install.ps1 -OutFile ` + installerPath + `; ` +
-		`& ` + installerPath + ` -Server 'https://scanner.suricatoos.com/agent/v1' -Token 'st_TESTE' -CaPin 'sha256:deadbeef'"`
+	const server, token, pin = "https://scanner.suricatoos.com/agent/v1", "st_TESTE", "sha256:deadbeef"
+	unix, err := installcmd.Unix(server, token, pin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	windows, err := installcmd.Windows(server, token, pin)
+	if err != nil {
+		t.Fatal(err)
+	}
 	for goos, want := range map[string]string{"linux": unix, "darwin": unix, "windows": windows} {
-		if got := svc.command(goos, "st_TESTE"); got != want {
-			t.Errorf("%s: forma do comando mudou:\n got: %s\nwant: %s", goos, got, want)
+		got, err := svc.command(goos, token)
+		if err != nil {
+			t.Fatalf("%s: %v", goos, err)
 		}
+		if got != want {
+			t.Errorf("%s: o comando nao e o do installcmd:\n got: %s\nwant: %s", goos, got, want)
+		}
+	}
+}
+
+// Config que nao cabe com seguranca no comando do Windows (aqui, uma URL com '$('): sem
+// comando e sem token vivo; o erro nao vaza nada. Linux e macOS citam o valor para o
+// shell e seguem funcionando.
+func TestProvisionWindowsRefusedWhenServerURLIsUnsafe(t *testing.T) {
+	tm := tokens.NewManager(tokens.NewMemStore())
+	svc := New(tm, "sha256:deadbeef", "https://scanner.suricatoos.com/agent/v1$(evil)")
+
+	rec := httptest.NewRecorder()
+	svc.Handler()(rec, gatedGet("/provision/install?os=windows"))
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("windows com URL insegura deveria 500, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if body := rec.Body.String(); strings.Contains(body, "st_") || strings.Contains(body, "evil") {
+		t.Errorf("a resposta de erro vazou dado: %s", body)
+	}
+	// O token mintado para um comando que nao saiu nao fica vivo.
+	recs, _ := tm.List()
+	if len(recs) != 1 || !recs[0].Revoked {
+		t.Fatalf("o token do comando recusado deveria estar revogado: %+v", recs)
+	}
+
+	rec = httptest.NewRecorder()
+	svc.Handler()(rec, gatedGet("/provision/install?os=linux"))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("linux deveria seguir funcionando, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var r response
+	if err := json.Unmarshal(rec.Body.Bytes(), &r); err != nil {
+		t.Fatal(err)
+	}
+	if want := "--server 'https://scanner.suricatoos.com/agent/v1$(evil)'"; !strings.Contains(r.Command, want) {
+		t.Errorf("o valor deveria sair citado para o shell (%s):\n%s", want, r.Command)
 	}
 }
 

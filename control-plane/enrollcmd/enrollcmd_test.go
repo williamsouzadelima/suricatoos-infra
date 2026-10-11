@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/williamsouzadelima/suricatoos-infra/control-plane/installcmd"
 	"github.com/williamsouzadelima/suricatoos-infra/control-plane/sessiongate"
 	"github.com/williamsouzadelima/suricatoos-infra/control-plane/tokens"
 )
@@ -204,8 +205,13 @@ func TestDarwinTargetUsesInstallScript(t *testing.T) {
 		t.Errorf("darwin nao usa imagem de container, got image=%q", r.Image)
 	}
 	// Mesmo one-liner do linux (so o token muda).
-	if got, want := s.command("darwin", "st_x"), s.command("linux", "st_x"); got != want {
-		t.Errorf("darwin deveria ter o mesmo one-liner do linux:\n got: %s\nwant: %s", got, want)
+	gotDarwin, errD := s.command("darwin", "st_x")
+	wantLinux, errL := s.command("linux", "st_x")
+	if errD != nil || errL != nil {
+		t.Fatalf("command: darwin=%v linux=%v", errD, errL)
+	}
+	if gotDarwin != wantLinux {
+		t.Errorf("darwin deveria ter o mesmo one-liner do linux:\n got: %s\nwant: %s", gotDarwin, wantLinux)
 	}
 	// O token e do tenant e com a mesma politica dos demais alvos.
 	recs, _ := tm.List()
@@ -341,16 +347,91 @@ func TestWindowsCommandIsRobust(t *testing.T) {
 		"-Server 'https://scanner.suricatoos.com/agent/v1'",
 		"-Token 'st_",
 		"-CaPin 'sha256:abc123'",
-		`C:\Windows\Temp\suricatoos-install.ps1`,
+		"(Get-Item env:TEMP).Value", // TEMP de quem roda o comando, nao um caminho fixo
 	} {
 		if !strings.Contains(r.Command, want) {
 			t.Errorf("comando windows nao contem %q:\n%s", want, r.Command)
 		}
 	}
-	// REGRESSAO: nenhum '$' no comando. Um '$f'/'$env:TEMP' dentro do -Command e
+	// REGRESSAO 1: nenhum '$' no comando. Um '$f'/'$env:TEMP' dentro do -Command e
 	// expandido pelo shell de FORA ao colar num prompt do PowerShell, quebrando o
-	// one-liner (=Join-Path..., -OutFile vazio). O comando robusto nao usa '$'.
-	if strings.Contains(r.Command, "$") {
-		t.Errorf("comando windows nao pode conter '$' (quebra ao colar no PowerShell):\n%s", r.Command)
+	// one-liner (=Join-Path..., -OutFile vazio). O comando robusto nao usa '$' (nem
+	// crase, nem '%' do cmd.exe).
+	if strings.ContainsAny(r.Command, "$`%") {
+		t.Errorf("comando windows nao pode conter '$', crase ou '%%' (quebra ao colar no PowerShell/cmd):\n%s", r.Command)
+	}
+	// REGRESSAO 2: nada de caminho fixo em C:\Windows\Temp, onde qualquer usuario local
+	// cria arquivos (pre-criar ou trocar o instalador antes da execucao elevada).
+	if strings.Contains(r.Command, `Windows\Temp`) {
+		t.Errorf("comando windows nao pode gravar em C:\\Windows\\Temp:\n%s", r.Command)
+	}
+}
+
+// enrollcmd nao monta comando proprio para linux, macOS e Windows: devolve o do
+// installcmd, o MESMO que o provision devolve (a forma exata esta travada la).
+func TestCommandsComeFromInstallcmd(t *testing.T) {
+	s, _ := newSvc(knownAcme)
+	const server, token, pin = "https://scanner.suricatoos.com/agent/v1", "st_TESTE", "sha256:abc123"
+	unix, err := installcmd.Unix(server, token, pin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	windows, err := installcmd.Windows(server, token, pin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for target, want := range map[string]string{"linux": unix, "darwin": unix, "windows": windows} {
+		got, err := s.command(target, token)
+		if err != nil {
+			t.Fatalf("%s: %v", target, err)
+		}
+		if got != want {
+			t.Errorf("%s: o comando nao e o do installcmd:\n got: %s\nwant: %s", target, got, want)
+		}
+	}
+}
+
+// Config que nao cabe com seguranca no comando do Windows (aqui, uma URL com '$('): sem
+// comando e sem token vivo; o erro nao vaza nada. Docker, linux e macOS citam o valor
+// para o shell e seguem funcionando.
+func TestWindowsRefusedWhenServerURLIsUnsafe(t *testing.T) {
+	tm := tokens.NewManager(tokens.NewMemStore())
+	s := New(Config{
+		TM:          tm,
+		Known:       knownAcme,
+		CAPin:       "sha256:abc123",
+		ServerURL:   "https://scanner.suricatoos.com/agent/v1$(evil)",
+		AdminSecret: "sekret",
+	})
+
+	w := do(s, "GET", "/api/v1/tenants/acme/enroll-command?target=windows", "sekret")
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("windows com URL insegura deveria 500, got %d: %s", w.Code, w.Body.String())
+	}
+	if body := w.Body.String(); strings.Contains(body, "st_") || strings.Contains(body, "evil") {
+		t.Errorf("a resposta de erro vazou dado: %s", body)
+	}
+	// O token mintado para um comando que nao saiu nao fica vivo.
+	recs, _ := tm.List()
+	if len(recs) != 1 || !recs[0].Revoked {
+		t.Fatalf("o token do comando recusado deveria estar revogado: %+v", recs)
+	}
+
+	for target, want := range map[string]string{
+		"linux":  "--server 'https://scanner.suricatoos.com/agent/v1$(evil)'",
+		"darwin": "--server 'https://scanner.suricatoos.com/agent/v1$(evil)'",
+		"docker": "CLOUD_BASE_URL='https://scanner.suricatoos.com/agent/v1$(evil)'",
+	} {
+		w := do(s, "GET", "/api/v1/tenants/acme/enroll-command?target="+target, "sekret")
+		if w.Code != http.StatusOK {
+			t.Fatalf("%s deveria seguir funcionando, got %d: %s", target, w.Code, w.Body.String())
+		}
+		var r response
+		if err := json.Unmarshal(w.Body.Bytes(), &r); err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(r.Command, want) {
+			t.Errorf("%s: o valor deveria sair citado para o shell (%s):\n%s", target, want, r.Command)
+		}
 	}
 }
