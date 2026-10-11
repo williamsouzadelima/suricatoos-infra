@@ -187,10 +187,12 @@ services:
       # Store de provedores (0600, escrita atômica; chaves CIFRADAS).
       AI_PROVIDERS_FILE: "${AI_PROVIDERS_FILE:-/data/ai-providers.json}"
       # Só modelos GRATUITOS (default true, custo zero): só OpenRouter/UnoRouter e só
-      # modelo com id terminado em :free (ou openrouter/free no OpenRouter); o planner
-      # recusa qualquer outro antes de ir à rede. Modelo gratuito não garante ZDR:
-      # habilitar exige a ciência da política de dados (data_policy_ack) gravada pelo
-      # operador. "false" volta a aceitar gateway genérico e modelo pago (régua UE+ZDR).
+      # modelo com id terminado em :free (ou openrouter/free no OpenRouter); a
+      # base_url fica fixa no endpoint oficial do tipo (a enviada é ignorada), então a
+      # chave só vai ao roteador; o planner recusa qualquer outro modelo/endpoint antes
+      # de ir à rede. Modelo gratuito não garante ZDR: habilitar exige a ciência da
+      # política de dados (data_policy_ack) gravada pelo operador. "false" volta a
+      # aceitar gateway genérico, endpoint próprio e modelo pago (régua UE+ZDR).
       AI_FREE_MODELS_ONLY: "${AI_FREE_MODELS_ONLY:-true}"
       # Remediation planner (IA advisory). Gatilho por operador (admin). DARK por padrão.
       AI_PLANNER_ENABLED: "${AI_PLANNER_ENABLED:-false}"
@@ -200,6 +202,10 @@ services:
       # modelo gratuito custa 0 (não consome o teto).
       AI_PLANNER_BUDGET_USD: "${AI_PLANNER_BUDGET_USD:-50}"
       AI_PLANNER_USD_PER_1K: "${AI_PLANNER_USD_PER_1K:-0.005}"
+      # Tempo total de UM rascunho (todos os provedores e formatos juntos; duração
+      # Go, ex.: 90s, 5m). A rota do planner ganha prazo de escrita próprio a partir
+      # dele; o WriteTimeout geral do servidor não muda.
+      AI_PLANNER_TIMEOUT: "${AI_PLANNER_TIMEOUT:-5m}"
       # Provedores a usar: ids separados por vírgula, em ordem de prioridade (em 429,
       # 5xx, timeout ou erro de rede tenta o próximo). Vazio = todos os habilitados:
       # openrouter-free, depois unorouter-free, depois o resto por nome.

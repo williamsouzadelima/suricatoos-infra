@@ -74,8 +74,9 @@ func newModelsClient(rt http.RoundTripper) *http.Client {
 	}
 }
 
-// doModels lists the FREE models of provider {id} from its live catalog
-// (<base_url>/models), queried server-side with the stored key when there is one.
+// doModels lists the FREE models of provider {id} from its router's live catalog
+// (the OFFICIAL <base_url>/models only), queried server-side with the stored key
+// when there is one.
 func (s *Service) doModels(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	src, err := s.reg.modelsSource(id)
@@ -83,12 +84,16 @@ func (s *Service) doModels(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
+	if errors.Is(err, ErrNotOfficialEndpoint) {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]any{"error": err.Error()})
+		return
+	}
 	if err != nil {
 		http.Error(w, "erro interno", http.StatusInternalServerError)
 		return
 	}
-	// Only OpenRouter's catalog is public; UnoRouter (and a generic gateway)
-	// refuses /models without a key, so do not even call it.
+	// Only OpenRouter's catalog is public; UnoRouter refuses /models without a
+	// key, so do not even call it.
 	if src.key == "" && src.kind != KindOpenRouter {
 		writeJSON(w, http.StatusConflict, map[string]any{"error": msgPasteKey})
 		return

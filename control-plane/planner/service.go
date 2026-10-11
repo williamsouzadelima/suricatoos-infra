@@ -5,7 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"time"
 )
+
+// planWriteMargin is the time left to write the response after the planner's
+// overall timeout (the plan route's write deadline is Timeout + this margin).
+const planWriteMargin = 30 * time.Second
 
 // Service exposes the operator-triggered draft endpoint. A draft is produced ONLY
 // on an explicit, admin-authenticated request — never automatically — which keeps
@@ -45,6 +50,13 @@ func (s *Service) planHandler() http.HandlerFunc {
 			http.Error(w, "corpo JSON inválido", http.StatusBadRequest)
 			return
 		}
+		// A draft can take far longer than the server-wide WriteTimeout (a slow free
+		// model, several providers/formats): without this the connection would be
+		// torn down before the draft is written. THIS response gets its own write
+		// deadline, bounded by the planner's overall timeout (the server-wide one
+		// stays as is for every other route). Best effort: a writer without deadline
+		// support simply keeps the server's.
+		_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(s.planner.Timeout() + planWriteMargin))
 		plan, err := s.planner.Plan(r.Context(), req)
 		if err != nil {
 			switch {
@@ -52,6 +64,8 @@ func (s *Service) planHandler() http.HandlerFunc {
 				writeJSON(w, http.StatusForbidden, map[string]any{"error": err.Error()})
 			case errors.Is(err, ErrBudget):
 				writeJSON(w, http.StatusTooManyRequests, map[string]any{"error": err.Error()})
+			case errors.Is(err, ErrTimeout):
+				writeJSON(w, http.StatusGatewayTimeout, map[string]any{"error": err.Error()})
 			default:
 				writeJSON(w, http.StatusBadGateway, map[string]any{"error": err.Error()})
 			}

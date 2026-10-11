@@ -10,34 +10,56 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
+
+	"github.com/williamsouzadelima/suricatoos-infra/control-plane/aiproviders"
 )
 
-// scriptLLM answers per provider BaseURL and records the order of the calls.
+// scriptLLM answers per MODEL (the free providers sit on their routers' official
+// endpoints, so the model is what tells them apart) and records the call order.
 type scriptLLM struct {
-	byBase map[string]scripted
-	calls  []string
+	byModel map[string]scripted
+	mu      sync.Mutex
+	calls   []string
 }
 
 type scripted struct {
 	resp ChatResponse
 	err  error
+	fn   func(ctx context.Context) (ChatResponse, error) // when set, answers instead of resp/err
 }
 
-func (s *scriptLLM) Chat(_ context.Context, req ChatRequest) (ChatResponse, error) {
-	s.calls = append(s.calls, req.BaseURL)
-	r, ok := s.byBase[req.BaseURL]
+func (s *scriptLLM) Chat(ctx context.Context, req ChatRequest) (ChatResponse, error) {
+	s.mu.Lock()
+	s.calls = append(s.calls, req.Model)
+	r, ok := s.byModel[req.Model]
+	s.mu.Unlock()
 	if !ok {
-		return ChatResponse{}, fmt.Errorf("base inesperada %q", req.BaseURL)
+		return ChatResponse{}, fmt.Errorf("modelo inesperado %q", req.Model)
+	}
+	if r.fn != nil {
+		return r.fn(ctx)
 	}
 	return r.resp, r.err
 }
 
+// called is the comma-joined models in call order.
+func (s *scriptLLM) called() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return strings.Join(s.calls, ",")
+}
+
 var (
-	freeA = Provider{ID: "openrouter-free", Name: "OpenRouter grátis", Kind: "openrouter", BaseURL: "https://a/v1", APIKey: "ka", Model: "openrouter/free"}
-	freeB = Provider{ID: "unorouter-free", Name: "UnoRouter grátis", Kind: "unorouter", BaseURL: "https://b/v1", APIKey: "kb", Model: "deepseek-v4-flash:free"}
-	paidP = Provider{ID: "pago", Name: "Pago", Kind: "openrouter", BaseURL: "https://p/v1", APIKey: "kp", Model: "openai/gpt-5.5"}
+	officialOR  = aiproviders.OfficialBaseURL(aiproviders.KindOpenRouter)
+	officialUno = aiproviders.OfficialBaseURL(aiproviders.KindUnoRouter)
+
+	freeA = Provider{ID: "openrouter-free", Name: "OpenRouter grátis", Kind: "openrouter", BaseURL: officialOR, APIKey: "ka", Model: "openrouter/free"}
+	freeB = Provider{ID: "unorouter-free", Name: "UnoRouter grátis", Kind: "unorouter", BaseURL: officialUno, APIKey: "kb", Model: "deepseek-v4-flash:free"}
+	paidP = Provider{ID: "pago", Name: "Pago", Kind: "openrouter", BaseURL: officialOR, APIKey: "kp", Model: "openai/gpt-5.5"}
 )
 
 func okScript() scripted { return scripted{resp: ChatResponse{Content: okContent}} }
@@ -52,6 +74,45 @@ func (timeoutErr) Error() string   { return "Client.Timeout exceeded while await
 func (timeoutErr) Timeout() bool   { return true }
 func (timeoutErr) Temporary() bool { return true }
 
+func hostOf(raw string) string {
+	u, _ := url.Parse(raw)
+	return u.Host
+}
+
+// hostRouter delivers requests addressed to the given hosts to test servers
+// (keeping the Host header). Any other host goes through unchanged and is really
+// reached — so zero hits on a foreign test server means it was never contacted.
+type hostRouter map[string]*httptest.Server
+
+func (h hostRouter) RoundTrip(r *http.Request) (*http.Response, error) {
+	srv, ok := h[r.URL.Host]
+	if !ok {
+		return http.DefaultTransport.RoundTrip(r)
+	}
+	u, err := url.Parse(srv.URL)
+	if err != nil {
+		return nil, err
+	}
+	r2 := r.Clone(r.Context())
+	r2.URL.Scheme, r2.URL.Host = u.Scheme, u.Host
+	r2.Host = r.URL.Host
+	return http.DefaultTransport.RoundTrip(r2)
+}
+
+// routedLLM is the real HTTP client with the routes above.
+func routedLLM(routes hostRouter) *HTTPLLM {
+	return &HTTPLLM{hc: &http.Client{Timeout: 60 * time.Second, Transport: routes}}
+}
+
+// chatBody is an OpenAI-compatible completion whose message content is content.
+func chatBody(content string) []byte {
+	b, _ := json.Marshal(map[string]any{
+		"choices": []any{map[string]any{"message": map[string]any{"content": content}}},
+		"usage":   map[string]any{"prompt_tokens": 10, "completion_tokens": 5},
+	})
+	return b
+}
+
 func TestPlan_FreeOnlyRefusesPaidModelBeforeAnyNetwork(t *testing.T) {
 	// The real HTTP client against a counting server: proves ZERO network calls.
 	var hits int32
@@ -60,10 +121,9 @@ func TestPlan_FreeOnlyRefusesPaidModelBeforeAnyNetwork(t *testing.T) {
 		_, _ = w.Write(chatBody(okContent))
 	}))
 	defer srv.Close()
-	paid := paidP
-	paid.BaseURL = srv.URL
+	llm := routedLLM(hostRouter{hostOf(officialOR): srv})
 
-	_, err := New(NewHTTPLLM(), fakeResolver{provs: []Provider{paid}}, freeCfg()).Plan(context.Background(), sampleReq())
+	_, err := New(llm, fakeResolver{provs: []Provider{paidP}}, freeCfg()).Plan(context.Background(), sampleReq())
 	if !errors.Is(err, ErrNonFreeModel) {
 		t.Fatalf("modelo pago com a regra ligada deveria dar ErrNonFreeModel, veio %v", err)
 	}
@@ -72,14 +132,56 @@ func TestPlan_FreeOnlyRefusesPaidModelBeforeAnyNetwork(t *testing.T) {
 	}
 }
 
+// With the rule on, the planner only ever calls the routers' official endpoints: a
+// provider whose stored base_url points elsewhere (e.g. stored before the rule), or
+// a generic gateway, is refused before any network — even with a ":free" model.
+func TestPlan_FreeOnlyNeverCallsAForeignEndpoint(t *testing.T) {
+	var evilHits, legitHits int32
+	var legitHost atomic.Value
+	evil := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&evilHits, 1)
+		_, _ = w.Write(chatBody(okContent))
+	}))
+	defer evil.Close()
+	legit := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&legitHits, 1)
+		legitHost.Store(r.Host)
+		_, _ = w.Write(chatBody(okContent))
+	}))
+	defer legit.Close()
+	llm := routedLLM(hostRouter{hostOf(officialOR): legit, hostOf(officialUno): legit})
+
+	repointed := Provider{Name: "OpenRouter repontado", Kind: "openrouter", BaseURL: evil.URL, APIKey: "k1", Model: "openrouter/free"}
+	gateway := Provider{Name: "Gateway antigo", Kind: "openai_compatible", BaseURL: evil.URL, APIKey: "k2", Model: "x:free"}
+
+	_, err := New(llm, fakeResolver{provs: []Provider{repointed, gateway}}, freeCfg()).Plan(context.Background(), sampleReq())
+	if !errors.Is(err, ErrNonFreeModel) {
+		t.Fatalf("só endpoints fora do oficial: esperava a recusa da regra, veio %v", err)
+	}
+	if !strings.Contains(err.Error(), "não é o oficial") || !strings.Contains(err.Error(), "openai_compatible") {
+		t.Fatalf("a recusa deveria dizer o motivo de cada provedor: %v", err)
+	}
+
+	plan, err := New(llm, fakeResolver{provs: []Provider{repointed, gateway, freeB}}, freeCfg()).Plan(context.Background(), sampleReq())
+	if err != nil || plan.Provider != freeB.Name {
+		t.Fatalf("o provedor no endpoint oficial deveria atender: plan=%+v err=%v", plan, err)
+	}
+	if n := atomic.LoadInt32(&evilHits); n != 0 {
+		t.Fatalf("o planner contatou um endpoint fora do oficial (%d chamada(s)) — a chave iria junto", n)
+	}
+	if atomic.LoadInt32(&legitHits) != 1 || legitHost.Load() != hostOf(officialUno) {
+		t.Fatalf("esperava 1 chamada ao endpoint oficial do UnoRouter: hits=%d host=%v", legitHits, legitHost.Load())
+	}
+}
+
 func TestPlan_FreeOnlySkipsPaidAndUsesFree(t *testing.T) {
-	llm := &scriptLLM{byBase: map[string]scripted{freeB.BaseURL: okScript()}}
+	llm := &scriptLLM{byModel: map[string]scripted{freeB.Model: okScript()}}
 	plan, err := New(llm, fakeResolver{provs: []Provider{paidP, freeB}}, freeCfg()).Plan(context.Background(), sampleReq())
 	if err != nil {
 		t.Fatalf("err = %v", err)
 	}
-	if strings.Join(llm.calls, ",") != freeB.BaseURL {
-		t.Fatalf("só o gratuito deveria ser chamado, chamadas = %v", llm.calls)
+	if llm.called() != freeB.Model {
+		t.Fatalf("só o gratuito deveria ser chamado, chamadas = %s", llm.called())
 	}
 	if plan.Provider != freeB.Name || plan.Model != freeB.Model {
 		t.Fatalf("o plano deveria registrar o provedor que redigiu: %s/%s", plan.Provider, plan.Model)
@@ -87,13 +189,13 @@ func TestPlan_FreeOnlySkipsPaidAndUsesFree(t *testing.T) {
 }
 
 func TestPlan_FreeRuleOffAllowsPaid(t *testing.T) {
-	llm := &scriptLLM{byBase: map[string]scripted{paidP.BaseURL: okScript()}}
+	llm := &scriptLLM{byModel: map[string]scripted{paidP.Model: okScript()}}
 	cfg := Config{ConsentGranted: true} // FreeModelsOnly off: old behavior
 	if _, err := New(llm, fakeResolver{provs: []Provider{paidP}}, cfg).Plan(context.Background(), sampleReq()); err != nil {
 		t.Fatalf("regra desligada: modelo pago deveria ser chamado: %v", err)
 	}
-	if len(llm.calls) != 1 {
-		t.Fatalf("chamadas = %v", llm.calls)
+	if llm.called() != paidP.Model {
+		t.Fatalf("chamadas = %s", llm.called())
 	}
 }
 
@@ -105,20 +207,20 @@ func TestPlan_FallsBackOnRetryableErrors(t *testing.T) {
 		{"429", &StatusError{Code: http.StatusTooManyRequests}},
 		{"500", &StatusError{Code: http.StatusInternalServerError}},
 		{"503", &StatusError{Code: http.StatusServiceUnavailable}},
-		{"timeout", &url.Error{Op: "Post", URL: "https://a/v1/chat/completions", Err: timeoutErr{}}},
-		{"rede", &url.Error{Op: "Post", URL: "https://a/v1/chat/completions", Err: &net.OpError{Op: "dial", Net: "tcp", Err: errors.New("connection refused")}}},
+		{"timeout", &url.Error{Op: "Post", URL: officialOR + "/chat/completions", Err: timeoutErr{}}},
+		{"rede", &url.Error{Op: "Post", URL: officialOR + "/chat/completions", Err: &net.OpError{Op: "dial", Net: "tcp", Err: errors.New("connection refused")}}},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			llm := &scriptLLM{byBase: map[string]scripted{
-				freeA.BaseURL: {err: c.err},
-				freeB.BaseURL: okScript(),
+			llm := &scriptLLM{byModel: map[string]scripted{
+				freeA.Model: {err: c.err},
+				freeB.Model: okScript(),
 			}}
 			plan, err := New(llm, fakeResolver{provs: []Provider{freeA, freeB}}, freeCfg()).Plan(context.Background(), sampleReq())
 			if err != nil {
 				t.Fatalf("deveria cair p/ o próximo provedor: %v", err)
 			}
-			if strings.Join(llm.calls, ",") != freeA.BaseURL+","+freeB.BaseURL {
-				t.Fatalf("ordem de chamadas = %v", llm.calls)
+			if llm.called() != freeA.Model+","+freeB.Model {
+				t.Fatalf("ordem de chamadas = %s", llm.called())
 			}
 			if plan.Provider != freeB.Name {
 				t.Fatalf("o plano deveria vir do 2º provedor: %s", plan.Provider)
@@ -129,39 +231,39 @@ func TestPlan_FallsBackOnRetryableErrors(t *testing.T) {
 
 func TestPlan_NoFallbackOnRequestErrors(t *testing.T) {
 	for _, code := range []int{400, 401, 403, 404, 422} {
-		llm := &scriptLLM{byBase: map[string]scripted{
-			freeA.BaseURL: {err: &StatusError{Code: code}},
-			freeB.BaseURL: okScript(),
+		llm := &scriptLLM{byModel: map[string]scripted{
+			freeA.Model: {err: &StatusError{Code: code}},
+			freeB.Model: okScript(),
 		}}
 		_, err := New(llm, fakeResolver{provs: []Provider{freeA, freeB}}, freeCfg()).Plan(context.Background(), sampleReq())
 		if err == nil {
 			t.Fatalf("%d: erro do pedido deveria parar (sem fallback)", code)
 		}
-		if len(llm.calls) != 1 {
-			t.Fatalf("%d: não deveria tentar o próximo, chamadas = %v", code, llm.calls)
+		if llm.called() != freeA.Model {
+			t.Fatalf("%d: não deveria tentar o próximo, chamadas = %s", code, llm.called())
 		}
 	}
 	// An unclassified error (not 429/5xx/timeout/network) also stops.
-	llm := &scriptLLM{byBase: map[string]scripted{
-		freeA.BaseURL: {err: errors.New("provedor não retornou conteúdo")},
-		freeB.BaseURL: okScript(),
+	llm := &scriptLLM{byModel: map[string]scripted{
+		freeA.Model: {err: errors.New("provedor não retornou conteúdo")},
+		freeB.Model: okScript(),
 	}}
-	if _, err := New(llm, fakeResolver{provs: []Provider{freeA, freeB}}, freeCfg()).Plan(context.Background(), sampleReq()); err == nil || len(llm.calls) != 1 {
-		t.Fatalf("erro não classificado deveria parar: err=%v chamadas=%v", err, llm.calls)
+	if _, err := New(llm, fakeResolver{provs: []Provider{freeA, freeB}}, freeCfg()).Plan(context.Background(), sampleReq()); err == nil || llm.called() != freeA.Model {
+		t.Fatalf("erro não classificado deveria parar: err=%v chamadas=%s", err, llm.called())
 	}
 }
 
 func TestPlan_AllProvidersFailReportsEach(t *testing.T) {
-	llm := &scriptLLM{byBase: map[string]scripted{
-		freeA.BaseURL: {err: &StatusError{Code: http.StatusTooManyRequests}},
-		freeB.BaseURL: {err: &StatusError{Code: http.StatusBadGateway}},
+	llm := &scriptLLM{byModel: map[string]scripted{
+		freeA.Model: {err: &StatusError{Code: http.StatusTooManyRequests}},
+		freeB.Model: {err: &StatusError{Code: http.StatusBadGateway}},
 	}}
 	_, err := New(llm, fakeResolver{provs: []Provider{freeA, freeB}}, freeCfg()).Plan(context.Background(), sampleReq())
-	if err == nil || len(llm.calls) != 2 {
-		t.Fatalf("todos falhando: err=%v chamadas=%v", err, llm.calls)
+	if err == nil || llm.called() != freeA.Model+","+freeB.Model {
+		t.Fatalf("todos falhando: err=%v chamadas=%s", err, llm.called())
 	}
-	if errors.Is(err, ErrBudget) || errors.Is(err, ErrNonFreeModel) || errors.Is(err, ErrConsentOff) {
-		t.Fatalf("falha de provedor não é recusa de governança: %v", err)
+	if errors.Is(err, ErrBudget) || errors.Is(err, ErrNonFreeModel) || errors.Is(err, ErrConsentOff) || errors.Is(err, ErrTimeout) {
+		t.Fatalf("falha de provedor não é recusa de governança nem tempo esgotado: %v", err)
 	}
 	for _, name := range []string{freeA.Name, freeB.Name} {
 		if !strings.Contains(err.Error(), name) {
@@ -171,17 +273,31 @@ func TestPlan_AllProvidersFailReportsEach(t *testing.T) {
 }
 
 func TestPlan_CancelledContextStopsFallback(t *testing.T) {
+	// The operator's request goes away DURING the first attempt.
 	ctx, cancel := context.WithCancel(context.Background())
-	cancel() // the operator's request went away
-	llm := &scriptLLM{byBase: map[string]scripted{
-		freeA.BaseURL: {err: &url.Error{Op: "Post", URL: "https://a/v1/chat/completions", Err: context.Canceled}},
-		freeB.BaseURL: okScript(),
+	defer cancel()
+	llm := &scriptLLM{byModel: map[string]scripted{
+		freeA.Model: {fn: func(context.Context) (ChatResponse, error) {
+			cancel()
+			return ChatResponse{}, &url.Error{Op: "Post", URL: officialOR + "/chat/completions", Err: context.Canceled}
+		}},
+		freeB.Model: okScript(),
 	}}
-	if _, err := New(llm, fakeResolver{provs: []Provider{freeA, freeB}}, freeCfg()).Plan(ctx, sampleReq()); err == nil {
-		t.Fatal("contexto cancelado deveria dar erro")
+	_, err := New(llm, fakeResolver{provs: []Provider{freeA, freeB}}, freeCfg()).Plan(ctx, sampleReq())
+	if err == nil || errors.Is(err, ErrTimeout) {
+		t.Fatalf("cancelamento deveria dar erro (e não tempo esgotado): %v", err)
 	}
-	if len(llm.calls) != 1 {
-		t.Fatalf("com o pedido cancelado não se tenta o próximo provedor: %v", llm.calls)
+	if llm.called() != freeA.Model {
+		t.Fatalf("com o pedido cancelado não se tenta o próximo provedor: %s", llm.called())
+	}
+
+	// Already cancelled before Plan: no attempt at all, and the error says so.
+	gone, stop := context.WithCancel(context.Background())
+	stop()
+	llm2 := &scriptLLM{byModel: map[string]scripted{freeA.Model: okScript()}}
+	_, err = New(llm2, fakeResolver{provs: []Provider{freeA}}, freeCfg()).Plan(gone, sampleReq())
+	if err == nil || !errors.Is(err, context.Canceled) || llm2.called() != "" {
+		t.Fatalf("pedido já cancelado: nenhuma tentativa e erro de cancelamento; err=%v chamadas=%q", err, llm2.called())
 	}
 }
 
@@ -193,9 +309,9 @@ func (s *switchResolver) Resolve(context.Context) ([]Provider, error) { return s
 
 func TestPlan_FreeModelCostsZero(t *testing.T) {
 	huge := Usage{PromptTokens: 1_000_000, CompletionTokens: 1_000_000}
-	llm := &scriptLLM{byBase: map[string]scripted{
-		freeA.BaseURL: {resp: ChatResponse{Content: okContent, Usage: huge}},
-		paidP.BaseURL: okScript(),
+	llm := &scriptLLM{byModel: map[string]scripted{
+		freeA.Model: {resp: ChatResponse{Content: okContent, Usage: huge}},
+		paidP.Model: okScript(),
 	}}
 	// Tiny ceiling: a single PAID call of this size would exhaust it.
 	res := &switchResolver{provs: []Provider{freeA}}
@@ -211,16 +327,16 @@ func TestPlan_FreeModelCostsZero(t *testing.T) {
 	if err != nil || plan.Provider != paidP.Name {
 		t.Fatalf("chamadas gratuitas não podem consumir o orçamento: plan=%+v err=%v", plan, err)
 	}
-	if len(llm.calls) != 4 {
-		t.Fatalf("chamadas = %v", llm.calls)
+	if n := strings.Count(llm.called(), ",") + 1; n != 4 {
+		t.Fatalf("chamadas = %s", llm.called())
 	}
 }
 
 func TestPlan_SpentBudgetStillServesFree(t *testing.T) {
 	huge := Usage{PromptTokens: 1_000_000, CompletionTokens: 1_000_000}
-	llm := &scriptLLM{byBase: map[string]scripted{
-		paidP.BaseURL: {resp: ChatResponse{Content: okContent, Usage: huge}},
-		freeA.BaseURL: okScript(),
+	llm := &scriptLLM{byModel: map[string]scripted{
+		paidP.Model: {resp: ChatResponse{Content: okContent, Usage: huge}},
+		freeA.Model: okScript(),
 	}}
 	p := New(llm, fakeResolver{provs: []Provider{paidP, freeA}}, Config{ConsentGranted: true, MonthlyBudgetUSD: 0.001, USDPer1kTokens: 0.005})
 	plan, err := p.Plan(context.Background(), sampleReq()) // paid call: exhausts the ceiling
@@ -231,21 +347,14 @@ func TestPlan_SpentBudgetStillServesFree(t *testing.T) {
 	if err != nil || plan.Provider != freeA.Name {
 		t.Fatalf("com o orçamento estourado o gratuito ainda serve: plan=%+v err=%v", plan, err)
 	}
-	if strings.Join(llm.calls, ",") != paidP.BaseURL+","+freeA.BaseURL {
-		t.Fatalf("o pago não pode ser chamado após estourar o teto: %v", llm.calls)
+	if llm.called() != paidP.Model+","+freeA.Model {
+		t.Fatalf("o pago não pode ser chamado após estourar o teto: %s", llm.called())
 	}
 }
 
-// chatBody is an OpenAI-compatible completion whose message content is content.
-func chatBody(content string) []byte {
-	b, _ := json.Marshal(map[string]any{
-		"choices": []any{map[string]any{"message": map[string]any{"content": content}}},
-		"usage":   map[string]any{"prompt_tokens": 10, "completion_tokens": 5},
-	})
-	return b
-}
-
-func TestPlan_ProviderFallbackOverHTTP(t *testing.T) {
+// With the rule OFF, custom endpoints keep working (today's behavior), and the
+// provider fallback runs over real HTTP: network error → 503 → healthy.
+func TestPlan_RuleOffProviderFallbackOverHTTP(t *testing.T) {
 	var hitsDown, hitsUp int32
 	down := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		atomic.AddInt32(&hitsDown, 1)
@@ -264,9 +373,9 @@ func TestPlan_ProviderFallbackOverHTTP(t *testing.T) {
 	provs := []Provider{
 		{Name: "Fora do ar", Kind: "openrouter", BaseURL: goneURL, APIKey: "k1", Model: "openrouter/free"},
 		{Name: "503", Kind: "unorouter", BaseURL: down.URL, APIKey: "k2", Model: "x:free"},
-		{Name: "Saudável", Kind: "unorouter", BaseURL: up.URL, APIKey: "k3", Model: "y:free"},
+		{Name: "Saudável", Kind: "openai_compatible", BaseURL: up.URL, APIKey: "k3", Model: "y:free"},
 	}
-	plan, err := New(NewHTTPLLM(), fakeResolver{provs: provs}, freeCfg()).Plan(context.Background(), sampleReq())
+	plan, err := New(NewHTTPLLM(), fakeResolver{provs: provs}, Config{ConsentGranted: true}).Plan(context.Background(), sampleReq())
 	if err != nil {
 		t.Fatalf("deveria chegar ao provedor saudável: %v", err)
 	}
@@ -292,20 +401,19 @@ func TestPlan_FormatFallbackStillRequiresValidDraft(t *testing.T) {
 			_, _ = w.Write(chatBody(content))
 		}))
 	}
-	prov := func(base string) fakeResolver {
-		return fakeResolver{provs: []Provider{{Name: "OR", Kind: "openrouter", BaseURL: base, APIKey: "k", Model: "openrouter/free"}}}
-	}
+	res := fakeResolver{provs: []Provider{freeA}} // official endpoint, free model: the rule lets it through
 
 	// Free text / foreign JSON through the fallback is still REJECTED by parseDraft.
 	bad := srv(`{"resposta":"texto livre, sem o schema"}`)
 	defer bad.Close()
-	if _, err := New(NewHTTPLLM(), prov(bad.URL), freeCfg()).Plan(context.Background(), sampleReq()); err == nil {
-		t.Fatal("saída fora do schema não pode virar plano, nem no fallback de formato")
+	_, err := New(routedLLM(hostRouter{hostOf(officialOR): bad}), res, freeCfg()).Plan(context.Background(), sampleReq())
+	if err == nil || errors.Is(err, ErrNonFreeModel) {
+		t.Fatalf("saída fora do schema não pode virar plano, nem no fallback de formato: %v", err)
 	}
 	// A valid draft through the same fallback is accepted.
 	good := srv(okContent)
 	defer good.Close()
-	plan, err := New(NewHTTPLLM(), prov(good.URL), freeCfg()).Plan(context.Background(), sampleReq())
+	plan, err := New(routedLLM(hostRouter{hostOf(officialOR): good}), res, freeCfg()).Plan(context.Background(), sampleReq())
 	if err != nil || len(plan.Steps) == 0 {
 		t.Fatalf("rascunho válido via fallback deveria passar: plan=%+v err=%v", plan, err)
 	}

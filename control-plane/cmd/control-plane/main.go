@@ -44,8 +44,10 @@
 //	                      keys stored ENCRYPTED). Absent → in-memory.
 //	AI_FREE_MODELS_ONLY   DEFAULT true: only FREE models (id ending in ":free", or
 //	                      openrouter/free) of OpenRouter/UnoRouter may be configured,
-//	                      and the planner refuses any other model. "false" restores
-//	                      the generic gateway and paid models (still governed).
+//	                      base_url is pinned to the router's official endpoint (a
+//	                      supplied one is ignored), and the planner refuses any other
+//	                      model or endpoint. "false" restores the generic gateway,
+//	                      custom endpoints and paid models (still governed).
 //	AI_PLANNER_ENABLED    "true" mounts POST /api/v1/remediation/plan (operator-
 //	                      triggered AI draft). DARK by default; admin-bearer.
 //	AI_PLANNER_CONSENT    "true" grants per-purpose consent. DEFAULT off → no model
@@ -53,6 +55,10 @@
 //	AI_PLANNER_BUDGET_USD monthly spend ceiling (estimate); <=0/unset → no ceiling.
 //	                      Calls to free models cost 0 against it.
 //	AI_PLANNER_USD_PER_1K cost estimate per 1k tokens, for the budget gate.
+//	AI_PLANNER_TIMEOUT    overall time budget of ONE draft — every provider and
+//	                      response-format attempt together (Go duration, default
+//	                      5m). The plan route gets its own write deadline from it;
+//	                      the server-wide WriteTimeout is unchanged.
 //	AI_PLANNER_PROVIDER_ID comma-separated provider ids in priority order (the
 //	                      next one is tried on 429/5xx/timeout/network error);
 //	                      unset → every enabled provider, openrouter-free first,
@@ -282,6 +288,8 @@ func main() {
 	// default and the budget caps spend, so a drafting call only happens on an
 	// explicit admin request with consent granted and an enabled provider. The real
 	// OpenAI-compatible client reads the key from aiproviders server-side.
+	// AI_PLANNER_TIMEOUT caps one draft as a whole (all providers and formats).
+	plannerTimeout := envDuration("AI_PLANNER_TIMEOUT", 5*time.Minute)
 	plannerSvc := cpplanner.NewService(
 		cpplanner.New(
 			cpplanner.NewHTTPLLM(),
@@ -291,6 +299,7 @@ func main() {
 				MonthlyBudgetUSD: envFloat("AI_PLANNER_BUDGET_USD"),
 				USDPer1kTokens:   envFloat("AI_PLANNER_USD_PER_1K"),
 				FreeModelsOnly:   aiFreeOnly,
+				Timeout:          plannerTimeout,
 			},
 		),
 		adminSecret,
@@ -397,7 +406,7 @@ func main() {
 	}
 	if plannerEnabled {
 		plannerSvc.Register(mux)
-		log.Printf("remediation-planner: rascunho de IA HABILITADO (advisory; consentimento=%v)", os.Getenv("AI_PLANNER_CONSENT") == "true")
+		log.Printf("remediation-planner: rascunho de IA HABILITADO (advisory; consentimento=%v; tempo total por rascunho=%s)", os.Getenv("AI_PLANNER_CONSENT") == "true", plannerTimeout)
 	} else {
 		log.Printf("remediation-planner: desabilitado (AI_PLANNER_ENABLED != true)")
 	}
@@ -456,6 +465,21 @@ func envBool(key string, def bool) bool {
 		return def
 	}
 	return b
+}
+
+// envDuration parses a Go duration env var ("90s", "5m"), returning def when unset,
+// unparseable or not positive.
+func envDuration(key string, def time.Duration) time.Duration {
+	v := os.Getenv(key)
+	if v == "" {
+		return def
+	}
+	d, err := time.ParseDuration(v)
+	if err != nil || d <= 0 {
+		log.Printf("%s=%q inválido; usando o padrão %s", key, v, def)
+		return def
+	}
+	return d
 }
 
 // envFloat parses a float env var, returning 0 when unset or unparseable.

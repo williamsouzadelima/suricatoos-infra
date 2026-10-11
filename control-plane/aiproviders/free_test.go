@@ -292,3 +292,73 @@ func TestPresets_Persisted(t *testing.T) {
 		t.Fatalf("após o reload nada deveria ser criado: %v err=%v", created, err)
 	}
 }
+
+func TestOfficialEndpoint(t *testing.T) {
+	if OfficialBaseURL(KindOpenRouter) != "https://openrouter.ai/api/v1" ||
+		OfficialBaseURL(KindUnoRouter) != "https://api.unorouter.com/v1" ||
+		OfficialBaseURL(KindOpenAICompatible) != "" {
+		t.Fatal("endpoints oficiais errados")
+	}
+	for _, c := range []struct {
+		kind, base string
+		want       bool
+	}{
+		{KindOpenRouter, "https://openrouter.ai/api/v1", true},
+		{KindOpenRouter, "https://openrouter.ai/api/v1/", true}, // trailing slash tolerated
+		{KindUnoRouter, "https://api.unorouter.com/v1", true},
+		{KindOpenRouter, "https://api.unorouter.com/v1", false}, // the OTHER router's endpoint
+		{KindOpenRouter, "https://openrouter.ai.evil.example/api/v1", false},
+		{KindOpenRouter, "https://openrouter.ai/api/v1/outro", false}, // exact endpoint, not a prefix
+		{KindOpenRouter, "https://openrouter.ai/api/v1beta", false},
+		{KindOpenRouter, "https://evil.example/v1", false},
+		{KindOpenRouter, "", false},
+		{KindOpenAICompatible, "https://openrouter.ai/api/v1", false}, // generic gateway: never official
+	} {
+		if got := IsOfficialEndpoint(c.kind, c.base); got != c.want {
+			t.Errorf("IsOfficialEndpoint(%q, %q) = %v, want %v", c.kind, c.base, got, c.want)
+		}
+	}
+}
+
+// With the rule on, base_url is fixed by the kind: whatever the request says is
+// ignored and the router's official API is stored, so the write-only key can only
+// ever travel there (never to a host chosen through the API).
+func TestFreeOnly_PinsBaseURLToTheOfficialEndpoint(t *testing.T) {
+	r := newFreeReg(t)
+	for _, c := range []struct{ kind, model, base, want string }{
+		{KindOpenRouter, "openrouter/free", "https://evil.example/v1", "https://openrouter.ai/api/v1"},
+		{KindUnoRouter, "deepseek-v4-flash:free", "https://evil.example/v1", "https://api.unorouter.com/v1"},
+		{KindOpenRouter, "openrouter/free", "http://not-even-https.example", "https://openrouter.ai/api/v1"}, // ignored, not validated
+		{KindOpenRouter, "openrouter/free", "", "https://openrouter.ai/api/v1"},
+	} {
+		in := freeInput()
+		in.Kind, in.Model, in.BaseURL = c.kind, c.model, c.base
+		pub, err := r.Upsert(in, "op")
+		if err != nil {
+			t.Fatalf("kind=%s base=%q: %v", c.kind, c.base, err)
+		}
+		if pub.BaseURL != c.want {
+			t.Fatalf("kind=%s base=%q: base_url gravada = %q, want %q", c.kind, c.base, pub.BaseURL, c.want)
+		}
+	}
+	// An UPDATE that tries to repoint a key-bearing provider is pinned too, and the
+	// stored key stays where it belongs.
+	pub, err := r.Upsert(freeInput(), "op")
+	if err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+	up := freeInput()
+	up.ID, up.APIKey, up.BaseURL = pub.ID, "", "https://evil.example/v1"
+	pub2, err := r.Upsert(up, "intruso")
+	if err != nil || pub2.BaseURL != "https://openrouter.ai/api/v1" || !pub2.HasKey {
+		t.Fatalf("repontar a base de um provedor com chave deveria ser ignorado: %+v err=%v", pub2, err)
+	}
+}
+
+func TestFreeRuleOff_KeepsCustomBaseURL(t *testing.T) {
+	r := newReg(t) // rule OFF: today's behavior
+	pub, err := r.Upsert(UpsertInput{Name: "Proxy", Kind: KindOpenRouter, BaseURL: "https://proxy.example/v1", Model: "openai/gpt-5.5"}, "op")
+	if err != nil || pub.BaseURL != "https://proxy.example/v1" {
+		t.Fatalf("regra desligada: base própria deveria ser mantida: %+v err=%v", pub, err)
+	}
+}

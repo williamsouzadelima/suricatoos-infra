@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/williamsouzadelima/suricatoos-infra/control-plane/aiproviders"
 )
@@ -16,8 +17,14 @@ import (
 var (
 	ErrConsentOff   = errors.New("consentimento de IA desativado para esta finalidade (default off)")
 	ErrBudget       = errors.New("orçamento mensal de IA excedido")
-	ErrNonFreeModel = errors.New("modelo não gratuito recusado (AI_FREE_MODELS_ONLY=true)")
+	ErrNonFreeModel = errors.New("recusado pela regra de modelos gratuitos (AI_FREE_MODELS_ONLY=true)")
+	// ErrTimeout: the planner's overall time budget (Config.Timeout, all providers
+	// and formats together) ran out; the remaining attempts were not made.
+	ErrTimeout = errors.New("tempo total do planner esgotado (AI_PLANNER_TIMEOUT)")
 )
+
+// defaultTimeout is the overall budget of one Plan when Config.Timeout is unset.
+const defaultTimeout = 5 * time.Minute
 
 // Config carries the governance knobs. Consent is OFF by default (a zero Config
 // never calls a model); the budget ceiling refuses runaway spend.
@@ -25,10 +32,14 @@ type Config struct {
 	ConsentGranted   bool    // per-purpose consent; DEFAULT false (born off)
 	MonthlyBudgetUSD float64 // <= 0 → no ceiling
 	USDPer1kTokens   float64 // estimate used only for the budget gate
-	// FreeModelsOnly refuses (before any network) every model that is not free
-	// (aiproviders.IsFreeModel). The control-plane turns it on by default
-	// (AI_FREE_MODELS_ONLY); the zero Config leaves it off.
+	// FreeModelsOnly refuses (before any network) every provider whose model is
+	// not free (aiproviders.IsFreeModel) or that is not on its router's official
+	// endpoint (aiproviders.IsOfficialEndpoint). The control-plane turns it on by
+	// default (AI_FREE_MODELS_ONLY); the zero Config leaves it off.
 	FreeModelsOnly bool
+	// Timeout is the OVERALL budget of one Plan — every provider and every
+	// response-format attempt together (AI_PLANNER_TIMEOUT). <= 0 → 5 minutes.
+	Timeout time.Duration
 }
 
 // Planner drafts advisory remediation plans. It holds the LLM seam, a provider
@@ -39,37 +50,53 @@ type Planner struct {
 	providers ProviderResolver
 	budget    *budget
 	cfg       Config
+	timeout   time.Duration
 }
 
 // New builds a Planner. A missing token rate falls back to a conservative
-// placeholder purely for the budget estimate.
+// placeholder purely for the budget estimate; a missing overall timeout to 5 min.
 func New(llm LLM, providers ProviderResolver, cfg Config) *Planner {
 	rate := cfg.USDPer1kTokens
 	if rate <= 0 {
 		rate = 0.005
+	}
+	timeout := cfg.Timeout
+	if timeout <= 0 {
+		timeout = defaultTimeout
 	}
 	return &Planner{
 		llm:       llm,
 		providers: providers,
 		budget:    newBudget(cfg.MonthlyBudgetUSD, rate, nil),
 		cfg:       cfg,
+		timeout:   timeout,
 	}
 }
+
+// Timeout is the overall time budget of one Plan (the plan route sizes its write
+// deadline from it).
+func (p *Planner) Timeout() time.Duration { return p.timeout }
 
 // Plan drafts a remediation plan for an attested finding. It refuses (no model
 // call) when consent is off; it pseudonymizes before send, restores identifiers in
 // the draft, and ECHOES the attested severity/CVEs (never the model's). The
 // returned Plan is always a Draft for human review.
 //
-// The resolved providers are tried in priority order. A provider whose model is
-// not free is never called while FreeModelsOnly is on; a paid model is called only
-// within the budget, while a FREE model costs 0 (it neither needs nor consumes
-// budget). On 429, 5xx, timeout or network error the next provider is tried; any
-// other failure (a 4xx is an error in the request, not in the provider) stops.
+// The resolved providers are tried in priority order. While FreeModelsOnly is on,
+// a provider is never called unless its model is free AND it sits on its router's
+// official endpoint (a stored base_url pointing elsewhere is refused before any
+// network). A paid model is called only within the budget, while a FREE model
+// costs 0 (it neither needs nor consumes budget). On 429, 5xx, timeout or network
+// error the next provider is tried; any other failure (a 4xx is an error in the
+// request, not in the provider) stops. Everything — every provider and every
+// response-format attempt — runs inside ONE overall budget (Config.Timeout): when
+// it runs out the current attempt is cancelled and no other one starts (ErrTimeout).
 func (p *Planner) Plan(ctx context.Context, req PlanRequest) (*Plan, error) {
 	if !p.cfg.ConsentGranted {
 		return nil, ErrConsentOff
 	}
+	ctx, cancel := context.WithTimeout(ctx, p.timeout)
+	defer cancel()
 	provs, err := p.providers.Resolve(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("provedor: %w", err)
@@ -81,14 +108,17 @@ func (p *Planner) Plan(ctx context.Context, req PlanRequest) (*Plan, error) {
 	var refused, failures []string
 	budgetSpent := false
 	for _, prov := range provs {
-		free := aiproviders.IsFreeModel(prov.Kind, prov.Model)
-		if p.cfg.FreeModelsOnly && !free {
-			refused = append(refused, fmt.Sprintf("%s (%s)", prov.Name, prov.Model))
+		if why := p.refusal(prov); why != "" {
+			refused = append(refused, why)
 			continue
 		}
+		free := aiproviders.IsFreeModel(prov.Kind, prov.Model)
 		if !free && !p.budget.allow() {
 			budgetSpent = true
 			continue
+		}
+		if ctx.Err() != nil {
+			break // overall budget gone: no new attempt starts
 		}
 		resp, err := p.llm.Chat(ctx, ChatRequest{
 			BaseURL:  prov.BaseURL,
@@ -102,6 +132,9 @@ func (p *Planner) Plan(ctx context.Context, req PlanRequest) (*Plan, error) {
 				failures = append(failures, fmt.Sprintf("%s: %v", prov.Name, err))
 				continue
 			}
+			if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+				return nil, fmt.Errorf("%w: %s: %v", ErrTimeout, prov.Name, err)
+			}
 			return nil, fmt.Errorf("chamada ao modelo (%s): %w", prov.Name, err)
 		}
 		if !free {
@@ -111,6 +144,12 @@ func (p *Planner) Plan(ctx context.Context, req PlanRequest) (*Plan, error) {
 	}
 
 	switch {
+	case errors.Is(ctx.Err(), context.DeadlineExceeded) && len(failures) > 0:
+		return nil, fmt.Errorf("%w (%s)", ErrTimeout, strings.Join(failures, "; "))
+	case errors.Is(ctx.Err(), context.DeadlineExceeded):
+		return nil, ErrTimeout
+	case ctx.Err() != nil:
+		return nil, fmt.Errorf("pedido cancelado antes do rascunho: %w", ctx.Err())
 	case len(failures) > 0:
 		return nil, fmt.Errorf("chamada ao modelo: nenhum provedor respondeu (%s)", strings.Join(failures, "; "))
 	case budgetSpent:
@@ -120,6 +159,25 @@ func (p *Planner) Plan(ctx context.Context, req PlanRequest) (*Plan, error) {
 	default:
 		return nil, errors.New("provedor: nenhum provedor de IA habilitado")
 	}
+}
+
+// refusal says why the free-models-only rule forbids calling prov ("" = allowed):
+// only free models, only the two routers, and only on their official endpoints —
+// a stored key is never sent anywhere else, and ":free" only means zero cost there.
+func (p *Planner) refusal(prov Provider) string {
+	if !p.cfg.FreeModelsOnly {
+		return ""
+	}
+	official := aiproviders.OfficialBaseURL(prov.Kind)
+	switch {
+	case official == "":
+		return fmt.Sprintf("%s (tipo %q não permitido)", prov.Name, prov.Kind)
+	case !aiproviders.IsFreeModel(prov.Kind, prov.Model):
+		return fmt.Sprintf("%s (modelo não gratuito: %s)", prov.Name, prov.Model)
+	case !aiproviders.IsOfficialEndpoint(prov.Kind, prov.BaseURL):
+		return fmt.Sprintf("%s (endpoint %s não é o oficial %s)", prov.Name, prov.BaseURL, official)
+	}
+	return ""
 }
 
 // draft validates the model's content (parseDraft — the ONLY bar a draft must

@@ -21,6 +21,9 @@ var (
 	ErrNotFound   = errors.New("provedor não encontrado")
 	ErrGovernance = errors.New("provedor fora da régua: habilitar exige UE + ZDR, ou modelo gratuito com ciência da política de dados (data_policy_ack)")
 	ErrValidation = errors.New("configuração de provedor inválida")
+	// ErrNotOfficialEndpoint: the models listing only queries the routers' official
+	// endpoints (models.go). Mapped to HTTP 422.
+	ErrNotOfficialEndpoint = errors.New("a lista de modelos só consulta o endpoint oficial do OpenRouter/UnoRouter")
 )
 
 // Registry is the persisted set of configured providers. Writes are serialized and
@@ -113,12 +116,6 @@ func (r *Registry) Upsert(in UpsertInput, by string) (PublicProvider, error) {
 	if !validKind(in.Kind) {
 		return PublicProvider{}, fmt.Errorf("%w: kind %q (esperado openrouter|unorouter|openai_compatible)", ErrValidation, in.Kind)
 	}
-	if in.BaseURL == "" {
-		in.BaseURL = defaultBaseURL(in.Kind) // preset for named routers; "" for openai_compatible
-	}
-	if err := validateBaseURL(in.BaseURL); err != nil {
-		return PublicProvider{}, fmt.Errorf("%w: %v", ErrValidation, err)
-	}
 	free := IsFreeModel(in.Kind, in.Model)
 	if r.freeOnly {
 		// Zero-cost contract: neither a generic gateway nor a paid model may even be
@@ -126,12 +123,23 @@ func (r *Registry) Upsert(in UpsertInput, by string) (PublicProvider, error) {
 		if !freeOnlyKind(in.Kind) {
 			return PublicProvider{}, fmt.Errorf("%w: tipo %q não permitido — use openrouter ou unorouter", ErrFreeOnly, in.Kind)
 		}
+		// The endpoint is FIXED by the kind: any base_url in the request is ignored
+		// and the router's official API is stored. Otherwise anyone who can save a
+		// provider could repoint one that already holds a key at a host they control
+		// and have the server send that write-only key there.
+		in.BaseURL = OfficialBaseURL(in.Kind)
 		if !free {
 			if in.Model == "" {
 				return PublicProvider{}, fmt.Errorf("%w: informe um modelo gratuito (%s)", ErrFreeOnly, FreeRule)
 			}
 			return PublicProvider{}, fmt.Errorf("%w: modelo %q não é gratuito (%s)", ErrFreeOnly, in.Model, FreeRule)
 		}
+	}
+	if in.BaseURL == "" {
+		in.BaseURL = defaultBaseURL(in.Kind) // preset for named routers; "" for openai_compatible
+	}
+	if err := validateBaseURL(in.BaseURL); err != nil {
+		return PublicProvider{}, fmt.Errorf("%w: %v", ErrValidation, err)
 	}
 	// Governance (decision #3): enabling a provider outside the privacy contract
 	// would route attested data to a processor that may retain it. Allow it to be
@@ -259,7 +267,14 @@ type catalogSource struct {
 // modelsSource returns the catalog endpoint and the decrypted key of provider id.
 // Unlike DecryptedKey it does NOT require the provider to be enabled: the operator
 // lists the models to PICK one before enabling. SERVER-SIDE ONLY — the key goes
-// only to the provider's own <base_url>/models, never into a response.
+// only to the router's OFFICIAL /models, never into a response.
+//
+// The listing is reachable from a session, so it queries ONLY a router's official
+// endpoint, whatever the rule: a provider stored with another base_url (a generic
+// gateway, a custom endpoint saved with the rule off, or one stored before the
+// rule) is refused (ErrNotOfficialEndpoint) without any request. Otherwise saving
+// a provider with a chosen base_url and listing its models would send the stored
+// key — or a server-side request — to any host.
 func (r *Registry) modelsSource(id string) (catalogSource, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -267,7 +282,18 @@ func (r *Registry) modelsSource(id string) (catalogSource, error) {
 	if !ok {
 		return catalogSource{}, ErrNotFound
 	}
-	src := catalogSource{kind: p.Kind, baseURL: p.BaseURL}
+	official := OfficialBaseURL(p.Kind)
+	if official == "" {
+		return catalogSource{}, fmt.Errorf("%w (tipo %q)", ErrNotOfficialEndpoint, p.Kind)
+	}
+	if !IsOfficialEndpoint(p.Kind, p.BaseURL) {
+		hint := ""
+		if r.freeOnly {
+			hint = " — salve o provedor de novo para fixá-la (com só modelos gratuitos a base vem do tipo)"
+		}
+		return catalogSource{}, fmt.Errorf("%w: base_url %q não é %s%s", ErrNotOfficialEndpoint, p.BaseURL, official, hint)
+	}
+	src := catalogSource{kind: p.Kind, baseURL: official}
 	keySig := "sem-chave"
 	if len(p.KeyCipher) > 0 {
 		key, err := decrypt(r.kek, p.KeyCipher)

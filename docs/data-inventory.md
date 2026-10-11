@@ -81,7 +81,9 @@ Coletamos apenas o mínimo necessário para **correlação de vulnerabilidade ba
 > pelo servidor); (4) modelo pago só fora da regra de gratuitos e sob a régua UE + ZDR.
 
 > **Chaves de API dos provedores:** cifradas em repouso (AES-256-GCM, KEK do host), write-only pela API
-> (só os 4 últimos caracteres aparecem) e usadas só server-side, no envio ao próprio provedor.
+> (só os 4 últimos caracteres aparecem) e usadas só server-side, no envio ao próprio provedor. Com
+> `AI_FREE_MODELS_ONLY=true` a `base_url` fica fixa no endpoint oficial do roteador, então a chave só vai
+> a ele; a lista de modelos (rota de sessão) só consulta endpoints oficiais, com a regra ligada ou não.
 
 ## Base legal e finalidade
 

@@ -55,6 +55,25 @@ func freeOnlyKind(kind string) bool {
 	return kind == KindOpenRouter || kind == KindUnoRouter
 }
 
+// OfficialBaseURL is the official API endpoint of a router kind (openrouter or
+// unorouter), "" for any other kind. With the free-models-only rule on it is the
+// ONLY place a stored key may be sent: upsert pins base_url to it, and the models
+// listing and the planner refuse any other endpoint. ":free" (and zero cost) only
+// means something on these endpoints.
+func OfficialBaseURL(kind string) string {
+	if !freeOnlyKind(kind) {
+		return ""
+	}
+	return defaultBaseURL(kind)
+}
+
+// IsOfficialEndpoint reports whether baseURL is kind's official endpoint (a
+// trailing slash is tolerated; anything else must match exactly).
+func IsOfficialEndpoint(kind, baseURL string) bool {
+	official := OfficialBaseURL(kind)
+	return official != "" && strings.TrimRight(baseURL, "/") == official
+}
+
 // preset is one pre-configured provider: born DISABLED, without a key and without
 // the acknowledgment, so the operator only pastes the key, acknowledges and enables.
 type preset struct {

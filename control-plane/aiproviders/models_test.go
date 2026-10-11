@@ -6,6 +6,8 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"sync"
@@ -16,13 +18,15 @@ import (
 )
 
 // upstream is a fake provider catalog. It is TLS because a provider's base_url must
-// be https. It counts hits and records the last Authorization header and path.
+// be https. It counts hits and records the last Authorization header, path and Host
+// (the host the request was ADDRESSED to — see officialRouter).
 type upstream struct {
 	srv  *httptest.Server
 	mu   sync.Mutex
 	hits int
 	auth string
 	path string
+	host string
 }
 
 func newUpstream(t *testing.T, h http.HandlerFunc) *upstream {
@@ -33,11 +37,42 @@ func newUpstream(t *testing.T, h http.HandlerFunc) *upstream {
 		u.hits++
 		u.auth = r.Header.Get("Authorization")
 		u.path = r.URL.Path
+		u.host = r.Host
 		u.mu.Unlock()
 		h(w, r)
 	}))
 	t.Cleanup(u.srv.Close)
 	return u
+}
+
+func (u *upstream) lastHost() string {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	return u.host
+}
+
+// officialRouter delivers requests addressed to the routers' OFFICIAL hosts to the
+// fake upstream (keeping path and Host header). Any other host goes through
+// unchanged and is really reached — so "zero hits" on a foreign test server means
+// it was never contacted, not that the request was swallowed here.
+type officialRouter struct {
+	target *url.URL
+	base   http.RoundTripper
+}
+
+func (o officialRouter) RoundTrip(r *http.Request) (*http.Response, error) {
+	if r.URL.Host == hostOf(OfficialBaseURL(KindOpenRouter)) || r.URL.Host == hostOf(OfficialBaseURL(KindUnoRouter)) {
+		r2 := r.Clone(r.Context())
+		r2.URL.Scheme, r2.URL.Host = o.target.Scheme, o.target.Host
+		r2.Host = r.URL.Host
+		return o.base.RoundTrip(r2)
+	}
+	return o.base.RoundTrip(r)
+}
+
+func hostOf(raw string) string {
+	u, _ := url.Parse(raw)
+	return u.Host
 }
 
 func (u *upstream) count() int {
@@ -93,9 +128,7 @@ func (c *testClock) Advance(d time.Duration) {
 	c.t = c.t.Add(d)
 }
 
-// modelsHarness wires a Service whose outbound /models client trusts the fake
-// upstream's TLS certificate, with a controllable clock (advance it to expire the
-// cache).
+// modelsHarness wires a Service over a fresh registry; see serveModels.
 func modelsHarness(t *testing.T, freeOnly bool, up *upstream) (*httptest.Server, *Registry, *Service, *testClock) {
 	t.Helper()
 	kek, _ := randBytes(kekSize)
@@ -103,9 +136,22 @@ func modelsHarness(t *testing.T, freeOnly bool, up *upstream) (*httptest.Server,
 	if err != nil {
 		t.Fatalf("NewRegistry: %v", err)
 	}
+	srv, svc, clock := serveModels(t, reg, up)
+	return srv, reg, svc, clock
+}
+
+// serveModels serves reg's API. The outbound /models client delivers requests for
+// the routers' official hosts to the fake upstream (TLS trusted) and lets any other
+// host through; the clock is controllable (advance it to expire the cache).
+func serveModels(t *testing.T, reg *Registry, up *upstream) (*httptest.Server, *Service, *testClock) {
+	t.Helper()
 	svc := NewService(reg, "s3cret")
 	if up != nil {
-		svc.modelsHC = newModelsClient(up.srv.Client().Transport)
+		target, err := url.Parse(up.srv.URL)
+		if err != nil {
+			t.Fatalf("url do upstream: %v", err)
+		}
+		svc.modelsHC = newModelsClient(officialRouter{target: target, base: up.srv.Client().Transport})
 	}
 	clock := &testClock{t: time.Date(2026, 10, 11, 12, 0, 0, 0, time.UTC)}
 	svc.now = clock.Now
@@ -113,14 +159,14 @@ func modelsHarness(t *testing.T, freeOnly bool, up *upstream) (*httptest.Server,
 	svc.Register(mux)
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
-	return srv, reg, svc, clock
+	return srv, svc, clock
 }
 
-// addProvider stores a DISABLED provider (enabling is not needed to list models:
-// the operator lists them to pick one before enabling).
-func addProvider(t *testing.T, reg *Registry, kind, base, model, key string) string {
+// addProvider stores a DISABLED provider on the kind's default endpoint (enabling
+// is not needed to list models: the operator lists them to pick one first).
+func addProvider(t *testing.T, reg *Registry, kind, model, key string) string {
 	t.Helper()
-	pub, err := reg.Upsert(UpsertInput{Name: "P " + kind, Kind: kind, BaseURL: base, Model: model, APIKey: key}, "op")
+	pub, err := reg.Upsert(UpsertInput{Name: "P " + kind, Kind: kind, Model: model, APIKey: key}, "op")
 	if err != nil {
 		t.Fatalf("setup upsert: %v", err)
 	}
@@ -144,7 +190,7 @@ func decodeModels(t *testing.T, b []byte) modelsBody {
 func TestModels_FiltersFreeAndSortsJSONSchemaFirst(t *testing.T) {
 	up := newUpstream(t, serveCatalog)
 	srv, reg, _, _ := modelsHarness(t, true, up)
-	id := addProvider(t, reg, KindOpenRouter, up.srv.URL+"/api/v1", "openrouter/free", "")
+	id := addProvider(t, reg, KindOpenRouter, "openrouter/free", "")
 
 	resp, b := do(t, srv, "GET", "/api/v1/ai/providers/"+id+"/models", "s3cret", "")
 	if resp.StatusCode != http.StatusOK {
@@ -160,8 +206,8 @@ func TestModels_FiltersFreeAndSortsJSONSchemaFirst(t *testing.T) {
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("models =\n %+v\nwant\n %+v", got, want)
 	}
-	if p := up.lastPath(); p != "/api/v1/models" {
-		t.Fatalf("deveria buscar <base_url>/models, buscou %q", p)
+	if p, h := up.lastPath(), up.lastHost(); p != "/api/v1/models" || h != "openrouter.ai" {
+		t.Fatalf("deveria buscar o /models do endpoint oficial, buscou host=%q path=%q", h, p)
 	}
 	// Wire shape: context_length is omitted when the provider does not inform it.
 	if !bytes.Contains(b, []byte(`{"id":"alpha/no-params:free","json_schema":false,"json_schema_known":false}`)) {
@@ -172,7 +218,7 @@ func TestModels_FiltersFreeAndSortsJSONSchemaFirst(t *testing.T) {
 func TestModels_OpenRouterWithoutKeyOmitsAuthorization(t *testing.T) {
 	up := newUpstream(t, serveCatalog)
 	srv, reg, _, _ := modelsHarness(t, true, up)
-	id := addProvider(t, reg, KindOpenRouter, up.srv.URL, "openrouter/free", "")
+	id := addProvider(t, reg, KindOpenRouter, "openrouter/free", "")
 	if resp, b := do(t, srv, "GET", "/api/v1/ai/providers/"+id+"/models", "s3cret", ""); resp.StatusCode != http.StatusOK {
 		t.Fatalf("openrouter sem chave = %d, want 200: %s", resp.StatusCode, b)
 	}
@@ -184,7 +230,7 @@ func TestModels_OpenRouterWithoutKeyOmitsAuthorization(t *testing.T) {
 func TestModels_UnoRouterUsesStoredKeyAndExcludesTheOpenRouterRouter(t *testing.T) {
 	up := newUpstream(t, serveCatalog)
 	srv, reg, _, _ := modelsHarness(t, true, up)
-	id := addProvider(t, reg, KindUnoRouter, up.srv.URL, "deepseek-v4-flash:free", testKey)
+	id := addProvider(t, reg, KindUnoRouter, "deepseek-v4-flash:free", testKey)
 
 	resp, b := do(t, srv, "GET", "/api/v1/ai/providers/"+id+"/models", "s3cret", "")
 	if resp.StatusCode != http.StatusOK {
@@ -208,7 +254,7 @@ func TestModels_UnoRouterUsesStoredKeyAndExcludesTheOpenRouterRouter(t *testing.
 func TestModels_UnoRouterWithoutKeyIs409(t *testing.T) {
 	up := newUpstream(t, serveCatalog)
 	srv, reg, _, _ := modelsHarness(t, true, up)
-	id := addProvider(t, reg, KindUnoRouter, up.srv.URL, "deepseek-v4-flash:free", "")
+	id := addProvider(t, reg, KindUnoRouter, "deepseek-v4-flash:free", "")
 
 	resp, b := do(t, srv, "GET", "/api/v1/ai/providers/"+id+"/models", "s3cret", "")
 	if resp.StatusCode != http.StatusConflict {
@@ -225,7 +271,7 @@ func TestModels_UnoRouterWithoutKeyIs409(t *testing.T) {
 func TestModels_CachedPerProviderForTenMinutes(t *testing.T) {
 	up := newUpstream(t, serveCatalog)
 	srv, reg, _, clock := modelsHarness(t, true, up)
-	id := addProvider(t, reg, KindOpenRouter, up.srv.URL, "openrouter/free", "")
+	id := addProvider(t, reg, KindOpenRouter, "openrouter/free", "")
 	get := func() {
 		t.Helper()
 		if resp, b := do(t, srv, "GET", "/api/v1/ai/providers/"+id+"/models", "s3cret", ""); resp.StatusCode != http.StatusOK {
@@ -249,7 +295,7 @@ func TestModels_CachedPerProviderForTenMinutes(t *testing.T) {
 		t.Fatalf("após 10 min deveria buscar de novo: %d chamada(s)", n)
 	}
 	// Pasting a key (or changing the endpoint) invalidates the cached list at once.
-	if _, err := reg.Upsert(UpsertInput{ID: id, Name: "P", Kind: KindOpenRouter, BaseURL: up.srv.URL, Model: "openrouter/free", APIKey: testKey}, "op"); err != nil {
+	if _, err := reg.Upsert(UpsertInput{ID: id, Name: "P", Kind: KindOpenRouter, Model: "openrouter/free", APIKey: testKey}, "op"); err != nil {
 		t.Fatalf("colar a chave: %v", err)
 	}
 	get()
@@ -292,7 +338,7 @@ func TestModels_ProviderErrorIs502WithoutLeakingKey(t *testing.T) {
 			up := newUpstream(t, c.h)
 			srv, reg, svc, _ := modelsHarness(t, true, up)
 			svc.modelsMax = 1024 // small limit so the oversize case needs no 8 MB body
-			id := addProvider(t, reg, KindUnoRouter, up.srv.URL, "deepseek-v4-flash:free", testKey)
+			id := addProvider(t, reg, KindUnoRouter, "deepseek-v4-flash:free", testKey)
 
 			resp, b := do(t, srv, "GET", "/api/v1/ai/providers/"+id+"/models", "s3cret", "")
 			if resp.StatusCode != http.StatusBadGateway {
@@ -329,7 +375,7 @@ func TestModels_ErrorsAreNotCached(t *testing.T) {
 		serveCatalog(w, r)
 	})
 	srv, reg, _, _ := modelsHarness(t, true, up)
-	id := addProvider(t, reg, KindOpenRouter, up.srv.URL, "openrouter/free", "")
+	id := addProvider(t, reg, KindOpenRouter, "openrouter/free", "")
 	if resp, _ := do(t, srv, "GET", "/api/v1/ai/providers/"+id+"/models", "s3cret", ""); resp.StatusCode != http.StatusBadGateway {
 		t.Fatalf("provedor fora = %d, want 502", resp.StatusCode)
 	}
@@ -348,7 +394,7 @@ func TestModels_ErrorsAreNotCached(t *testing.T) {
 func TestModels_NetworkErrorIs502(t *testing.T) {
 	up := newUpstream(t, serveCatalog)
 	srv, reg, _, _ := modelsHarness(t, true, up)
-	id := addProvider(t, reg, KindOpenRouter, up.srv.URL, "openrouter/free", "")
+	id := addProvider(t, reg, KindOpenRouter, "openrouter/free", "")
 	up.srv.Close() // the provider is gone: connection refused
 	resp, b := do(t, srv, "GET", "/api/v1/ai/providers/"+id+"/models", "s3cret", "")
 	if resp.StatusCode != http.StatusBadGateway {
@@ -366,7 +412,7 @@ func TestModels_UnknownProviderIs404(t *testing.T) {
 func TestModels_SessionRouteRequiresGateMarker(t *testing.T) {
 	up := newUpstream(t, serveCatalog)
 	srv, reg, _, _ := modelsHarness(t, true, up)
-	id := addProvider(t, reg, KindOpenRouter, up.srv.URL, "openrouter/free", "")
+	id := addProvider(t, reg, KindOpenRouter, "openrouter/free", "")
 
 	resp, b := doGate(t, srv, "GET", "/ai/providers/"+id+"/models", "", "")
 	if resp.StatusCode != http.StatusForbidden || !bytes.Contains(b, []byte("rota de sessão sem portão")) {
@@ -384,7 +430,7 @@ func TestModels_SessionRouteRequiresGateMarker(t *testing.T) {
 func TestModels_BearerRouteRequiresBearer(t *testing.T) {
 	up := newUpstream(t, serveCatalog)
 	srv, reg, _, _ := modelsHarness(t, true, up)
-	id := addProvider(t, reg, KindOpenRouter, up.srv.URL, "openrouter/free", "")
+	id := addProvider(t, reg, KindOpenRouter, "openrouter/free", "")
 	for _, bearer := range []string{"", "errado"} {
 		if resp, _ := do(t, srv, "GET", "/api/v1/ai/providers/"+id+"/models", bearer, ""); resp.StatusCode != http.StatusUnauthorized {
 			t.Fatalf("bearer %q = %d, want 401", bearer, resp.StatusCode)
@@ -495,5 +541,121 @@ func TestService_FreeOnlyUpsertIs422WithClearMessage(t *testing.T) {
 	}
 	if bytes.Contains(b, []byte("sk-or-v1-TESTKEY-abcd1234")) {
 		t.Fatalf("resposta vazou a chave: %s", b)
+	}
+}
+
+func mustUpsert(t *testing.T, reg *Registry, in UpsertInput) string {
+	t.Helper()
+	pub, err := reg.Upsert(in, "op")
+	if err != nil {
+		t.Fatalf("setup upsert %s: %v", in.Name, err)
+	}
+	return pub.ID
+}
+
+// The confused-deputy path: a session user repoints a key-bearing provider at a
+// host they control and asks for its models, hoping the server sends the stored
+// key there. With the rule on the base_url is pinned, so the key only ever reaches
+// the router's official API.
+func TestModels_NeverSendsTheKeyToAForeignHost(t *testing.T) {
+	up := newUpstream(t, serveCatalog)   // stands in for the official API
+	evil := newUpstream(t, serveCatalog) // a host chosen through the API
+	srv, _, _, _ := modelsHarness(t, true, up)
+
+	body := `{"name":"OR","kind":"openrouter","base_url":"` + evil.srv.URL + `","model":"openrouter/free","api_key":"` + testKey + `"}`
+	resp, b := doSession(t, srv, "POST", "/ai/providers", body)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("upsert = %d: %s", resp.StatusCode, b)
+	}
+	var got struct {
+		Provider PublicProvider `json:"provider"`
+	}
+	_ = json.Unmarshal(b, &got)
+	if got.Provider.BaseURL != OfficialBaseURL(KindOpenRouter) {
+		t.Fatalf("base_url deveria ser fixada no endpoint oficial, ficou %q", got.Provider.BaseURL)
+	}
+
+	resp, b = doSession(t, srv, "GET", "/ai/providers/"+got.Provider.ID+"/models", "")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("models = %d: %s", resp.StatusCode, b)
+	}
+	if n := evil.count(); n != 0 {
+		t.Fatalf("o servidor contatou um host escolhido pela API (%d chamada(s)) — a chave iria junto", n)
+	}
+	if up.count() != 1 || up.lastHost() != "openrouter.ai" || up.lastAuth() != "Bearer "+testKey {
+		t.Fatalf("a chave deveria ir só ao endpoint oficial: hits=%d host=%q", up.count(), up.lastHost())
+	}
+}
+
+// Providers stored BEFORE the rule (or with it off) may carry a foreign base_url;
+// with the rule on, the listing refuses them (422) without any request, until the
+// provider is saved again — which pins the base.
+func TestModels_RefusesLegacyForeignEndpoint(t *testing.T) {
+	up := newUpstream(t, serveCatalog)
+	evil := newUpstream(t, serveCatalog)
+	path := filepath.Join(t.TempDir(), "providers.json")
+	kek, _ := randBytes(kekSize)
+	old, err := NewRegistry(path, kek) // rule off, as before the upgrade
+	if err != nil {
+		t.Fatalf("NewRegistry: %v", err)
+	}
+	orID := mustUpsert(t, old, UpsertInput{Name: "OR antigo", Kind: KindOpenRouter, BaseURL: evil.srv.URL, Model: "openrouter/free", APIKey: testKey})
+	gwID := mustUpsert(t, old, UpsertInput{Name: "GW antigo", Kind: KindOpenAICompatible, BaseURL: evil.srv.URL, Model: "x:free", APIKey: testKey})
+
+	reg, err := NewRegistry(path, kek, WithFreeModelsOnly(true)) // same store, rule on
+	if err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+	srv, _, _ := serveModels(t, reg, up)
+	for _, id := range []string{orID, gwID} {
+		resp, b := do(t, srv, "GET", "/api/v1/ai/providers/"+id+"/models", "s3cret", "")
+		if resp.StatusCode != http.StatusUnprocessableEntity || !strings.Contains(decodeModels(t, b).Error, "endpoint oficial") {
+			t.Fatalf("registro antigo fora do endpoint oficial = %d %s, want 422", resp.StatusCode, b)
+		}
+	}
+	if evil.count() != 0 || up.count() != 0 {
+		t.Fatalf("recusa não pode ir à rede: evil=%d oficial=%d", evil.count(), up.count())
+	}
+
+	// Saving the router again (no new key) pins its base; the listing then reaches
+	// the official API with the stored key, and still never the foreign host.
+	resp, b := do(t, srv, "POST", "/api/v1/ai/providers", "s3cret", `{"id":"`+orID+`","name":"OR antigo","kind":"openrouter","model":"openrouter/free"}`)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("salvar de novo = %d: %s", resp.StatusCode, b)
+	}
+	if resp, b := do(t, srv, "GET", "/api/v1/ai/providers/"+orID+"/models", "s3cret", ""); resp.StatusCode != http.StatusOK {
+		t.Fatalf("após salvar de novo = %d: %s", resp.StatusCode, b)
+	}
+	if evil.count() != 0 || up.count() != 1 || up.lastAuth() != "Bearer "+testKey {
+		t.Fatalf("após salvar: evil=%d oficial=%d auth=%q", evil.count(), up.count(), up.lastAuth())
+	}
+}
+
+// With the rule OFF a custom endpoint is still accepted and kept (today's
+// behavior), but this session-reachable listing still never sends the stored key —
+// nor any request — anywhere but the routers' official APIs.
+func TestModels_RuleOffAlsoRefusesForeignEndpoint(t *testing.T) {
+	up := newUpstream(t, serveCatalog)
+	evil := newUpstream(t, serveCatalog)
+	srv, reg, _, _ := modelsHarness(t, false, up)
+
+	pub, err := reg.Upsert(UpsertInput{Name: "Proxy", Kind: KindOpenRouter, BaseURL: evil.srv.URL, Model: "openai/gpt-5.5", APIKey: testKey}, "op")
+	if err != nil || pub.BaseURL != evil.srv.URL {
+		t.Fatalf("regra desligada: base própria deveria ser mantida: %+v err=%v", pub, err)
+	}
+	resp, b := doSession(t, srv, "GET", "/ai/providers/"+pub.ID+"/models", "")
+	if resp.StatusCode != http.StatusUnprocessableEntity {
+		t.Fatalf("listagem de endpoint próprio = %d %s, want 422", resp.StatusCode, b)
+	}
+	if n := evil.count(); n != 0 {
+		t.Fatalf("a listagem contatou o endpoint próprio (%d chamada(s))", n)
+	}
+	// The official endpoint keeps working with the rule off.
+	id := addProvider(t, reg, KindOpenRouter, "openai/gpt-5.5", testKey)
+	if resp, b := doSession(t, srv, "GET", "/ai/providers/"+id+"/models", ""); resp.StatusCode != http.StatusOK {
+		t.Fatalf("regra desligada, endpoint oficial = %d: %s", resp.StatusCode, b)
+	}
+	if up.count() != 1 || up.lastHost() != "openrouter.ai" {
+		t.Fatalf("esperava 1 chamada ao endpoint oficial: hits=%d host=%q", up.count(), up.lastHost())
 	}
 }

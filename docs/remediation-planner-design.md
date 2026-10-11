@@ -119,6 +119,8 @@ tem as chaves de assinatura (feed/update/CA/remediação). O `OPENROUTER_API_KEY
 | Provedor responde 429/5xx, timeout ou erro de rede | Tenta o próximo provedor da lista (§11); outro 4xx é erro do pedido e para. Todos falhando → sem rascunho. |
 | Provedor recusa `response_format` json_schema (400 citando o formato) | Re-tenta UMA vez com `json_object` e, se de novo, sem `response_format` (§11); a saída continua tendo de passar no `parseDraft`. |
 | Modelo não gratuito com `AI_FREE_MODELS_ONLY=true` | Recusado antes de qualquer rede (403 na rota do planner); sem rascunho. |
+| Provedor fora do endpoint oficial com `AI_FREE_MODELS_ONLY=true` (registro antigo) | Recusado antes de qualquer rede (403 se for o único); salvar o provedor de novo fixa a base oficial. |
+| Tempo total do rascunho esgotado (`AI_PLANNER_TIMEOUT`, default 5 min) | A tentativa em curso é cancelada e nenhuma outra começa; 504; sem rascunho. |
 | Saída não valida no json_schema | Rascunho descartado; sem rascunho (nunca texto livre não-estruturado). |
 
 ## 9. LGPD
@@ -152,6 +154,14 @@ registro só aceita os tipos `openrouter` e `unorouter` e só modelo gratuito �
 desabilitado (fora disso → HTTP 422 com mensagem em pt-BR) — e o planner **recusa** chamar modelo não
 gratuito antes de qualquer rede (defesa em profundidade, caso um registro pago antigo siga habilitado).
 
+**Endpoint fixo.** Com a regra ligada, a `base_url` é fixada no endpoint **oficial** do tipo
+(`https://openrouter.ai/api/v1`, `https://api.unorouter.com/v1`): a enviada no upsert é **ignorada**
+e a resposta mostra a efetiva. Assim, quem pode salvar um provedor não consegue repontar um provedor que
+já tem chave para um host seu e fazer o servidor mandar a chave para lá. Registro antigo com outra base
+(salvo antes da regra ou com ela desligada) é recusado pelo planner antes de qualquer rede e pela lista de
+modelos (422) até ser salvo de novo — o que fixa a base oficial. Com a regra desligada, endpoint próprio
+continua aceito no cadastro e no planner (comportamento anterior).
+
 **Presets.** Com `AI_CONFIG_ENABLED=true`, o boot garante `openrouter-free` ("OpenRouter — modelos
 gratuitos", modelo `openrouter/free`) e `unorouter-free` ("UnoRouter — modelos gratuitos", modelo
 `deepseek-v4-flash:free`), na base padrão do tipo, **desabilitados e sem chave**. Só cria o id que não
@@ -169,9 +179,12 @@ prompts, inclusive para treino. Por isso:
   `AI_PLANNER_CONSENT=true` (default off).
 
 **Lista viva de modelos.** `GET /ai/providers/{id}/models` (sessão: portão gsad do nginx + marca do
-`sessiongate`) e `GET /api/v1/ai/providers/{id}/models` (bearer) consultam `<base_url>/models` no
-servidor, com a chave guardada se houver (o OpenRouter lista sem chave; sem chave no UnoRouter → 409
-"cole a chave para listar os modelos", sem ir à rede). Timeout de 10 s, corpo ≤ 8 MB, redirect não é
+`sessiongate`) e `GET /api/v1/ai/providers/{id}/models` (bearer) consultam no servidor **só** o
+`/models` do endpoint **oficial** do tipo — com a regra ligada ou não: provedor com outra base (ou
+gateway genérico) → 422 sem ir à rede, para a rota de sessão nunca levar a chave (nem um pedido do
+servidor) a um host escolhido pela API. Usa a chave guardada se houver (o OpenRouter lista sem chave;
+sem chave no UnoRouter → 409 "cole a chave para listar os modelos", sem ir à rede). Timeout de 10 s,
+corpo ≤ 8 MB, redirect não é
 seguido, cache de 10 min por provedor (invalidado ao trocar chave ou endpoint; erro não fica em cache).
 Devolve só os gratuitos, primeiro os que declaram `structured_outputs`. Erro do provedor → 502 com
 mensagem curta, sem repassar o corpo dele (que pode ecoar a chave). `GET /ai/policy` e
@@ -186,4 +199,8 @@ mensagem curta, sem repassar o corpo dele (que pode ecoar a chave). `GET /ai/pol
   sem `response_format`. Nesses dois casos o schema vai no prompt de **sistema** (nunca como prefill).
   Em todos os casos a saída só vale se passar no `parseDraft` — nada de afrouxar a validação.
 - Orçamento: chamada a modelo gratuito custa 0 — não consome o teto nem é barrada por ele.
+- Tempo total: um rascunho inteiro (todos os provedores e formatos) cabe em `AI_PLANNER_TIMEOUT`
+  (default 5 min). Esgotado, a tentativa em curso é cancelada, nenhuma outra começa e a rota responde
+  504. A rota do planner ganha prazo de escrita próprio (tempo total + 30 s), porque um modelo gratuito
+  lento passa fácil do `WriteTimeout` geral do servidor (30 s), que não muda para as outras rotas.
 - Regras Claude 5 em todas as tentativas: sem `temperature`, sem prefill.
