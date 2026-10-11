@@ -82,7 +82,15 @@ curl -sS -X POST https://scanner.suricatoos.com/agent/api/v1/remediation/jobs/<j
   -d '{"approved_by":"<operador>"}'
 ```
 
-**Rejeitar** (descarta): `POST .../remediation/jobs/<job_id>/reject` (mesmo bearer; aprovador no corpo).
+**Rejeitar** (descarta): mesmo bearer e, pelo mesmo motivo (o nginx remove o `X-Operator`), o operador
+vai no **corpo**, no campo `rejected_by` (`approved_by` continua aceito por compatibilidade). Sem operador
+— nem `X-Operator` nem corpo — a resposta é `400`.
+
+```bash
+curl -sS -X POST https://scanner.suricatoos.com/agent/api/v1/remediation/jobs/<job_id>/reject \
+  -H "Authorization: Bearer $ADMIN_SECRET" -H 'Content-Type: application/json' \
+  -d '{"rejected_by":"<operador>"}'
+```
 
 Depois de `APPROVED`, o agente do host-alvo (e **só** ele — escopo `CN==agent_id` + `O==tenant`) pega o
 job no próximo poll, verifica a assinatura/janela e aplica **dentro da janela** (`not_before`/
@@ -95,6 +103,31 @@ job no próximo poll, verifica a assinatura/janela e aplica **dentro da janela**
   → a correlação re-roda → o achado some → o **Ticket** do gvmd anda `Open → Fixed → Fix Verified`.
 - `correlation_id` costura **job → finding → ticket**. `VERIFIED` é marcado **server-side** só após o
   re-scan; o agente nunca se auto-declara verificado.
+- **Acompanhar:** `GET .../remediation/jobs` (bearer) lista os jobs do mais novo para o mais antigo, com o
+  resultado reportado pelo agente (`result`). Filtros opcionais: `state` (ex.: `APPLIED`, `FAILED`),
+  `tenant`, `agent_id`; `limit` (padrão 200, máximo 1000). O `payload` **não** é devolvido (só o
+  `payload_sha256`): ele é opaco para a fila e pode carregar configuração sensível.
+
+  ```bash
+  curl -sS "https://scanner.suricatoos.com/agent/api/v1/remediation/jobs?state=APPLIED&tenant=<tenant>" \
+    -H "Authorization: Bearer $ADMIN_SECRET"
+  ```
+- **Fechar:** com o re-scan confirmando o fix, marque o job `VERIFIED`. O operador vai no corpo
+  (`verified_by`; o nginx remove o `X-Operator`) e o control-plane registra quem verificou no log:
+
+  ```bash
+  curl -sS -X POST https://scanner.suricatoos.com/agent/api/v1/remediation/jobs/<job_id>/verified \
+    -H "Authorization: Bearer $ADMIN_SECRET" -H 'Content-Type: application/json' \
+    -d '{"verified_by":"<operador>"}'
+  ```
+
+  Só um job `APPLIED` vira `VERIFIED`: outro estado → `409`, id inexistente → `404`, sem operador → `400`.
+- **Expiração e limpeza:** o `expires_at` só vale **até o agente assumir o job** (`PENDING_APPROVAL`,
+  `APPROVED` ou `DELIVERED` sem ack viram `EXPIRED`). `ACKED` e `APPLIED` **não expiram**: o relatório
+  do agente ainda é aceito depois do prazo e um job aplicado segue verificável. Jobs terminais
+  (`VERIFIED`/`FAILED`/`EXPIRED`/`REJECTED`) criados há mais de 7 dias saem da fila no próximo
+  enfileiramento; um job `ACKED`/`APPLIED` parado **não** é limpo sozinho — feche-o você: `APPLIED` com
+  `verified` (ou `reject`), `ACKED` cujo agente sumiu com `reject`.
 
 ## 4. Reverter (rollback)
 

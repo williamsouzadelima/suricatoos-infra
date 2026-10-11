@@ -42,6 +42,9 @@ func (t Type) valid() bool {
 // JobState is a job's lifecycle. The human-approval gate (PENDING_APPROVAL →
 // APPROVED) precedes any delivery, and APPLIED is NOT terminal — the server
 // still has to confirm the fix (→ VERIFIED) by re-scanning.
+//
+// ExpiresAt only bounds the states BEFORE the agent has effectively taken the job
+// (see expirable): once a job is ACKED or APPLIED the deadline no longer applies.
 type JobState string
 
 const (
@@ -61,6 +64,45 @@ func (s JobState) terminal() bool {
 	switch s {
 	case StateVerified, StateFailed, StateExpired, StateRejected:
 		return true
+	}
+	return false
+}
+
+// expirable reports whether a lapsed ExpiresAt still moves a job in this state to
+// EXPIRED. It does for the states BEFORE the agent has effectively taken the job:
+// PENDING_APPROVAL and APPROVED (never handed out) and DELIVERED (handed out but
+// not acked yet — the agent re-checks the signed expiry itself before acting, so
+// it refuses a lapsed job too).
+//
+// It does NOT for ACKED (the agent accepted the job and may be applying it) nor
+// APPLIED (already applied, awaiting the re-scan that verifies it): expiring those
+// would discard the apply result — Report only accepts DELIVERED/ACKED jobs — and
+// the very fact that the fix was applied. Terminal states are already final.
+//
+// Caveat: today's agent runner acks AFTER applying (right before it reports), so
+// a job being applied is still DELIVERED here, and one whose ack/report never
+// arrives before ExpiresAt lapses can still be swept. Acking before applying, on
+// the agent side, would close that window.
+func (s JobState) expirable() bool {
+	switch s {
+	case StatePendingApproval, StateApproved, StateDelivered:
+		return true
+	}
+	return false
+}
+
+// allStates lists every lifecycle state (the listing filter accepts exactly these).
+var allStates = []JobState{
+	StatePendingApproval, StateApproved, StateDelivered, StateAcked, StateApplied,
+	StateFailed, StateVerified, StateExpired, StateRejected,
+}
+
+// valid reports whether s is one of the lifecycle states.
+func (s JobState) valid() bool {
+	for _, st := range allStates {
+		if s == st {
+			return true
+		}
 	}
 	return false
 }
