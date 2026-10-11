@@ -67,6 +67,64 @@ func TestProvisionWindowsUsesPowershell(t *testing.T) {
 	}
 }
 
+// installerPath is the fixed path the Windows one-liner downloads install.ps1 to and
+// then runs. It is a literal on purpose: no '$f', no '$env:TEMP' (see command).
+const installerPath = `C:\Windows\Temp\suricatoos-install.ps1`
+
+// REGRESSAO: o one-liner do Windows nao pode depender do shell de FORA. Colado num
+// prompt do PowerShell (ja aberto, sem aninhar), um '$f' / '$env:TEMP' dentro do
+// -Command entre aspas duplas e expandido pelo shell externo ANTES de o powershell
+// interno rodar: sobra "=Join-Path ..." e "-OutFile" vazio, e a instalacao quebra.
+// O comando robusto usa um caminho fixo e nao tem '$' (nem crase, nem '%' do cmd.exe).
+func TestProvisionWindowsCommandIsRobust(t *testing.T) {
+	svc := newService()
+	rec := httptest.NewRecorder()
+	svc.Handler()(rec, gatedGet("/provision/install?os=windows"))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var r response
+	if err := json.Unmarshal(rec.Body.Bytes(), &r); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if r.OS != "windows" {
+		t.Fatalf("os = %q", r.OS)
+	}
+	for _, want := range []string{
+		"powershell",
+		"iwr -useb https://scanner.suricatoos.com/install.ps1",
+		"-Server 'https://scanner.suricatoos.com/agent/v1'",
+		"-Token 'st_",
+		"-CaPin 'sha256:deadbeef'",
+		"-OutFile " + installerPath, // baixa para o caminho fixo...
+		"& " + installerPath,        // ...e executa exatamente esse arquivo
+	} {
+		if !strings.Contains(r.Command, want) {
+			t.Errorf("comando windows nao contem %q:\n%s", want, r.Command)
+		}
+	}
+	if strings.ContainsAny(r.Command, "$`%") {
+		t.Errorf("comando windows nao pode conter '$', crase ou '%%' (o shell de fora expande ao colar):\n%s", r.Command)
+	}
+}
+
+// Forma exata de cada one-liner. Linux e macOS compartilham o install.sh (ele escolhe
+// o binario por 'uname -s'); travados para o ramo do Windows nao mexer neles. O
+// Windows e idem ao do enrollcmd (caminho fixo, sem '$').
+func TestProvisionCommandForms(t *testing.T) {
+	svc := newService()
+	const unix = `curl -fsSL https://scanner.suricatoos.com/install.sh | sudo sh -s -- ` +
+		`--server https://scanner.suricatoos.com/agent/v1 --token st_TESTE --ca-pin sha256:deadbeef`
+	const windows = `powershell -ExecutionPolicy Bypass -Command "` +
+		`iwr -useb https://scanner.suricatoos.com/install.ps1 -OutFile ` + installerPath + `; ` +
+		`& ` + installerPath + ` -Server 'https://scanner.suricatoos.com/agent/v1' -Token 'st_TESTE' -CaPin 'sha256:deadbeef'"`
+	for goos, want := range map[string]string{"linux": unix, "darwin": unix, "windows": windows} {
+		if got := svc.command(goos, "st_TESTE"); got != want {
+			t.Errorf("%s: forma do comando mudou:\n got: %s\nwant: %s", goos, got, want)
+		}
+	}
+}
+
 func TestProvisionRejectsBadOS(t *testing.T) {
 	svc := newService()
 	rec := httptest.NewRecorder()

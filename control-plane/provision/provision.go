@@ -97,12 +97,20 @@ func (s *Service) Handler() http.HandlerFunc {
 }
 
 // command renders the one-liner the operator pastes. Linux/macOS pipe install.sh
-// into sh; Windows downloads install.ps1 to a temp file and runs it with params.
+// into sh (it picks the binary by `uname -s`); Windows downloads install.ps1 to a
+// fixed path and runs it with params.
 func (s *Service) command(goos, token string) string {
 	switch goos {
 	case "windows":
+		// NO '$' variables: a '$f'/'$env:TEMP' inside the double-quoted -Command
+		// gets expanded by the OUTER shell when the user pastes this at a
+		// PowerShell prompt (not nested), producing "=Join-Path ..." / empty
+		// -OutFile. A fixed path under C:\Windows\Temp (the installer needs an
+		// elevated shell anyway) keeps the one-liner robust whether pasted in
+		// cmd.exe or PowerShell. Same form as enrollcmd's windows command — keep
+		// the two in sync.
 		return fmt.Sprintf(
-			`powershell -ExecutionPolicy Bypass -Command "$f=Join-Path $env:TEMP 'suricatoos-install.ps1'; iwr -useb %s/install.ps1 -OutFile $f; & $f -Server '%s' -Token '%s' -CaPin '%s'"`,
+			`powershell -ExecutionPolicy Bypass -Command "iwr -useb %s/install.ps1 -OutFile C:\Windows\Temp\suricatoos-install.ps1; & C:\Windows\Temp\suricatoos-install.ps1 -Server '%s' -Token '%s' -CaPin '%s'"`,
 			s.publicBase, s.serverURL, token, s.caPin)
 	default: // linux, darwin
 		return fmt.Sprintf(
