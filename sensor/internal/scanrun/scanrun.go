@@ -69,6 +69,10 @@ type bridgeResult struct {
 	Progress int       `json:"progress"`
 	Findings []Finding `json:"findings"`
 	Error    string    `json:"error"`
+	// fetch only. HostsScanned is a pointer so "absent" (a bridge older than the
+	// field → old behavior) stays distinct from 0 (the scan measured no host).
+	HostsScanned  *int `json:"hosts_scanned,omitempty"`
+	ReportMissing bool `json:"report_missing,omitempty"` // the Done task has no report
 }
 
 type bridgeExec func(ctx context.Context, subcommand string, reqJSON []byte) (*bridgeResult, error)
@@ -108,7 +112,9 @@ func New(cfg Config) *Runner {
 
 // Run applies the baked scope, launches the scan, polls to completion, and returns
 // the findings. droppedCount is how many targets were rejected by the scope (log
-// it). Returns (nil, dropped, nil) when nothing is in scope.
+// it). Returns (nil, dropped, nil) when nothing is in scope. A Done scan that
+// measured nothing (no report, or zero hosts) is an ERROR, not an empty clean
+// result: the supervisor then neither pushes a report nor acks the job.
 func (r *Runner) Run(ctx context.Context, job Job) (findings []Finding, droppedCount int, err error) {
 	kept, dropped := r.cfg.Scope.Filter(job.Targets)
 	if len(dropped) > 0 {
@@ -141,6 +147,12 @@ func (r *Runner) Run(ctx context.Context, job Job) (findings []Finding, droppedC
 			fr, err := r.run(ctx, "fetch", reqJSON)
 			if err != nil {
 				return nil, len(dropped), fmt.Errorf("fetch: %w", err)
+			}
+			if fr.ReportMissing {
+				return nil, len(dropped), fmt.Errorf("task Done sem relatório")
+			}
+			if fr.HostsScanned != nil && *fr.HostsScanned == 0 {
+				return nil, len(dropped), fmt.Errorf("scan não mediu nenhum host vivo (verifique alive test/alcance)")
 			}
 			return fr.Findings, len(dropped), nil
 		case "Stopped", "Interrupted", "Failed":
