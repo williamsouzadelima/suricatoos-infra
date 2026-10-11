@@ -97,25 +97,20 @@ def bm_plain(t):
     return plain(t)
 
 
-def cut_words(text, budget):
-    """O corte de bookmark-text no latex.xsl: normaliza, e acima do teto corta
-    na ULTIMA fronteira de palavra (um espaco no indice 0-based i quer dizer
-    que os i primeiros caracteres sao palavras inteiras), recuando no maximo
-    metade do teto; sem fronteira na janela, corta no teto. O corte vira U+2026."""
-    t = norm_space(text)
-    if len(t) <= budget:
-        return t
-    back = min(budget // 2, 199)
-    spaces = [i for i in range(budget - back, budget + 1) if t[i] == " "]
-    return t[:spaces[-1] if spaces else budget] + "\u2026"
-
-
 def expect_text(head, text, budget):
-    t = cut_words(text, budget)
-    head = norm_space(head)
-    if head and t:
-        return head + "  " + t
-    return head or t
+    """O texto que bookmark-text (latex.xsl) escreve: cabeca e texto, cada um
+    normalizado, separados por DOIS espacos; o conjunto, acima do teto, cortado
+    na ULTIMA fronteira de palavra (um espaco no indice 0-based i quer dizer que
+    os i primeiros caracteres sao palavras inteiras), recuando no maximo metade
+    do teto -- sem fronteira na janela, corta no teto --, sem espaco sobrando
+    antes da reticencia (U+2026)."""
+    head, text = norm_space(head), norm_space(text)
+    s = head + "  " + text if head and text else head or text
+    if len(s) <= budget:
+        return s
+    back = min(budget // 2, 199)
+    spaces = [i for i in range(budget - back, budget + 1) if s[i] == " "]
+    return s[:spaces[-1] if spaces else budget].rstrip(" ") + "\u2026"
 
 
 def macro_at(s, k, name, nargs):

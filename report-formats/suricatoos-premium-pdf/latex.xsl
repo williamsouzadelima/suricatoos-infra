@@ -1698,12 +1698,16 @@ SPDX-License-Identifier: GPL-2.0-or-later
 % indexa nada sozinho: cada marcador e' um \pdfbookmark do design system
 % (nivel 0 = secao, posto pelo \suriSection; nivel 1 = host da secao 3 e card
 % da secao 5, anunciados abaixo com \suriBookmark -- suricatoos-page.sty).
-% `bookmarksopen'/`bookmarksopenlevel' vao AQUI, como opcao de CARGA: e' so'
-% onde o hyperref as honra (em \hypersetup ele avisa "Option ... has already
-% been used" e ignora). O hyperref abre o item de nivel L quando L e' MENOR que
-% bookmarksopenlevel, entao 0 deixa cada secao fechada: o painel abre com as
-% seis secoes, so' o nivel 0 a' vista, e o leitor expande a que quiser -- numa
-% tortura de 180+ paginas a secao 5 sozinha tem centenas de cards.
+% O painel abre so' com as seis secoes, cada uma FECHADA, e o leitor expande a
+% que quiser (numa tortura de 180+ paginas a secao 5 sozinha tem centenas de
+% cards). `bookmarksopen=true,bookmarksopenlevel=0' NAO e' o que produz isso:
+% o hyperref abre o item de nivel L so' quando L e' MENOR que
+% bookmarksopenlevel, entao com 0 nada abre -- exatamente o padrao dele
+% (bookmarksopen=false, tudo fechado). As opcoes ficam escritas, como opcao de
+% CARGA (em \hypersetup o hyperref avisa "Option ... has already been used" e
+% as ignora), para o contrato ficar a' vista no preambulo. Quem o GARANTE e' o
+% portao do CI: pdf-arvore (report-formats/ci/check-navigation.py) reprova
+% secao com filhos que abra expandida (/Count >= 0).
 \usepackage[unicode=true,hidelinks,bookmarksopen=true,bookmarksopenlevel=0]{hyperref}
 % Só metadado aqui.
 \hypersetup{pdftitle={</xsl:text>
@@ -5105,44 +5109,70 @@ SPDX-License-Identifier: GPL-2.0-or-later
 </xsl:text>
   </xsl:template>
 
-  <!-- Teto, em caracteres, do texto de um marcador (fora o "#N  " ou o IP da
-       frente). O painel de marcadores e' estreito e quase todo visualizador
-       corta com reticencias o que nao cabe; 100 deixa inteiro o nome de NVT
-       comum (raramente passa de 90) e corta, com reticencias proprias, o que
-       viraria um paragrafo no painel. -->
+  <!-- Teto, em caracteres, do texto INTEIRO de um marcador (o "#N" do card ou
+       o IP do host, os dois espacos e o titulo). O painel de marcadores e'
+       estreito e quase todo visualizador corta com reticencias o que nao cabe;
+       100 deixa inteiro o nome de NVT comum (raramente passa de 90) e corta,
+       com reticencias proprias, o que viraria um paragrafo no painel. Vale
+       para o texto todo, e nao so' para o titulo: um IPv6 de centenas de
+       caracteres na frente tambem conta. -->
   <xsl:param name="bookmark-max" select="100"/>
 
   <!-- O TEXTO de um marcador do PDF, em LaTeX que o \pdfstringdef do hyperref
        converte: SO' texto escapado (escape_text), sem \surjb, \surwb nem
        \suriTruncMark, que sao composicao e sairiam como lixo ou aviso no
-       painel. $head (o "#N" do card, ou o IP do host) vai inteiro; $text
-       (titulo, hostname) e' normalizado e, acima de $bookmark-max, cortado na
-       ULTIMA fronteira de palavra (gvm:cut-at, a mesma regra do nome do projeto
-       na capa) com \textellipsis no lugar do resto. Os dois ficam separados por
-       DOIS espacos, o formato "N  Titulo" do nivel 0 (\space: espaco digitado
-       em dobro o TeX colapsaria). -->
+       painel. $head (o "#N" do card, ou o IP do host) e $text (titulo,
+       hostname), cada um normalizado, ficam separados por DOIS espacos, o
+       formato "N  Titulo" do nivel 0. O conjunto, acima de $bookmark-max, e'
+       cortado na ULTIMA fronteira de palavra (gvm:cut-at, a mesma regra do
+       nome do projeto na capa) com \textellipsis no lugar do resto; um corte
+       que caia entre os dois espacos da juncao nao deixa espaco antes da
+       reticencia. Os dois espacos saem como \space\space: digitados em dobro,
+       o TeX os colapsaria em um. -->
   <xsl:template name="bookmark-text">
     <xsl:param name="head" select="''"/>
     <xsl:param name="text" select="''"/>
+    <xsl:variable name="h" select="normalize-space($head)"/>
     <xsl:variable name="t" select="normalize-space($text)"/>
-    <xsl:variable name="over" select="string-length($t) &gt; number($bookmark-max)"/>
-    <xsl:variable name="keep">
+    <xsl:variable name="both" select="string-length($h) &gt; 0 and string-length($t) &gt; 0"/>
+    <!-- O marcador inteiro em texto cru; a juncao e' o unico espaco duplo
+         (normalize-space tirou os outros). -->
+    <xsl:variable name="s">
       <xsl:choose>
-        <xsl:when test="$over">
-          <xsl:value-of select="gvm:hx-min2(gvm:cut-at($t, number($bookmark-max) + 1, floor(number($bookmark-max) div 2) + 1), number($bookmark-max))"/>
-        </xsl:when>
-        <xsl:otherwise><xsl:value-of select="string-length($t)"/></xsl:otherwise>
+        <xsl:when test="$both"><xsl:value-of select="concat($h, '  ', $t)"/></xsl:when>
+        <xsl:otherwise><xsl:value-of select="concat($h, $t)"/></xsl:otherwise>
       </xsl:choose>
     </xsl:variable>
-    <xsl:call-template name="escape_text">
-      <xsl:with-param name="string" select="normalize-space($head)"/>
-    </xsl:call-template>
-    <xsl:if test="string-length(normalize-space($head)) &gt; 0 and string-length($t) &gt; 0">
-      <xsl:text>\space\space </xsl:text>
-    </xsl:if>
-    <xsl:call-template name="escape_text">
-      <xsl:with-param name="string" select="substring($t, 1, number($keep))"/>
-    </xsl:call-template>
+    <xsl:variable name="over" select="string-length($s) &gt; number($bookmark-max)"/>
+    <xsl:variable name="k0">
+      <xsl:choose>
+        <xsl:when test="$over">
+          <xsl:value-of select="gvm:hx-min2(gvm:cut-at(string($s), number($bookmark-max) + 1, floor(number($bookmark-max) div 2) + 1), number($bookmark-max))"/>
+        </xsl:when>
+        <xsl:otherwise><xsl:value-of select="string-length($s)"/></xsl:otherwise>
+      </xsl:choose>
+    </xsl:variable>
+    <!-- Corte dentro da juncao: o(s) espaco(s) que sobrar(em) no fim sai(em);
+         no maximo dois, porque a juncao e' o unico espaco duplo. -->
+    <xsl:variable name="k1" select="number($k0) - number(substring($s, number($k0), 1) = ' ')"/>
+    <xsl:variable name="k" select="$k1 - number(substring($s, $k1, 1) = ' ')"/>
+    <xsl:variable name="kept" select="substring($s, 1, $k)"/>
+    <xsl:choose>
+      <xsl:when test="$both and $k &gt; string-length($h)">
+        <xsl:call-template name="escape_text">
+          <xsl:with-param name="string" select="$h"/>
+        </xsl:call-template>
+        <xsl:text>\space\space </xsl:text>
+        <xsl:call-template name="escape_text">
+          <xsl:with-param name="string" select="substring($kept, string-length($h) + 3)"/>
+        </xsl:call-template>
+      </xsl:when>
+      <xsl:otherwise>
+        <xsl:call-template name="escape_text">
+          <xsl:with-param name="string" select="$kept"/>
+        </xsl:call-template>
+      </xsl:otherwise>
+    </xsl:choose>
     <xsl:if test="$over"><xsl:text>\textellipsis</xsl:text></xsl:if>
   </xsl:template>
 

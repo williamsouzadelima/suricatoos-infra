@@ -281,8 +281,9 @@
 %   0  cada secao, "N  Titulo", posto pelo proprio \suriSection;
 %   1  o que a secao enumera -- cada host na secao 3, cada card de achado na
 %      secao 5 --, anunciado pelo XSLT com \suriBookmark logo antes da caixa.
-% Abrir so' o nivel 0 e' opcao de CARGA do hyperref (bookmarksopen*), no
-% preambulo que o XSLT escreve, e nao daqui.
+% O painel abre com o nivel 0 a' vista e cada secao fechada: e' o padrao do
+% hyperref (o preambulo que o XSLT escreve so' o deixa explicito na carga) e
+% quem o garante e' o portao pdf-arvore do CI (Count < 0), nao este modulo.
 %
 % Por que \suriBookmark nao escreve o marcador na hora.  Entre dois blocos, um
 % \pdfbookmark deixaria na lista vertical um \write e um \pdfdest, e whatsit
@@ -390,6 +391,17 @@
 % "§N".  A cauda e' a do \suriSection depois do ajuste do suricatoos-report
 % (cor, \nobreak, \addvspace de 8px), escrita direto.
 %
+% A ALTURA da linha do titulo e' fixa: a de um "a" acentuado (\vphantom{\'a})
+% com o titulo em \smash.  Com o \topskip de 1px do suricatoos-report, a linha
+% de base da 1a linha da folha fica a ALTURA da caixa abaixo do topo, e a
+% altura da caixa e' a do glifo mais alto: o "I" maiusculo acentuado de
+% "Indice" (18.35pt na SB de 25.5px) baixava o titulo em espanhol 3.2pt em
+% relacao a "Sumario" (o "a" acentuado, 15.15pt), e "Contents" (13.88pt)
+% subia 1.3pt.  Medido nos .tfm do subset Plex.  Com a altura do "a"
+% acentuado as tres linguas dividem a linha de base -- a de "Sumario", que nao
+% se mexe (mesma altura, mesma profundidade) -- e a regra de baixo junto.
+% O \suriSection nao foi tocado: os titulos de secao continuam como estavam.
+%
 % suritoc e' a lista: a regra de 2px em `ink' por cima, uma linha por secao com
 % o fio `hairlinetwo' embaixo, e a de 2px fechando, puxada um fio para cima para
 % engolir o ultimo -- o desenho das tabelas de pg-04/06/07.
@@ -416,7 +428,7 @@
   {\suriSB\suriFS{25.5}{25.5}\color{ink}%
    \spaceskip=\dimexpr\fontdimen2\font-\suripx{1.45}\relax
      plus\fontdimen3\font minus\fontdimen4\font
-   #1}%
+   \vphantom{\'a}\smash{#1}}%
   \par\nobreak
   \color{body}\nobreak\addvspace{\suripx{8}}%
   \@afterindentfalse\@afterheading}
