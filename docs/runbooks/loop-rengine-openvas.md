@@ -64,8 +64,52 @@ docker compose up -d --no-deps ingest
 
 Dispare um scan pelo reNgine e acompanhe: `docker logs -f greenbone-community-edition-ingest-1`
 (linhas `scanlaunch:`), a task `suricatoos-rengine-{id}-{12 primeiros caracteres do request_id}`
-na GSA (um nome por pedido; jobs lançados antes disso seguem com `suricatoos-rengine-{id}`), e as
-`Vulnerability` `source=openvas` no reNgine.
+na GSA (um nome por pedido, mais `-a{N}` a partir da 2ª tentativa — ver "Re-envio"; jobs
+lançados antes disso seguem com `suricatoos-rengine-{id}`), e as `Vulnerability`
+`source=openvas` no reNgine.
+
+## Estados finais do job (o que o `GET` devolve em `state`/`error`)
+
+Um scan só vira `COMPLETED` quando o relatório mostra que algo foi medido. Um "Done" vazio
+nunca é apresentado como host limpo.
+
+| `state` | `error` | Significado / o que fazer |
+|---|---|---|
+| `COMPLETED` | — | Done com host(s) medido(s). `findings` vazio = host medido sem achado (resultado legítimo). |
+| `FAILED` | `scan não mediu nenhum host vivo (verifique alive test/alcance)` | Done com **0 hosts** no relatório: o alive test não achou host vivo ou o alvo é inalcançável a partir do scanner. **Não** é atestado de host limpo. Confira `SCAN_ALIVE_TEST` e o caminho de rede; o re-envio faz **scan novo** (task nova). |
+| `FAILED` | `task Done sem relatório` | A task terminou sem relatório no gvmd (ex.: relatório apagado na GSA). O re-envio faz **scan novo**. |
+| `FAILED` | `task Done, mas o relatório não foi obtido após N tentativa(s): …` | O scan terminou, mas buscar (ou cachear) o relatório falhou `SCAN_FETCH_RETRY_LIMIT` vezes seguidas (padrão 20 ≈ 10 min no tick de 30 s; mais se cada tentativa estourar o timeout de 5 min). O re-envio **re-lê** o relatório pronto da mesma task, sem novo scan. |
+| `FAILED` | `scan Interrupted` / `scan Failed` | O gvmd interrompeu o scan (ou a task sumiu). O re-envio reinicia a mesma task. |
+| `EXPIRED` | `scan ainda em execução além do limite de duração (SCAN_MAX_DURATION=…) — parado` | Passou do teto e foi parado no gvmd. |
+| `EXPIRED` | `sem status do gvmd além do limite de duração (SCAN_MAX_DURATION=…, N falhas seguidas): …` | Passou do teto e o gvmd não respondeu ao `status` em **3 ticks seguidos** (≈1,5 min; qualquer status OK zera a contagem). O stop é best effort: com o gvmd fora, a task pode seguir rodando lá — confira na GSA. |
+| `STOPPED` | — | Parado por `DELETE`. |
+
+Um Done é buscado mesmo depois do `SCAN_MAX_DURATION`: o teto não descarta relatório pronto.
+
+### Re-envio (retry)
+
+Re-enviar o **mesmo** `rengine_scan_history_id` de um job `FAILED`/`STOPPED`/`EXPIRED` reabre o
+mesmo job (mesmo `request_id`, volta a `PENDING`). Jobs `PENDING`/`RUNNING`/`COMPLETED` voltam
+como estão (replay idempotente).
+
+- Falhas "não mediu nada" (as duas primeiras linhas `FAILED` acima): o job passa para a próxima
+  tentativa — target e task **novos** no gvmd (`…-a1`, `…-a2`), com o `SCAN_ALIVE_TEST` atual.
+  Sem isso, o relançamento reencontraria a task Done e re-leria o mesmo relatório vazio.
+- Demais falhas: relança na **mesma** task (sem scan duplo após um erro de launch; relatório
+  pronto re-lido após o limite de fetch; task interrompida/parada é reiniciada).
+- Um job parado por `DELETE` e re-enviado é lançado de novo (a marca de stop não passa adiante).
+- Depois que o job terminal é expurgado (`SCAN_RESULT_RETENTION`, 48 h), o re-envio cria um job
+  novo, com `request_id` e task novos — nunca reaproveita a task Done antiga.
+
+### Ajustes
+
+| Env (ingest) | Padrão | Efeito |
+|---|---|---|
+| `SCAN_MAX_DURATION` | `6h` | Teto de execução; além dele o scan é parado (`EXPIRED`). |
+| `SCAN_FETCH_RETRY_LIMIT` | `20` (1–1000) | Tentativas de buscar/cachear o relatório de uma task Done antes de `FAILED`. |
+
+A tolerância de 3 falhas seguidas de `status` além do teto é fixa no código
+(`StatusFailuresToExpire`).
 
 ## Verificações
 
@@ -82,7 +126,13 @@ na GSA (um nome por pedido; jobs lançados antes disso seguem com `suricatoos-re
 
 - **Flag primeiro** (instantâneo, sem redeploy): `SCAN_LAUNCH_ENABLED=false` ou
   `SURICATOOS_SCANNER_PUSH_ENABLED=False`.
-- **Imagem**: `docker tag ...suricatoos-ingest:stable-prev ...:stable` + `up -d --no-deps ingest`.
+- **Imagem**: **esvazie antes** — `SCAN_MAX_CONCURRENT=0` (pausa lançamentos; recrie o ingest)
+  e espere os jobs `RUNNING` terminarem, ou dê `DELETE` neles. A imagem anterior não conhece o
+  nome de task por pedido: um scan em voo lançado pela versão nova viraria `FAILED scan
+  Interrupted` com a task seguindo órfã no gvmd, fora do limite de concorrência. Depois:
+  `docker tag ...suricatoos-ingest:stable-prev ...:stable` + `up -d --no-deps ingest`.
+  (O deploy para a frente é seguro com jobs em voo: o bridge novo acha a task legada
+  `suricatoos-rengine-{id}` pelo `gvm_task_id` do job.)
 - **nginx**: restaure a conf boa, `docker compose exec nginx nginx -t`, `up -d --no-deps nginx`.
 - **Schema reNgine** é aditivo (`ScanBridgeJob` + `Domain.send_to_scanner`); nada a reverter.
 

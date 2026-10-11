@@ -103,7 +103,9 @@ func (rc *reconciler) launch(ctx context.Context, j *Job) bool {
 		job.GVMReportID = res.ReportID
 		job.StartedAt = rc.now().UTC()
 		job.Error = ""
-		job.FetchFailures = 0 // a relaunch (job reopened after FAILED) gets a fresh retry budget
+		// A relaunch (job reopened after a failure) gets fresh retry budgets.
+		job.FetchFailures = 0
+		job.StatusFailures = 0
 	})
 	return true
 }
@@ -116,22 +118,32 @@ func (rc *reconciler) launch(ctx context.Context, j *Job) bool {
 // as EXPIRED). The cap only auto-stops a scan that is genuinely still running —
 // or one whose status gvmd cannot give at all once past the cap (below): without
 // a status nobody can tell it is Done, and the job must not hold a slot forever.
+// One failed status call is not enough for that (gvmd may be restarting): it takes
+// StatusFailuresToExpire consecutive failures, persisted in the Job.
 func (rc *reconciler) poll(ctx context.Context, j *Job) {
 	res, err := rc.run(ctx, "status", j)
 	if err != nil {
-		if rc.pastMaxDuration(j) {
-			log.Printf("scanlaunch: %s sem status do gvmd além de SCAN_MAX_DURATION — parando: %v", j.RequestID, err)
+		upd, ok := rc.reg.Update(j.RequestID, func(job *Job) { job.StatusFailures++ })
+		if !ok {
+			return
+		}
+		if rc.pastMaxDuration(j) && upd.StatusFailures >= StatusFailuresToExpire {
+			log.Printf("scanlaunch: %s sem status do gvmd além de SCAN_MAX_DURATION (%d falhas seguidas) — parando: %v",
+				j.RequestID, upd.StatusFailures, err)
 			rc.bestEffortStop(ctx, j)
 			rc.reg.Update(j.RequestID, func(job *Job) {
 				job.State = StateExpired
-				job.Error = truncErr(fmt.Sprintf("sem status do gvmd além do limite de duração (SCAN_MAX_DURATION=%s): %v",
-					rc.cfg.MaxDuration, err))
+				job.Error = truncErr(fmt.Sprintf("sem status do gvmd além do limite de duração (SCAN_MAX_DURATION=%s, %d falhas seguidas): %v",
+					rc.cfg.MaxDuration, upd.StatusFailures, err))
 				job.CompletedAt = rc.now().UTC()
 			})
 			return
 		}
-		log.Printf("scanlaunch: status %s falhou: %v", j.RequestID, err)
+		log.Printf("scanlaunch: status %s falhou (%d seguida(s)): %v", j.RequestID, upd.StatusFailures, err)
 		return // transient; retry next tick
+	}
+	if j.StatusFailures > 0 {
+		rc.reg.Update(j.RequestID, func(job *Job) { job.StatusFailures = 0 })
 	}
 	switch res.Status {
 	case "Done":
@@ -216,12 +228,16 @@ func (rc *reconciler) complete(ctx context.Context, j *Job, statusRes *bridgeRes
 }
 
 // failDone marks a job whose gvmd task is Done as FAILED with reason, keeping the
-// report id so the operator can inspect it in the GSA.
+// report id so the operator can inspect it in the GSA. These failures (the scan
+// measured nothing) are the only ones whose retry needs a NEW gvmd task: re-reading
+// the same Done report would fail again. RetryNewTask tells the registry's reopen to
+// move the job to the next attempt.
 func (rc *reconciler) failDone(j *Job, statusRes *bridgeResult, reason string) {
 	log.Printf("scanlaunch: %s FAILED — %s", j.RequestID, reason)
 	rc.reg.Update(j.RequestID, func(job *Job) {
 		job.State = StateFailed
 		job.Error = reason
+		job.RetryNewTask = true
 		if statusRes.ReportID != "" {
 			job.GVMReportID = statusRes.ReportID
 		}

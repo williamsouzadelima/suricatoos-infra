@@ -84,10 +84,15 @@ type Job struct {
 	Progress      int       `json:"progress"`
 	Error         string    `json:"error,omitempty"`
 	StopRequested bool      `json:"stop_requested,omitempty"` // DELETE sets it; the reconciler performs the stop
-	FetchFailures int       `json:"fetch_failures,omitempty"` // failed fetch/cache attempts of a Done task (bounded by SCAN_FETCH_RETRY_LIMIT)
 	SubmittedAt   time.Time `json:"submitted_at"`
 	StartedAt     time.Time `json:"started_at,omitempty"`
 	CompletedAt   time.Time `json:"completed_at,omitempty"`
+
+	// Reconciler bookkeeping — additive in the registry JSON (absent = zero).
+	Attempt        int  `json:"attempt,omitempty"`         // gvmd task generation of this request (the bridge appends -a<N> when > 0)
+	RetryNewTask   bool `json:"retry_new_task,omitempty"`  // set only by failDone: the next reopen moves to a new attempt
+	FetchFailures  int  `json:"fetch_failures,omitempty"`  // failed fetch/cache attempts of a Done task (bounded by SCAN_FETCH_RETRY_LIMIT)
+	StatusFailures int  `json:"status_failures,omitempty"` // consecutive status errors (expiry past the cap needs StatusFailuresToExpire)
 }
 
 // clone returns a deep copy so callers never mutate the registry's stored Job.
@@ -111,6 +116,8 @@ func (j *Job) clone() *Job {
 // fresh task instead of the old Done one (and its stale findings). Jobs launched
 // before the suffix keep the legacy name "suricatoos-rengine-<id>"; the bridge
 // falls back to it (pinned to the job's gvm_task_id) for status/fetch/stop.
+// "-a<Attempt>" is appended when Attempt > 0 (a re-sent job that measured nothing
+// rescans on a new task).
 func (j *Job) taskName() string {
 	name := "suricatoos-rengine-" + strconv.FormatInt(j.ScanHistoryID, 10)
 	var suffix []rune
@@ -124,6 +131,9 @@ func (j *Job) taskName() string {
 	}
 	if len(suffix) > 0 {
 		name += "-" + string(suffix)
+	}
+	if j.Attempt > 0 {
+		name += "-a" + strconv.Itoa(j.Attempt)
 	}
 	return name
 }

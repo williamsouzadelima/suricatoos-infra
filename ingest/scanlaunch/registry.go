@@ -99,6 +99,19 @@ func (r *Registry) FindOrCreate(req *ScanRequest, id certIdentity, cooldown time
 			existing.SubmittedAt = r.now().UTC()
 			existing.Error = ""
 			existing.Progress = 0
+			// A DELETE of the previous run does not carry over to the re-sent one
+			// (otherwise the reopened job would be stopped again before ever running).
+			existing.StopRequested = false
+			// A run that measured nothing (marked by the reconciler's failDone) moves to
+			// the next attempt: a NEW gvmd target/task, since relaunching on the same name
+			// would re-find the Done task and re-read the same useless report. Any other
+			// failure reopens on the SAME task (idempotent: no second scan after a launch
+			// error, and a finished report is re-read after the fetch retry limit).
+			if existing.RetryNewTask {
+				existing.Attempt++
+				existing.RetryNewTask = false
+				existing.GVMTargetID, existing.GVMTaskID, existing.GVMReportID = "", "", ""
+			}
 			_ = r.saveLocked()
 		}
 		return existing.clone(), false, nil
