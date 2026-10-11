@@ -87,6 +87,12 @@ type Job struct {
 	SubmittedAt   time.Time `json:"submitted_at"`
 	StartedAt     time.Time `json:"started_at,omitempty"`
 	CompletedAt   time.Time `json:"completed_at,omitempty"`
+
+	// Reconciler bookkeeping — additive in the registry JSON (absent = zero).
+	Attempt        int  `json:"attempt,omitempty"`         // gvmd task generation of this request (the bridge appends -a<N> when > 0)
+	RetryNewTask   bool `json:"retry_new_task,omitempty"`  // set only by failDone: the next reopen moves to a new attempt
+	FetchFailures  int  `json:"fetch_failures,omitempty"`  // failed fetch/cache attempts of a Done task (bounded by SCAN_FETCH_RETRY_LIMIT)
+	StatusFailures int  `json:"status_failures,omitempty"` // consecutive status errors (expiry past the cap needs StatusFailuresToExpire)
 }
 
 // clone returns a deep copy so callers never mutate the registry's stored Job.
@@ -102,8 +108,32 @@ func (j *Job) clone() *Job {
 }
 
 // taskName is the deterministic gvmd task/target name — a pure function of the
-// reNgine scan_history_id, so a retried launch finds the same task (idempotent)
-// and the ingest can reconstruct state from gvmd after a restart.
+// reNgine scan_history_id (and the request_id, below), so a retried launch finds
+// the same task (idempotent) and the ingest can reconstruct state from gvmd after
+// a restart. It mirrors scan_bridge.py `_task_name`, which is what actually names
+// the task: a suffix with the first 12 alphanumerics of the request_id makes it
+// unique PER REQUEST, so a scan_history_id re-sent after its job was reaped gets a
+// fresh task instead of the old Done one (and its stale findings). Jobs launched
+// before the suffix keep the legacy name "suricatoos-rengine-<id>"; the bridge
+// falls back to it (pinned to the job's gvm_task_id) for status/fetch/stop.
+// "-a<Attempt>" is appended when Attempt > 0 (a re-sent job that measured nothing
+// rescans on a new task).
 func (j *Job) taskName() string {
-	return "suricatoos-rengine-" + strconv.FormatInt(j.ScanHistoryID, 10)
+	name := "suricatoos-rengine-" + strconv.FormatInt(j.ScanHistoryID, 10)
+	var suffix []rune
+	for _, r := range j.RequestID {
+		if len(suffix) == 12 {
+			break
+		}
+		if r >= '0' && r <= '9' || r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' {
+			suffix = append(suffix, r)
+		}
+	}
+	if len(suffix) > 0 {
+		name += "-" + string(suffix)
+	}
+	if j.Attempt > 0 {
+		name += "-a" + strconv.Itoa(j.Attempt)
+	}
+	return name
 }

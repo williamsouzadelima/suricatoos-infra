@@ -2,6 +2,7 @@ package scanrun
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"testing"
 	"time"
@@ -104,6 +105,59 @@ func TestRunTimeout(t *testing.T) {
 	r.sleep = func(time.Duration) { now = now.Add(2 * time.Minute) }
 	if _, _, err := r.Run(context.Background(), Job{CorrelationID: "c", Targets: []string{"10.20.1.1"}}); err == nil {
 		t.Fatal("scan que nunca termina deveria estourar MaxDuration")
+	}
+}
+
+// runDone roda um scan que termina Done e cujo fetch imprime fetchStdout — a saída
+// REAL do scan_bridge.py, decodificada como o execBridge faz.
+func runDone(t *testing.T, fetchStdout string) ([]Finding, error) {
+	t.Helper()
+	run := func(_ context.Context, sub string, _ []byte) (*bridgeResult, error) {
+		switch sub {
+		case "launch":
+			return &bridgeResult{Status: "Requested"}, nil
+		case "status":
+			return &bridgeResult{Status: "Done", Progress: 100}, nil
+		case "fetch":
+			var res bridgeResult
+			if err := json.Unmarshal([]byte(fetchStdout), &res); err != nil {
+				t.Fatalf("saída do bridge inválida %q: %v", fetchStdout, err)
+			}
+			return &res, nil
+		}
+		return nil, fmt.Errorf("sub inesperado %s", sub)
+	}
+	fs, _, err := testRunner(t, run).Run(context.Background(), Job{CorrelationID: "c", Targets: []string{"10.20.1.1"}})
+	return fs, err
+}
+
+// Um scan que não mediu nada NÃO pode virar relatório "limpo": erro => o supervisor
+// não empurra relatório nem dá ack (o job fica para redelivery).
+func TestRunDoneSemHostMedidoEErro(t *testing.T) {
+	fs, err := runDone(t, `{"findings": [], "hosts_scanned": 0, "report_missing": false}`)
+	if err == nil || !contains(err.Error(), "não mediu nenhum host vivo") || fs != nil {
+		t.Fatalf("Done sem host medido deveria ser erro, got fs=%v err=%v", fs, err)
+	}
+}
+
+func TestRunDoneSemRelatorioEErro(t *testing.T) {
+	fs, err := runDone(t, `{"findings": [], "hosts_scanned": 0, "report_missing": true}`)
+	if err == nil || !contains(err.Error(), "sem relatório") || fs != nil {
+		t.Fatalf("Done sem relatório deveria ser erro, got fs=%v err=%v", fs, err)
+	}
+}
+
+func TestRunDoneComHostLimpoNaoEErro(t *testing.T) {
+	fs, err := runDone(t, `{"findings": [], "hosts_scanned": 1, "report_missing": false}`)
+	if err != nil || len(fs) != 0 {
+		t.Fatalf("host medido sem achado é resultado legítimo, got fs=%v err=%v", fs, err)
+	}
+}
+
+func TestRunBridgeAntigoSemHostsScannedMantemComportamento(t *testing.T) {
+	fs, err := runDone(t, `{"findings": [{"host": "10.20.1.1", "oid": "o1", "name": "x"}]}`)
+	if err != nil || len(fs) != 1 || fs[0].OID != "o1" {
+		t.Fatalf("saída sem hosts_scanned deveria manter o comportamento antigo, got fs=%v err=%v", fs, err)
 	}
 }
 
