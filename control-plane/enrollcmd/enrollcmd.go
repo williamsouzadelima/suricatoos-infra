@@ -248,7 +248,7 @@ func (s *Service) command(target, token string) (string, error) {
 				`-e ENROLL_TOKEN=%s -e CLOUD_BASE_URL=%s -e CA_PIN=%s -e AGENT_ID="$(hostname)" `+
 				`-v /:/host:ro -v suricatoos-agent:/var/lib/suricatoos-agent %s`,
 			installcmd.ShellQuote(token), installcmd.ShellQuote(s.cfg.ServerURL),
-			installcmd.ShellQuote(s.cfg.CAPin), s.cfg.Image), nil
+			installcmd.ShellQuote(s.cfg.CAPin), installcmd.ShellQuote(s.cfg.Image)), nil
 	case "windows":
 		return installcmd.Windows(s.cfg.ServerURL, token, s.cfg.CAPin)
 	default: // linux, darwin (binary installer; install.sh picks the OS by `uname -s`)

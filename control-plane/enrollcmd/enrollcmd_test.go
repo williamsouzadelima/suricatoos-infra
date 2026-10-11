@@ -443,6 +443,39 @@ func TestWindowsRefusedWhenServerURLIsUnsafe(t *testing.T) {
 	}
 }
 
+// A referencia da imagem era o unico valor que ainda entrava cru no docker run: passa pelo
+// ShellQuote como os demais. A imagem padrao sai igual a antes, sem aspas.
+func TestDockerImageIsShellQuoted(t *testing.T) {
+	cmdFor := func(image string) string {
+		t.Helper()
+		s := New(Config{
+			TM:          tokens.NewManager(tokens.NewMemStore()),
+			Known:       knownAcme,
+			CAPin:       "sha256:abc123",
+			ServerURL:   "https://scanner.suricatoos.com/agent/v1",
+			Image:       image,
+			AdminSecret: "sekret",
+		})
+		w := do(s, "GET", "/api/v1/tenants/acme/enroll-command?target=docker", "sekret")
+		if w.Code != http.StatusOK {
+			t.Fatalf("docker deveria 200, got %d: %s", w.Code, w.Body.String())
+		}
+		var r response
+		if err := json.Unmarshal(w.Body.Bytes(), &r); err != nil {
+			t.Fatal(err)
+		}
+		return r.Command
+	}
+
+	if got := cmdFor(""); !strings.HasSuffix(got, " ghcr.io/williamsouzadelima/suricatoos-agent:stable") {
+		t.Errorf("a imagem padrao deveria sair sem aspas, no fim do comando:\n%s", got)
+	}
+	const hostile = "reg.example/agent:1 --privileged; touch /tmp/x"
+	if got := cmdFor(hostile); !strings.HasSuffix(got, " '"+hostile+"'") {
+		t.Errorf("a imagem com espaco e ';' deveria sair como UMA palavra entre aspas:\n%s", got)
+	}
+}
+
 // failingUpdateStore falha em Update (disco cheio, banco travado): o Revoke falha junto.
 type failingUpdateStore struct{ tokens.Store }
 
