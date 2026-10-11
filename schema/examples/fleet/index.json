@@ -599,6 +599,15 @@
       }
     },
     {
+      "file": "invalid/heartbeat/heartbeat_request--without-replay-floor.json",
+      "target": "fleet-heartbeat.schema.json#/$defs/heartbeat_request",
+      "description": "NB2: the node publishes its replay floor; the hub never issues below replay_floor + 10 min",
+      "expect": {
+        "keyword": "required",
+        "path": ""
+      }
+    },
+    {
       "file": "invalid/heartbeat/heartbeat_request--without-unauthenticated-rejections.json",
       "target": "fleet-heartbeat.schema.json#/$defs/heartbeat_request",
       "description": "I4: lines 0-2 are only counted, and the count is mandatory",
@@ -1064,6 +1073,15 @@
       "expect": {
         "keyword": "required",
         "path": "/data/policy"
+      }
+    },
+    {
+      "file": "invalid/state/node-without-replay-floor.json",
+      "target": "fleet-state.schema.json",
+      "description": "NB2: the node state carries the replay floor too",
+      "expect": {
+        "keyword": "required",
+        "path": "/data"
       }
     },
     {

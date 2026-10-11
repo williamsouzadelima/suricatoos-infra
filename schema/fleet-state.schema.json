@@ -52,7 +52,7 @@
     },
     "data_node": {
       "type": "object",
-      "required": ["node_kind", "connector_version", "versions", "feeds", "health", "capabilities", "policy", "policy_sha256"],
+      "required": ["node_kind", "connector_version", "versions", "feeds", "health", "capabilities", "policy", "policy_sha256", "replay_floor"],
       "additionalProperties": false,
       "properties": {
         "node_kind": { "enum": ["central", "standalone", "sensor"] },
@@ -132,7 +132,8 @@
             "total_per_hour": { "type": "integer", "minimum": 0, "maximum": 3600, "description": "GLOBAL local budget of ACCEPTED commands of any type per sliding hour (default 120): bounds how fast a compromised hub can grow the exec audit stream with allowed commands" }
           }
         },
-        "policy_sha256": { "$ref": "fleet-command.schema.json#/$defs/sha256_hex", "description": "sha256 of the policy object serialized as compact JSON with keys sorted and 'allow' sorted — the hub can recompute it from 'policy'" }
+        "policy_sha256": { "$ref": "fleet-command.schema.json#/$defs/sha256_hex", "description": "sha256 of the policy object serialized as compact JSON with keys sorted and 'allow' sorted — the hub can recompute it from 'policy'" },
+        "replay_floor": { "$ref": "fleet-command.schema.json#/$defs/utc_time", "description": "same value as the heartbeat's replay_floor: the hub never issues a command with issued_at < replay_floor + 10 min" }
       }
     },
 

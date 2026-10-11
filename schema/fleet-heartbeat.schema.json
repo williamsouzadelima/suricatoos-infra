@@ -11,7 +11,7 @@
   "$defs": {
     "heartbeat_request": {
       "type": "object",
-      "required": ["schema_version", "node_id", "sent_at", "connector_version", "schema_versions", "state_hashes", "outbox_events", "outbox_dropped", "pending_results", "unauthenticated_rejections"],
+      "required": ["schema_version", "node_id", "sent_at", "connector_version", "schema_versions", "replay_floor", "state_hashes", "outbox_events", "outbox_dropped", "pending_results", "unauthenticated_rejections"],
       "additionalProperties": false,
       "properties": {
         "schema_version": { "type": "string", "const": "1.0.0" },
@@ -19,6 +19,7 @@
         "sent_at": { "$ref": "fleet-command.schema.json#/$defs/utc_time" },
         "connector_version": { "$ref": "fleet-command.schema.json#/$defs/version_string" },
         "schema_versions": { "$ref": "fleet-command.schema.json#/$defs/schema_versions", "description": "versions the NODE supports (may change after an upgrade)" },
+        "replay_floor": { "$ref": "fleet-command.schema.json#/$defs/utc_time", "description": "the node's replay floor: set at every (re)enroll and whenever the anti-replay store was unreadable or missing at boot; the node rejects as replay any command with issued_at < replay_floor + its skew. NORMATIVE for the hub: never issue a command for this node with issued_at < replay_floor + 10 min (the FLEET_CLOCK_SKEW ceiling), nor before it has seen the replay_floor that follows a (re)enroll" },
         "state_hashes": {
           "description": "kind -> content_sha256 of the node's latest snapshot of that kind",
           "type": "object",

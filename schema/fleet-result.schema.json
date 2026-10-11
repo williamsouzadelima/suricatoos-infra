@@ -60,7 +60,7 @@
     },
 
     "ack": {
-      "description": "Body of POST /fleet/v1/commands/{id}/ack, sent ONLY for envelopes that passed authentication (verification lines 0-2 never produce an ack: they are only counted, see heartbeat unauthenticated_rejections). accepted = verified, authorized, about to execute. rejected = FINAL: recorded with the nonce and the command_id (lines 3-9); the hub never redelivers it and issues a NEW command (new id, new nonce) once the cause is fixed. deferred = retryable and NOT recorded (not_yet_valid, unavailable): the hub may redeliver the SAME envelope, byte for byte, until not_after; a later final decision supersedes a deferred one.",
+      "description": "Body of POST /fleet/v1/commands/{id}/ack, sent ONLY for envelopes that passed authentication (verification lines 0-2 never produce an ack: they are only counted, see heartbeat unauthenticated_rejections). accepted = verified, authorized, about to execute. rejected = FINAL (lines 3-9): recorded with the nonce and the command_id, except bad_window and expired (line 3), which depend only on the envelope and the clock and are recomputed identically on a redelivery; the hub never redelivers it and issues a NEW command (new id, new nonce) once the cause is fixed. deferred = retryable and NOT recorded (not_yet_valid, unavailable): the hub may redeliver the SAME envelope, byte for byte, until not_after; a later final decision supersedes a deferred one.",
       "type": "object",
       "required": ["schema_version", "command_id", "node_id", "decision", "received_at"],
       "additionalProperties": false,
@@ -81,7 +81,7 @@
     },
 
     "final_reason": {
-      "description": "reasons of a FINAL rejection (decision=rejected), always recorded with the nonce and the command_id",
+      "description": "reasons of a FINAL rejection (decision=rejected). Recorded with the nonce and the command_id, except bad_window and expired (line 3): they depend only on the envelope and the clock, so a redelivery gets the same decision without a store entry",
       "enum": ["bad_window", "expired", "wrong_node", "replay", "tenant_unknown", "unsupported", "type_not_allowed", "rate_limited", "bad_payload", "unsupported_report_variant", "scope_denied"]
     },
     "deferred_reason": {
@@ -90,7 +90,7 @@
     },
 
     "reject_reason": {
-      "description": "Every reason the node can refuse a command for, in verification order (the local audit uses them all). Three classes: (1) UNAUTHENTICATED — bad_envelope, payload_mismatch, bad_signature (lines 0-2): no ack, nothing recorded, only counted; (2) deferred_reason — not_yet_valid, unavailable: retryable, not recorded; (3) final_reason — everything else (lines 3-9), recorded with the nonce and the command_id. Of the final ones, those of lines 6-9 (tenant_unknown, unsupported, type_not_allowed, rate_limited, bad_payload, unsupported_report_variant, scope_denied) are also emitted as a command.rejected_by_policy event. unsupported_report_variant = a schema-valid report.export whose (format, lang, variant) is not in the node's capabilities.report_formats; unavailable = a local dependency of the decision (anti-replay store, gvmd read for the scope check) failed — fail-closed.",
+      "description": "Every reason the node can refuse a command for, in verification order (the local audit uses them all). Three classes: (1) UNAUTHENTICATED — bad_envelope, payload_mismatch, bad_signature (lines 0-2): no ack, nothing recorded, only counted; (2) deferred_reason — not_yet_valid, unavailable: retryable, not recorded; (3) final_reason — everything else (lines 3-9), recorded with the nonce and the command_id except the line-3 ones (bad_window, expired). Of the final ones, those of lines 6-9 (tenant_unknown, unsupported, type_not_allowed, rate_limited, bad_payload, unsupported_report_variant, scope_denied) are also emitted as a command.rejected_by_policy event. unsupported_report_variant = a schema-valid report.export whose (format, lang, variant) is not in the node's capabilities.report_formats; unavailable = a local dependency of the decision (anti-replay store, gvmd read for the scope check) failed — fail-closed.",
       "enum": [
         "bad_envelope",
         "payload_mismatch",
