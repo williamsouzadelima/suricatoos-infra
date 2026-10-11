@@ -32,10 +32,15 @@
 //     enrollment token (reproduced on Windows PowerShell 5.1).
 //   - SYSTEM is refused, not just documented. Run as SYSTEM (RMM, PsExec -s), TEMP is
 //     C:\Windows\Temp, where any local user can create files. A guard before the
-//     download throws when TEMP matches *\Windows\Temp*; mass or SYSTEM deployment
+//     download throws when TEMP matches *\W?ndows\Temp*; mass or SYSTEM deployment
 //     runs install.ps1 itself with -File from a protected directory (its header says
 //     so). A shared TEMP configured by hand (say C:\Temp writable by Users) is still
-//     trusted, exactly as install.ps1 trusts it.
+//     trusted, exactly as install.ps1 trusts it. The pattern has a '?' where the 'i'
+//     of Windows would be: Windows PowerShell 5.1 -like ignores case using the CURRENT
+//     culture, and in tr-TR, tr-CY, az-Latn-AZ and az-Cyrl-AZ (and their parents) an
+//     upper-case I does not fold to i (dotless i), so '*\Windows\Temp*' let
+//     C:\WINDOWS\TEMP through there. With the '?', all 915 .NET cultures match the
+//     system temp and none matches an ordinary user temp (checked on 5.1).
 //   - -NoProfile: the inner powershell is elevated and must not load the user's
 //     profile scripts.
 //   - A file, not an in-memory script block. install.ps1 does not depend on its own
@@ -74,8 +79,9 @@ const winInstaller = `(Join-Path (Get-Item env:TEMP).Value 'suricatoos-install.p
 
 // winSystemGuard runs before anything is downloaded and refuses a TEMP that is the
 // system temp directory (what SYSTEM gets). ASCII on purpose: it is printed in
-// whatever code page the terminal has. Its pattern is the only mention of that path.
-const winSystemGuard = `if ((Get-Item env:TEMP).Value -like '*\Windows\Temp*') { throw 'Nao rode como SYSTEM: use o install.ps1 com -File a partir de uma pasta protegida' }; `
+// whatever code page the terminal has. Its pattern is the only mention of that path,
+// and has no letter i (see the package comment: dotless-i casing in tr/az cultures).
+const winSystemGuard = `if ((Get-Item env:TEMP).Value -like '*\W?ndows\Temp*') { throw 'Nao rode como SYSTEM: use o install.ps1 com -File a partir de uma pasta protegida' }; `
 
 // Windows renders the one-liner for a Windows host: download install.ps1 into the
 // invoking user's temp directory and, only if that download succeeded, run it with

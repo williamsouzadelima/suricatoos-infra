@@ -40,7 +40,7 @@ func TestWindowsExactForm(t *testing.T) {
 		t.Fatal(err)
 	}
 	const want = `powershell -NoProfile -ExecutionPolicy Bypass -Command "` +
-		`if ((Get-Item env:TEMP).Value -like '*\Windows\Temp*') { throw 'Nao rode como SYSTEM: use o install.ps1 com -File a partir de uma pasta protegida' }; ` +
+		`if ((Get-Item env:TEMP).Value -like '*\W?ndows\Temp*') { throw 'Nao rode como SYSTEM: use o install.ps1 com -File a partir de uma pasta protegida' }; ` +
 		`if (iwr -useb https://scanner.suricatoos.com/install.ps1 -PassThru -OutFile (Join-Path (Get-Item env:TEMP).Value 'suricatoos-install.ps1')) ` +
 		`{ & (Join-Path (Get-Item env:TEMP).Value 'suricatoos-install.ps1') ` +
 		`-Server 'https://scanner.suricatoos.com/agent/v1' -Token 'st_AbC123.xyz-9_Q' -CaPin 'sha256:0a1b2c' }"`
@@ -129,13 +129,23 @@ func TestWindowsCommandInvariants(t *testing.T) {
 	// (RMM, PsExec -s) o TEMP e C:\Windows\Temp, onde qualquer usuario local cria arquivos:
 	// o comando recusa em vez de so documentar. Unica mencao a esse caminho no comando.
 	guard := between(t, cmd, `-Command "`, "; if (iwr ")
-	for _, want := range []string{"(Get-Item env:TEMP).Value", `-like '*\Windows\Temp*'`, "throw '"} {
+	for _, want := range []string{"(Get-Item env:TEMP).Value", `-like '*\W?ndows\Temp*'`, "throw '"} {
 		if !strings.Contains(guard, want) {
 			t.Errorf("a guarda deveria conter %q, got %s", want, guard)
 		}
 	}
-	if strings.Count(cmd, `Windows\Temp`) != 1 {
+	if strings.Count(cmd, `\W?ndows\Temp`) != 1 {
 		t.Errorf("C:\\Windows\\Temp so pode aparecer na guarda:\n%s", cmd)
+	}
+	// O padrao da guarda nao tem a letra 'i': o -like do PowerShell 5.1 ignora a caixa pela
+	// cultura ATUAL e, em tr-TR, tr-CY, az-Latn-AZ e az-Cyrl-AZ, 'I' nao vira 'i' (i sem
+	// ponto). Com '*\Windows\Temp*', C:\WINDOWS\TEMP passava la; o '?' no lugar do 'i' vale em
+	// todas as 915 culturas do .NET (conferido no PowerShell 5.1 real).
+	if pattern := between(t, guard, "-like '", "'"); strings.ContainsAny(pattern, "iI") {
+		t.Errorf("o padrao da guarda nao pode ter 'i' nem 'I' (casing das culturas turca e azeri), got %q", pattern)
+	}
+	if strings.Contains(cmd, `\Windows\Temp`) {
+		t.Errorf("o caminho nao pode aparecer escrito com o 'i' (falha em tr-TR/az):\n%s", cmd)
 	}
 
 	// 9. -NoProfile no powershell interno e elevado: nada do perfil do usuario roda com
