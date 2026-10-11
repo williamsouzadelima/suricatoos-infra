@@ -5349,10 +5349,10 @@ index eaff647..d6e39ef 100644
 \ No newline at end of file
 diff --git a/public/locales/gsa-es.json b/public/locales/gsa-es.json
 new file mode 100644
-index 0000000..176258e
+index 0000000..701c66e
 --- /dev/null
 +++ b/public/locales/gsa-es.json
-@@ -0,0 +1,2464 @@
+@@ -0,0 +1,2488 @@
 +{
 +  "AI Providers": "Proveedores de IA",
 +  "Configure LLM providers (OpenRouter, UnoRouter and others) used to draft remediation plans. Keys are stored encrypted and never shown.": "Configure los proveedores de LLM (OpenRouter, UnoRouter y otros) usados para redactar planes de remediación. Las claves se guardan cifradas y nunca se muestran.",
@@ -5509,7 +5509,7 @@ index 0000000..176258e
 +  "# of created DFN-CERT Advs": "N.º de avisos DFN-CERT creados",
 +  "# of Created Notes": "N.º de notas creadas",
 +  "# of created NVTs": "N.º de NVTs creados",
-+  "# of created Overrides": "N.º de overrides creados",
++  "# of created Overrides": "N.º de excepciones creadas",
 +  "# of created Tickets": "N.º de tickets creados",
 +  "# of CVEs": "N.º de CVE",
 +  "# of DFN-CERT Advisories": "N.º de avisos DFN-CERT",
@@ -5522,9 +5522,9 @@ index 0000000..176258e
 +  "# of Notes": "N.º de notas",
 +  "# of NVTs": "N.º de NVTs",
 +  "# of Operating Systems": "N.º de sistemas operativos",
-+  "# of Overrides": "N.º de overrides",
++  "# of Overrides": "N.º de excepciones",
 +  "# of Reports": "N.º de informes",
-+  "# of Results": "N.º de resultados",
++  "# of Results": "N.º de hallazgos",
 +  "# of Tasks": "N.º de tareas",
 +  "# of Tickets": "N.º de tickets",
 +  "# of Vulnerabilities": "N.º de vulnerabilidades",
@@ -5551,10 +5551,10 @@ index 0000000..176258e
 +  "Add new Dashboard": "Agregar nuevo panel",
 +  "Add new Dashboard Display": "Agregar nueva visualización de panel",
 +  "Add new Note": "Agregar nueva nota",
-+  "Add new Override": "Agregar nuevo override",
++  "Add new Override": "Agregar nueva excepción",
 +  "Add Port Range": "Agregar rango de puertos",
 +  "Add Resource by ID": "Agregar recurso por ID",
-+  "Add results to Assets": "Agregar resultados a los activos",
++  "Add results to Assets": "Agregar hallazgos a los activos",
 +  "Add Tag": "Agregar etiqueta",
 +  "Add Tag to All Filtered": "Agregar etiqueta a todos los filtrados",
 +  "Add tag to filtered": "Agregar etiqueta a los filtrados",
@@ -5564,7 +5564,7 @@ index 0000000..176258e
 +  "Add Tag to Selection": "Agregar etiqueta a la selección",
 +  "Add to Assets": "Agregar a los activos",
 +  "Add to Assets with QoD >= 70%": "Agregar a los activos con QoD >= 70 %",
-+  "Add to Assets with QoD >= 70% and Overrides enabled": "Agregar a los activos con QoD >= 70 % y overrides habilitados",
++  "Add to Assets with QoD >= 70% and Overrides enabled": "Agregar a los activos con QoD >= 70 % y excepciones habilitadas",
 +  "Add:": "Agregar:",
 +  "Adjacent": "Adyacente",
 +  "Adjust and update your filter settings.": "Ajuste y actualice la configuración de su filtro.",
@@ -5644,7 +5644,7 @@ index 0000000..176258e
 +  "Applied filter: ": "Filtro aplicado: ",
 +  "Apply a minimum severity of 7.0.": "Aplicar una severidad mínima de 7.0.",
 +  "Apply default timeout": "Aplicar tiempo de espera predeterminado",
-+  "Apply Overrides": "Aplicar overrides",
++  "Apply Overrides": "Aplicar excepciones",
 +  "Apply to all filtered": "Aplicar a todos los filtrados",
 +  "Apply to page contents": "Aplicar al contenido de la página",
 +  "Apply to selection": "Aplicar a la selección",
@@ -5658,7 +5658,7 @@ index 0000000..176258e
 +  "Are you sure you want to move all items on this page to the trashcan?": "¿Está seguro de que desea mover todos los elementos de esta página a la papelera?",
 +  "Are you sure you want to revoke all selected agents?": "¿Está seguro de que desea revocar todos los agentes seleccionados?",
 +  "As a short-cut the following steps will be done for you:": "Como atajo, los siguientes pasos se realizarán por usted:",
-+  "As soon as the scan progress is beyond 1%, you can already jump to the scan report by clicking on the progress bar in the \"Status\" column and review the results collected so far.": "Tan pronto como el progreso del escaneo supere el 1%, ya puede saltar al informe del escaneo haciendo clic en la barra de progreso de la columna \"Estado\" y revisar los resultados recopilados hasta el momento.",
++  "As soon as the scan progress is beyond 1%, you can already jump to the scan report by clicking on the progress bar in the \"Status\" column and review the results collected so far.": "Tan pronto como el progreso del escaneo supere el 1%, ya puede saltar al informe del escaneo haciendo clic en la barra de progreso de la columna \"Estado\" y revisar los hallazgos recopilados hasta el momento.",
 +  "Ascending": "Ascendente",
 +  "Asset": "Activo",
 +  "Asset Displays": "Visualizaciones de activos",
@@ -5807,21 +5807,21 @@ index 0000000..176258e
 +  "Chart: Operating Systems by CVSS": "Gráfico: Sistemas operativos por CVSS",
 +  "Chart: Operating Systems by Severity Class": "Gráfico: Sistemas operativos por clase de severidad",
 +  "Chart: Operating Systems by Vulnerability Score": "Gráfico: Sistemas operativos por puntuación de vulnerabilidad",
-+  "Chart: Overrides by Active Days": "Gráfico: Overrides por días activos",
-+  "Chart: Overrides by Creation Time": "Gráfico: Overrides por hora de creación",
-+  "Chart: Overrides Text Word Cloud": "Gráfico: Nube de palabras del texto de overrides",
++  "Chart: Overrides by Active Days": "Gráfico: Excepciones por días activos",
++  "Chart: Overrides by Creation Time": "Gráfico: Excepciones por hora de creación",
++  "Chart: Overrides Text Word Cloud": "Gráfico: Nube de palabras del texto de excepciones",
 +  "Chart: Reports by CVSS": "Gráfico: Informes por CVSS",
 +  "Chart: Reports by Severity Class": "Gráfico: Informes por clase de severidad",
-+  "Chart: Reports with high Results": "Gráfico: Informes con resultados altos",
-+  "Chart: Results by CVSS": "Gráfico: Resultados por CVSS",
-+  "Chart: Results by Severity Class": "Gráfico: Resultados por clase de severidad",
-+  "Chart: Results Description Word Cloud": "Gráfico: Nube de palabras de la descripción de resultados",
-+  "Chart: Results Vulnerability Word Cloud": "Gráfico: Nube de palabras de la vulnerabilidad de resultados",
++  "Chart: Reports with high Results": "Gráfico: Informes con hallazgos altos",
++  "Chart: Results by CVSS": "Gráfico: Hallazgos por CVSS",
++  "Chart: Results by Severity Class": "Gráfico: Hallazgos por clase de severidad",
++  "Chart: Results Description Word Cloud": "Gráfico: Nube de palabras de la descripción de hallazgos",
++  "Chart: Results Vulnerability Word Cloud": "Gráfico: Nube de palabras de la vulnerabilidad de hallazgos",
 +  "Chart: Tasks by CVSS": "Gráfico: Tareas por CVSS",
-+  "Chart: Tasks by High Results per Host": "Gráfico: Tareas por resultados altos por host",
++  "Chart: Tasks by High Results per Host": "Gráfico: Tareas por hallazgos altos por host",
 +  "Chart: Tasks by Severity Class": "Gráfico: Tareas por clase de severidad",
 +  "Chart: Tasks by Status": "Gráfico: Tareas por estado",
-+  "Chart: Tasks with most High Results per Host": "Gráfico: Tareas con más resultados altos por host",
++  "Chart: Tasks with most High Results per Host": "Gráfico: Tareas con más hallazgos altos por host",
 +  "Chart: Tickets by Assigned User": "Gráfico: Tickets por usuario asignado",
 +  "Chart: Tickets by Creation Time": "Gráfico: Tickets por hora de creación",
 +  "Chart: Tickets by Status": "Gráfico: Tickets por estado",
@@ -5916,7 +5916,7 @@ index 0000000..176258e
 +  "Copy to clipboard": "Copiar al portapapeles",
 +  "Corresponding Performance": "Rendimiento correspondiente",
 +  "Corresponding Report": "Informe correspondiente",
-+  "Corresponding Results": "Resultados correspondientes",
++  "Corresponding Results": "Hallazgos correspondientes",
 +  "Corresponding Task": "Tarea correspondiente",
 +  "Corresponding Task ({{name}})": "Tarea correspondiente ({{name}})",
 +  "Corresponding task is in trashcan": "La tarea correspondiente está en la papelera",
@@ -5962,8 +5962,8 @@ index 0000000..176258e
 +  "Create new SSH credential": "Crear nueva credencial SSH",
 +  "Create new SSH elevate credential": "Crear nueva credencial de elevación SSH",
 +  "Create new Ticket": "Crear nuevo ticket",
-+  "Create new Ticket for Result": "Crear nuevo ticket para el resultado",
-+  "Create new Ticket for Result {{- name}}": "Crear nuevo ticket para el resultado {{- name}}",
++  "Create new Ticket for Result": "Crear nuevo ticket para el hallazgo",
++  "Create new Ticket for Result {{- name}}": "Crear nuevo ticket para el hallazgo {{- name}}",
 +  "Create Permission": "Crear permiso",
 +  "Create permission to grant full read and write access among all group members and across any resources": "Crear permiso para otorgar acceso completo de lectura y escritura entre todos los miembros del grupo y a través de cualquier recurso",
 +  "Create Schedule": "Crear programación",
@@ -5979,7 +5979,7 @@ index 0000000..176258e
 +  "Created DFN-CERT Advs": "Avisos DFN-CERT creados",
 +  "Created Notes": "Notas creadas",
 +  "Created NVTs": "NVT creados",
-+  "Created Overrides": "Overrides creados",
++  "Created Overrides": "Excepciones creadas",
 +  "Created Tickets": "Tickets creados",
 +  "Created Time": "Hora de creación",
 +  "Created:": "Creado:",
@@ -6047,7 +6047,7 @@ index 0000000..176258e
 +  "day(s)": "día(s)",
 +  "days": "días",
 +  "Debug": "Depuración",
-+  "Decrease the minimum QoD in the filter settings to 30 percent to see those results.": "Disminuya el QoD mínimo en la configuración del filtro al 30 por ciento para ver esos resultados.",
++  "Decrease the minimum QoD in the filter settings to 30 percent to see those results.": "Disminuya el QoD mínimo en la configuración del filtro al 30 por ciento para ver esos hallazgos.",
 +  "decreased": "disminuido",
 +  "default": "predeterminado",
 +  "Default": "Predeterminado",
@@ -6083,7 +6083,7 @@ index 0000000..176258e
 +  "Deletion started": "Eliminación iniciada",
 +  "Delta": "Delta",
 +  "Delta Report": "Informe delta",
-+  "Delta Results": "Resultados delta",
++  "Delta Results": "Hallazgos delta",
 +  "Deny all": "Denegar todo",
 +  "Deny all and allow": "Denegar todo y permitir",
 +  "Deny all and allow from {{addresses}}": "Denegar todo y permitir desde {{addresses}}",
@@ -6095,8 +6095,8 @@ index 0000000..176258e
 +  "Details URL": "URL de detalles",
 +  "Details: ": "Detalles: ",
 +  "Detection Method": "Método de detección",
-+  "Detection Result": "Resultado de detección",
-+  "Detection Results": "Resultados de detección",
++  "Detection Result": "Hallazgo de detección",
++  "Detection Results": "Hallazgos de detección",
 +  "DFN-CERT Advisories": "Avisos DFN-CERT",
 +  "DFN-CERT Advisories by Creation Time": "Avisos DFN-CERT por hora de creación",
 +  "DFN-CERT Advisories by CVSS (Total: {{count}})": "Avisos DFN-CERT por CVSS (Total: {{count}})",
@@ -6126,7 +6126,6 @@ index 0000000..176258e
 +  "Download CA Certificate": "Descargar certificado de CA",
 +  "Download Certificate": "Descargar certificado",
 +  "Download Client Certificate": "Descargar certificado de cliente",
-+  "Download CSV": "Descargar CSV",
 +  "Download Debian (.deb) Package": "Descargar paquete Debian (.deb)",
 +  "Download filtered Report": "Descargar informe filtrado",
 +  "Download Greenbone Compliance Report": "Descargar informe de cumplimiento de Greenbone",
@@ -6166,7 +6165,7 @@ index 0000000..176258e
 +  "Edit Network Vulnerability Test Families ({{counts}})": "Editar familias de pruebas de vulnerabilidades de red ({{counts}})",
 +  "Edit Network Vulnerability Tests": "Editar pruebas de vulnerabilidades de red",
 +  "Edit Note {{- name}}": "Editar nota {{- name}}",
-+  "Edit Override {{- name}}": "Editar override {{- name}}",
++  "Edit Override {{- name}}": "Editar excepción {{- name}}",
 +  "Edit permission {{name}}": "Editar permiso {{name}}",
 +  "Edit Permission {{name}}": "Editar permiso {{name}}",
 +  "Edit Policy {{- name}}": "Editar política {{- name}}",
@@ -6240,16 +6239,16 @@ index 0000000..176258e
 +  "Error Messages": "Mensajes de error",
 +  "Error while loading Applications for Report {{reportId}}": "Error al cargar las Aplicaciones para el informe {{reportId}}",
 +  "Error while loading Closed CVEs for Report {{reportId}}": "Error al cargar los CVE cerrados para el informe {{reportId}}",
-+  "Error while loading Container Scanning Results for Report {{reportId}}": "Error al cargar los resultados de escaneo de contenedores para el informe {{reportId}}",
++  "Error while loading Container Scanning Results for Report {{reportId}}": "Error al cargar los hallazgos de escaneo de contenedores para el informe {{reportId}}",
 +  "Error while loading CVEs for Report {{reportId}}": "Error al cargar los CVE para el informe {{reportId}}",
 +  "Error while loading Error Messages for Report {{reportId}}": "Error al cargar los mensajes de error para el informe {{reportId}}",
 +  "Error while loading Hosts for Report {{reportId}}": "Error al cargar los hosts para el informe {{reportId}}",
 +  "Error while loading Operating Systems for Report {{reportId}}": "Error al cargar los sistemas operativos para el informe {{reportId}}",
 +  "Error while loading Ports for Report {{reportId}}": "Error al cargar los puertos para el informe {{reportId}}",
 +  "Error while loading Report {{reportId}}": "Error al cargar el informe {{reportId}}",
-+  "Error while loading Results for Report {{reportId}}": "Error al cargar los resultados para el informe {{reportId}}",
++  "Error while loading Results for Report {{reportId}}": "Error al cargar los hallazgos para el informe {{reportId}}",
 +  "Error while loading TLS Certificates for Report {{reportId}}": "Error al cargar los certificados TLS para el informe {{reportId}}",
-+  "Error while loading Web Application Scanning Results for Report {{reportId}}": "Error al cargar los resultados de escaneo de aplicaciones web para el informe {{reportId}}",
++  "Error while loading Web Application Scanning Results for Report {{reportId}}": "Error al cargar los hallazgos de escaneo de aplicaciones web para el informe {{reportId}}",
 +  "Error: Unknown Performance Report": "Error: Informe de rendimiento desconocido",
 +  "ESXi": "ESXi",
 +  "ESXi authentication was successful": "La autenticación ESXi fue exitosa",
@@ -6316,8 +6315,8 @@ index 0000000..176258e
 +  "Export Note as XML": "Exportar nota como XML",
 +  "Export NVT": "Exportar NVT",
 +  "Export Operating System": "Exportar sistema operativo",
-+  "Export Override": "Exportar override",
-+  "Export Override as XML": "Exportar override como XML",
++  "Export Override": "Exportar excepción",
++  "Export Override as XML": "Exportar excepción como XML",
 +  "Export page contents": "Exportar contenido de la página",
 +  "Export Permission": "Exportar permiso",
 +  "Export Permission as XML": "Exportar permiso como XML",
@@ -6327,7 +6326,7 @@ index 0000000..176258e
 +  "Export Port List as XML": "Exportar lista de puertos como XML",
 +  "Export Report Config": "Exportar configuración de informe",
 +  "Export Reports to OPENVAS SECURITY INTELLIGENCE": "Exportar informes a OPENVAS SECURITY INTELLIGENCE",
-+  "Export Result as XML": "Exportar resultado como XML",
++  "Export Result as XML": "Exportar hallazgo como XML",
 +  "Export Role": "Exportar rol",
 +  "Export Role as XML": "Exportar rol como XML",
 +  "Export Scan Config": "Exportar configuración de escaneo",
@@ -6371,18 +6370,18 @@ index 0000000..176258e
 +  "Filter matches at least {{count}} {{type}}": "El filtro coincide con al menos {{count}} {{type}}",
 +  "Filter matches at least {{count}} more {{result}} than the previous scan": "El filtro coincide con al menos {{count}} {{result}} más que el escaneo anterior",
 +  "Filter Name": "Nombre del filtro",
-+  "Filter out log message results.": "Filtrar los resultados de mensajes de registro.",
-+  "Filter out results with compliance \"Incomplete\".": "Filtrar los resultados con cumplimiento \"Incompleto\".",
-+  "Filter out results with compliance \"Undefined\".": "Filtrar los resultados con cumplimiento \"Indefinido\".",
-+  "Filter out results with compliance \"Yes\".": "Filtrar los resultados con cumplimiento \"Sí\".",
-+  "Filter out results with the severity \"Low\".": "Filtrar los resultados con severidad \"Baja\".",
-+  "Filter out results with the severity \"Medium\".": "Filtrar los resultados con severidad \"Media\".",
++  "Filter out log message results.": "Filtrar los hallazgos de mensajes de registro.",
++  "Filter out results with compliance \"Incomplete\".": "Filtrar los hallazgos con cumplimiento \"Incompleto\".",
++  "Filter out results with compliance \"Undefined\".": "Filtrar los hallazgos con cumplimiento \"Indefinido\".",
++  "Filter out results with compliance \"Yes\".": "Filtrar los hallazgos con cumplimiento \"Sí\".",
++  "Filter out results with the severity \"Low\".": "Filtrar los hallazgos con severidad \"Baja\".",
++  "Filter out results with the severity \"Medium\".": "Filtrar los hallazgos con severidad \"Media\".",
 +  "Filter: {{name}}": "Filtro: {{name}}",
 +  "Filters": "Filtros",
 +  "Filters Filter": "Filtro de filtros",
 +  "Fingerprint": "Huella digital",
 +  "First": "Primero",
-+  "First result": "Primer resultado",
++  "First result": "Primer hallazgo",
 +  "First Run": "Primera ejecución",
 +  "Fix Verified": "Corrección verificada",
 +  "Fixed": "Corregido",
@@ -6413,7 +6412,7 @@ index 0000000..176258e
 +  "Grant": "Conceder",
 +  "Green": "Verde",
 +  "Greenbone": "Greenbone",
-+  "Greenbone Sensor": "Sensor Greenbone",
++  "Greenbone Sensor": "Sensor Suricatoos",
 +  "Group": "Grupo",
 +  "Group ID": "ID del grupo",
 +  "Group Name": "Nombre del grupo",
@@ -6460,7 +6459,7 @@ index 0000000..176258e
 +  "Help: Notes": "Ayuda: Notas",
 +  "Help: NVTs": "Ayuda: NVT",
 +  "Help: Operating Systems": "Ayuda: Sistemas operativos",
-+  "Help: Overrides": "Ayuda: Overrides",
++  "Help: Overrides": "Ayuda: Excepciones",
 +  "Help: Performance": "Ayuda: Rendimiento",
 +  "Help: Permissions": "Ayuda: Permisos",
 +  "Help: Policies": "Ayuda: Políticas",
@@ -6472,7 +6471,7 @@ index 0000000..176258e
 +  "Help: Report Configs": "Ayuda: Configuraciones de informe",
 +  "Help: Report Formats": "Ayuda: Formatos de informe",
 +  "Help: Reports": "Ayuda: Informes",
-+  "Help: Results": "Ayuda: Resultados",
++  "Help: Results": "Ayuda: Hallazgos",
 +  "Help: Roles": "Ayuda: Roles",
 +  "Help: Scan Configs": "Ayuda: Configuraciones de escaneo",
 +  "Help: ScanConfigs": "Ayuda: ScanConfigs",
@@ -6491,7 +6490,7 @@ index 0000000..176258e
 +  "High per Host": "Alta por host",
 +  "Highest": "Más alta",
 +  "Highest Severity": "Severidad más alta",
-+  "Highest Severity from Results": "Severidad más alta de los resultados",
++  "Highest Severity from Results": "Severidad más alta de los hallazgos",
 +  "Host": "Host",
 +  "Host (IP)": "Host (IP)",
 +  "Host (Name)": "Host (Nombre)",
@@ -6582,7 +6581,7 @@ index 0000000..176258e
 +  "Issuer": "Emisor",
 +  "Issuer DN": "DN del emisor",
 +  "Items": "Elementos",
-+  "Just wait for results to arrive.": "Solo espere a que lleguen los resultados.",
++  "Just wait for results to arrive.": "Solo espere a que lleguen los hallazgos.",
 +  "Key Distribution Center": "Centro de distribución de claves",
 +  "Key Type": "Tipo de clave",
 +  "Known Hosts": "Hosts conocidos",
@@ -6734,7 +6733,7 @@ index 0000000..176258e
 +  "New Host": "Nuevo host",
 +  "New Import Task": "Nueva tarea de importación",
 +  "New Note": "Nueva nota",
-+  "New Override": "Nuevo override",
++  "New Override": "Nueva excepción",
 +  "New Password": "Nueva contraseña",
 +  "New Permission": "Nuevo permiso",
 +  "New Policy": "Nueva política",
@@ -6757,7 +6756,7 @@ index 0000000..176258e
 +  "New Value": "Nuevo valor",
 +  "New Web Application Target": "Nuevo objetivo de aplicación web",
 +  "New Web Application Task": "Nueva tarea de aplicación web",
-+  "Newest Result": "Resultado más reciente",
++  "Newest Result": "Hallazgo más reciente",
 +  "Next": "Siguiente",
 +  "Next Run": "Próxima ejecución",
 +  "Next Schedule Time": "Próxima hora programada",
@@ -6786,7 +6785,7 @@ index 0000000..176258e
 +  "No Displays": "Sin paneles",
 +  "No Errors available": "No hay errores disponibles",
 +  "No filters available": "No hay filtros disponibles",
-+  "No first result available.": "No hay un primer resultado disponible.",
++  "No first result available.": "No hay un primer hallazgo disponible.",
 +  "No Groups available": "No hay grupos disponibles",
 +  "No hosts available": "No hay hosts disponibles",
 +  "No Hosts available": "No hay hosts disponibles",
@@ -6797,7 +6796,7 @@ index 0000000..176258e
 +  "No Notes available": "No hay notas disponibles",
 +  "No NVTs available": "No hay NVT disponibles",
 +  "No Operating Systems available": "No hay sistemas operativos disponibles",
-+  "No Overrides available": "No hay overrides disponibles",
++  "No Overrides available": "No hay excepciones disponibles",
 +  "No parameters available": "No hay parámetros disponibles",
 +  "No permissions available": "No hay permisos disponibles",
 +  "No Policies available": "No hay políticas disponibles",
@@ -6808,13 +6807,13 @@ index 0000000..176258e
 +  "No report configs available": "No hay configuraciones de informe disponibles",
 +  "No report formats available": "No hay formatos de informe disponibles",
 +  "No reports available": "No hay informes disponibles",
-+  "No results available": "No hay resultados disponibles",
++  "No results available": "No hay hallazgos disponibles",
 +  "No Roles available": "No hay roles disponibles",
 +  "No Scan Configs available": "No hay configuraciones de escaneo disponibles",
 +  "No scanners available": "No hay escáneres disponibles",
 +  "No scans yet": "Aún no hay escaneos",
 +  "No schedules available": "No hay programaciones disponibles",
-+  "No second result available.": "No hay un segundo resultado disponible.",
++  "No second result available.": "No hay un segundo hallazgo disponible.",
 +  "No severity available, the ticket is orphaned": "No hay severidad disponible, el ticket está huérfano",
 +  "No tags available": "No hay etiquetas disponibles",
 +  "No targets available": "No hay objetivos disponibles",
@@ -6828,7 +6827,7 @@ index 0000000..176258e
 +  "None": "Ninguno",
 +  "None available": "Ninguno disponible",
 +  "None.": "Ninguno.",
-+  "None. Result was an open port.": "Ninguno. El resultado fue un puerto abierto.",
++  "None. Result was an open port.": "Ninguno. El hallazgo fue un puerto abierto.",
 +  "Not a valid CA Certificate file.": "No es un archivo de certificado de CA válido.",
 +  "Not a valid Client Certificate file": "No es un archivo de certificado de cliente válido",
 +  "Not a valid Client Private Key file": "No es un archivo de clave privada de cliente válido",
@@ -6889,13 +6888,13 @@ index 0000000..176258e
 +  "OID": "OID",
 +  "OK": "Aceptar",
 +  "Old": "Antiguo",
-+  "Oldest Result": "Resultado más antiguo",
++  "Oldest Result": "Hallazgo más antiguo",
 +  "on": "en",
 +  "on port": "en el puerto",
 +  "Once": "Una vez",
 +  "One more run not shown": "No se muestra una ejecución más",
-+  "Only selected result ({{- name}})": "Solo el resultado seleccionado ({{- name}})",
-+  "Only show hosts that have results": "Mostrar solo los hosts que tienen resultados",
++  "Only selected result ({{- name}})": "Solo el hallazgo seleccionado ({{- name}})",
++  "Only show hosts that have results": "Mostrar solo los hosts que tienen hallazgos",
 +  "Open": "Abierto",
 +  "Open all details": "Abrir todos los detalles",
 +  "Open End": "Sin fin definido",
@@ -6922,18 +6921,18 @@ index 0000000..176258e
 +  "OS Conflict: {{best_os_txt}} ({{best_os_cpe}})": "Conflicto de OS: {{best_os_txt}} ({{best_os_cpe}})",
 +  "Other": "Otro",
 +  "Other Links": "Otros enlaces",
-+  "Override": "Override",
++  "Override": "Excepción",
 +  "Override Default Scanner Preferences": "Sobrescribir las preferencias predeterminadas del escáner",
-+  "Override Details": "Detalles del override",
-+  "Override from {{- severity}} to {{- newSeverity}}": "Override de {{- severity}} a {{- newSeverity}}",
-+  "Override List": "Lista de overrides",
-+  "Override Text": "Texto del override",
-+  "Overrides": "Overrides",
-+  "Overrides by Active Days (Total: {{count}})": "Overrides por días activos (Total: {{count}})",
-+  "Overrides by Creation Time": "Overrides por fecha de creación",
-+  "Overrides Filter": "Filtro de overrides",
-+  "Overrides for Task {{- name}}": "Overrides para la tarea {{- name}}",
-+  "Overrides Text Word Cloud": "Nube de palabras del texto de overrides",
++  "Override Details": "Detalles de la excepción",
++  "Override from {{- severity}} to {{- newSeverity}}": "Excepción de {{- severity}} a {{- newSeverity}}",
++  "Override List": "Lista de excepciones",
++  "Override Text": "Texto de la excepción",
++  "Overrides": "Excepciones",
++  "Overrides by Active Days (Total: {{count}})": "Excepciones por días activos (Total: {{count}})",
++  "Overrides by Creation Time": "Excepciones por fecha de creación",
++  "Overrides Filter": "Filtro de excepciones",
++  "Overrides for Task {{- name}}": "Excepciones para la tarea {{- name}}",
++  "Overrides Text Word Cloud": "Nube de palabras del texto de excepciones",
 +  "Overview": "Resumen",
 +  "Owned Ticket changed": "Ticket propio modificado",
 +  "Owned Ticket Changed": "Ticket propio modificado",
@@ -7031,7 +7030,7 @@ index 0000000..176258e
 +  "Privileges Required": "Privilegios requeridos",
 +  "Processing": "Procesando",
 +  "Product": "Producto",
-+  "Product Detection Result": "Resultado de detección de producto",
++  "Product Detection Result": "Hallazgo de detección de producto",
 +  "Protocol": "Protocolo",
 +  "Provider Urgency": "Urgencia del proveedor",
 +  "Public Key": "Clave pública",
@@ -7100,12 +7099,12 @@ index 0000000..176258e
 +  "Report Configs List": "Lista de configuraciones de informe",
 +  "Report Configs using this Report Format": "Configuraciones de informe que usan este formato de informe",
 +  "Report Content": "Contenido del informe",
-+  "Report content added to Assets with QoD>=70% and Overrides enabled.": "Contenido del informe agregado a los activos con QoD>=70% y overrides habilitados.",
++  "Report content added to Assets with QoD>=70% and Overrides enabled.": "Contenido del informe agregado a los activos con QoD>=70% y excepciones habilitadas.",
 +  "Report content removed from Assets.": "Contenido del informe quitado de los activos.",
 +  "Report Details": "Detalles del informe",
 +  "Report download not available": "Descarga del informe no disponible",
 +  "Report Export File Name": "Nombre de archivo de exportación del informe",
-+  "Report for Greenbone Sensor": "Informe para Greenbone Sensor",
++  "Report for Suricatoos Sensor": "Informe del sensor Suricatoos",
 +  "Report for Last": "Informe del último",
 +  "Report for Last Day": "Informe del último día",
 +  "Report for Last Hour": "Informe de la última hora",
@@ -7118,7 +7117,7 @@ index 0000000..176258e
 +  "Report Formats Filter": "Filtro de formatos de informe",
 +  "Report Formats List": "Lista de formatos de informe",
 +  "Report is selected for delta comparison": "El informe está seleccionado para la comparación delta",
-+  "Report Result Filter": "Filtro de resultados del informe",
++  "Report Result Filter": "Filtro de hallazgos del informe",
 +  "Report Type": "Tipo de informe",
 +  "Report with ID": "Informe con ID",
 +  "Report:": "Informe:",
@@ -7129,7 +7128,7 @@ index 0000000..176258e
 +  "Reports by Severity Class (Total: {{count}})": "Informes por clase de severidad (Total: {{count}})",
 +  "Reports Filter": "Filtro de informes",
 +  "Reports List": "Lista de informes",
-+  "Reports with High Results": "Informes con resultados altos",
++  "Reports with High Results": "Informes con hallazgos altos",
 +  "Reports: Last": "Informes: Último",
 +  "Reports: Total": "Informes: Total",
 +  "Request canceled": "Solicitud cancelada",
@@ -7146,31 +7145,31 @@ index 0000000..176258e
 +  "Resources": "Recursos",
 +  "Response error": "Error de respuesta",
 +  "Restore": "Restaurar",
-+  "Result": "Resultado",
-+  "Result 1": "Resultado 1",
-+  "Result 2": "Resultado 2",
-+  "Result: {{name}}": "Resultado: {{name}}",
-+  "result(s) more than previous scan": "resultado(s) más que el escaneo anterior",
-+  "result(s) NVT(s)": "resultado(s) NVT(s)",
-+  "Results": "Resultados",
-+  "Results aren't filtered by severity.": "Los resultados no están filtrados por severidad.",
-+  "Results by CVSS (Total: {{count}})": "Resultados por CVSS (Total: {{count}})",
-+  "Results by Severity Class (Total: {{count}})": "Resultados por clase de severidad (Total: {{count}})",
-+  "Results Description Word Cloud": "Nube de palabras de descripción de resultados",
-+  "Results Filter": "Filtro de resultados",
-+  "Results for Audit {{- name}}": "Resultados de la auditoría {{- name}}",
-+  "Results for Task {{- name}}": "Resultados de la tarea {{- name}}",
-+  "Results for this Host": "Resultados de este host",
-+  "Results List": "Lista de resultados",
-+  "Results per Host": "Resultados por host",
++  "Result": "Hallazgo",
++  "Result 1": "Hallazgo 1",
++  "Result 2": "Hallazgo 2",
++  "Result: {{name}}": "Hallazgo: {{name}}",
++  "result(s) more than previous scan": "hallazgo(s) más que el escaneo anterior",
++  "result(s) NVT(s)": "hallazgo(s) NVT(s)",
++  "Results": "Hallazgos",
++  "Results aren't filtered by severity.": "Los hallazgos no están filtrados por severidad.",
++  "Results by CVSS (Total: {{count}})": "Hallazgos por CVSS (Total: {{count}})",
++  "Results by Severity Class (Total: {{count}})": "Hallazgos por clase de severidad (Total: {{count}})",
++  "Results Description Word Cloud": "Nube de palabras de descripción de hallazgos",
++  "Results Filter": "Filtro de hallazgos",
++  "Results for Audit {{- name}}": "Hallazgos de la auditoría {{- name}}",
++  "Results for Task {{- name}}": "Hallazgos de la tarea {{- name}}",
++  "Results for this Host": "Hallazgos de este host",
++  "Results List": "Lista de hallazgos",
++  "Results per Host": "Hallazgos por host",
 +  "Results per page": "Resultados por página",
-+  "Results Vulnerability Word Cloud": "Nube de palabras de vulnerabilidad de resultados",
-+  "Results with compliance \"Incomplete\" are currently included.": "Actualmente se incluyen los resultados con cumplimiento \"Incompleto\".",
-+  "Results with compliance \"Undefined\" are currently included.": "Actualmente se incluyen los resultados con cumplimiento \"Indefinido\".",
-+  "Results with compliance \"Yes\" are currently included.": "Actualmente se incluyen los resultados con cumplimiento \"Sí\".",
-+  "Results with log messages are currently included.": "Actualmente se incluyen los resultados con mensajes de registro.",
-+  "Results with the severity \"Low\" are currently included.": "Actualmente se incluyen los resultados con la severidad \"Baja\".",
-+  "Results with the severity \"Medium\" are currently included.": "Actualmente se incluyen los resultados con la severidad \"Media\".",
++  "Results Vulnerability Word Cloud": "Nube de palabras de vulnerabilidad de hallazgos",
++  "Results with compliance \"Incomplete\" are currently included.": "Actualmente se incluyen los hallazgos con cumplimiento \"Incompleto\".",
++  "Results with compliance \"Undefined\" are currently included.": "Actualmente se incluyen los hallazgos con cumplimiento \"Indefinido\".",
++  "Results with compliance \"Yes\" are currently included.": "Actualmente se incluyen los hallazgos con cumplimiento \"Sí\".",
++  "Results with log messages are currently included.": "Actualmente se incluyen los hallazgos con mensajes de registro.",
++  "Results with the severity \"Low\" are currently included.": "Actualmente se incluyen los hallazgos con la severidad \"Baja\".",
++  "Results with the severity \"Medium\" are currently included.": "Actualmente se incluyen los hallazgos con la severidad \"Media\".",
 +  "Resume": "Reanudar",
 +  "Resume Requested": "Reanudación solicitada",
 +  "Retry": "Reintentar",
@@ -7216,11 +7215,11 @@ index 0000000..176258e
 +  "Scan Duration Report 1": "Informe de duración del escaneo 1",
 +  "Scan Duration Report 2": "Informe de duración del escaneo 2",
 +  "Scan is active": "El escaneo está activo",
-+  "Scan Results: False Positive": "Resultados del escaneo: Falso positivo",
-+  "Scan Results: High": "Resultados del escaneo: Alta",
-+  "Scan Results: Log": "Resultados del escaneo: Registro",
-+  "Scan Results: Low": "Resultados del escaneo: Baja",
-+  "Scan Results: Medium": "Resultados del escaneo: Media",
++  "Scan Results: False Positive": "Hallazgos del escaneo: Falso positivo",
++  "Scan Results: High": "Hallazgos del escaneo: Alta",
++  "Scan Results: Log": "Hallazgos del escaneo: Registro",
++  "Scan Results: Low": "Hallazgos del escaneo: Baja",
++  "Scan Results: Medium": "Hallazgos del escaneo: Media",
 +  "Scan sensor": "Sensor de escaneo",
 +  "Scan Status": "Estado del escaneo",
 +  "Scan Status Report 1": "Informe de estado del escaneo 1",
@@ -7383,8 +7382,6 @@ index 0000000..176258e
 +  "Supplemental Metrics": "Métricas suplementarias",
 +  "Support for LDAP is not available.": "El soporte para LDAP no está disponible.",
 +  "Support for RADIUS is not available.": "El soporte para RADIUS no está disponible.",
-+  "Switch language to English": "Cambiar el idioma a inglés",
-+  "Switch language to German": "Cambiar el idioma a alemán",
 +  "Sync Agents": "Sincronizar agentes",
 +  "Synchronization issue: {{error}}": "Problema de sincronización: {{error}}",
 +  "System Default": "Predeterminado del sistema",
@@ -7422,21 +7419,21 @@ index 0000000..176258e
 +  "Table: Operating Systems by CVSS": "Tabla: Sistemas operativos por CVSS",
 +  "Table: Operating Systems by Severity Class": "Tabla: Sistemas operativos por clase de severidad",
 +  "Table: Operating Systems by Vulnerability Score": "Tabla: Sistemas operativos por puntuación de vulnerabilidad",
-+  "Table: Overrides by Active Days": "Tabla: Overrides por días activos",
-+  "Table: Overrides by Creation Time": "Tabla: Overrides por hora de creación",
-+  "Table: Overrides Text Word Cloud": "Tabla: Nube de palabras del texto de los overrides",
++  "Table: Overrides by Active Days": "Tabla: Excepciones por días activos",
++  "Table: Overrides by Creation Time": "Tabla: Excepciones por hora de creación",
++  "Table: Overrides Text Word Cloud": "Tabla: Nube de palabras del texto de las excepciones",
 +  "Table: Reports by CVSS": "Tabla: Informes por CVSS",
 +  "Table: Reports by Severity Class": "Tabla: Informes por clase de severidad",
-+  "Table: Reports with high Results": "Tabla: Informes con resultados altos",
-+  "Table: Results by CVSS": "Tabla: Resultados por CVSS",
-+  "Table: Results by Severity Class": "Tabla: Resultados por clase de severidad",
-+  "Table: Results Description Word Cloud": "Tabla: Nube de palabras de la descripción de los resultados",
-+  "Table: Results Vulnerability Word Cloud": "Tabla: Nube de palabras de vulnerabilidad de los resultados",
++  "Table: Reports with high Results": "Tabla: Informes con hallazgos altos",
++  "Table: Results by CVSS": "Tabla: Hallazgos por CVSS",
++  "Table: Results by Severity Class": "Tabla: Hallazgos por clase de severidad",
++  "Table: Results Description Word Cloud": "Tabla: Nube de palabras de la descripción de los hallazgos",
++  "Table: Results Vulnerability Word Cloud": "Tabla: Nube de palabras de vulnerabilidad de los hallazgos",
 +  "Table: Tasks by CVSS": "Tabla: Tareas por CVSS",
-+  "Table: Tasks by High Results per Host": "Tabla: Tareas por resultados altos por host",
++  "Table: Tasks by High Results per Host": "Tabla: Tareas por hallazgos altos por host",
 +  "Table: Tasks by Severity Class": "Tabla: Tareas por clase de severidad",
 +  "Table: Tasks by Status": "Tabla: Tareas por estado",
-+  "Table: Tasks with most High Results per Host": "Tabla: Tareas con más resultados altos por host",
++  "Table: Tasks with most High Results per Host": "Tabla: Tareas con más hallazgos altos por host",
 +  "Table: Tickets by Assigned User": "Tabla: Tickets por usuario asignado",
 +  "Table: Tickets by Creation Time": "Tabla: Tickets por hora de creación",
 +  "Table: Tickets by Status": "Tabla: Tickets por estado",
@@ -7479,7 +7476,7 @@ index 0000000..176258e
 +  "Task: {{name}}": "Tarea: {{name}}",
 +  "Tasks": "Tareas",
 +  "Tasks by CVSS (Total: {{count}})": "Tareas por CVSS (Total: {{count}})",
-+  "Tasks by High Results per Host": "Tareas por resultados altos por host",
++  "Tasks by High Results per Host": "Tareas por hallazgos altos por host",
 +  "Tasks by Severity Class (Total: {{count}})": "Tareas por clase de severidad (Total: {{count}})",
 +  "Tasks by Status (Total: {{count}})": "Tareas por estado (Total: {{count}})",
 +  "Tasks Filter": "Filtro de tareas",
@@ -7488,7 +7485,7 @@ index 0000000..176258e
 +  "Tasks using this Scanner": "Tareas que usan este escáner",
 +  "Tasks using this Schedule": "Tareas que usan esta programación",
 +  "Tasks using this Target ({{count}})": "Tareas que usan este objetivo ({{count}})",
-+  "Tasks with most High Results per Host": "Tareas con más resultados altos por host",
++  "Tasks with most High Results per Host": "Tareas con más hallazgos altos por host",
 +  "TCP": "TCP",
 +  "TCP Port Count": "Cantidad de puertos TCP",
 +  "Term": "Término",
@@ -7502,7 +7499,7 @@ index 0000000..176258e
 +  "Text": "Texto",
 +  "Th.": "Ju.",
 +  "The {{entity}} you were looking for could not be found.": "No se pudo encontrar el {{entity}} que buscaba.",
-+  "The {{entityType}} cannot be displayed in order to maintain the performance within the browser's capabilities. The report contains too many results. Please decrease the number of results below the threshold of {{threshold}} by applying a more refined filter.": "El {{entityType}} no se puede mostrar para mantener el rendimiento dentro de las capacidades del navegador. El informe contiene demasiados resultados. Reduzca la cantidad de resultados por debajo del umbral de {{threshold}} aplicando un filtro más refinado.",
++  "The {{entityType}} cannot be displayed in order to maintain the performance within the browser's capabilities. The report contains too many results. Please decrease the number of results below the threshold of {{threshold}} by applying a more refined filter.": "El {{entityType}} no se puede mostrar para mantener el rendimiento dentro de las capacidades del navegador. El informe contiene demasiados hallazgos. Reduzca la cantidad de hallazgos por debajo del umbral de {{threshold}} aplicando un filtro más refinado.",
 +  "The connection to this web application is not encrypted, allowing anyone listening to the traffic to steal your credentials.": "La conexión a esta aplicación web no está cifrada, lo que permite que cualquiera que escuche el tráfico robe sus credenciales.",
 +  "The current number of {{hostsCount}} hosts exceeds the maximum of {{maxHosts}}. Please apply a more specific filter.": "La cantidad actual de {{hostsCount}} hosts excede el máximo de {{maxHosts}}. Aplique un filtro más específico.",
 +  "The default address is either your computer or your network gateway.": "La dirección predeterminada es su computadora o la puerta de enlace de su red.",
@@ -7521,7 +7518,7 @@ index 0000000..176258e
 +  "The Greenbone Enterprise License for this system is invalid. You can still use the system without restrictions, but you will not receive updates anymore. Please contact your administrator.": "La licencia Greenbone Enterprise de este sistema no es válida. Aún puede usar el sistema sin restricciones, pero ya no recibirá actualizaciones. Comuníquese con su administrador.",
 +  "The Greenbone Enterprise License for this system will expire in {{days}} days. After that your appliance remains valid and you can still use the system without restrictions, but you will not receive updates anymore. Please contact your administrator for extending the license.": "La licencia Greenbone Enterprise de este sistema expirará en {{days}} días. Después de eso, su appliance seguirá siendo válido y aún podrá usar el sistema sin restricciones, pero ya no recibirá actualizaciones. Comuníquese con su administrador para extender la licencia.",
 +  "The Greenbone Enterprise License for this system will expire in {{days}} days. After that your appliance remains valid and you can still use the system without restrictions, but you will not receive updates anymore. You can find information about extending your license on the": "La licencia Greenbone Enterprise de este sistema expirará en {{days}} días. Después de eso, su appliance seguirá siendo válido y aún podrá usar el sistema sin restricciones, pero ya no recibirá actualizaciones. Puede encontrar información sobre cómo extender su licencia en el",
-+  "The Greenbone Vulnerability Manager service is not responding. This could be due to system maintenance. Please try again later, check the system status, or contact your system administrator.": "El servicio Greenbone Vulnerability Manager no responde. Esto podría deberse a un mantenimiento del sistema. Vuelva a intentarlo más tarde, verifique el estado del sistema o comuníquese con su administrador del sistema.",
++  "The Greenbone Vulnerability Manager service is not responding. This could be due to system maintenance. Please try again later, check the system status, or contact your system administrator.": "El servicio Suricatoos Vulnerability Manager no responde. Esto podría deberse a un mantenimiento del sistema. Vuelva a intentarlo más tarde, verifique el estado del sistema o comuníquese con su administrador del sistema.",
 +  "The last": "El último",
 +  "The Last": "El último",
 +  "The last {{weekday}} every {{interval}} months": "El último {{weekday}} cada {{interval}} meses",
@@ -7534,24 +7531,24 @@ index 0000000..176258e
 +  "The performance report format {{format}} is not supported.": "El formato de informe de rendimiento {{format}} no es compatible.",
 +  "The policy is currently in use by one or more audits, therefore only name and comment can be modified.": "La política está actualmente en uso por una o más auditorías, por lo que solo se pueden modificar el nombre y el comentario.",
 +  "The port range needs numerical values for start and end!": "¡El rango de puertos requiere valores numéricos para el inicio y el fin!",
-+  "The report cannot be displayed because no Greenbone Vulnerability Manager report format is available. This could be due to a missing gvmd data feed. Please update the gvmd data feed, check the \"feed import owner\" setting, or contact your system administrator.": "No se puede mostrar el informe porque no hay ningún formato de informe de Greenbone Vulnerability Manager disponible. Esto podría deberse a la falta de un feed de datos de gvmd. Actualice el feed de datos de gvmd, verifique la configuración de \"feed import owner\" o comuníquese con su administrador del sistema.",
++  "The report cannot be displayed because no Suricatoos Vulnerability Manager report format is available. This could be due to a missing gvmd data feed. Please update the gvmd data feed, check the \"feed import owner\" setting, or contact your system administrator.": "No se puede mostrar el informe porque no hay ningún formato de informe de Suricatoos Vulnerability Manager disponible. Esto podría deberse a la falta de un feed de datos de gvmd. Actualice el feed de datos de gvmd, verifique la configuración de \"feed import owner\" o comuníquese con su administrador del sistema.",
 +  "The report cannot be displayed because no report format is available. This could be due to a missing gvmd data feed. Please update the gvmd data feed, check the \"feed import owner\" setting, the feed status page, or contact your system administrator.": "No se puede mostrar el informe porque no hay ningún formato de informe disponible. Esto podría deberse a la falta de un feed de datos de gvmd. Actualice el feed de datos de gvmd, verifique la configuración de \"feed import owner\", la página de estado del feed o comuníquese con su administrador del sistema.",
-+  "The report is empty. The filter does not match any of the {{all}} results.": "El informe está vacío. El filtro no coincide con ninguno de los {{all}} resultados.",
++  "The report is empty. The filter does not match any of the {{all}} results.": "El informe está vacío. El filtro no coincide con ninguno de los {{all}} hallazgos.",
 +  "The Report is empty. This can happen for the following reasons:": "El informe está vacío. Esto puede ocurrir por las siguientes razones:",
 +  "The scan config is currently in use by one or more tasks, therefore only name and comment can be modified.": "La configuración de escaneo está actualmente en uso por una o más tareas, por lo que solo se pueden modificar el nombre y el comentario.",
-+  "The scan did not collect any results": "El escaneo no recopiló ningún resultado",
-+  "The scan is still running and no results have arrived yet": "El escaneo aún está en ejecución y todavía no han llegado resultados",
-+  "The scan just started and no results have arrived yet": "El escaneo acaba de comenzar y todavía no han llegado resultados",
++  "The scan did not collect any results": "El escaneo no recopiló ningún hallazgo",
++  "The scan is still running and no results have arrived yet": "El escaneo aún está en ejecución y todavía no han llegado hallazgos",
++  "The scan just started and no results have arrived yet": "El escaneo acaba de comenzar y todavía no han llegado hallazgos",
 +  "The Second": "El segundo",
 +  "The Target and Task will be created using the defaults as configured in \"My Settings\".": "El objetivo y la tarea se crearán usando los valores predeterminados configurados en \"Mi configuración\".",
 +  "The target hosts could be regarded dead": "Los hosts objetivo podrían considerarse inactivos",
 +  "The Third": "El tercero",
 +  "The trial period for this system will end in {{days}} days. Please contact your administrator for purchasing a new license.": "El período de prueba de este sistema finalizará en {{days}} días. Comuníquese con su administrador para adquirir una nueva licencia.",
 +  "The trial period for this system will end in {{days}} days. You can find further information about purchasing a license on the": "El período de prueba de este sistema finalizará en {{days}} días. Puede encontrar más información sobre cómo adquirir una licencia en el",
-+  "There are notes for this result": "Hay notas para este resultado",
-+  "There are overrides for this result": "Hay overrides para este resultado",
-+  "There are tickets for this result": "Hay tickets para este resultado",
-+  "There may be results below the currently selected Quality of Detection (QoD).": "Puede haber resultados por debajo de la calidad de detección (QoD) seleccionada actualmente.",
++  "There are notes for this result": "Hay notas para este hallazgo",
++  "There are overrides for this result": "Hay excepciones para este hallazgo",
++  "There are tickets for this result": "Hay tickets para este hallazgo",
++  "There may be results below the currently selected Quality of Detection (QoD).": "Puede haber hallazgos por debajo de la calidad de detección (QoD) seleccionada actualmente.",
 +  "There was an error fetching the feed. It will be retried in a few minutes.": "Se produjo un error al obtener el feed. Se reintentará en unos minutos.",
 +  "Third Party": "Terceros",
 +  "This CPE does not appear in the CPE dictionary but is referenced by one or more CVE.": "Este CPE no aparece en el diccionario CPE, pero está referenciado por uno o más CVE.",
@@ -7603,10 +7600,9 @@ index 0000000..176258e
 +  "To": "Para",
 +  "To address": "Dirección de destino",
 +  "To Address": "Dirección de destino",
-+  "To change the filter, please filter your results on the report page. This filter will not be stored as default.": "Para cambiar el filtro, filtre sus resultados en la página del informe. Este filtro no se guardará como predeterminado.",
++  "To change the filter, please filter your results on the report page. This filter will not be stored as default.": "Para cambiar el filtro, filtre sus hallazgos en la página del informe. Este filtro no se guardará como predeterminado.",
 +  "To change the filter, please select a filter from the dropdown menu.": "Para cambiar el filtro, seleccione un filtro del menú desplegable.",
 +  "To see all assigned resources click here:": "Para ver todos los recursos asignados haga clic aquí:",
-+  "Toggle 2D/3D view": "Alternar vista 2D/3D",
 +  "Toggle Legend": "Alternar leyenda",
 +  "Too many resources to list.": "Demasiados recursos para listar.",
 +  "Too old ({{age}} days)": "Demasiado antiguo ({{age}} días)",
@@ -7621,7 +7617,7 @@ index 0000000..176258e
 +  "Total Hosts (High)": "Total de hosts (alto)",
 +  "Total Notes": "Total de notas",
 +  "Total NVTs": "Total de NVT",
-+  "Total Overrides": "Total de overrides",
++  "Total Overrides": "Total de excepciones",
 +  "Total Reports for Audit {{- name}}": "Total de informes para la auditoría {{- name}}",
 +  "Total Reports for Task {{- name}}": "Total de informes para la tarea {{- name}}",
 +  "Total Tickets": "Total de tickets",
@@ -7745,7 +7741,7 @@ index 0000000..176258e
 +  "Vulnerable System Impact Metrics": "Métricas de impacto del sistema vulnerable",
 +  "Vulnerable System Integrity Impact": "Impacto en la integridad del sistema vulnerable",
 +  "Warning: Connection unencrypted": "Advertencia: conexión sin cifrar",
-+  "WARNING: Please be aware that the report has more results than the threshold of {{threshold}}. Therefore, this action can take a really long time to finish. It might even exceed the session timeout!": "ADVERTENCIA: Tenga en cuenta que el informe tiene más resultados que el umbral de {{threshold}}. Por lo tanto, esta acción puede tardar mucho tiempo en finalizar. ¡Incluso podría superar el tiempo de espera de la sesión!",
++  "WARNING: Please be aware that the report has more results than the threshold of {{threshold}}. Therefore, this action can take a really long time to finish. It might even exceed the session timeout!": "ADVERTENCIA: Tenga en cuenta que el informe tiene más hallazgos que el umbral de {{threshold}}. Por lo tanto, esta acción puede tardar mucho tiempo en finalizar. ¡Incluso podría superar el tiempo de espera de la sesión!",
 +  "We are sorry. The page you have requested could not be found.": "Lo sentimos. No se pudo encontrar la página solicitada.",
 +  "We.": "Mié.",
 +  "Web Application Scanner": "Escáner de aplicaciones web",
@@ -7796,33 +7792,61 @@ index 0000000..176258e
 +  "Your last filter change may be too restrictive.": "Su último cambio de filtro puede ser demasiado restrictivo.",
 +  "Language": "Idioma",
 +  "Select language": "Seleccionar idioma",
-+  "Feed update": "Actualización de Feed",
++  "Feed update": "Actualización del feed",
 +  "Update feeds now": "Actualizar feeds ahora",
 +  "Updating feeds...": "Actualizando feeds...",
 +  "Update now": "Actualizar ahora",
 +  "Updating...": "Actualizando...",
-+  "Last update: {{time}} ({{result}})": "Última actualización: {{time}} ({{result}})",
 +  "Last update: never": "Última actualización: nunca",
 +  "Enable automatic update": "Habilitar actualización automática",
 +  "Frequency": "Frecuencia",
 +  "Day of week": "Día de la semana",
 +  "Save schedule": "Guardar programación",
 +  "Saved": "Guardado",
-+  "success": "éxito",
 +  "{{count}} feed(s) updated": "{{count}} feed(s) actualizado(s)",
 +  "feeds already up to date": "feeds ya estaban actualizados",
-+  "Last update: {{time}} — {{detail}}": "Última actualización: {{time}} — {{detail}}",
++  "Last update: {{- time}} — {{- detail}}": "Última actualización: {{- time}} — {{- detail}}",
 +  "No permission from this network. Feed management is restricted to the administration networks — connect to the VPN and reload.": "Sin permiso desde esta red. La gestión de feeds está restringida a las redes de administración — conéctese a la VPN y recargue.",
 +  "Session expired. Sign in again to manage the feed.": "Sesión expirada. Inicie sesión de nuevo para gestionar el feed.",
 +  "Status unavailable": "Estado no disponible",
-+  "error": "error"
++  "error": "error",
++  "Activate Agent": "Activar agente",
++  "Activate a Suricatoos Agent": "Activar un agente Suricatoos",
++  "Choose the tenant and the platform — the command already carries the token of the tenant (dynamic). Copy it and run it on the host.": "Elija el tenant y la plataforma: el comando ya incluye el token del tenant (dinámico). Cópielo y ejecútelo en el host.",
++  "Tenant": "Tenant",
++  "— select —": "— seleccione —",
++  "Select a tenant first": "Seleccione un tenant primero",
++  "Generating command…": "Generando comando…",
++  "Error generating the command: {{- error}}": "Error al generar el comando: {{- error}}",
++  "tenant": "tenant",
++  ", run it on the host:": ", ejecútelo en el host:",
++  "Copy": "Copiar",
++  "Copied ✓": "Copiado ✓",
++  "Deployment token (up to {{max}} hosts)": "Token de despliegue (hasta {{max}} hosts)",
++  "Single-use token": "Token de un solo uso",
++  "expires on {{- date}}": "expira el {{- date}}",
++  "Endpoint Agents": "Agentes de endpoint",
++  "Refresh": "Actualizar",
++  "Error loading the agents: {{- error}}": "Error al cargar los agentes: {{- error}}",
++  "No agents yet. Install one from the Activate Agent page.": "Todavía no hay agentes. Instale uno desde la página Activar agente.",
++  "Online": "En línea",
++  "Offline": "Fuera de línea",
++  "check-in {{- time}}": "check-in {{- time}}",
++  "Findings": "Hallazgos",
++  "findings": "hallazgos",
++  "{{critical}} critical · {{high}} high · {{medium}} medium": "{{critical}} crít. · {{high}} altos · {{medium}} medios",
++  "{{count}} report(s)": "{{count}} informe(s)",
++  "View findings": "Ver hallazgos",
++  "Scan now": "Escanear ahora",
++  "Scan requested for {{- host}} — new collection in ~60 s.": "Escaneo solicitado para {{- host}}: nueva recolección en ~60 s.",
++  "EU": "UE"
 +}
 \ No newline at end of file
 diff --git a/public/locales/gsa-pt_BR.json b/public/locales/gsa-pt_BR.json
-index 10e592f..8071cad 100644
+index 10e592f..8dd1b9e 100644
 --- a/public/locales/gsa-pt_BR.json
 +++ b/public/locales/gsa-pt_BR.json
-@@ -1,216 +1,2464 @@
+@@ -1,216 +1,2488 @@
  {
 -  "# of OVAL Definitions": "OVAL defini\u00e7\u00e3o",
 -  "# of Operating Systems": "Sistema Operacional",
@@ -7911,56 +7935,56 @@ index 10e592f..8071cad 100644
 +  "Windows: paste into a PowerShell/cmd opened as Administrator. Do not run as SYSTEM (RMM, Intune, GPO, PsExec -s) — the one-liner refuses; for mass deployment, download install.ps1 to a protected folder and run it with -File.": "Windows: cole num PowerShell/cmd aberto como Administrador. Não rode como SYSTEM (RMM, Intune, GPO, PsExec -s) — o one-liner recusa; para implantação em massa, baixe o install.ps1 para uma pasta protegida e rode com -File.",
 +  "Session expired. Sign in again.": "Sessão expirada. Entre novamente.",
 +  "No permission for this action.": "Sem permissão para esta ação.",
-+  "\nThis could have the following reasons:\n1. The CPE might not be included in the official NVD CPE dictionary yet, and no additional information is available.\n2. You might have followed an incorrect link and the CPE does not exist.": "\nIsto pode ter os seguintes motivos:\n1. O CPE pode ainda nao estar incluido no dicionario oficial de CPE do NVD, e nenhuma informação adicional esta disponível.\n2. Voce pode ter seguido um link incorreto e o CPE nao existe.",
-+  "\nThis could have the following reasons:\n1. The CVE might not be included in the SCAP database yet. For new CVEs it can take a month or more until they become available.\n2. You might have followed an incorrect link and the CVE does not exist.": "\nIsto pode ter os seguintes motivos:\n1. O CVE pode ainda nao estar incluido no banco de dados SCAP. Para novos CVEs, pode levar um mes ou mais ate que se tornem disponíveis.\n2. Voce pode ter seguido um link incorreto e o CVE nao existe.",
-+  "\nYou might have followed an incorrect link and the {{entity}} does not exist.": "\nVoce pode ter seguido um link incorreto e o {{entity}} nao existe.",
++  "\nThis could have the following reasons:\n1. The CPE might not be included in the official NVD CPE dictionary yet, and no additional information is available.\n2. You might have followed an incorrect link and the CPE does not exist.": "\nIsto pode ter os seguintes motivos:\n1. O CPE pode ainda não estar incluído no dicionário oficial de CPE do NVD, e nenhuma informação adicional está disponível.\n2. Você pode ter seguido um link incorreto e o CPE não existe.",
++  "\nThis could have the following reasons:\n1. The CVE might not be included in the SCAP database yet. For new CVEs it can take a month or more until they become available.\n2. You might have followed an incorrect link and the CVE does not exist.": "\nIsto pode ter os seguintes motivos:\n1. O CVE pode ainda não estar incluído no banco de dados SCAP. Para novos CVEs, pode levar um mês ou mais até que se tornem disponíveis.\n2. Você pode ter seguido um link incorreto e o CVE não existe.",
++  "\nYou might have followed an incorrect link and the {{entity}} does not exist.": "\nVocê pode ter seguido um link incorreto e o {{entity}} não existe.",
 +  " on port ": " na porta ",
 +  " on Port {{port}}": " na Porta {{port}}",
-+  " or just create the task so you can run it manually later.": " ou apenas crie a tarefa para que voce possa executa-la manualmente mais tarde.",
++  " or just create the task so you can run it manually later.": " ou apenas crie a tarefa para que você possa executá-la manualmente mais tarde.",
 +  ", schedule the task for a later date and time,": ", agende a tarefa para uma data e hora posteriores,",
 +  "\"Rows per page\" requires a value of 1 or greater.": "\"Linhas por página\" requer um valor de 1 ou maior.",
 +  "(Applied filter: {{- filter}})": "(Filtro aplicado: {{- filter}})",
-+  "(Credential unavailable)": "(Credencial indisponivel)",
++  "(Credential unavailable)": "(Credencial indisponível)",
 +  "(Global Object)": "(Objeto Global)",
 +  "(Target Host)": "(Host do Alvo)",
 +  "{{- entity}} {{- name}} successfully moved to trashcan": "{{- entity}} {{- name}} movido para a lixeira com sucesso",
 +  "{{- entity}} successfully moved to trashcan": "{{- entity}} movido para a lixeira com sucesso",
 +  "{{- name}} cloned successfully.": "{{- name}} clonado com sucesso.",
-+  "{{- name}} deleted successfully.": "{{- name}} excluido com sucesso.",
++  "{{- name}} deleted successfully.": "{{- name}} excluído com sucesso.",
 +  "{{- name}} downloaded successfully.": "{{- name}} baixado com sucesso.",
 +  "{{- name}} restored successfully.": "{{- name}} restaurado com sucesso.",
 +  "{{age}} days old": "{{age}} dias de idade",
-+  "{{count}} alert(s) only visible to other users": "{{count}} alerta(s) visivel(eis) apenas para outros usuários",
++  "{{count}} alert(s) only visible to other users": "{{count}} alerta(s) visível(eis) apenas para outros usuários",
 +  "{{count}} of {{max}}": "{{count}} de {{max}}",
-+  "{{count}} report config(s) only visible to other users": "{{count}} configuração(oes) de relatório visivel(eis) apenas para outros usuários",
-+  "{{count}} user(s) deleted successfully": "{{count}} usuário(s) excluido(s) com sucesso",
-+  "{{count}} users will be deleted": "{{count}} usuários serao excluidos",
++  "{{count}} report config(s) only visible to other users": "{{count}} configuração(ões) de relatório visível(eis) apenas para outros usuários",
++  "{{count}} user(s) deleted successfully": "{{count}} usuário(s) excluído(s) com sucesso",
++  "{{count}} users will be deleted": "{{count}} usuários serão excluídos",
 +  "{{days}} day {{hours}}:{{minutes}} h": "{{days}} dia {{hours}}:{{minutes}} h",
 +  "{{days}} days {{hours}}:{{minutes}} h": "{{days}} dias {{hours}}:{{minutes}} h",
 +  "{{entity}} {{- name}} cloned successfully": "{{entity}} {{- name}} clonado com sucesso",
 +  "{{entity}} {{- name}} successfully created": "{{entity}} {{- name}} criado com sucesso",
-+  "{{entity}} {{- name}} successfully deleted": "{{entity}} {{- name}} excluido com sucesso",
++  "{{entity}} {{- name}} successfully deleted": "{{entity}} {{- name}} excluído com sucesso",
 +  "{{entity}} {{- name}} successfully saved": "{{entity}} {{- name}} salvo com sucesso",
 +  "{{entity}} cloned successfully": "{{entity}} clonado com sucesso",
-+  "{{entity}} is not writable": "{{entity}} nao e gravavel",
-+  "{{entity}} is still in use": "{{entity}} ainda esta em uso",
-+  "{{entity}} may not be cloned": "{{entity}} nao pode ser clonado",
-+  "{{entity}} may not be created": "{{entity}} nao pode ser criado",
-+  "{{entity}} may not be verified": "{{entity}} nao pode ser verificado",
-+  "{{entity}} settings is not writable": "As configurações de {{entity}} nao sao gravaveis",
++  "{{entity}} is not writable": "{{entity}} não é gravável",
++  "{{entity}} is still in use": "{{entity}} ainda está em uso",
++  "{{entity}} may not be cloned": "{{entity}} não pode ser clonado",
++  "{{entity}} may not be created": "{{entity}} não pode ser criado",
++  "{{entity}} may not be verified": "{{entity}} não pode ser verificado",
++  "{{entity}} settings is not writable": "As configurações de {{entity}} não são graváveis",
 +  "{{entity}} successfully created": "{{entity}} criado com sucesso",
-+  "{{entity}} successfully deleted": "{{entity}} excluido com sucesso",
++  "{{entity}} successfully deleted": "{{entity}} excluído com sucesso",
 +  "{{entity}} successfully saved": "{{entity}} salvo com sucesso",
 +  "{{filtered}} of {{all}}": "{{filtered}} de {{all}}",
 +  "{{first}} - {{last}} of {{filtered}}": "{{first}} - {{last}} de {{filtered}}",
-+  "{{hosts}} Host(s) with average severity {{avgSev}}": "{{hosts}} Host(s) com severidade media {{avgSev}}",
++  "{{hosts}} Host(s) with average severity {{avgSev}}": "{{hosts}} Host(s) com severidade média {{avgSev}}",
 +  "{{hours}}:{{minutes}} h": "{{hours}}:{{minutes}} h",
-+  "{{name}} Start: {{date}}": "{{name}} Inicio: {{date}}",
-+  "{{name}} Start: {{startDate}} End: {{endDate}}": "{{name}} Inicio: {{startDate}} Fim: {{endDate}}",
++  "{{name}} Start: {{date}}": "{{name}} Início: {{date}}",
++  "{{name}} Start: {{startDate}} End: {{endDate}}": "{{name}} Início: {{startDate}} Fim: {{endDate}}",
 +  "{{nr}} more times": "mais {{nr}} vezes",
 +  "{{nth}} {{weekday}} every {{interval}} months": "{{nth}} {{weekday}} a cada {{interval}} meses",
-+  "{{nth}} {{weekday}} every month": "{{nth}} {{weekday}} todo mes",
-+  "{{num}} more runs not shown": "mais {{num}} execuções nao exibidas",
++  "{{nth}} {{weekday}} every month": "{{nth}} {{weekday}} todo mês",
++  "{{num}} more runs not shown": "mais {{num}} execuções não exibidas",
 +  "{{progress}} %": "{{progress}} %",
 +  "{{sevMax}}: ({{riskFactor}})": "{{sevMax}}: ({{riskFactor}})",
 +  "{{status}} at {{progress}} %": "{{status}} em {{progress}} %",
@@ -7976,14 +8000,14 @@ index 10e592f..8071cad 100644
 +  "{{subjectType}} {{- subjectName}} may delete {{resourceType}} {{resourceName}}": "{{subjectType}} {{- subjectName}} pode excluir {{resourceType}} {{resourceName}}",
 +  "{{subjectType}} {{- subjectName}} may delete an existing {{resourceType}}": "{{subjectType}} {{- subjectName}} pode excluir um {{resourceType}} existente",
 +  "{{subjectType}} {{- subjectName}} may empty the trashcan": "{{subjectType}} {{- subjectName}} pode esvaziar a lixeira",
-+  "{{subjectType}} {{- subjectName}} may get the dependencies of NVTs": "{{subjectType}} {{- subjectName}} pode obter as dependencias de NVTs",
++  "{{subjectType}} {{- subjectName}} may get the dependencies of NVTs": "{{subjectType}} {{- subjectName}} pode obter as dependências de NVTs",
 +  "{{subjectType}} {{- subjectName}} may get the help text": "{{subjectType}} {{- subjectName}} pode obter o texto de ajuda",
 +  "{{subjectType}} {{- subjectName}} may get version information": "{{subjectType}} {{- subjectName}} pode obter informações de versão",
 +  "{{subjectType}} {{- subjectName}} may login": "{{subjectType}} {{- subjectName}} pode fazer login",
 +  "{{subjectType}} {{- subjectName}} may move {{resourceType}}": "{{subjectType}} {{- subjectName}} pode mover {{resourceType}}",
 +  "{{subjectType}} {{- subjectName}} may restore items from the trashcan": "{{subjectType}} {{- subjectName}} pode restaurar itens da lixeira",
 +  "{{subjectType}} {{- subjectName}} may resume Task": "{{subjectType}} {{- subjectName}} pode retomar Tarefa",
-+  "{{subjectType}} {{- subjectName}} may run multiple GMP commands in one": "{{subjectType}} {{- subjectName}} pode executar varios comandos GMP em um so",
++  "{{subjectType}} {{- subjectName}} may run multiple GMP commands in one": "{{subjectType}} {{- subjectName}} pode executar vários comandos GMP em um só",
 +  "{{subjectType}} {{- subjectName}} may run Wizard": "{{subjectType}} {{- subjectName}} pode executar o Assistente",
 +  "{{subjectType}} {{- subjectName}} may start Task": "{{subjectType}} {{- subjectName}} pode iniciar Tarefa",
 +  "{{subjectType}} {{- subjectName}} may stop Task": "{{subjectType}} {{- subjectName}} pode interromper Tarefa",
@@ -7994,11 +8018,11 @@ index 10e592f..8071cad 100644
 +  "{{subjectType}} {{- subjectName}} may test Alert": "{{subjectType}} {{- subjectName}} pode testar Alerta",
 +  "{{subjectType}} {{- subjectName}} may verify {{resourceType}}": "{{subjectType}} {{- subjectName}} pode verificar {{resourceType}}",
 +  "{{title}} {{filtered}} of {{all}}": "{{title}} {{filtered}} de {{all}}",
-+  "{{type}} cannot be started manually because the assigned schedule has a duration limit": "{{type}} nao pode ser iniciado manualmente porque o agendamento atribuido tem um limite de duração",
-+  "{{type}} is already active": "{{type}} ja esta ativo",
-+  "{{type}} is for import only": "{{type}} e apenas para importacao",
-+  "{{type}} is not stopped": "{{type}} nao esta interrompido",
-+  "{{type}} is scheduled": "{{type}} esta agendado",
++  "{{type}} cannot be started manually because the assigned schedule has a duration limit": "{{type}} não pode ser iniciado manualmente porque o agendamento atribuído tem um limite de duração",
++  "{{type}} is already active": "{{type}} já está ativo",
++  "{{type}} is for import only": "{{type}} é apenas para importação",
++  "{{type}} is not stopped": "{{type}} não está interrompido",
++  "{{type}} is scheduled": "{{type}} está agendado",
 +  "{{type}} owned by {{owner}}": "{{type}} de propriedade de {{owner}}",
 +  "{{value}}: {{count}} (severity: {{severity}})": "{{value}}: {{count}} (severidade: {{severity}})",
 +  "# of Agents": "Nro de Agentes",
@@ -8012,7 +8036,7 @@ index 10e592f..8071cad 100644
 +  "# of created DFN-CERT Advs": "Nro de Avisos DFN-CERT criados",
 +  "# of Created Notes": "Nro de Notas Criadas",
 +  "# of created NVTs": "Nº de NVTs criados",
-+  "# of created Overrides": "Nº de overrides criados",
++  "# of created Overrides": "Nº de exceções criadas",
 +  "# of created Tickets": "Nº de tickets criados",
 +  "# of CVEs": "Nº de CVEs",
 +  "# of DFN-CERT Advisories": "Nº de avisos DFN-CERT",
@@ -8025,9 +8049,9 @@ index 10e592f..8071cad 100644
 +  "# of Notes": "Nº de notas",
 +  "# of NVTs": "Nº de NVTs",
 +  "# of Operating Systems": "Nº de sistemas operacionais",
-+  "# of Overrides": "Nº de overrides",
++  "# of Overrides": "Nº de exceções",
 +  "# of Reports": "Nº de relatórios",
-+  "# of Results": "Nº de resultados",
++  "# of Results": "Nº de achados",
 +  "# of Tasks": "Nº de tarefas",
 +  "# of Tickets": "Nº de tickets",
 +  "# of Vulnerabilities": "Nº de vulnerabilidades",
@@ -8054,10 +8078,10 @@ index 10e592f..8071cad 100644
 +  "Add new Dashboard": "Adicionar novo painel",
 +  "Add new Dashboard Display": "Adicionar nova exibição de painel",
 +  "Add new Note": "Adicionar nova nota",
-+  "Add new Override": "Adicionar novo override",
++  "Add new Override": "Adicionar nova exceção",
 +  "Add Port Range": "Adicionar faixa de portas",
 +  "Add Resource by ID": "Adicionar recurso por ID",
-+  "Add results to Assets": "Adicionar resultados aos ativos",
++  "Add results to Assets": "Adicionar achados aos ativos",
 +  "Add Tag": "Adicionar tag",
 +  "Add Tag to All Filtered": "Adicionar tag a todos os filtrados",
 +  "Add tag to filtered": "Adicionar tag aos filtrados",
@@ -8067,7 +8091,7 @@ index 10e592f..8071cad 100644
 +  "Add Tag to Selection": "Adicionar tag à seleção",
 +  "Add to Assets": "Adicionar aos ativos",
 +  "Add to Assets with QoD >= 70%": "Adicionar aos ativos com QoD >= 70%",
-+  "Add to Assets with QoD >= 70% and Overrides enabled": "Adicionar aos ativos com QoD >= 70% e overrides habilitados",
++  "Add to Assets with QoD >= 70% and Overrides enabled": "Adicionar aos ativos com QoD >= 70% e exceções habilitadas",
 +  "Add:": "Adicionar:",
 +  "Adjacent": "Adjacente",
 +  "Adjust and update your filter settings.": "Ajuste e atualize suas configurações de filtro.",
@@ -8147,7 +8171,7 @@ index 10e592f..8071cad 100644
 +  "Applied filter: ": "Filtro aplicado: ",
 +  "Apply a minimum severity of 7.0.": "Aplicar uma severidade mínima de 7.0.",
 +  "Apply default timeout": "Aplicar tempo limite padrão",
-+  "Apply Overrides": "Aplicar Overrides",
++  "Apply Overrides": "Aplicar exceções",
 +  "Apply to all filtered": "Aplicar a todos os filtrados",
 +  "Apply to page contents": "Aplicar ao conteúdo da página",
 +  "Apply to selection": "Aplicar à seleção",
@@ -8161,7 +8185,7 @@ index 10e592f..8071cad 100644
 +  "Are you sure you want to move all items on this page to the trashcan?": "Tem certeza de que deseja mover todos os itens desta página para a lixeira?",
 +  "Are you sure you want to revoke all selected agents?": "Tem certeza de que deseja revogar todos os agentes selecionados?",
 +  "As a short-cut the following steps will be done for you:": "Como atalho, os seguintes passos serão executados para você:",
-+  "As soon as the scan progress is beyond 1%, you can already jump to the scan report by clicking on the progress bar in the \"Status\" column and review the results collected so far.": "Assim que o progresso da varredura ultrapassar 1%, você já pode ir para o relatório da varredura clicando na barra de progresso na coluna \"Status\" e revisar os resultados coletados até o momento.",
++  "As soon as the scan progress is beyond 1%, you can already jump to the scan report by clicking on the progress bar in the \"Status\" column and review the results collected so far.": "Assim que o progresso da varredura ultrapassar 1%, você já pode ir para o relatório da varredura clicando na barra de progresso na coluna \"Status\" e revisar os achados coletados até o momento.",
 +  "Ascending": "Crescente",
 +  "Asset": "Ativo",
 +  "Asset Displays": "Exibições de Ativos",
@@ -8310,21 +8334,21 @@ index 10e592f..8071cad 100644
 +  "Chart: Operating Systems by CVSS": "Gráfico: Sistemas Operacionais por CVSS",
 +  "Chart: Operating Systems by Severity Class": "Gráfico: Sistemas Operacionais por Classe de Severidade",
 +  "Chart: Operating Systems by Vulnerability Score": "Gráfico: Sistemas Operacionais por Pontuação de Vulnerabilidade",
-+  "Chart: Overrides by Active Days": "Gráfico: Overrides por Dias Ativos",
-+  "Chart: Overrides by Creation Time": "Gráfico: Overrides por hora de criação",
-+  "Chart: Overrides Text Word Cloud": "Gráfico: Nuvem de palavras do texto dos overrides",
++  "Chart: Overrides by Active Days": "Gráfico: Exceções por Dias Ativos",
++  "Chart: Overrides by Creation Time": "Gráfico: Exceções por hora de criação",
++  "Chart: Overrides Text Word Cloud": "Gráfico: Nuvem de palavras do texto das exceções",
 +  "Chart: Reports by CVSS": "Gráfico: Relatórios por CVSS",
 +  "Chart: Reports by Severity Class": "Gráfico: Relatórios por classe de severidade",
-+  "Chart: Reports with high Results": "Gráfico: Relatórios com resultados altos",
-+  "Chart: Results by CVSS": "Gráfico: Resultados por CVSS",
-+  "Chart: Results by Severity Class": "Gráfico: Resultados por classe de severidade",
-+  "Chart: Results Description Word Cloud": "Gráfico: Nuvem de palavras da descrição dos resultados",
-+  "Chart: Results Vulnerability Word Cloud": "Gráfico: Nuvem de palavras das vulnerabilidades dos resultados",
++  "Chart: Reports with high Results": "Gráfico: Relatórios com achados altos",
++  "Chart: Results by CVSS": "Gráfico: Achados por CVSS",
++  "Chart: Results by Severity Class": "Gráfico: Achados por classe de severidade",
++  "Chart: Results Description Word Cloud": "Gráfico: Nuvem de palavras da descrição dos achados",
++  "Chart: Results Vulnerability Word Cloud": "Gráfico: Nuvem de palavras das vulnerabilidades dos achados",
 +  "Chart: Tasks by CVSS": "Gráfico: Tarefas por CVSS",
-+  "Chart: Tasks by High Results per Host": "Gráfico: Tarefas por resultados altos por host",
++  "Chart: Tasks by High Results per Host": "Gráfico: Tarefas por achados altos por host",
 +  "Chart: Tasks by Severity Class": "Gráfico: Tarefas por classe de severidade",
 +  "Chart: Tasks by Status": "Gráfico: Tarefas por status",
-+  "Chart: Tasks with most High Results per Host": "Gráfico: Tarefas com mais resultados altos por host",
++  "Chart: Tasks with most High Results per Host": "Gráfico: Tarefas com mais achados altos por host",
 +  "Chart: Tickets by Assigned User": "Gráfico: Tickets por usuário atribuído",
 +  "Chart: Tickets by Creation Time": "Gráfico: Tickets por hora de criação",
 +  "Chart: Tickets by Status": "Gráfico: Tickets por status",
@@ -8419,7 +8443,7 @@ index 10e592f..8071cad 100644
 +  "Copy to clipboard": "Copiar para a área de transferência",
 +  "Corresponding Performance": "Desempenho Correspondente",
 +  "Corresponding Report": "Relatório Correspondente",
-+  "Corresponding Results": "Resultados Correspondentes",
++  "Corresponding Results": "Achados Correspondentes",
 +  "Corresponding Task": "Tarefa Correspondente",
 +  "Corresponding Task ({{name}})": "Tarefa Correspondente ({{name}})",
 +  "Corresponding task is in trashcan": "A tarefa correspondente está na lixeira",
@@ -8455,6 +8479,8 @@ index 10e592f..8071cad 100644
 -  "Delete": "Apagar",
 -  "Delete Report": "Apagar",
 -  "Donut Chart": "Gr\u00e1fico de rosquinha",
+-  "Download CSV": "Baixar CSV",
+-  "Download Certificate": "Baixar CSV",
 +  "Create a credential": "Criar uma credencial",
 +  "Create a new Agent Group": "Criar um novo Grupo de Agentes",
 +  "Create a new alert": "Criar um novo alerta",
@@ -8480,8 +8506,8 @@ index 10e592f..8071cad 100644
 +  "Create new SSH credential": "Criar nova credencial SSH",
 +  "Create new SSH elevate credential": "Criar nova credencial de elevação SSH",
 +  "Create new Ticket": "Criar novo Ticket",
-+  "Create new Ticket for Result": "Criar novo Ticket para Resultado",
-+  "Create new Ticket for Result {{- name}}": "Criar novo Ticket para Resultado {{- name}}",
++  "Create new Ticket for Result": "Criar novo Ticket para Achado",
++  "Create new Ticket for Result {{- name}}": "Criar novo Ticket para Achado {{- name}}",
 +  "Create Permission": "Criar Permissão",
 +  "Create permission to grant full read and write access among all group members and across any resources": "Criar permissão para conceder acesso total de leitura e escrita entre todos os membros do grupo e em todos os recursos",
 +  "Create Schedule": "Criar Agendamento",
@@ -8497,7 +8523,7 @@ index 10e592f..8071cad 100644
 +  "Created DFN-CERT Advs": "Avisos DFN-CERT Criados",
 +  "Created Notes": "Notas Criadas",
 +  "Created NVTs": "NVTs Criados",
-+  "Created Overrides": "Overrides Criados",
++  "Created Overrides": "Exceções Criadas",
 +  "Created Tickets": "Tickets Criados",
 +  "Created Time": "Data de Criação",
 +  "Created:": "Criado:",
@@ -8519,7 +8545,7 @@ index 10e592f..8071cad 100644
 +  "Credentials": "Credenciais",
 +  "Credentials Filter": "Filtro de Credenciais",
 +  "Credentials for authenticated checks": "Credenciais para verificações autenticadas",
-+  "Critical": "Crítico",
++  "Critical": "Crítica",
 +  "Cron expression for scheduler": "Expressão cron para o agendador",
 +  "Current": "Atual",
 +  "Current Report for Audit {{- name}} from {{- date}}": "Relatório Atual da Auditoria {{- name}} de {{- date}}",
@@ -8565,7 +8591,7 @@ index 10e592f..8071cad 100644
 +  "day(s)": "dia(s)",
 +  "days": "dias",
 +  "Debug": "Depuração",
-+  "Decrease the minimum QoD in the filter settings to 30 percent to see those results.": "Diminua o QoD mínimo nas configurações de filtro para 30 por cento para ver esses resultados.",
++  "Decrease the minimum QoD in the filter settings to 30 percent to see those results.": "Diminua o QoD mínimo nas configurações de filtro para 30 por cento para ver esses achados.",
 +  "decreased": "diminuído",
 +  "default": "padrão",
 +  "Default": "Padrão",
@@ -8601,7 +8627,7 @@ index 10e592f..8071cad 100644
 +  "Deletion started": "Exclusão iniciada",
 +  "Delta": "Delta",
 +  "Delta Report": "Relatório delta",
-+  "Delta Results": "Resultados delta",
++  "Delta Results": "Achados delta",
 +  "Deny all": "Negar tudo",
 +  "Deny all and allow": "Negar tudo e permitir",
 +  "Deny all and allow from {{addresses}}": "Negar tudo e permitir a partir de {{addresses}}",
@@ -8613,8 +8639,8 @@ index 10e592f..8071cad 100644
 +  "Details URL": "URL de detalhes",
 +  "Details: ": "Detalhes: ",
 +  "Detection Method": "Método de detecção",
-+  "Detection Result": "Resultado da detecção",
-+  "Detection Results": "Resultados da detecção",
++  "Detection Result": "Achado da detecção",
++  "Detection Results": "Achados da detecção",
 +  "DFN-CERT Advisories": "Avisos DFN-CERT",
 +  "DFN-CERT Advisories by Creation Time": "Avisos DFN-CERT por horário de criação",
 +  "DFN-CERT Advisories by CVSS (Total: {{count}})": "Avisos DFN-CERT por CVSS (Total: {{count}})",
@@ -8644,8 +8670,6 @@ index 10e592f..8071cad 100644
 +  "Download CA Certificate": "Baixar certificado da CA",
 +  "Download Certificate": "Baixar certificado",
 +  "Download Client Certificate": "Baixar certificado do cliente",
-   "Download CSV": "Baixar CSV",
--  "Download Certificate": "Baixar CSV",
 +  "Download Debian (.deb) Package": "Baixar pacote Debian (.deb)",
 +  "Download filtered Report": "Baixar relatório filtrado",
 +  "Download Greenbone Compliance Report": "Baixar relatório de conformidade Greenbone",
@@ -8687,7 +8711,7 @@ index 10e592f..8071cad 100644
 +  "Edit Network Vulnerability Test Families ({{counts}})": "Editar famílias de testes de vulnerabilidade de rede ({{counts}})",
 +  "Edit Network Vulnerability Tests": "Editar testes de vulnerabilidade de rede",
 +  "Edit Note {{- name}}": "Editar nota {{- name}}",
-+  "Edit Override {{- name}}": "Editar override {{- name}}",
++  "Edit Override {{- name}}": "Editar exceção {{- name}}",
 +  "Edit permission {{name}}": "Editar permissão {{name}}",
 +  "Edit Permission {{name}}": "Editar permissão {{name}}",
 +  "Edit Policy {{- name}}": "Editar política {{- name}}",
@@ -8772,16 +8796,16 @@ index 10e592f..8071cad 100644
 +  "Error Messages": "Mensagens de erro",
 +  "Error while loading Applications for Report {{reportId}}": "Erro ao carregar Aplicações para o relatório {{reportId}}",
 +  "Error while loading Closed CVEs for Report {{reportId}}": "Erro ao carregar CVEs fechados para o relatório {{reportId}}",
-+  "Error while loading Container Scanning Results for Report {{reportId}}": "Erro ao carregar resultados de varredura de contêiner para o relatório {{reportId}}",
++  "Error while loading Container Scanning Results for Report {{reportId}}": "Erro ao carregar achados de varredura de contêiner para o relatório {{reportId}}",
 +  "Error while loading CVEs for Report {{reportId}}": "Erro ao carregar CVEs para o relatório {{reportId}}",
 +  "Error while loading Error Messages for Report {{reportId}}": "Erro ao carregar mensagens de erro para o relatório {{reportId}}",
 +  "Error while loading Hosts for Report {{reportId}}": "Erro ao carregar Hosts para o relatório {{reportId}}",
 +  "Error while loading Operating Systems for Report {{reportId}}": "Erro ao carregar sistemas operacionais para o relatório {{reportId}}",
 +  "Error while loading Ports for Report {{reportId}}": "Erro ao carregar portas para o relatório {{reportId}}",
 +  "Error while loading Report {{reportId}}": "Erro ao carregar o relatório {{reportId}}",
-+  "Error while loading Results for Report {{reportId}}": "Erro ao carregar resultados para o relatório {{reportId}}",
++  "Error while loading Results for Report {{reportId}}": "Erro ao carregar achados para o relatório {{reportId}}",
 +  "Error while loading TLS Certificates for Report {{reportId}}": "Erro ao carregar certificados TLS para o relatório {{reportId}}",
-+  "Error while loading Web Application Scanning Results for Report {{reportId}}": "Erro ao carregar resultados de varredura de aplicações web para o relatório {{reportId}}",
++  "Error while loading Web Application Scanning Results for Report {{reportId}}": "Erro ao carregar achados de varredura de aplicações web para o relatório {{reportId}}",
 +  "Error: Unknown Performance Report": "Erro: relatório de desempenho desconhecido",
 +  "ESXi": "ESXi",
 +  "ESXi authentication was successful": "A autenticação ESXi foi bem-sucedida",
@@ -8848,18 +8872,18 @@ index 10e592f..8071cad 100644
 +  "Export Note as XML": "Exportar nota como XML",
 +  "Export NVT": "Exportar NVT",
 +  "Export Operating System": "Exportar sistema operacional",
-+  "Export Override": "Exportar override",
-+  "Export Override as XML": "Exportar override como XML",
-+  "Export page contents": "Exportar conteudo da página",
++  "Export Override": "Exportar exceção",
++  "Export Override as XML": "Exportar exceção como XML",
++  "Export page contents": "Exportar conteúdo da página",
 +  "Export Permission": "Exportar permissão",
 +  "Export Permission as XML": "Exportar permissão como XML",
-+  "Export Policy": "Exportar politica",
-+  "Export Policy as XML": "Exportar politica como XML",
++  "Export Policy": "Exportar política",
++  "Export Policy as XML": "Exportar política como XML",
 +  "Export Port List": "Exportar lista de portas",
 +  "Export Port List as XML": "Exportar lista de portas como XML",
 +  "Export Report Config": "Exportar configuração de relatório",
 +  "Export Reports to OPENVAS SECURITY INTELLIGENCE": "Exportar relatórios para OPENVAS SECURITY INTELLIGENCE",
-+  "Export Result as XML": "Exportar resultado como XML",
++  "Export Result as XML": "Exportar achado como XML",
 +  "Export Role": "Exportar papel",
 +  "Export Role as XML": "Exportar papel como XML",
 +  "Export Scan Config": "Exportar configuração de varredura",
@@ -8880,11 +8904,11 @@ index 10e592f..8071cad 100644
 +  "Export User": "Exportar usuário",
 +  "Export User as XML": "Exportar usuário como XML",
 +  "Export Web Application Target": "Exportar alvo de aplicação web",
-+  "Extension": "Extensao",
++  "Extension": "Extensão",
 +  "Failed to connect to credential store server. Please check your settings.": "Falha ao conectar ao servidor de armazenamento de credenciais. Verifique suas configurações.",
-+  "Failed to copy checksum for agent installer {{name}} {{version}} to clipboard.": "Falha ao copiar o checksum do instalador do agente {{name}} {{version}} para a area de transferencia.",
-+  "Failed to create a new Target because the default Port List is not available.": "Falha ao criar um novo alvo porque a lista de portas padrão nao esta disponível.",
-+  "Failed to create a new Task because the default Scan Config is not available.": "Falha ao criar uma nova tarefa porque a configuração de varredura padrão nao esta disponível.",
++  "Failed to copy checksum for agent installer {{name}} {{version}} to clipboard.": "Falha ao copiar o checksum do instalador do agente {{name}} {{version}} para a área de transferência.",
++  "Failed to create a new Target because the default Port List is not available.": "Falha ao criar um novo alvo porque a lista de portas padrão não está disponível.",
++  "Failed to create a new Task because the default Scan Config is not available.": "Falha ao criar uma nova tarefa porque a configuração de varredura padrão não está disponível.",
 +  "Failed to load {{type}} from trashcan": "Falha ao carregar {{type}} da lixeira",
 +  "Failed to run alert.": "Falha ao executar o alerta.",
 +  "Failed to save filter setting": "Falha ao salvar a configuração do filtro",
@@ -8904,11 +8928,11 @@ index 10e592f..8071cad 100644
 -  "Help: Filters": "Atualizar filtro",
 -  "Help: OVAL Definitions": "OVAL defini\u00e7\u00e3o",
 -  "Help: Operating Systems": "Sistema Operacional",
-+  "Families: Total": "Familias: Total",
-+  "Families: Trend": "Familias: Tendencia",
-+  "Family": "Familia",
-+  "Feed is currently syncing.": "O feed esta sincronizando no momento.",
-+  "Feed is currently syncing. Please try again later.": "O feed esta sincronizando no momento. Tente novamente mais tarde.",
++  "Families: Total": "Famílias: Total",
++  "Families: Trend": "Famílias: Tendência",
++  "Family": "Família",
++  "Feed is currently syncing.": "O feed está sincronizando no momento.",
++  "Feed is currently syncing. Please try again later.": "O feed está sincronizando no momento. Tente novamente mais tarde.",
 +  "Feed Status": "Status do feed",
 +  "Feeds": "Feeds",
 +  "File path": "Caminho do arquivo",
@@ -8917,28 +8941,28 @@ index 10e592f..8071cad 100644
 +  "Filter matches at least {{count}} {{type}}": "O filtro corresponde a pelo menos {{count}} {{type}}",
 +  "Filter matches at least {{count}} more {{result}} than the previous scan": "O filtro corresponde a pelo menos {{count}} {{result}} a mais que a varredura anterior",
 +  "Filter Name": "Nome do filtro",
-+  "Filter out log message results.": "Filtrar resultados de mensagens de log.",
-+  "Filter out results with compliance \"Incomplete\".": "Filtrar resultados com conformidade \"Incompleta\".",
-+  "Filter out results with compliance \"Undefined\".": "Filtrar resultados com conformidade \"Indefinida\".",
-+  "Filter out results with compliance \"Yes\".": "Filtrar resultados com conformidade \"Sim\".",
-+  "Filter out results with the severity \"Low\".": "Filtrar resultados com severidade \"Baixa\".",
-+  "Filter out results with the severity \"Medium\".": "Filtrar resultados com severidade \"Media\".",
++  "Filter out log message results.": "Filtrar achados de mensagens de log.",
++  "Filter out results with compliance \"Incomplete\".": "Filtrar achados com conformidade \"Incompleta\".",
++  "Filter out results with compliance \"Undefined\".": "Filtrar achados com conformidade \"Indefinida\".",
++  "Filter out results with compliance \"Yes\".": "Filtrar achados com conformidade \"Sim\".",
++  "Filter out results with the severity \"Low\".": "Filtrar achados com severidade \"Baixa\".",
++  "Filter out results with the severity \"Medium\".": "Filtrar achados com severidade \"Média\".",
 +  "Filter: {{name}}": "Filtro: {{name}}",
 +  "Filters": "Filtros",
 +  "Filters Filter": "Filtro de filtros",
-+  "Fingerprint": "Impressao digital",
++  "Fingerprint": "Impressão digital",
 +  "First": "Primeiro",
-+  "First result": "Primeiro resultado",
++  "First result": "Primeiro achado",
 +  "First Run": "Primeira execução",
-+  "Fix Verified": "Correcao verificada",
++  "Fix Verified": "Correção verificada",
 +  "Fixed": "Corrigido",
 +  "Fold": "Recolher",
 +  "Fold all details": "Recolher todos os detalhes",
 +  "Follow Link": "Seguir link",
-+  "For any other setting the defaults from \"My Settings\" will be applied.": "Para qualquer outra configuração, os padrões de \"Minhas configurações\" serao aplicados.",
++  "For any other setting the defaults from \"My Settings\" will be applied.": "Para qualquer outra configuração, os padrões de \"Minhas configurações\" serão aplicados.",
 +  "for current resource only": "apenas para o recurso atual",
 +  "for related resources only": "apenas para recursos relacionados",
-+  "Format: minute hour day month weekday": "Formato: minuto hora dia mes dia-da-semana",
++  "Format: minute hour day month weekday": "Formato: minuto hora dia mês dia-da-semana",
 +  "Fr.": "Sex.",
 +  "Friday": "Sexta-feira",
 +  "From": "De",
@@ -8946,10 +8970,10 @@ index 10e592f..8071cad 100644
 +  "From Address": "Endereço de origem",
 +  "From file": "De arquivo",
 +  "From host assets ({{count}} hosts)": "De ativos de host ({{count}} hosts)",
-+  "From Metrics": "De metricas",
++  "From Metrics": "De métricas",
 +  "From Task (name)": "De tarefa (nome)",
 +  "From Vector": "De vetor",
-+  "Full and fast": "Completo e rapido",
++  "Full and fast": "Completo e rápido",
 +  "General": "Geral",
 +  "General Command Permissions": "Permissões de comando gerais",
 +  "General note": "Nota geral",
@@ -8959,7 +8983,7 @@ index 10e592f..8071cad 100644
 +  "Grant": "Conceder",
 +  "Green": "Verde",
 +  "Greenbone": "Greenbone",
-+  "Greenbone Sensor": "Sensor Greenbone",
++  "Greenbone Sensor": "Sensor Suricatoos",
 +  "Group": "Grupo",
 +  "Group ID": "ID do grupo",
 +  "Group Name": "Nome do grupo",
@@ -8991,11 +9015,11 @@ index 10e592f..8071cad 100644
 +  "Help: CERT-Bund Advisories": "Ajuda: Avisos CERT-Bund",
 +  "Help: Container Image Targets": "Ajuda: Alvos de imagem de container",
 +  "Help: CPEs": "Ajuda: CPEs",
-+  "Help: Credential Store": "Ajuda: Repositorio de credenciais",
++  "Help: Credential Store": "Ajuda: Repositório de credenciais",
 +  "Help: Credentials": "Ajuda: Credenciais",
 +  "Help: CVEs": "Ajuda: CVEs",
-+  "Help: CVSS Base Score Calculator": "Ajuda: Calculadora de pontuacao base CVSS",
-+  "Help: Dashboards": "Ajuda: Paineis",
++  "Help: CVSS Base Score Calculator": "Ajuda: Calculadora de pontuação base CVSS",
++  "Help: Dashboards": "Ajuda: Painéis",
 +  "Help: DFN-CERT Advisories": "Ajuda: Avisos DFN-CERT",
 +  "Help: Feed Status": "Ajuda: Status do feed",
 +  "Help: Filters": "Ajuda: Filtros",
@@ -9006,20 +9030,20 @@ index 10e592f..8071cad 100644
 +  "Help: Notes": "Ajuda: Notas",
 +  "Help: NVTs": "Ajuda: NVTs",
 +  "Help: Operating Systems": "Ajuda: Sistemas operacionais",
-+  "Help: Overrides": "Ajuda: Overrides",
++  "Help: Overrides": "Ajuda: Exceções",
 +  "Help: Performance": "Ajuda: Desempenho",
 +  "Help: Permissions": "Ajuda: Permissões",
-+  "Help: Policies": "Ajuda: Politicas",
++  "Help: Policies": "Ajuda: Políticas",
 +  "Help: Port Lists": "Ajuda: Listas de portas",
 +  "Help: Powerfilter": "Ajuda: Powerfilter",
 +  "Help: RADIUS Authentication": "Ajuda: Autenticação RADIUS",
 +  "Help: Reading Reports": "Ajuda: Leitura de relatórios",
-+  "Help: Remediation Tickets": "Ajuda: Tickets de remediacao",
++  "Help: Remediation Tickets": "Ajuda: Tickets de remediação",
 +  "Help: Report Configs": "Ajuda: Configurações de relatório",
 +  "Help: Report Formats": "Ajuda: Formatos de relatório",
 +  "Help: Reports": "Ajuda: Relatórios",
-+  "Help: Results": "Ajuda: Resultados",
-+  "Help: Roles": "Ajuda: Papeis",
++  "Help: Results": "Ajuda: Achados",
++  "Help: Roles": "Ajuda: Papéis",
 +  "Help: Scan Configs": "Ajuda: Configurações de varredura",
 +  "Help: ScanConfigs": "Ajuda: ScanConfigs",
 +  "Help: Scanners": "Ajuda: Scanners",
@@ -9039,9 +9063,9 @@ index 10e592f..8071cad 100644
 -  "Horizontal Bar Chart": "Gr\u00e1fico de barra horizontal",
 -  "Hosts Filter": "Atualizar filtro",
 +  "High per Host": "Alta por host",
-+  "Highest": "Maxima",
-+  "Highest Severity": "Severidade maxima",
-+  "Highest Severity from Results": "Severidade maxima dos resultados",
++  "Highest": "Máxima",
++  "Highest Severity": "Severidade máxima",
++  "Highest Severity from Results": "Severidade máxima dos achados",
 +  "Host": "Host",
 +  "Host (IP)": "Host (IP)",
 +  "Host (Name)": "Host (nome)",
@@ -9056,7 +9080,7 @@ index 10e592f..8071cad 100644
 +  "Hosts": "Hosts",
 +  "Hosts (All)": "Hosts (todos)",
 +  "Hosts (Best OS)": "Hosts (melhor OS)",
-+  "Hosts (High) by Modification Time (Total: {{count}})": "Hosts (alta) por horario de modificação (Total: {{count}})",
++  "Hosts (High) by Modification Time (Total: {{count}})": "Hosts (alta) por horário de modificação (Total: {{count}})",
 +  "Hosts by CVSS (Total: {{count}})": "Hosts por CVSS (Total: {{count}})",
 +  "Hosts by Modification Time (Total: {{count}})": "Hosts por Horário de Modificação (Total: {{count}})",
 +  "Hosts by Severity Class (Total: {{count}})": "Hosts por Classe de Severidade (Total: {{count}})",
@@ -9145,7 +9169,7 @@ index 10e592f..8071cad 100644
 +  "Issuer": "Emissor",
 +  "Issuer DN": "DN do Emissor",
 +  "Items": "Itens",
-+  "Just wait for results to arrive.": "Apenas aguarde a chegada dos resultados.",
++  "Just wait for results to arrive.": "Apenas aguarde a chegada dos achados.",
 +  "Key Distribution Center": "Centro de Distribuição de Chaves",
 +  "Key Type": "Tipo de Chave",
 +  "Known Hosts": "Hosts Conhecidos",
@@ -9311,7 +9335,7 @@ index 10e592f..8071cad 100644
 +  "New Host": "Novo Host",
 +  "New Import Task": "Nova Tarefa de Importação",
 +  "New Note": "Nova Nota",
-+  "New Override": "Novo Override",
++  "New Override": "Nova Exceção",
 +  "New Password": "Nova Senha",
 +  "New Permission": "Nova Permissão",
 +  "New Policy": "Nova Política",
@@ -9334,7 +9358,7 @@ index 10e592f..8071cad 100644
 +  "New Value": "Novo Valor",
 +  "New Web Application Target": "Novo Alvo de Aplicação Web",
 +  "New Web Application Task": "Nova Tarefa de Aplicação Web",
-+  "Newest Result": "Resultado Mais Recente",
++  "Newest Result": "Achado Mais Recente",
 +  "Next": "Próximo",
 +  "Next Run": "Próxima Execução",
 +  "Next Schedule Time": "Próximo Horário Agendado",
@@ -9363,7 +9387,7 @@ index 10e592f..8071cad 100644
 +  "No Displays": "Sem Exibições",
 +  "No Errors available": "Nenhum Erro disponível",
 +  "No filters available": "Nenhum filtro disponível",
-+  "No first result available.": "Nenhum primeiro resultado disponível.",
++  "No first result available.": "Nenhum primeiro achado disponível.",
 +  "No Groups available": "Nenhum Grupo disponível",
 +  "No hosts available": "Nenhum host disponível",
 +  "No Hosts available": "Nenhum Host disponível",
@@ -9374,7 +9398,7 @@ index 10e592f..8071cad 100644
 +  "No Notes available": "Nenhuma Nota disponível",
 +  "No NVTs available": "Nenhum NVT disponível",
 +  "No Operating Systems available": "Nenhum Sistema Operacional disponível",
-+  "No Overrides available": "Nenhum Override disponível",
++  "No Overrides available": "Nenhuma Exceção disponível",
 +  "No parameters available": "Nenhum parâmetro disponível",
 +  "No permissions available": "Nenhuma permissão disponível",
 +  "No Policies available": "Nenhuma Política disponível",
@@ -9385,13 +9409,13 @@ index 10e592f..8071cad 100644
 +  "No report configs available": "Nenhuma configuração de relatório disponível",
 +  "No report formats available": "Nenhum formato de relatório disponível",
 +  "No reports available": "Nenhum relatório disponível",
-+  "No results available": "Nenhum resultado disponível",
++  "No results available": "Nenhum achado disponível",
 +  "No Roles available": "Nenhum papel disponível",
 +  "No Scan Configs available": "Nenhuma configuração de varredura disponível",
 +  "No scanners available": "Nenhum scanner disponível",
 +  "No scans yet": "Nenhuma varredura ainda",
 +  "No schedules available": "Nenhum agendamento disponível",
-+  "No second result available.": "Nenhum segundo resultado disponível.",
++  "No second result available.": "Nenhum segundo achado disponível.",
 +  "No severity available, the ticket is orphaned": "Nenhuma severidade disponível, o ticket está órfão",
 +  "No tags available": "Nenhuma tag disponível",
 +  "No targets available": "Nenhum alvo disponível",
@@ -9423,7 +9447,7 @@ index 10e592f..8071cad 100644
 -  "Please try again.": "Por favor, aguarde...",
 +  "None available": "Nenhum disponível",
 +  "None.": "Nenhum.",
-+  "None. Result was an open port.": "Nenhum. O resultado foi uma porta aberta.",
++  "None. Result was an open port.": "Nenhum. O achado foi uma porta aberta.",
 +  "Not a valid CA Certificate file.": "Arquivo de certificado CA inválido.",
 +  "Not a valid Client Certificate file": "Arquivo de certificado de cliente inválido",
 +  "Not a valid Client Private Key file": "Arquivo de chave privada de cliente inválido",
@@ -9484,13 +9508,13 @@ index 10e592f..8071cad 100644
 +  "OID": "OID",
 +  "OK": "OK",
 +  "Old": "Antigo",
-+  "Oldest Result": "Resultado mais antigo",
++  "Oldest Result": "Achado mais antigo",
 +  "on": "em",
 +  "on port": "na porta",
 +  "Once": "Uma vez",
 +  "One more run not shown": "Mais uma execução não exibida",
-+  "Only selected result ({{- name}})": "Apenas o resultado selecionado ({{- name}})",
-+  "Only show hosts that have results": "Mostrar apenas hosts que têm resultados",
++  "Only selected result ({{- name}})": "Apenas o achado selecionado ({{- name}})",
++  "Only show hosts that have results": "Mostrar apenas hosts que têm achados",
 +  "Open": "Aberto",
 +  "Open all details": "Abrir todos os detalhes",
 +  "Open End": "Fim em aberto",
@@ -9511,36 +9535,36 @@ index 10e592f..8071cad 100644
 +  "Optional": "Opcional",
 +  "or": "ou",
 +  "Origin": "Origem",
-+  "Orphan": "Orfao",
++  "Orphan": "Órfão",
 +  "OS": "OS",
 +  "OS Conflict: {{best_os_txt}}": "Conflito de OS: {{best_os_txt}}",
 +  "OS Conflict: {{best_os_txt}} ({{best_os_cpe}})": "Conflito de OS: {{best_os_txt}} ({{best_os_cpe}})",
 +  "Other": "Outro",
 +  "Other Links": "Outros Links",
-+  "Override": "Override",
-+  "Override Default Scanner Preferences": "Sobrepor Preferencias Padrão do Scanner",
-+  "Override Details": "Detalhes do Override",
-+  "Override from {{- severity}} to {{- newSeverity}}": "Override de {{- severity}} para {{- newSeverity}}",
-+  "Override List": "Lista de Overrides",
-+  "Override Text": "Texto do Override",
-+  "Overrides": "Overrides",
-+  "Overrides by Active Days (Total: {{count}})": "Overrides por Dias Ativos (Total: {{count}})",
-+  "Overrides by Creation Time": "Overrides por Data de Criação",
-+  "Overrides Filter": "Filtro de Overrides",
-+  "Overrides for Task {{- name}}": "Overrides da Tarefa {{- name}}",
-+  "Overrides Text Word Cloud": "Nuvem de Palavras do Texto dos Overrides",
-+  "Overview": "Visao Geral",
++  "Override": "Exceção",
++  "Override Default Scanner Preferences": "Sobrepor Preferências Padrão do Scanner",
++  "Override Details": "Detalhes da Exceção",
++  "Override from {{- severity}} to {{- newSeverity}}": "Exceção de {{- severity}} para {{- newSeverity}}",
++  "Override List": "Lista de Exceções",
++  "Override Text": "Texto da Exceção",
++  "Overrides": "Exceções",
++  "Overrides by Active Days (Total: {{count}})": "Exceções por Dias Ativos (Total: {{count}})",
++  "Overrides by Creation Time": "Exceções por Data de Criação",
++  "Overrides Filter": "Filtro de Exceções",
++  "Overrides for Task {{- name}}": "Exceções da Tarefa {{- name}}",
++  "Overrides Text Word Cloud": "Nuvem de Palavras do Texto das Exceções",
++  "Overview": "Visão Geral",
 +  "Owned Ticket changed": "Ticket de propriedade alterado",
 +  "Owned Ticket Changed": "Ticket de Propriedade Alterado",
 +  "Owner": "Proprietário",
 +  "Owner:": "Proprietário:",
-+  "Package check": "Verificacao de pacote",
-+  "Page Not Found": "Página Nao Encontrada",
-+  "Page Not Found.": "Página Nao Encontrada.",
-+  "Parameter Details": "Detalhes do Parametro",
-+  "Parameters": "Parametros",
++  "Package check": "Verificação de pacote",
++  "Page Not Found": "Página Não Encontrada",
++  "Page Not Found.": "Página Não Encontrada.",
++  "Parameter Details": "Detalhes do Parâmetro",
++  "Parameters": "Parâmetros",
 +  "Partial": "Parcial",
-+  "Partition": "Particao",
++  "Partition": "Partição",
 +  "Passive": "Passivo",
 +  "Passphrase": "Frase secreta",
 +  "Passphrase for Client Private Key": "Frase secreta da Chave Privada do Cliente",
@@ -9554,7 +9578,7 @@ index 10e592f..8071cad 100644
 +  "Performance": "Desempenho",
 +  "Period": "Período",
 +  "Permission": "Permissão",
-+  "Permission deleted successfully.": "Permissão excluida com sucesso.",
++  "Permission deleted successfully.": "Permissão excluída com sucesso.",
 +  "Permission List": "Lista de Permissões",
 +  "Permission to clone {{entity}} denied": "Permissão para clonar {{entity}} negada",
 +  "Permission to create {{entity}} denied": "Permissão para criar {{entity}} negada",
@@ -9571,33 +9595,33 @@ index 10e592f..8071cad 100644
 +  "Permissions": "Permissões",
 +  "Permissions ({{count}})": "Permissões ({{count}})",
 +  "Permissions Filter": "Filtro de Permissões",
-+  "Permissions to create a ticket are insufficient. You need the create_permission and get_users permissions.": "As permissões para criar um ticket sao insuficientes. Voce precisa das permissões create_permission e get_users.",
++  "Permissions to create a ticket are insufficient. You need the create_permission and get_users permissions.": "As permissões para criar um ticket são insuficientes. Você precisa das permissões create_permission e get_users.",
 +  "Permissions to verify Scanner denied": "Permissões para verificar Scanner negadas",
 +  "PGP Encryption Key": "Chave de Criptografia PGP",
-+  "Physical": "Fisico",
++  "Physical": "Físico",
 +  "PKCS#12 File - alternative to separate certificate/key": "Arquivo PKCS#12 - alternativa a certificado/chave separados",
 +  "PKCS12 Credential": "Credencial PKCS12",
 +  "PKCS12 File": "Arquivo PKCS12",
 +  "Platform": "Plataforma",
 +  "Please be aware that:": "Esteja ciente de que:",
-+  "Please check the automatic synchronization of your system.": "Verifique a sincronizacao automatica do seu sistema.",
-+  "Please configure a TLS certificate for the HTTPS service or ask your administrator to do so as soon as possible.": "Configure um certificado TLS para o serviço HTTPS ou peca ao seu administrador para faze-lo o mais rapido possivel.",
-+  "Please consider enabling \"Time synchronization\" if the scans are not starting at the expected time.": "Considere habilitar a \"Sincronizacao de horario\" se as varreduras nao estiverem iniciando no horario esperado.",
++  "Please check the automatic synchronization of your system.": "Verifique a sincronização automática do seu sistema.",
++  "Please configure a TLS certificate for the HTTPS service or ask your administrator to do so as soon as possible.": "Configure um certificado TLS para o serviço HTTPS ou peça ao seu administrador para fazê-lo o mais rápido possível.",
++  "Please consider enabling \"Time synchronization\" if the scans are not starting at the expected time.": "Considere habilitar a \"Sincronização de horário\" se as varreduras não estiverem iniciando no horário esperado.",
 +  "Please enter a new password!": "Insira uma nova senha!",
 +  "Please enter your old password!": "Insira sua senha antiga!",
 +  "Please insert a name for the new filter": "Insira um nome para o novo filtro",
-+  "Please note that assigning a tag to {{count}} items may take several minutes.": "Observe que atribuir uma tag a {{count}} itens pode levar varios minutos.",
-+  "Please note: You are about to change your own personal user data as Super Admin! It is not possible to change the login name. If you have modified the login name, neither the login name nor any other changes made will be saved. If you have made any modifications other than the login name, the data will be saved when clicking OK, and you will be logged out immediately.": "Observação: Voce esta prestes a alterar seus proprios dados pessoais de usuário como Super Admin! Nao e possivel alterar o nome de login. Se voce modificou o nome de login, nem o nome de login nem quaisquer outras alteracoes feitas serao salvas. Se voce fez quaisquer modificacoes alem do nome de login, os dados serao salvos ao clicar em OK, e voce sera desconectado imediatamente.",
-+  "Please note: You are about to create a user without a role. This user will not have any permissions and as a result will not be able to login.": "Observação: Voce esta prestes a criar um usuário sem papel. Este usuário nao tera nenhuma permissão e, como resultado, nao podera fazer login.",
-+  "Please run these commands on the selected sensor network only; do not execute them on the master node.": "Execute estes comandos apenas na rede de sensores selecionada; nao os execute no no mestre.",
++  "Please note that assigning a tag to {{count}} items may take several minutes.": "Observe que atribuir uma tag a {{count}} itens pode levar vários minutos.",
++  "Please note: You are about to change your own personal user data as Super Admin! It is not possible to change the login name. If you have modified the login name, neither the login name nor any other changes made will be saved. If you have made any modifications other than the login name, the data will be saved when clicking OK, and you will be logged out immediately.": "Observação: Você está prestes a alterar seus próprios dados pessoais de usuário como Super Admin! Não é possível alterar o nome de login. Se você modificou o nome de login, nem o nome de login nem quaisquer outras alterações feitas serão salvas. Se você fez quaisquer modificações além do nome de login, os dados serão salvos ao clicar em OK, e você será desconectado imediatamente.",
++  "Please note: You are about to create a user without a role. This user will not have any permissions and as a result will not be able to login.": "Observação: Você está prestes a criar um usuário sem papel. Este usuário não terá nenhuma permissão e, como resultado, não poderá fazer login.",
++  "Please run these commands on the selected sensor network only; do not execute them on the master node.": "Execute estes comandos apenas na rede de sensores selecionada; não os execute no nó mestre.",
 +  "Please try again.": "Tente novamente.",
-+  "Please wait while the feed is syncing. Scans are not available during this time. For more information, visit the": "Aguarde enquanto o feed esta sincronizando. As varreduras nao estao disponíveis durante este período. Para mais informações, visite o",
++  "Please wait while the feed is syncing. Scans are not available during this time. For more information, visit the": "Aguarde enquanto o feed está sincronizando. As varreduras não estão disponíveis durante este período. Para mais informações, visite o",
 +  "POC": "POC",
-+  "Policies": "Politicas",
-+  "Policies Filter": "Filtro de Politicas",
-+  "Policies List": "Lista de Politicas",
-+  "Policy": "Politica",
-+  "Policy: {{name}}": "Politica: {{name}}",
++  "Policies": "Políticas",
++  "Policies Filter": "Filtro de Políticas",
++  "Policies List": "Lista de Políticas",
++  "Policy": "Política",
++  "Policy: {{name}}": "Política: {{name}}",
 +  "Port": "Porta",
 +  "Port Count": "Contagem de Portas",
 +  "Port Counts": "Contagens de Portas",
@@ -9613,7 +9637,7 @@ index 10e592f..8071cad 100644
 +  "Port Ranges ({{count}})": "Intervalos de portas ({{count}})",
 +  "PortList List": "Lista de listas de portas",
 +  "Ports": "Portas",
-+  "Preferences": "Preferencias",
++  "Preferences": "Preferências",
 +  "Prefs": "Prefs",
 +  "Present": "Presente",
 +  "Previous": "Anterior",
@@ -9623,14 +9647,14 @@ index 10e592f..8071cad 100644
 +  "Privacy Password": "Senha de privacidade",
 +  "Private Key": "Chave privada",
 +  "Private SSH Key": "Chave SSH privada",
-+  "Privileges Required": "Privilegios necessarios",
++  "Privileges Required": "Privilégios necessários",
 +  "Processing": "Processando",
 +  "Product": "Produto",
-+  "Product Detection Result": "Resultado de detecção de produto",
++  "Product Detection Result": "Achado de detecção de produto",
 +  "Protocol": "Protocolo",
-+  "Provider Urgency": "Urgencia do fornecedor",
-+  "Public Key": "Chave publica",
-+  "Public PGP Key": "Chave PGP publica",
++  "Provider Urgency": "Urgência do fornecedor",
++  "Public Key": "Chave pública",
++  "Public PGP Key": "Chave PGP pública",
 +  "Published": "Publicado",
 +  "Published:": "Publicado:",
    "QoD": "QoD",
@@ -9645,9 +9669,9 @@ index 10e592f..8071cad 100644
 +  "QoD-Type": "Tipo de QoD",
 +  "Quality of Detection": "Qualidade de detecção",
 +  "Queued": "Na fila",
-+  "Quick edit: Modify a task": "Edicao rapida: Modificar uma tarefa",
-+  "Quick start: Create a new task": "Inicio rapido: Criar uma nova tarefa",
-+  "Quick start: Immediately scan an IP address": "Inicio rapido: Varrer imediatamente um endereço IP",
++  "Quick edit: Modify a task": "Edição rápida: Modificar uma tarefa",
++  "Quick start: Create a new task": "Início rápido: Criar uma nova tarefa",
++  "Quick start: Immediately scan an IP address": "Início rápido: Varrer imediatamente um endereço IP",
 +  "RADIUS": "RADIUS",
 +  "RADIUS Authentication": "Autenticação RADIUS",
 +  "RADIUS Authentication Only": "Apenas autenticação RADIUS",
@@ -9656,18 +9680,18 @@ index 10e592f..8071cad 100644
 +  "read": "leitura",
 +  "Realm": "Realm",
 +  "Recent Activity": "Atividade recente",
-+  "Recovery": "Recuperacao",
++  "Recovery": "Recuperação",
 +  "Recur on day(s)": "Recorrer no(s) dia(s)",
-+  "Recurrence": "Recorrencia",
++  "Recurrence": "Recorrência",
 +  "Red": "Vermelho",
-+  "Reference Source": "Fonte de referencia",
-+  "Reference URL": "URL de referencia",
++  "Reference Source": "Fonte de referência",
++  "Reference URL": "URL de referência",
 +  "Referenced CVEs": "CVEs referenciados",
-+  "References": "Referencias",
-+  "References CVEs": "Referencia CVEs",
-+  "Registry check": "Verificacao de registro",
++  "References": "Referências",
++  "References CVEs": "CVEs referenciados",
++  "Registry check": "Verificação de registro",
 +  "related resource(s)": "recurso(s) relacionado(s)",
-+  "Remediation Tickets": "Tickets de remediacao",
++  "Remediation Tickets": "Tickets de remediação",
 +  "Remote active": "Ativo remoto",
 +  "Remote analysis": "Analise remota",
 +  "Remote app": "Aplicativo remoto",
@@ -9711,13 +9735,13 @@ index 10e592f..8071cad 100644
 +  "Report Configs Filter": "Filtro de configurações de relatório",
 +  "Report Configs List": "Lista de configurações de relatório",
 +  "Report Configs using this Report Format": "Configurações de relatório que usam este formato de relatório",
-+  "Report Content": "Conteudo do relatório",
-+  "Report content added to Assets with QoD>=70% and Overrides enabled.": "Conteudo do relatório adicionado aos ativos com QoD>=70% e overrides habilitados.",
-+  "Report content removed from Assets.": "Conteudo do relatório removido dos ativos.",
++  "Report Content": "Conteúdo do relatório",
++  "Report content added to Assets with QoD>=70% and Overrides enabled.": "Conteúdo do relatório adicionado aos ativos com QoD>=70% e exceções habilitadas.",
++  "Report content removed from Assets.": "Conteúdo do relatório removido dos ativos.",
 +  "Report Details": "Detalhes do relatório",
-+  "Report download not available": "Download do relatório nao disponível",
-+  "Report Export File Name": "Nome do arquivo de exportacao do relatório",
-+  "Report for Greenbone Sensor": "Relatório para o Greenbone Sensor",
++  "Report download not available": "Download do relatório não disponível",
++  "Report Export File Name": "Nome do arquivo de exportação do relatório",
++  "Report for Suricatoos Sensor": "Relatório do sensor Suricatoos",
 +  "Report for Last": "Relatório para o último",
 +  "Report for Last Day": "Relatório para o último dia",
 +  "Report for Last Hour": "Relatório da Última Hora",
@@ -9730,7 +9754,7 @@ index 10e592f..8071cad 100644
 +  "Report Formats Filter": "Filtro de Formatos de Relatório",
 +  "Report Formats List": "Lista de Formatos de Relatório",
 +  "Report is selected for delta comparison": "O relatório está selecionado para comparação delta",
-+  "Report Result Filter": "Filtro de Resultados do Relatório",
++  "Report Result Filter": "Filtro de Achados do Relatório",
 +  "Report Type": "Tipo de Relatório",
 +  "Report with ID": "Relatório com ID",
 +  "Report:": "Relatório:",
@@ -9741,7 +9765,7 @@ index 10e592f..8071cad 100644
 +  "Reports by Severity Class (Total: {{count}})": "Relatórios por Classe de Severidade (Total: {{count}})",
 +  "Reports Filter": "Filtro de Relatórios",
 +  "Reports List": "Lista de Relatórios",
-+  "Reports with High Results": "Relatórios com Resultados Altos",
++  "Reports with High Results": "Relatórios com Achados Altos",
 +  "Reports: Last": "Relatórios: Último",
 +  "Reports: Total": "Relatórios: Total",
 +  "Request canceled": "Requisição cancelada",
@@ -9758,31 +9782,31 @@ index 10e592f..8071cad 100644
 +  "Resources": "Recursos",
 +  "Response error": "Erro de resposta",
 +  "Restore": "Restaurar",
-+  "Result": "Resultado",
-+  "Result 1": "Resultado 1",
-+  "Result 2": "Resultado 2",
-+  "Result: {{name}}": "Resultado: {{name}}",
-+  "result(s) more than previous scan": "resultado(s) a mais que a varredura anterior",
-+  "result(s) NVT(s)": "resultado(s) NVT(s)",
-+  "Results": "Resultados",
-+  "Results aren't filtered by severity.": "Os resultados não estão filtrados por severidade.",
-+  "Results by CVSS (Total: {{count}})": "Resultados por CVSS (Total: {{count}})",
-+  "Results by Severity Class (Total: {{count}})": "Resultados por Classe de Severidade (Total: {{count}})",
-+  "Results Description Word Cloud": "Nuvem de Palavras de Descrição dos Resultados",
-+  "Results Filter": "Filtro de Resultados",
-+  "Results for Audit {{- name}}": "Resultados da Auditoria {{- name}}",
-+  "Results for Task {{- name}}": "Resultados da Tarefa {{- name}}",
-+  "Results for this Host": "Resultados deste Host",
-+  "Results List": "Lista de Resultados",
-+  "Results per Host": "Resultados por Host",
++  "Result": "Achado",
++  "Result 1": "Achado 1",
++  "Result 2": "Achado 2",
++  "Result: {{name}}": "Achado: {{name}}",
++  "result(s) more than previous scan": "achado(s) a mais que a varredura anterior",
++  "result(s) NVT(s)": "achado(s) NVT(s)",
++  "Results": "Achados",
++  "Results aren't filtered by severity.": "Os achados não estão filtrados por severidade.",
++  "Results by CVSS (Total: {{count}})": "Achados por CVSS (Total: {{count}})",
++  "Results by Severity Class (Total: {{count}})": "Achados por Classe de Severidade (Total: {{count}})",
++  "Results Description Word Cloud": "Nuvem de Palavras de Descrição dos Achados",
++  "Results Filter": "Filtro de Achados",
++  "Results for Audit {{- name}}": "Achados da Auditoria {{- name}}",
++  "Results for Task {{- name}}": "Achados da Tarefa {{- name}}",
++  "Results for this Host": "Achados deste Host",
++  "Results List": "Lista de Achados",
++  "Results per Host": "Achados por Host",
 +  "Results per page": "Resultados por página",
-+  "Results Vulnerability Word Cloud": "Nuvem de Palavras de Vulnerabilidades dos Resultados",
-+  "Results with compliance \"Incomplete\" are currently included.": "Resultados com conformidade \"Incompleta\" estão incluídos atualmente.",
-+  "Results with compliance \"Undefined\" are currently included.": "Resultados com conformidade \"Indefinida\" estão incluídos atualmente.",
-+  "Results with compliance \"Yes\" are currently included.": "Resultados com conformidade \"Sim\" estão incluídos atualmente.",
-+  "Results with log messages are currently included.": "Resultados com mensagens de log estão incluídos atualmente.",
-+  "Results with the severity \"Low\" are currently included.": "Resultados com a severidade \"Baixa\" estão incluídos atualmente.",
-+  "Results with the severity \"Medium\" are currently included.": "Resultados com a severidade \"Média\" estão incluídos atualmente.",
++  "Results Vulnerability Word Cloud": "Nuvem de Palavras de Vulnerabilidades dos Achados",
++  "Results with compliance \"Incomplete\" are currently included.": "Achados com conformidade \"Incompleta\" estão incluídos atualmente.",
++  "Results with compliance \"Undefined\" are currently included.": "Achados com conformidade \"Indefinida\" estão incluídos atualmente.",
++  "Results with compliance \"Yes\" are currently included.": "Achados com conformidade \"Sim\" estão incluídos atualmente.",
++  "Results with log messages are currently included.": "Achados com mensagens de log estão incluídos atualmente.",
++  "Results with the severity \"Low\" are currently included.": "Achados com a severidade \"Baixa\" estão incluídos atualmente.",
++  "Results with the severity \"Medium\" are currently included.": "Achados com a severidade \"Média\" estão incluídos atualmente.",
 +  "Resume": "Retomar",
 +  "Resume Requested": "Retomada Solicitada",
 +  "Retry": "Tentar Novamente",
@@ -9885,11 +9909,11 @@ index 10e592f..8071cad 100644
 +  "Scan Duration Report 1": "Relatório de duração da varredura 1",
 +  "Scan Duration Report 2": "Relatório de duração da varredura 2",
 +  "Scan is active": "A varredura está ativa",
-+  "Scan Results: False Positive": "Resultados da varredura: Falso positivo",
-+  "Scan Results: High": "Resultados da varredura: Alta",
-+  "Scan Results: Log": "Resultados da varredura: Log",
-+  "Scan Results: Low": "Resultados da varredura: Baixa",
-+  "Scan Results: Medium": "Resultados da varredura: Média",
++  "Scan Results: False Positive": "Achados da varredura: Falso positivo",
++  "Scan Results: High": "Achados da varredura: Alta",
++  "Scan Results: Log": "Achados da varredura: Log",
++  "Scan Results: Low": "Achados da varredura: Baixa",
++  "Scan Results: Medium": "Achados da varredura: Média",
 +  "Scan sensor": "Sensor de varredura",
 +  "Scan Status": "Status da varredura",
 +  "Scan Status Report 1": "Relatório de status da varredura 1",
@@ -10052,8 +10076,6 @@ index 10e592f..8071cad 100644
 +  "Supplemental Metrics": "Métricas complementares",
 +  "Support for LDAP is not available.": "O suporte a LDAP não está disponível.",
 +  "Support for RADIUS is not available.": "O suporte a RADIUS não está disponível.",
-+  "Switch language to English": "Mudar idioma para inglês",
-+  "Switch language to German": "Mudar idioma para alemão",
 +  "Sync Agents": "Sincronizar agentes",
 +  "Synchronization issue: {{error}}": "Problema de sincronização: {{error}}",
 +  "System Default": "Padrão do sistema",
@@ -10091,21 +10113,21 @@ index 10e592f..8071cad 100644
 +  "Table: Operating Systems by CVSS": "Tabela: Sistemas Operacionais por CVSS",
 +  "Table: Operating Systems by Severity Class": "Tabela: Sistemas Operacionais por Classe de Severidade",
 +  "Table: Operating Systems by Vulnerability Score": "Tabela: Sistemas Operacionais por Pontuação de Vulnerabilidade",
-+  "Table: Overrides by Active Days": "Tabela: Overrides por Dias Ativos",
-+  "Table: Overrides by Creation Time": "Tabela: Overrides por Hora de Criação",
-+  "Table: Overrides Text Word Cloud": "Tabela: Nuvem de Palavras do Texto dos Overrides",
++  "Table: Overrides by Active Days": "Tabela: Exceções por Dias Ativos",
++  "Table: Overrides by Creation Time": "Tabela: Exceções por Hora de Criação",
++  "Table: Overrides Text Word Cloud": "Tabela: Nuvem de Palavras do Texto das Exceções",
 +  "Table: Reports by CVSS": "Tabela: Relatórios por CVSS",
 +  "Table: Reports by Severity Class": "Tabela: Relatórios por Classe de Severidade",
-+  "Table: Reports with high Results": "Tabela: Relatórios com Resultados altos",
-+  "Table: Results by CVSS": "Tabela: Resultados por CVSS",
-+  "Table: Results by Severity Class": "Tabela: Resultados por Classe de Severidade",
-+  "Table: Results Description Word Cloud": "Tabela: Nuvem de Palavras da Descrição dos Resultados",
-+  "Table: Results Vulnerability Word Cloud": "Tabela: Nuvem de Palavras de Vulnerabilidade dos Resultados",
++  "Table: Reports with high Results": "Tabela: Relatórios com Achados altos",
++  "Table: Results by CVSS": "Tabela: Achados por CVSS",
++  "Table: Results by Severity Class": "Tabela: Achados por Classe de Severidade",
++  "Table: Results Description Word Cloud": "Tabela: Nuvem de Palavras da Descrição dos Achados",
++  "Table: Results Vulnerability Word Cloud": "Tabela: Nuvem de Palavras de Vulnerabilidade dos Achados",
 +  "Table: Tasks by CVSS": "Tabela: Tarefas por CVSS",
-+  "Table: Tasks by High Results per Host": "Tabela: Tarefas por Resultados Altos por Host",
++  "Table: Tasks by High Results per Host": "Tabela: Tarefas por Achados Altos por Host",
 +  "Table: Tasks by Severity Class": "Tabela: Tarefas por Classe de Severidade",
 +  "Table: Tasks by Status": "Tabela: Tarefas por Status",
-+  "Table: Tasks with most High Results per Host": "Tabela: Tarefas com mais Resultados Altos por Host",
++  "Table: Tasks with most High Results per Host": "Tabela: Tarefas com mais Achados Altos por Host",
 +  "Table: Tickets by Assigned User": "Tabela: Tickets por Usuário Atribuído",
 +  "Table: Tickets by Creation Time": "Tabela: Tickets por Hora de Criação",
 +  "Table: Tickets by Status": "Tabela: Tickets por Status",
@@ -10148,7 +10170,7 @@ index 10e592f..8071cad 100644
 +  "Task: {{name}}": "Tarefa: {{name}}",
 +  "Tasks": "Tarefas",
 +  "Tasks by CVSS (Total: {{count}})": "Tarefas por CVSS (Total: {{count}})",
-+  "Tasks by High Results per Host": "Tarefas por Resultados Altos por Host",
++  "Tasks by High Results per Host": "Tarefas por Achados Altos por Host",
 +  "Tasks by Severity Class (Total: {{count}})": "Tarefas por Classe de Severidade (Total: {{count}})",
 +  "Tasks by Status (Total: {{count}})": "Tarefas por Status (Total: {{count}})",
 +  "Tasks Filter": "Filtro de Tarefas",
@@ -10157,7 +10179,7 @@ index 10e592f..8071cad 100644
 +  "Tasks using this Scanner": "Tarefas que usam este Scanner",
 +  "Tasks using this Schedule": "Tarefas que usam este Agendamento",
 +  "Tasks using this Target ({{count}})": "Tarefas que usam este Alvo ({{count}})",
-+  "Tasks with most High Results per Host": "Tarefas com mais Resultados Altos por Host",
++  "Tasks with most High Results per Host": "Tarefas com mais Achados Altos por Host",
 +  "TCP": "TCP",
 +  "TCP Port Count": "Contagem de Portas TCP",
 +  "Term": "Termo",
@@ -10171,7 +10193,7 @@ index 10e592f..8071cad 100644
 +  "Text": "Texto",
 +  "Th.": "Qui.",
 +  "The {{entity}} you were looking for could not be found.": "O {{entity}} que você procurava não pôde ser encontrado.",
-+  "The {{entityType}} cannot be displayed in order to maintain the performance within the browser's capabilities. The report contains too many results. Please decrease the number of results below the threshold of {{threshold}} by applying a more refined filter.": "O {{entityType}} não pode ser exibido para manter o desempenho dentro das capacidades do navegador. O relatório contém resultados demais. Por favor, reduza o número de resultados abaixo do limite de {{threshold}} aplicando um filtro mais refinado.",
++  "The {{entityType}} cannot be displayed in order to maintain the performance within the browser's capabilities. The report contains too many results. Please decrease the number of results below the threshold of {{threshold}} by applying a more refined filter.": "O {{entityType}} não pode ser exibido para manter o desempenho dentro das capacidades do navegador. O relatório contém achados demais. Por favor, reduza o número de achados abaixo do limite de {{threshold}} aplicando um filtro mais refinado.",
 +  "The connection to this web application is not encrypted, allowing anyone listening to the traffic to steal your credentials.": "A conexão com esta aplicação web não está criptografada, permitindo que qualquer pessoa que esteja monitorando o tráfego roube suas credenciais.",
 +  "The current number of {{hostsCount}} hosts exceeds the maximum of {{maxHosts}}. Please apply a more specific filter.": "O número atual de {{hostsCount}} hosts excede o máximo de {{maxHosts}}. Por favor, aplique um filtro mais específico.",
 +  "The default address is either your computer or your network gateway.": "O endereço padrão é o seu computador ou o gateway da sua rede.",
@@ -10190,7 +10212,7 @@ index 10e592f..8071cad 100644
 +  "The Greenbone Enterprise License for this system is invalid. You can still use the system without restrictions, but you will not receive updates anymore. Please contact your administrator.": "A licença Greenbone Enterprise para este sistema é inválida. Você ainda pode usar o sistema sem restrições, mas não receberá mais atualizações. Entre em contato com seu administrador.",
 +  "The Greenbone Enterprise License for this system will expire in {{days}} days. After that your appliance remains valid and you can still use the system without restrictions, but you will not receive updates anymore. Please contact your administrator for extending the license.": "A licença Greenbone Enterprise para este sistema expirará em {{days}} dias. Depois disso, seu appliance permanece válido e você ainda pode usar o sistema sem restrições, mas não receberá mais atualizações. Entre em contato com seu administrador para estender a licença.",
 +  "The Greenbone Enterprise License for this system will expire in {{days}} days. After that your appliance remains valid and you can still use the system without restrictions, but you will not receive updates anymore. You can find information about extending your license on the": "A licença Greenbone Enterprise para este sistema expirará em {{days}} dias. Depois disso, seu appliance permanece válido e você ainda pode usar o sistema sem restrições, mas não receberá mais atualizações. Você pode encontrar informações sobre como estender sua licença em",
-+  "The Greenbone Vulnerability Manager service is not responding. This could be due to system maintenance. Please try again later, check the system status, or contact your system administrator.": "O serviço Greenbone Vulnerability Manager não está respondendo. Isso pode ser devido à manutenção do sistema. Tente novamente mais tarde, verifique o status do sistema ou entre em contato com o administrador do sistema.",
++  "The Greenbone Vulnerability Manager service is not responding. This could be due to system maintenance. Please try again later, check the system status, or contact your system administrator.": "O serviço Suricatoos Vulnerability Manager não está respondendo. Isso pode ser devido à manutenção do sistema. Tente novamente mais tarde, verifique o status do sistema ou entre em contato com o administrador do sistema.",
 +  "The last": "O último",
 +  "The Last": "O Último",
 +  "The last {{weekday}} every {{interval}} months": "O último {{weekday}} a cada {{interval}} meses",
@@ -10203,24 +10225,24 @@ index 10e592f..8071cad 100644
 +  "The performance report format {{format}} is not supported.": "O formato de relatório de desempenho {{format}} não é suportado.",
 +  "The policy is currently in use by one or more audits, therefore only name and comment can be modified.": "A política está em uso por uma ou mais auditorias no momento, portanto apenas o nome e o comentário podem ser modificados.",
 +  "The port range needs numerical values for start and end!": "O intervalo de portas precisa de valores numéricos para início e fim!",
-+  "The report cannot be displayed because no Greenbone Vulnerability Manager report format is available. This could be due to a missing gvmd data feed. Please update the gvmd data feed, check the \"feed import owner\" setting, or contact your system administrator.": "O relatório não pode ser exibido porque nenhum formato de relatório do Greenbone Vulnerability Manager está disponível. Isso pode ser devido à ausência do feed de dados gvmd. Atualize o feed de dados gvmd, verifique a configuração \"feed import owner\" ou entre em contato com o administrador do sistema.",
++  "The report cannot be displayed because no Suricatoos Vulnerability Manager report format is available. This could be due to a missing gvmd data feed. Please update the gvmd data feed, check the \"feed import owner\" setting, or contact your system administrator.": "O relatório não pode ser exibido porque nenhum formato de relatório do Suricatoos Vulnerability Manager está disponível. Isso pode ser devido à ausência do feed de dados gvmd. Atualize o feed de dados gvmd, verifique a configuração \"feed import owner\" ou entre em contato com o administrador do sistema.",
 +  "The report cannot be displayed because no report format is available. This could be due to a missing gvmd data feed. Please update the gvmd data feed, check the \"feed import owner\" setting, the feed status page, or contact your system administrator.": "O relatório não pode ser exibido porque nenhum formato de relatório está disponível. Isso pode ser devido à ausência do feed de dados gvmd. Atualize o feed de dados gvmd, verifique a configuração \"feed import owner\", a página de status do feed ou entre em contato com o administrador do sistema.",
-+  "The report is empty. The filter does not match any of the {{all}} results.": "O relatório está vazio. O filtro não corresponde a nenhum dos {{all}} resultados.",
++  "The report is empty. The filter does not match any of the {{all}} results.": "O relatório está vazio. O filtro não corresponde a nenhum dos {{all}} achados.",
 +  "The Report is empty. This can happen for the following reasons:": "O relatório está vazio. Isso pode ocorrer pelos seguintes motivos:",
 +  "The scan config is currently in use by one or more tasks, therefore only name and comment can be modified.": "A configuração de varredura está em uso por uma ou mais tarefas no momento, portanto apenas o nome e o comentário podem ser modificados.",
-+  "The scan did not collect any results": "A varredura não coletou nenhum resultado",
-+  "The scan is still running and no results have arrived yet": "A varredura ainda está em execução e nenhum resultado chegou ainda",
-+  "The scan just started and no results have arrived yet": "A varredura acabou de iniciar e nenhum resultado chegou ainda",
++  "The scan did not collect any results": "A varredura não coletou nenhum achado",
++  "The scan is still running and no results have arrived yet": "A varredura ainda está em execução e nenhum achado chegou ainda",
++  "The scan just started and no results have arrived yet": "A varredura acabou de iniciar e nenhum achado chegou ainda",
 +  "The Second": "O Segundo",
 +  "The Target and Task will be created using the defaults as configured in \"My Settings\".": "O alvo e a tarefa serão criados usando os padrões configurados em \"Minhas Configurações\".",
 +  "The target hosts could be regarded dead": "Os hosts alvo podem ser considerados inativos",
 +  "The Third": "O Terceiro",
 +  "The trial period for this system will end in {{days}} days. Please contact your administrator for purchasing a new license.": "O período de avaliação deste sistema terminará em {{days}} dias. Entre em contato com seu administrador para adquirir uma nova licença.",
 +  "The trial period for this system will end in {{days}} days. You can find further information about purchasing a license on the": "O período de avaliação deste sistema terminará em {{days}} dias. Você pode encontrar mais informações sobre como adquirir uma licença em",
-+  "There are notes for this result": "Existem notas para este resultado",
-+  "There are overrides for this result": "Existem overrides para este resultado",
-+  "There are tickets for this result": "Existem tickets para este resultado",
-+  "There may be results below the currently selected Quality of Detection (QoD).": "Pode haver resultados abaixo da Qualidade de Detecção (QoD) atualmente selecionada.",
++  "There are notes for this result": "Existem notas para este achado",
++  "There are overrides for this result": "Existem exceções para este achado",
++  "There are tickets for this result": "Existem tickets para este achado",
++  "There may be results below the currently selected Quality of Detection (QoD).": "Pode haver achados abaixo da Qualidade de Detecção (QoD) atualmente selecionada.",
 +  "There was an error fetching the feed. It will be retried in a few minutes.": "Ocorreu um erro ao buscar o feed. Será feita uma nova tentativa em alguns minutos.",
 +  "Third Party": "Terceiros",
 +  "This CPE does not appear in the CPE dictionary but is referenced by one or more CVE.": "Este CPE não aparece no dicionário CPE, mas é referenciado por um ou mais CVE.",
@@ -10272,10 +10294,9 @@ index 10e592f..8071cad 100644
 +  "To": "Para",
 +  "To address": "Endereço de destino",
 +  "To Address": "Endereço de Destino",
-+  "To change the filter, please filter your results on the report page. This filter will not be stored as default.": "Para alterar o filtro, filtre seus resultados na página do relatório. Este filtro não será armazenado como padrão.",
++  "To change the filter, please filter your results on the report page. This filter will not be stored as default.": "Para alterar o filtro, filtre seus achados na página do relatório. Este filtro não será armazenado como padrão.",
 +  "To change the filter, please select a filter from the dropdown menu.": "Para alterar o filtro, selecione um filtro no menu suspenso.",
 +  "To see all assigned resources click here:": "Para ver todos os recursos atribuídos, clique aqui:",
-+  "Toggle 2D/3D view": "Alternar visualização 2D/3D",
 +  "Toggle Legend": "Alternar Legenda",
 +  "Too many resources to list.": "Recursos demais para listar.",
 +  "Too old ({{age}} days)": "Muito antigo ({{age}} dias)",
@@ -10290,31 +10311,31 @@ index 10e592f..8071cad 100644
 +  "Total Hosts (High)": "Total de Hosts (Alto)",
 +  "Total Notes": "Total de Notas",
 +  "Total NVTs": "Total de NVTs",
-+  "Total Overrides": "Total de Overrides",
++  "Total Overrides": "Total de Exceções",
 +  "Total Reports for Audit {{- name}}": "Total de Relatórios para a Auditoria {{- name}}",
 +  "Total Reports for Task {{- name}}": "Total de Relatórios para a Tarefa {{- name}}",
 +  "Total Tickets": "Total de Tickets",
 +  "Total TLS Certificates": "Total de Certificados TLS",
 +  "Trashcan": "Lixeira",
-+  "Trend": "Tendencia",
++  "Trend": "Tendência",
 +  "Trigger Alert": "Disparar Alerta",
 +  "Trigger Alert for Compliance Report": "Disparar Alerta para Relatório de Conformidade",
 +  "Trigger Alert for Scan Report": "Disparar Alerta para Relatório de Varredura",
-+  "Trust": "Confianca",
-+  "Trust (Last Verified)": "Confianca (Última Verificacao)",
++  "Trust": "Confiança",
++  "Trust (Last Verified)": "Confiança (Última Verificação)",
 +  "Tu.": "Ter.",
 +  "Tuesday": "Terca-feira",
 +  "Type": "Tipo",
-+  "Type a resource UUID and press Enter. The system validates it: if found it is added to the selected resources; if missing you see \"UUID not found\"; if duplicate you see \"This resource is already selected\".": "Digite um UUID de recurso e pressione Enter. O sistema o válida: se encontrado, ele e adicionado aos recursos selecionados; se ausente, voce vera \"UUID nao encontrado\"; se duplicado, voce vera \"Este recurso ja esta selecionado\".",
++  "Type a resource UUID and press Enter. The system validates it: if found it is added to the selected resources; if missing you see \"UUID not found\"; if duplicate you see \"This resource is already selected\".": "Digite um UUID de recurso e pressione Enter. O sistema o valida: se encontrado, ele é adicionado aos recursos selecionados; se ausente, você verá \"UUID não encontrado\"; se duplicado, você verá \"Este recurso já está selecionado\".",
 +  "UDP": "UDP",
 +  "UDP Port Count": "Contagem de Portas UDP",
-+  "Ultimate Delete Requested": "Exclusao Definitiva Solicitada",
++  "Ultimate Delete Requested": "Exclusão Definitiva Solicitada",
 +  "Unchanged": "Inalterado",
 +  "undefined": "indefinido",
 +  "Undefined": "Indefinido",
 +  "Unfold": "Expandir",
 +  "Unfold all details": "Expandir todos os detalhes",
-+  "Unique ID of the application issuing password requests (required)": "ID unico do aplicativo que emite solicitacoes de senha (obrigatório)",
++  "Unique ID of the application issuing password requests (required)": "ID único do aplicativo que emite solicitações de senha (obrigatório)",
 +  "Unknown": "Desconhecido",
 +  "Unknown Error": "Erro Desconhecido",
 +  "Unknown error occurred": "Ocorreu um erro desconhecido",
@@ -10322,15 +10343,15 @@ index 10e592f..8071cad 100644
 +  "Unknown scanner type": "Tipo de scanner desconhecido",
 +  "Unknown scanner type ({{type}})": "Tipo de scanner desconhecido ({{type}})",
 +  "Unnamed": "Sem nome",
-+  "Unreliable exec. version": "Versão de exec. nao confiavel",
-+  "Unreliable package check": "Verificacao de pacote nao confiavel",
-+  "Unreliable rem. banner": "Banner rem. nao confiavel",
-+  "Unreported": "Nao relatado",
-+  "until {{- enddate}}": "ate {{- enddate}}",
++  "Unreliable exec. version": "Versão de exec. não confiável",
++  "Unreliable package check": "Verificação de pacote não confiável",
++  "Unreliable rem. banner": "Banner rem. não confiável",
++  "Unreported": "Não relatado",
++  "until {{- enddate}}": "até {{- enddate}}",
 +  "Update": "Atualizar",
-+  "Update available to:": "Atualizacao disponível para:",
++  "Update available to:": "Atualização disponível para:",
 +  "Update Filter": "Atualizar Filtro",
-+  "Update in progress...": "Atualizacao em andamento...",
++  "Update in progress...": "Atualização em andamento...",
 +  "Update to Latest": "Atualizar para a Versão Mais Recente",
 +  "Updated": "Atualizado",
 +  "Updated {{secinfo_type}} arrived": "{{secinfo_type}} atualizado chegou",
@@ -10343,7 +10364,7 @@ index 10e592f..8071cad 100644
 +  "Upload report": "Enviar relatório",
 +  "Upload server CA certificate (.pem, .crt)": "Enviar certificado de CA do servidor (.pem, .crt)",
 +  "Uploading": "Enviando",
-+  "Urgency": "Urgencia",
++  "Urgency": "Urgência",
 +  "URL": "URL",
 +  "URLs": "URLs",
 +  "Use LDAPS only": "Usar apenas LDAPS",
@@ -10351,9 +10372,9 @@ index 10e592f..8071cad 100644
 +  "Use System Default for Time and Date Format": "Usar Padrão do Sistema para Formato de Hora e Data",
 +  "Use workaround for default certificate": "Usar solução alternativa para certificado padrão",
 +  "User": "Usuário",
-+  "User {{name}} will be deleted.": "O usuário {{name}} sera excluido.",
++  "User {{name}} will be deleted.": "O usuário {{name}} será excluído.",
 +  "User ID": "ID do Usuário",
-+  "User Interaction": "Interacao do Usuário",
++  "User Interaction": "Interação do Usuário",
 +  "User Interface Language": "Idioma da Interface do Usuário",
 +  "User Tags": "Tags do Usuário",
 +  "User Tags ({{count}})": "Tags do Usuário ({{count}})",
@@ -10368,15 +10389,15 @@ index 10e592f..8071cad 100644
 +  "Users List": "Lista de Usuários",
 +  "Using Default": "Usando Padrão",
 +  "UUID": "UUID",
-+  "UUID not found. Please check the UUID and try again.": "UUID nao encontrado. Verifique o UUID e tente novamente.",
++  "UUID not found. Please check the UUID and try again.": "UUID não encontrado. Verifique o UUID e tente novamente.",
 +  "Valid": "Válido",
 +  "Value": "Valor",
 +  "Value Density": "Densidade de Valor",
 +  "Vault ID": "ID do Vault",
 +  "Vector": "Vetor",
 +  "Vendor": "Fornecedor",
-+  "Vendor Fix": "Correcao do Fornecedor",
-+  "Vendorfix": "Correcao do Fornecedor",
++  "Vendor Fix": "Correção do Fornecedor",
++  "Vendorfix": "Correção do Fornecedor",
 +  "Verify {{entity}}": "Verificar {{entity}}",
 +  "Verify Scanner": "Verificar Scanner",
 +  "verinice Connector": "Conector verinice",
@@ -10390,55 +10411,55 @@ index 10e592f..8071cad 100644
 +  "View details of CERT-Bund Advisory {{name}}": "Ver detalhes do comunicado CERT-Bund {{name}}",
 +  "View details of DFN-CERT Advisory {{name}}": "Ver detalhes do comunicado DFN-CERT {{name}}",
 +  "View details of product detection": "Ver detalhes da detecção do produto",
-+  "View Details of Schedule {{name}} (Next due: {{time}} Once)": "Ver detalhes do agendamento {{name}} (Proxima execução: {{time}} Uma vez)",
-+  "View Details of Schedule {{name}} (Next due: {{time}}, {{periods}} more times )": "Ver detalhes do agendamento {{name}} (Proxima execução: {{time}}, mais {{periods}} vezes )",
-+  "View Details of Schedule {{name}} (Next due: {{time}})": "Ver detalhes do agendamento {{name}} (Proxima execução: {{time}})",
-+  "View Details of Schedule {{name}} (Next due: over)": "Ver detalhes do agendamento {{name}} (Proxima execução: encerrado)",
-+  "View list of all reports for Task {{name}}, including unfinished ones": "Ver lista de todos os relatórios da tarefa {{name}}, incluindo os nao concluídos",
++  "View Details of Schedule {{name}} (Next due: {{time}} Once)": "Ver detalhes do agendamento {{name}} (Próxima execução: {{time}} Uma vez)",
++  "View Details of Schedule {{name}} (Next due: {{time}}, {{periods}} more times )": "Ver detalhes do agendamento {{name}} (Próxima execução: {{time}}, mais {{periods}} vezes )",
++  "View Details of Schedule {{name}} (Next due: {{time}})": "Ver detalhes do agendamento {{name}} (Próxima execução: {{time}})",
++  "View Details of Schedule {{name}} (Next due: over)": "Ver detalhes do agendamento {{name}} (Próxima execução: encerrado)",
++  "View list of all reports for Task {{name}}, including unfinished ones": "Ver lista de todos os relatórios da tarefa {{name}}, incluindo os não concluídos",
 +  "Vulnerabilities": "Vulnerabilidades",
 +  "Vulnerabilities by CVSS (Total: {{count}})": "Vulnerabilidades por CVSS (Total: {{count}})",
 +  "Vulnerabilities by Hosts (Total: {{count}})": "Vulnerabilidades por Hosts (Total: {{count}})",
 +  "Vulnerabilities by Severity Class (Total: {{count}})": "Vulnerabilidades por Classe de Severidade (Total: {{count}})",
-+  "Vulnerabilities did not change": "As vulnerabilidades nao mudaram",
++  "Vulnerabilities did not change": "As vulnerabilidades não mudaram",
 +  "Vulnerabilities Filter": "Filtro de Vulnerabilidades",
 +  "Vulnerability": "Vulnerabilidade",
-+  "Vulnerability (Severity) Score": "Pontuacao de Vulnerabilidade (Severidade)",
++  "Vulnerability (Severity) Score": "Pontuação de Vulnerabilidade (Severidade)",
 +  "Vulnerability count decreased": "Contagem de vulnerabilidades diminuiu",
 +  "Vulnerability count increased": "Contagem de vulnerabilidades aumentou",
 +  "Vulnerability Response Effort": "Esforco de Resposta a Vulnerabilidade",
-+  "Vulnerability Scoring": "Pontuacao de Vulnerabilidade",
-+  "Vulnerability was detected according to the Detection Method.": "A vulnerabilidade foi detectada de acordo com o Metodo de Detecção.",
-+  "Vulnerable Products": "Produtos Vulneraveis",
-+  "Vulnerable System Availability Impact": "Impacto na Disponibilidade do Sistema Vulneravel",
-+  "Vulnerable System Confidentiality Impact": "Impacto na Confidencialidade do Sistema Vulneravel",
-+  "Vulnerable System Impact Metrics": "Metricas de Impacto do Sistema Vulneravel",
-+  "Vulnerable System Integrity Impact": "Impacto na Integridade do Sistema Vulneravel",
-+  "Warning: Connection unencrypted": "Aviso: Conexão nao criptografada",
-+  "WARNING: Please be aware that the report has more results than the threshold of {{threshold}}. Therefore, this action can take a really long time to finish. It might even exceed the session timeout!": "AVISO: Esteja ciente de que o relatório tem mais resultados do que o limite de {{threshold}}. Portanto, esta ação pode levar muito tempo para ser concluída. Ela pode ate exceder o tempo limite da sessão!",
-+  "We are sorry. The page you have requested could not be found.": "Lamentamos. A página solicitada nao pode ser encontrada.",
++  "Vulnerability Scoring": "Pontuação de Vulnerabilidade",
++  "Vulnerability was detected according to the Detection Method.": "A vulnerabilidade foi detectada de acordo com o Método de Detecção.",
++  "Vulnerable Products": "Produtos Vulneráveis",
++  "Vulnerable System Availability Impact": "Impacto na Disponibilidade do Sistema Vulnerável",
++  "Vulnerable System Confidentiality Impact": "Impacto na Confidencialidade do Sistema Vulnerável",
++  "Vulnerable System Impact Metrics": "Métricas de Impacto do Sistema Vulnerável",
++  "Vulnerable System Integrity Impact": "Impacto na Integridade do Sistema Vulnerável",
++  "Warning: Connection unencrypted": "Aviso: Conexão não criptografada",
++  "WARNING: Please be aware that the report has more results than the threshold of {{threshold}}. Therefore, this action can take a really long time to finish. It might even exceed the session timeout!": "AVISO: Esteja ciente de que o relatório tem mais achados do que o limite de {{threshold}}. Portanto, esta ação pode levar muito tempo para ser concluída. Ela pode até exceder o tempo limite da sessão!",
++  "We are sorry. The page you have requested could not be found.": "Lamentamos. A página solicitada não pode ser encontrada.",
 +  "We.": "Qua.",
 +  "Web Application Scanner": "Scanner de Aplicação Web",
 +  "Web Application Target": "Alvo de Aplicação Web",
 +  "Web Application Targets": "Alvos de Aplicação Web",
-+  "Web Application Targets successfully deleted": "Alvos de Aplicação Web excluidos com sucesso",
++  "Web Application Targets successfully deleted": "Alvos de Aplicação Web excluídos com sucesso",
 +  "Web Application Task": "Tarefa de Aplicação Web",
 +  "Wednesday": "Quarta-feira",
 +  "Week": "Semana",
 +  "week(s)": "semana(s)",
 +  "Weekday": "Dia da semana",
-+  "Weekday, Day, Month, Year": "Dia da semana, Dia, Mes, Ano",
-+  "Weekday, Month, Day, Year": "Dia da semana, Mes, Dia, Ano",
++  "Weekday, Day, Month, Year": "Dia da semana, Dia, Mês, Ano",
++  "Weekday, Month, Day, Year": "Dia da semana, Mês, Dia, Ano",
 +  "Weekly": "Semanalmente",
 +  "Weekly (Sunday at midnight)": "Semanalmente (Domingo a meia-noite)",
-+  "When changing status to \"closed\", a \"Note for Closed\" is required.": "Ao alterar o status para \"fechado\", uma \"Nota para Fechado\" e obrigatoria.",
-+  "When changing status to \"fixed\", a \"Note for Fixed\" is required.": "Ao alterar o status para \"corrigido\", uma \"Nota para Corrigido\" e obrigatoria.",
-+  "When changing status to \"open\", a \"Note for Open\" is required.": "Ao alterar o status para \"aberto\", uma \"Nota para Aberto\" e obrigatoria.",
-+  "Will not fix": "Nao sera corrigido",
++  "When changing status to \"closed\", a \"Note for Closed\" is required.": "Ao alterar o status para \"fechado\", uma \"Nota para Fechado\" é obrigatória.",
++  "When changing status to \"fixed\", a \"Note for Fixed\" is required.": "Ao alterar o status para \"corrigido\", uma \"Nota para Corrigido\" é obrigatória.",
++  "When changing status to \"open\", a \"Note for Open\" is required.": "Ao alterar o status para \"aberto\", uma \"Nota para Aberto\" é obrigatória.",
++  "Will not fix": "Não será corrigido",
 +  "With Note": "Com Nota",
 +  "With Report": "Com Relatório",
 +  "Word Count": "Contagem de Palavras",
 +  "Workaround": "Solução alternativa",
-+  "Workweek (Monday till Friday)": "Semana util (Segunda a Sexta)",
++  "Workweek (Monday till Friday)": "Semana útil (Segunda a Sexta)",
 +  "write": "escrever",
 +  "Year": "Ano",
 +  "year(s)": "ano(s)",
@@ -10446,45 +10467,73 @@ index 10e592f..8071cad 100644
 +  "yes": "sim",
 +  "Yes": "Sim",
 +  "yes, always": "sim, sempre",
-+  "yes, for the next": "sim, pelas proximas",
-+  "yes, until": "sim, ate",
-+  "You are currently using the free OPENVAS COMMUNITY FEED - this shows only a few vulnerabilities for business critical enterprise software such as MS Exchange, Cisco, VMware, Citrix and many more. Over 60% of all relevant exploits remain hidden.": "Voce esta atualmente usando o OPENVAS COMMUNITY FEED gratuito - ele exibe apenas algumas vulnerabilidades para softwares corporativos criticos para os negocios, como MS Exchange, Cisco, VMware, Citrix e muitos outros. Mais de 60% de todos os exploits relevantes permanecem ocultos.",
-+  "You are leaving OPENVAS": "Voce esta saindo do OPENVAS",
-+  "You are using keywords setting a minimum limit on severity.": "Voce esta usando palavras-chave que definem um limite mínimo de severidade.",
-+  "You can choose, whether you want to run the scan immediately": "Voce pode escolher se deseja executar a varredura imediatamente",
-+  "you can create a new Task yourself.": "voce mesmo pode criar uma nova tarefa.",
-+  "You can find information about renewing your license on the": "Voce pode encontrar informações sobre a renovacao da sua licenca em",
-+  "You have been inactive, your session will expire in 3 minutes": "Voce ficou inativo, sua sessão expirara em 3 minutos",
-+  "You should change the Alive Test Method of the target for the next scan. However, if the target hosts are indeed dead, the scan duration might increase significantly.": "Voce deve alterar o Metodo de Teste de Atividade do alvo para a proxima varredura. No entanto, se os hosts alvo estiverem de fato inativos, a duração da varredura pode aumentar significativamente.",
-+  "Your changes have been saved.": "Suas alteracoes foram salvas.",
++  "yes, for the next": "sim, pelas próximas",
++  "yes, until": "sim, até",
++  "You are currently using the free OPENVAS COMMUNITY FEED - this shows only a few vulnerabilities for business critical enterprise software such as MS Exchange, Cisco, VMware, Citrix and many more. Over 60% of all relevant exploits remain hidden.": "Você está atualmente usando o OPENVAS COMMUNITY FEED gratuito - ele exibe apenas algumas vulnerabilidades para softwares corporativos críticos para os negócios, como MS Exchange, Cisco, VMware, Citrix e muitos outros. Mais de 60% de todos os exploits relevantes permanecem ocultos.",
++  "You are leaving OPENVAS": "Você está saindo do OPENVAS",
++  "You are using keywords setting a minimum limit on severity.": "Você está usando palavras-chave que definem um limite mínimo de severidade.",
++  "You can choose, whether you want to run the scan immediately": "Você pode escolher se deseja executar a varredura imediatamente",
++  "you can create a new Task yourself.": "você mesmo pode criar uma nova tarefa.",
++  "You can find information about renewing your license on the": "Você pode encontrar informações sobre a renovação da sua licença em",
++  "You have been inactive, your session will expire in 3 minutes": "Você ficou inativo, sua sessão expirará em 3 minutos",
++  "You should change the Alive Test Method of the target for the next scan. However, if the target hosts are indeed dead, the scan duration might increase significantly.": "Você deve alterar o Método de Teste de Atividade do alvo para a próxima varredura. No entanto, se os hosts alvo estiverem de fato inativos, a duração da varredura pode aumentar significativamente.",
++  "Your changes have been saved.": "Suas alterações foram salvas.",
 +  "Your filter settings may be too refined.": "Suas configurações de filtro podem estar muito restritivas.",
 +  "Your filter settings may be too unrefined.": "Suas configurações de filtro podem estar muito amplas.",
-+  "Your Greenbone Enterprise License has expired {{days}} days ago!": "Sua Licenca Greenbone Enterprise expirou ha {{days}} dias!",
-+  "Your Greenbone Enterprise License is invalid!": "Sua Licenca Greenbone Enterprise e inválida!",
-+  "Your Greenbone Enterprise License will expire in {{days}} days!": "Sua Licenca Greenbone Enterprise expirara em {{days}} dias!",
-+  "Your last filter change may be too restrictive.": "Sua última alteracao de filtro pode estar muito restritiva.",
++  "Your Greenbone Enterprise License has expired {{days}} days ago!": "Sua licença Greenbone Enterprise expirou há {{days}} dias!",
++  "Your Greenbone Enterprise License is invalid!": "Sua licença Greenbone Enterprise é inválida!",
++  "Your Greenbone Enterprise License will expire in {{days}} days!": "Sua licença Greenbone Enterprise expirará em {{days}} dias!",
++  "Your last filter change may be too restrictive.": "Sua última alteração de filtro pode estar muito restritiva.",
 +  "Language": "Idioma",
 +  "Select language": "Selecionar idioma",
-+  "Feed update": "Atualização de Feed",
++  "Feed update": "Atualização do feed",
 +  "Update feeds now": "Atualizar feeds agora",
 +  "Updating feeds...": "Atualizando feeds...",
 +  "Update now": "Atualizar agora",
 +  "Updating...": "Atualizando...",
-+  "Last update: {{time}} ({{result}})": "Última atualização: {{time}} ({{result}})",
 +  "Last update: never": "Última atualização: nunca",
 +  "Enable automatic update": "Habilitar atualização automática",
 +  "Frequency": "Frequência",
 +  "Day of week": "Dia da semana",
 +  "Save schedule": "Salvar agendamento",
 +  "Saved": "Salvo",
-+  "success": "sucesso",
 +  "{{count}} feed(s) updated": "{{count}} feed(s) atualizado(s)",
 +  "feeds already up to date": "feeds já estavam atualizados",
-+  "Last update: {{time}} — {{detail}}": "Última atualização: {{time}} — {{detail}}",
++  "Last update: {{- time}} — {{- detail}}": "Última atualização: {{- time}} — {{- detail}}",
 +  "No permission from this network. Feed management is restricted to the administration networks — connect to the VPN and reload.": "Sem permissão a partir desta rede. A gestão de feed é restrita às redes de administração — conecte a VPN e recarregue.",
 +  "Session expired. Sign in again to manage the feed.": "Sessão expirada. Entre novamente para gerenciar o feed.",
 +  "Status unavailable": "Status indisponível",
-+  "error": "erro"
++  "error": "erro",
++  "Activate Agent": "Ativar agente",
++  "Activate a Suricatoos Agent": "Ativar um agente Suricatoos",
++  "Choose the tenant and the platform — the command already carries the token of the tenant (dynamic). Copy it and run it on the host.": "Escolha o tenant e a plataforma — o comando já vem com o token do tenant embutido (dinâmico). Copie e rode no host.",
++  "Tenant": "Tenant",
++  "— select —": "— selecione —",
++  "Select a tenant first": "Selecione um tenant primeiro",
++  "Generating command…": "Gerando comando…",
++  "Error generating the command: {{- error}}": "Erro ao gerar o comando: {{- error}}",
++  "tenant": "tenant",
++  ", run it on the host:": ", rode no host:",
++  "Copy": "Copiar",
++  "Copied ✓": "Copiado ✓",
++  "Deployment token (up to {{max}} hosts)": "Token de implantação (até {{max}} hosts)",
++  "Single-use token": "Token de uso único",
++  "expires on {{- date}}": "expira em {{- date}}",
++  "Endpoint Agents": "Agentes de endpoint",
++  "Refresh": "Atualizar",
++  "Error loading the agents: {{- error}}": "Erro ao carregar os agentes: {{- error}}",
++  "No agents yet. Install one from the Activate Agent page.": "Nenhum agente ainda. Instale um pela página Ativar agente.",
++  "Online": "Online",
++  "Offline": "Offline",
++  "check-in {{- time}}": "check-in {{- time}}",
++  "Findings": "Achados",
++  "findings": "achados",
++  "{{critical}} critical · {{high}} high · {{medium}} medium": "{{critical}} crít. · {{high}} altos · {{medium}} médios",
++  "{{count}} report(s)": "{{count}} relatório(s)",
++  "View findings": "Ver achados",
++  "Scan now": "Varrer agora",
++  "Scan requested for {{- host}} — new collection in ~60 s.": "Varredura solicitada para {{- host}} — nova coleta em ~60 s.",
++  "EU": "UE"
 +}
 \ No newline at end of file
 diff --git a/public/suricatoos-theme.css b/public/suricatoos-theme.css
@@ -11351,7 +11400,7 @@ index d68da89..2bbd0cb 100644
    return (
      <StyledImage
 diff --git a/src/web/components/menu/Menu.tsx b/src/web/components/menu/Menu.tsx
-index 13fca0c..0fcbbe9 100644
+index 13fca0c..8166998 100644
 --- a/src/web/components/menu/Menu.tsx
 +++ b/src/web/components/menu/Menu.tsx
 @@ -6,7 +6,9 @@
@@ -11371,14 +11420,14 @@ index 13fca0c..0fcbbe9 100644
 +      // Suricatoos: ativação do agente de endpoint (página nativa da SPA).
 +      {
 +        icon: Download,
-+        label: _('Ativar Agente'),
++        label: _('Activate Agent'),
 +        to: '/downloads',
 +      },
 +      // Suricatoos: postura dos agentes de endpoint (severidade, online/offline,
 +      // re-scan). Página nativa da SPA — distinta do "Agents" do Greenbone.
 +      {
 +        icon: Server,
-+        label: _('Agentes de Endpoint'),
++        label: _('Endpoint Agents'),
 +        to: '/endpoint-agents',
 +      },
 +      // Suricatoos: AI provider configuration (native SPA page).
@@ -11391,28 +11440,28 @@ index 13fca0c..0fcbbe9 100644
    ];
    return (
 diff --git a/src/web/components/structure/Footer.tsx b/src/web/components/structure/Footer.tsx
-index 9775497..9bb4a1d 100644
+index 9775497..5c7d152 100644
 --- a/src/web/components/structure/Footer.tsx
 +++ b/src/web/components/structure/Footer.tsx
-@@ -28,14 +28,14 @@ const GreenboneFooter = () => {
- 
-   const linkHref =
-     language === 'de'
--      ? 'https://www.greenbone.net'
--      : 'https://www.greenbone.net/en';
-+      ? 'https://www.suricatoos.com'
-+      : 'https://www.suricatoos.com';
- 
-   return (
-     <Footer>
--      Copyright © 2009-2026 by Greenbone AG,&nbsp;
-+      Copyright © 2009-2026 by Suricatoos,&nbsp;
+@@ -37,6 +37,18 @@ const GreenboneFooter = () => {
        <Link href={linkHref} rel="noopener noreferrer" target="_blank">
--        www.greenbone.net
-+        www.suricatoos.com
+         www.greenbone.net
        </Link>
++      {/* Suricatoos: the fork next to the notice of Greenbone AG, which stays
++          as is (AGPL: copyright and attribution of the upstream). */}
++      <span>
++        &nbsp;·&nbsp;Suricatoos,&nbsp;
++        <Link
++          href="https://www.suricatoos.com"
++          rel="noopener noreferrer"
++          target="_blank"
++        >
++          www.suricatoos.com
++        </Link>
++      </span>
      </Footer>
    );
+ };
 diff --git a/src/web/components/structure/Header.tsx b/src/web/components/structure/Header.tsx
 index 6958f21..d703dc1 100644
 --- a/src/web/components/structure/Header.tsx
@@ -11609,10 +11658,10 @@ index a057cf9..409c93b 100644
    },
 diff --git a/src/web/pages/downloads/DownloadsPage.tsx b/src/web/pages/downloads/DownloadsPage.tsx
 new file mode 100644
-index 0000000..248f4e4
+index 0000000..49a43ce
 --- /dev/null
 +++ b/src/web/pages/downloads/DownloadsPage.tsx
-@@ -0,0 +1,234 @@
+@@ -0,0 +1,249 @@
 +/* SPDX-FileCopyrightText: 2024 Greenbone AG
 + *
 + * SPDX-License-Identifier: AGPL-3.0-or-later
@@ -11632,6 +11681,7 @@ index 0000000..248f4e4
 +import Section from 'web/components/section/Section';
 +import useGmp from 'web/hooks/useGmp';
 +import useTranslation from 'web/hooks/useTranslation';
++import useUserTimezone from 'web/hooks/useUserTimezone';
 +import {
 +  apiErrorMessage,
 +  apiRequest,
@@ -11639,6 +11689,7 @@ index 0000000..248f4e4
 +  SuricatoosApiError,
 +} from 'web/utils/suricatoosApi';
 +import Theme from 'web/utils/Theme';
++import {formattedUserSettingDateTimeWithTimeZone} from 'web/utils/user-setting-time-date-formatters';
 +
 +interface EnrollResponse {
 +  tenant: string;
@@ -11690,6 +11741,7 @@ index 0000000..248f4e4
 +
 +const DownloadsPage = () => {
 +  const [_] = useTranslation();
++  const [timezone] = useUserTimezone();
 +  const gmp = useGmp();
 +  const token: string = gmp.session.token ?? '';
 +  const [tenants, setTenants] = useState<string[]>([]);
@@ -11726,7 +11778,7 @@ index 0000000..248f4e4
 +  const pick = useCallback(
 +    async (tgt: string) => {
 +      if (!tenant) {
-+        setError(new Error(_('Selecione um tenant primeiro')));
++        setError(new Error(_('Select a tenant first')));
 +        return;
 +      }
 +      setTarget(tgt);
@@ -11760,13 +11812,13 @@ index 0000000..248f4e4
 +
 +  return (
 +    <React.Fragment>
-+      <PageTitle title={_('Ativar Agente')} />
++      <PageTitle title={_('Activate Agent')} />
 +      <Layout flex="column">
-+        <Section title={_('Ativar um Agente Suricatoos')} />
++        <Section title={_('Activate a Suricatoos Agent')} />
 +        <Layout flex="column">
 +          <p>
 +            {_(
-+              'Escolha o tenant e a plataforma — o comando já vem com o token do tenant embutido (dinâmico). Copie e rode no host.',
++              'Choose the tenant and the platform — the command already carries the token of the tenant (dynamic). Copy it and run it on the host.',
 +            )}
 +          </p>
 +          <Layout>
@@ -11782,7 +11834,7 @@ index 0000000..248f4e4
 +              }}
 +              style={selectStyle}
 +            >
-+              <option value="">{_('— selecione —')}</option>
++              <option value="">{_('— select —')}</option>
 +              {tenants.map(t => (
 +                <option key={t} value={t}>
 +                  {t}
@@ -11800,16 +11852,17 @@ index 0000000..248f4e4
 +            ))}
 +          </Layout>
 +
-+          {loading ? <p>{_('Gerando comando…')}</p> : null}
++          {loading ? <p>{_('Generating command…')}</p> : null}
 +          {error ? (
 +            <p style={{color: Theme.errorRed}}>
 +              {isSessionExpired(error)
 +                ? _('Session expired. Sign in again to activate agents.')
-+                : `${_('Erro ao gerar o comando')}: ${
-+                    error instanceof SuricatoosApiError
-+                      ? apiErrorMessage(_, error)
-+                      : error.message
-+                  }`}
++                : _('Error generating the command: {{- error}}', {
++                    error:
++                      error instanceof SuricatoosApiError
++                        ? apiErrorMessage(_, error)
++                        : error.message,
++                  })}
 +            </p>
 +          ) : null}
 +          {resp ? (
@@ -11817,7 +11870,7 @@ index 0000000..248f4e4
 +              <p style={{marginTop: '14px'}}>
 +                <b>{TARGETS.find(t => t.id === target)?.label}</b> — {_('tenant')}{' '}
 +                <b>{resp.tenant}</b>
-+                {_(', rode no host:')}
++                {_(', run it on the host:')}
 +              </p>
 +              <code style={codeBoxStyle}>{resp.command}</code>
 +              {resp.target === 'windows' ? (
@@ -11828,15 +11881,26 @@ index 0000000..248f4e4
 +                </p>
 +              ) : null}
 +              <Layout>
-+                <Button title={_('Copiar')} onClick={copy}>
-+                  {copied ? _('Copiado ✓') : _('Copiar')}
++                <Button title={_('Copy')} onClick={copy}>
++                  {copied ? _('Copied ✓') : _('Copy')}
 +                </Button>
 +              </Layout>
 +              <p style={{color: Theme.mediumGray, fontSize: '12px'}}>
 +                {resp.max_uses > 1
-+                  ? `${_('Token de deployment')} (${_('até')} ${resp.max_uses} ${_('hosts')})`
-+                  : _('Token de uso único')}
-+                {resp.expires_at ? ` · ${_('expira em')} ${resp.expires_at}` : ''}
++                  ? _('Deployment token (up to {{max}} hosts)', {
++                      max: String(resp.max_uses),
++                    })
++                  : _('Single-use token')}
++                {resp.expires_at
++                  ? ' · ' +
++                    _('expires on {{- date}}', {
++                      date:
++                        formattedUserSettingDateTimeWithTimeZone(
++                          resp.expires_at,
++                          timezone,
++                        ) ?? resp.expires_at,
++                    })
++                  : ''}
 +              </p>
 +            </div>
 +          ) : null}
@@ -11849,10 +11913,10 @@ index 0000000..248f4e4
 +export default DownloadsPage;
 diff --git a/src/web/pages/endpoint-agents/EndpointAgentsPage.tsx b/src/web/pages/endpoint-agents/EndpointAgentsPage.tsx
 new file mode 100644
-index 0000000..ce8ce8b
+index 0000000..13787ae
 --- /dev/null
 +++ b/src/web/pages/endpoint-agents/EndpointAgentsPage.tsx
-@@ -0,0 +1,346 @@
+@@ -0,0 +1,348 @@
 +/* SPDX-FileCopyrightText: 2024 Greenbone AG
 + *
 + * SPDX-License-Identifier: AGPL-3.0-or-later
@@ -11867,6 +11931,7 @@ index 0000000..ce8ce8b
 +
 +import React, {useState, useEffect, useCallback, useMemo, useRef} from 'react';
 +import {showSuccessNotification} from '@greenbone/ui-lib';
++import date from 'gmp/models/date';
 +import SeverityBar from 'web/components/bar/SeverityBar';
 +import Button from 'web/components/form/Button';
 +import Layout from 'web/components/layout/Layout';
@@ -11909,27 +11974,19 @@ index 0000000..ce8ce8b
 +  status: string;
 +}
 +
++// How long ago, in the language of the UI: the dayjs of the GSA follows it
++// ("há 5 minutos", "hace 5 minutos", "5 minutes ago"). A time ahead of this
++// clock counts as now; '—' when there is no valid time.
 +const relTime = (iso: string): string => {
 +  if (!iso) {
 +    return '—';
 +  }
-+  const t = Date.parse(iso);
-+  if (isNaN(t)) {
++  const t = date(iso);
++  if (!t.isValid()) {
 +    return '—';
 +  }
-+  const s = Math.max(0, Math.round((Date.now() - t) / 1000));
-+  if (s < 60) {
-+    return `há ${s}s`;
-+  }
-+  const m = Math.round(s / 60);
-+  if (m < 60) {
-+    return `há ${m} min`;
-+  }
-+  const h = Math.round(m / 60);
-+  if (h < 48) {
-+    return `há ${h} h`;
-+  }
-+  return `há ${Math.round(h / 24)} d`;
++  const now = date();
++  return (t.isAfter(now) ? now : t).fromNow();
 +};
 +
 +const badgeStyle = (bg: string): React.CSSProperties => ({
@@ -11946,7 +12003,7 @@ index 0000000..ce8ce8b
 +const StatusPill = ({agent}: {agent: Agent}) => {
 +  const [_] = useTranslation();
 +  let bg = Theme.mediumGray;
-+  let label = _('Desconhecido');
++  let label = _('Unknown');
 +  if (agent.status === 'online') {
 +    bg = Theme.statusNewGreen;
 +    label = _('Online');
@@ -11959,7 +12016,7 @@ index 0000000..ce8ce8b
 +      <span style={badgeStyle(bg)}>{label}</span>
 +      {agent.last_seen ? (
 +        <div style={{color: Theme.mediumGray, fontSize: '11px', marginTop: '3px'}}>
-+          check-in {relTime(agent.last_seen)}
++          {_('check-in {{- time}}', {time: relTime(agent.last_seen)})}
 +        </div>
 +      ) : null}
 +    </span>
@@ -12019,7 +12076,7 @@ index 0000000..ce8ce8b
 +        });
 +        showSuccessNotification(
 +          '',
-+          _('Scan solicitado para {{host}} — nova coleta em ~60s.', {host}),
++          _('Scan requested for {{- host}} — new collection in ~60 s.', {host}),
 +        );
 +        if (!mounted.current) {
 +          return;
@@ -12082,17 +12139,17 @@ index 0000000..ce8ce8b
 +
 +  return (
 +    <React.Fragment>
-+      <PageTitle title={_('Agentes de Endpoint')} />
++      <PageTitle title={_('Endpoint Agents')} />
 +      <Layout flex="column">
-+        <Section title={_('Agentes de Endpoint')} />
++        <Section title={_('Endpoint Agents')} />
 +        <Layout flex="column">
 +          <div style={{margin: '0 0 12px'}}>
 +            <Button
 +              disabled={isSessionExpired(error)}
-+              title={_('Atualizar')}
++              title={_('Refresh')}
 +              onClick={() => void refresh()}
 +            >
-+              {_('Atualizar')}
++              {_('Refresh')}
 +            </Button>
 +          </div>
 +            {error ? (
@@ -12101,14 +12158,16 @@ index 0000000..ce8ce8b
 +                  ? _(
 +                      'Session expired. Sign in again to see the endpoint agents.',
 +                    )
-+                  : `${_('Erro ao carregar')}: ${apiErrorMessage(_, error)}`}
++                  : _('Error loading the agents: {{- error}}', {
++                      error: apiErrorMessage(_, error),
++                    })}
 +              </p>
 +            ) : null}
 +            {loading ? (
-+              <p>{_('Carregando…')}</p>
++              <p>{_('Loading...')}</p>
 +            ) : agents.length === 0 ? (
 +              <p>
-+                {_('Nenhum agente ainda. Instale um pela página de Downloads.')}
++                {_('No agents yet. Install one from the Activate Agent page.')}
 +              </p>
 +            ) : (
 +              <Table>
@@ -12119,19 +12178,19 @@ index 0000000..ce8ce8b
 +                    <TableHead
 +                      {...sortProps}
 +                      sortBy="severity"
-+                      title={_('Severidade')}
++                      title={_('Severity')}
 +                    />
 +                    <TableHead
 +                      {...sortProps}
 +                      sortBy="findings"
-+                      title={_('Achados')}
++                      title={_('Findings')}
 +                    />
 +                    <TableHead
 +                      {...sortProps}
 +                      sortBy="last"
-+                      title={_('Último relatório')}
++                      title={_('Last Report')}
 +                    />
-+                    <TableHead title={_('Ações')} />
++                    <TableHead title={_('Actions')} />
 +                  </TableRow>
 +                </TableHeader>
 +                <TableBody>
@@ -12151,18 +12210,25 @@ index 0000000..ce8ce8b
 +                      </TableData>
 +                      <TableData>
 +                        <span style={{whiteSpace: 'nowrap'}}>
-+                          <b>{agent.findings}</b> {_('achados')}
++                          <b>{agent.findings}</b> {_('findings')}
 +                        </span>
 +                        {agent.findings > 0 ? (
 +                          <div style={{color: Theme.mediumGray, fontSize: '11px'}}>
-+                            {agent.critical} crít. · {agent.high} altos · {agent.medium} médios
++                            {_(
++                              '{{critical}} critical · {{high}} high · {{medium}} medium',
++                              {
++                                critical: String(agent.critical),
++                                high: String(agent.high),
++                                medium: String(agent.medium),
++                              },
++                            )}
 +                          </div>
 +                        ) : null}
 +                      </TableData>
 +                      <TableData>
 +                        {relTime(agent.last_report)}
 +                        <div style={{color: Theme.mediumGray, fontSize: '11px'}}>
-+                          {agent.reports} {_('relatório(s)')}
++                          {_('{{count}} report(s)', {count: String(agent.reports)})}
 +                        </div>
 +                      </TableData>
 +                      <TableData>
@@ -12176,14 +12242,14 @@ index 0000000..ce8ce8b
 +                        >
 +                          {agent.report_id ? (
 +                            <Link to={`report/${agent.report_id}`}>
-+                              {_('Ver achados')}
++                              {_('View findings')}
 +                            </Link>
 +                          ) : null}
 +                          <Button
-+                            title={_('Escanear agora')}
++                            title={_('Scan now')}
 +                            onClick={() => scanNow(agent.host)}
 +                          >
-+                            {_('Escanear agora')}
++                            {_('Scan now')}
 +                          </Button>
 +                        </div>
 +                      </TableData>
@@ -12221,10 +12287,10 @@ index b995df4..be67f0d 100644
              <TableRow>
 diff --git a/src/web/pages/extras/FeedUpdateSection.tsx b/src/web/pages/extras/FeedUpdateSection.tsx
 new file mode 100644
-index 0000000..0dfd0dd
+index 0000000..e0af31f
 --- /dev/null
 +++ b/src/web/pages/extras/FeedUpdateSection.tsx
-@@ -0,0 +1,314 @@
+@@ -0,0 +1,319 @@
 +/* SPDX-FileCopyrightText: 2026 Suricatoos
 + *
 + * SPDX-License-Identifier: AGPL-3.0-or-later
@@ -12240,6 +12306,7 @@ index 0000000..0dfd0dd
 +  type ApiRequestInit,
 +  usePolling,
 +} from 'web/utils/suricatoosApi';
++import {formattedUserSettingDateTimeWithTimeZone} from 'web/utils/user-setting-time-date-formatters';
 +
 +const API = '/feed-sync';
 +
@@ -12395,14 +12462,18 @@ index 0000000..0dfd0dd
 +  }
 +  // Com erro de leitura, NAO afirmar "nunca": nunca e' um fato sobre o feed, e
 +  // aqui o que houve foi nao conseguir perguntar.
++  // last_run vem sem fuso (o relogio do container do feed-updater): formatado
++  // no idioma e no formato de data do usuario, sem conversao de fuso.
 +  const lastLine =
 +    erro !== null
 +      ? _('Status unavailable')
 +      : running
 +        ? _('Updating feeds...')
 +        : status?.last_run
-+          ? _('Last update: {{time}} — {{detail}}', {
-+              time: status.last_run,
++          ? _('Last update: {{- time}} — {{- detail}}', {
++              time:
++                formattedUserSettingDateTimeWithTimeZone(status.last_run) ??
++                status.last_run,
 +              detail,
 +            })
 +          : _('Last update: never');
@@ -12755,19 +12826,6 @@ index 2856c11..1ba5568 100644
  );
  
  export default withEntitiesContainer('vulnerability', {
-diff --git a/src/web/utils/Render.tsx b/src/web/utils/Render.tsx
-index 39824b8..3834681 100644
---- a/src/web/utils/Render.tsx
-+++ b/src/web/utils/Render.tsx
-@@ -144,7 +144,7 @@ export const getTranslatableSeverityOrigin = (origin: string) => {
-     case 'Vendor':
-       return _('Vendor');
-     case 'Greenbone':
--      return _('Greenbone');
-+      return _('Suricatoos');
-     case 'NVD':
-       return _('NVD');
-     default:
 diff --git a/src/web/utils/Theme.tsx b/src/web/utils/Theme.tsx
 index dd0b390..9316ed8 100644
 --- a/src/web/utils/Theme.tsx
@@ -12811,7 +12869,7 @@ index dd0b390..9316ed8 100644
    Layers: {
 diff --git a/src/web/pages/ai-providers/AiProvidersPage.tsx b/src/web/pages/ai-providers/AiProvidersPage.tsx
 new file mode 100644
-index 0000000..5cd3437
+index 0000000..555aa0a
 --- /dev/null
 +++ b/src/web/pages/ai-providers/AiProvidersPage.tsx
 @@ -0,0 +1,1073 @@
@@ -13128,7 +13186,7 @@ index 0000000..5cd3437
 +        {p.base_url}
 +        {p.model ? ' · ' + p.model : ''}
 +        {' · '}
-+        {p.eu_region ? 'UE' : '-'}/{p.zdr ? 'ZDR' : '-'}
++        {p.eu_region ? _('EU') : '-'}/{p.zdr ? 'ZDR' : '-'}
 +        {' · '}
 +        {p.enabled ? _('enabled') : _('disabled')}
 +        {' · '}
