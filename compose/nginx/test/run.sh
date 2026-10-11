@@ -63,9 +63,9 @@ FORGED=(-H 'X-Suricatoos-Gate: gsad-session' -H 'X-Client-Cert-DN: CN=forjado'
         -H 'X-Operator: forjado')
 # Identidade de certificado forjada (com O/OU de sensor) e, em FORGED_ID, também a
 # de operador: as rotas de sessão e o /ingest/ sem mTLS não derivam identidade.
-FORGED_CERT=(-H 'X-Client-Cert-DN: CN=forjado,OU=scanner-sensor,O=lab'
+FORGED_UI_CERT=(-H 'X-Client-Cert-DN: CN=forjado,OU=scanner-sensor,O=lab'
              -H 'X-Client-Cert-Verify: SUCCESS' -H 'X-Client-Cert-Serial: 0A')
-FORGED_ID=("${FORGED_CERT[@]}" -H 'X-Operator: forjado')
+FORGED_ID=("${FORGED_UI_CERT[@]}" -H 'X-Operator: forjado')
 
 # Estado da execução.
 PASSED=0 FAILED=0 SEQ=0
@@ -799,7 +799,7 @@ cases_mtls() {
 cases_ingest_standalone() {
   local h
   begin_case "/ingest/ sem mTLS: GET /ingest/agents com marca de UI e identidade forjadas → ingest /agents sem nenhuma delas"
-  send GET /ingest/agents -H 'X-Suricatoos-UI: 1' "${FORGED_CERT[@]}"
+  send GET /ingest/agents -H 'X-Suricatoos-UI: 1' "${FORGED_UI_CERT[@]}"
   expect_status 200
   expect_upstream ingest GET /agents
   for h in X-Suricatoos-UI X-Client-Cert-DN X-Client-Cert-Verify X-Client-Cert-Serial; do
@@ -808,7 +808,7 @@ cases_ingest_standalone() {
   end_case
 
   begin_case "/ingest/ sem mTLS: POST /ingest/v1/sensor-report com identidade de sensor forjada → ingest sem X-Client-Cert-*"
-  send POST /ingest/v1/sensor-report "${FORGED_CERT[@]}"
+  send POST /ingest/v1/sensor-report "${FORGED_UI_CERT[@]}"
   expect_status 200
   expect_upstream ingest POST /v1/sensor-report
   for h in X-Suricatoos-UI X-Client-Cert-DN X-Client-Cert-Verify X-Client-Cert-Serial; do
