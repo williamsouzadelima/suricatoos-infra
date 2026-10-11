@@ -6,17 +6,24 @@ $defs entry, it targets, OFFLINE: the six schemas are loaded from disk into a
 `referencing` registry keyed by their $id; any other reference raises instead of
 being fetched over the network.
 
-  valid/<schema>/<case>.json    must parse (no duplicate key), validate and, for a
-                                signed command envelope, carry the right payload
-                                hash and a real Ed25519 signature
+  valid/<schema>/<case>.json    must parse (no duplicate key), validate and carry
+                                the right raw-byte hashes: a signed command envelope
+                                its payload_sha256 and a real Ed25519 signature, a
+                                state snapshot its content_sha256
   invalid/<schema>/<case>.json  must fail exactly as its "expect" in fleet/index.json
                                 says: {keyword, path} for a schema error (keyword +
                                 instance JSON pointer), or {check, path} for
                                 json_syntax (not exactly one JSON value, e.g. data
-                                after it) | duplicate_key | payload_sha256 | signature
+                                after it) | duplicate_key | payload_sha256 |
+                                signature | content_sha256
 
 A case named '<def>--<rest>.json' targets fleet-<schema>.schema.json#/$defs/<def>;
 any other case targets the schema root.
+
+Hashes cover the EXACT transmitted bytes (ADR-0011 "Codificação JSON"): the raw span
+of 'payload' inside a command envelope and of 'data' inside a state snapshot, as
+they are in the file -- never a re-serialization. One defect per case: an invalid
+case that fails on the schema must still carry correct hashes and signature.
 
 Signed envelopes are checked with an independent Python implementation of the
 ADR-0011 canonical form and the PUBLIC golden test key (seed = SHA-256 of
@@ -139,6 +146,13 @@ def envelope_problem(text, start):
     return None
 
 
+def snapshot_problem(text, start):
+    """None if content_sha256 of the state snapshot at text[start] covers the raw 'data' span, else 'content_sha256'."""
+    doc, _ = _DEC.raw_decode(text, start)
+    a, b = members(text, start)["data"]
+    return None if hashlib.sha256(text[a:b].encode("utf-8")).hexdigest() == doc["content_sha256"] else "content_sha256"
+
+
 def envelopes(target, text):
     """(JSON pointer, start) of every signed command envelope inside an example."""
     start = _ws(text, 0)
@@ -148,6 +162,39 @@ def envelopes(target, text):
         a, _ = members(text, start)["commands"]
         return [(f"/commands/{n}", s) for n, (s, _) in enumerate(elements(text, a))]
     return []
+
+
+def hashed(target, text):
+    """(JSON pointer, checker, start) of every raw-byte hash inside an example."""
+    out = [(ptr, envelope_problem, s) for ptr, s in envelopes(target, text)]
+    if target == "fleet-state.schema.json":
+        out.append(("", snapshot_problem, _ws(text, 0)))
+    return out
+
+
+def checkable(inst, ptr, checker):
+    """Whether the value at ptr is complete enough to recompute its hash (used for the one-defect rule)."""
+    for part in filter(None, ptr.split("/")):
+        try:
+            inst = inst[int(part)] if isinstance(inst, list) else inst[part]
+        except (KeyError, IndexError, ValueError, TypeError):
+            return False
+    if not isinstance(inst, dict):
+        return False
+    if checker is snapshot_problem:
+        return isinstance(inst.get("data"), dict) and isinstance(inst.get("content_sha256"), str)
+    return "payload" in inst and all(isinstance(inst.get(k), str) for k in SIGNED_FIELDS + ("signature",))
+
+
+def second_defect(target, text, inst):
+    """For an invalid case that already fails on the schema: a hash/signature that ALSO fails, if any."""
+    try:
+        for ptr, checker, start in hashed(target, text):
+            if checkable(inst, ptr, checker) and checker(text, start):
+                return f"{checker(text, start)} mismatch at '{ptr}'"
+    except (KeyError, IndexError, ValueError, TypeError):
+        return None
+    return None
 
 
 def adr_anchor(task_start_text):
@@ -251,7 +298,7 @@ def main():
     alternatives = {n: [r["$ref"].rsplit("/", 1)[-1] for r in schemas[n].get("oneOf", [])] for n in SCHEMAS}
     seen = {n: set() for n in SCHEMAS}
     tally = {n: {"valid": [0, 0], "invalid": [0, 0]} for n in SCHEMAS}
-    signed_ok = 0
+    signed_ok = snapshots_ok = 0
     task_start_text = None
 
     for rel in sorted(set(cases) & on_disk):
@@ -285,8 +332,8 @@ def main():
                 surprises.append(f"{rel}: unresolvable $ref with the offline registry (nothing fetched): {exc}")
                 continue
         if failure is None and not errors:
-            for ptr, start in envelopes(target, text):
-                problem = envelope_problem(text, start)
+            for ptr, checker, start in hashed(target, text):
+                problem = checker(text, start)
                 if problem:
                     failure = {"check": problem, "path": ptr, "detail": f"{problem} mismatch at '{ptr}'"}
                     break
@@ -298,6 +345,7 @@ def main():
             else:
                 tally[schema]["valid"][0] += 1
                 signed_ok += len(envelopes(target, text))
+                snapshots_ok += target == "fleet-state.schema.json"
                 root = "#" not in target
                 if schema == "command" and root:
                     seen[schema].add(inst["type"])
@@ -321,9 +369,13 @@ def main():
             else:
                 surprises.append(f"{rel}: fails with {failure['detail']}, but expect is {expect}")
         elif not errors:
-            surprises.append(f"{rel}: expected INVALID, but it validates (schema, payload hash and signature)")
+            surprises.append(f"{rel}: expected INVALID, but it validates (schema and raw-byte hashes)")
         elif (expect.get("keyword"), expect.get("path")) in set(flat_errors(errors)):
-            tally[schema]["invalid"][0] += 1
+            extra = second_defect(target, text, inst)
+            if extra:
+                surprises.append(f"{rel}: fails as expected, but carries a second defect ({extra}): one defect per case")
+            else:
+                tally[schema]["invalid"][0] += 1
         else:
             got = sorted(set(flat_errors(errors)))[:5]
             surprises.append(f"{rel}: fails, but not with {expect or 'an expect entry'}; got {got}")
@@ -358,6 +410,7 @@ def main():
     print(f"{'TOTAL':<10} {totals[0]:>4}/{totals[1]:<4} {totals[2]:>4}/{totals[3]:<4}")
     print("coverage: " + "; ".join(coverage))
     print(f"signed envelopes verified (payload sha256 + Ed25519, golden test key): {signed_ok}")
+    print(f"state snapshots verified (content_sha256 over the raw data span): {snapshots_ok}")
     print(f"jsonschema {version('jsonschema')}, referencing {version('referencing')}, "
           f"cryptography {version('cryptography')}, offline registry")
     if surprises:
@@ -365,8 +418,8 @@ def main():
         for s in surprises:
             print("  - " + s)
         return 1
-    print("OK: valid examples validate (signed envelopes verify), invalid ones fail for the expected reason,"
-          " and the ADR-0011 worked example is reproduced byte for byte")
+    print("OK: valid examples validate (signed envelopes and state hashes verify), invalid ones fail for the"
+          " expected reason only, and the ADR-0011 worked example is reproduced byte for byte")
     return 0
 
 
