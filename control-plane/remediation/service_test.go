@@ -164,13 +164,13 @@ func TestFullApprovalFlowHTTP(t *testing.T) {
 	p.Body.Close()
 
 	// Approve (admin + X-Operator) → signed.
-	ap := adminReq(t, "POST", srv.URL+"/api/v1/remediation/jobs/"+job.JobID+"/approve", "", "operator@strati")
+	ap := adminReq(t, "POST", srv.URL+"/api/v1/remediation/jobs/"+job.JobID+"/approve", "", "operator@example.com")
 	if ap.StatusCode != http.StatusOK {
 		t.Fatalf("approve = %d, want 200", ap.StatusCode)
 	}
 	appr := decodeJob(t, ap)
 	ap.Body.Close()
-	if appr.State != StateApproved || appr.Signature == "" || appr.ApprovedBy != "operator@strati" {
+	if appr.State != StateApproved || appr.Signature == "" || appr.ApprovedBy != "operator@example.com" {
 		t.Fatalf("approved job wrong: %+v", appr)
 	}
 	if !Verify(appr, key.Public()) {

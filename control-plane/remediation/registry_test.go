@@ -56,11 +56,11 @@ func TestEnqueueIsPendingUnsigned(t *testing.T) {
 func TestApproveSignsAndIsVerifiable(t *testing.T) {
 	r, key := testReg(t)
 	j := enq(t, r, "win1", "acme")
-	appr, err := r.Approve(j.JobID, "operator@strati")
+	appr, err := r.Approve(j.JobID, "operator@example.com")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if appr.State != StateApproved || appr.Signature == "" || appr.ApprovedBy != "operator@strati" {
+	if appr.State != StateApproved || appr.Signature == "" || appr.ApprovedBy != "operator@example.com" {
 		t.Fatalf("approve result wrong: %+v", appr)
 	}
 	if !Verify(appr, key.Public()) {
