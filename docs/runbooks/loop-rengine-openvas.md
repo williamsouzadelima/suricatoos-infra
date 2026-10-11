@@ -63,8 +63,9 @@ docker compose up -d --no-deps ingest
 ```
 
 Dispare um scan pelo reNgine e acompanhe: `docker logs -f greenbone-community-edition-ingest-1`
-(linhas `scanlaunch:`), a task `suricatoos-rengine-{id}` na GSA, e as `Vulnerability`
-`source=openvas` no reNgine.
+(linhas `scanlaunch:`), a task `suricatoos-rengine-{id}-{12 primeiros caracteres do request_id}`
+na GSA (um nome por pedido; jobs lançados antes disso seguem com `suricatoos-rengine-{id}`), e as
+`Vulnerability` `source=openvas` no reNgine.
 
 ## Verificações
 
