@@ -20,6 +20,9 @@
 #   destinos     zero "has been referenced but does not exist" no report.log:
 #                e' o proprio pdfTeX dizendo que um link do PDF nao tem destino
 #                (o portao de links abaixo olha o .tex; este, o documento);
+#   2a passada   zero "Rerun to get" / "Label(s) may have changed" no
+#                report.log FINAL: a passada entregue leu os rotulos (paginas
+#                do sumario) e a arvore de marcadores que a 1a escreveu;
 #   Type 3       zero fonte Type 3 no PDF do generate (pdffonts): Type 3 e'
 #                bitmap -- a face de verdade sumiu e o pdftex desenhou pixels;
 #   links/alvos  zero \hyperlink para alvo inexistente e
@@ -43,8 +46,12 @@
 #                cards da secao 5 no nivel 1, com o numero e o titulo do card),
 #                todo marcador aponta para um destino que existe, dentro da
 #                secao do pai, e a pagina que o sumario imprime (rotulo do
-#                report.aux do diagnostico) e' a pagina em que a secao abre.
-#                O PDF e' lido com a biblioteca padrao do python3 (zlib).
+#                report.aux do diagnostico) e' a pagina em que a secao abre;
+#                e, pelo TEXTO das paginas (pdftotext), cada marcador de card
+#                cai numa pagina com o "#N" dele, cada um de host numa com o
+#                IP dele, e o sumario impresso mostra, linha a linha, a pagina
+#                em que cai o marcador de cada secao. O PDF e' lido com a
+#                biblioteca padrao do python3 (zlib) e o pdftotext do poppler.
 #
 # Nota sobre links/alvos. A regua historica e' "#\hyperlink == #\hypertarget no
 # .tex", e ela vale enquanto o Sumario de Achados lista todos os achados (caso
@@ -223,6 +230,21 @@ if [ -f "$logf" ]; then
     gate falha "destinos do PDF" "$n_dest aviso(s) 'has been referenced but does not exist' do pdfTeX:"
     { grep -a -o -e 'name{[^}]*} has been referenced' -- "$tmpd/log.flat" || true; } \
       | sed -n '1,10p' | indent
+  fi
+
+  # A 2a passada e' a que o generate ENTREGA, e ela tem de ter lido tudo que a
+  # 1a escreveu: as paginas do sumario (rotulos suri-sec-N do .aux) e a arvore
+  # de marcadores (.out). A 1a passada sempre pede rerun -- e' por isso que ha
+  # duas --; se a 2a ainda pede, o PDF entregue tem pagina errada no sumario ou
+  # marcador velho. No log achatado, porque a frase pode vir partida em 79
+  # colunas.
+  n_rerun=$(count_matches 'Rerun to get\|Label(s) may have changed' "$tmpd/log.flat")
+  if [ "$n_rerun" -eq 0 ]; then
+    gate ok "2a passada estavel" "0 'Rerun to get' / 'Label(s) may have changed' no log final"
+  else
+    gate falha "2a passada estavel" "$n_rerun aviso(s) de rerun no log da 2a passada (a que e' entregue):"
+    { grep -a -o -e '.\{0,40\}Rerun to get.\{0,40\}' -e 'Label(s) may have changed.\{0,40\}' \
+        -- "$tmpd/log.flat" || true; } | sed -n '1,10p' | indent
   fi
 
   n_over=$(count_lines '^Overfull \\hbox' "$logf")

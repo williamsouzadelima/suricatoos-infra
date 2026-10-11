@@ -74,7 +74,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: poppler-utils no runner (pdffonts, pdfinfo, pdftoppm)
+      - name: poppler-utils no runner (pdffonts, pdfinfo, pdftoppm, pdftotext)
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq --no-install-recommends poppler-utils

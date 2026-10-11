@@ -31,11 +31,20 @@ e, com --pdf (o PDF que o generate entregou), sobre o documento compilado:
                  do sumario (sec-N);
   pdf-paginas    (com --aux) a pagina que o sumario IMPRIME para cada secao (o
                  rotulo suri-sec-N do .aux da compilacao) e' a pagina em que o
-                 marcador da secao cai.
+                 marcador da secao cai;
+  pdf-texto      o que as paginas MOSTRAM, pelo pdftotext do poppler: o
+                 marcador de cada secao cai na pagina que abre com "N Titulo";
+                 o sumario (a folha antes da secao 2) imprime, linha a linha, a
+                 pagina em que cai o marcador de cada secao; e cada marcador de
+                 card cai numa pagina com o "#N" DELE, cada um de host numa com
+                 o IP dele, cada tarja numa que a mostra -- um marcador uma
+                 pagina adiantado, ainda dentro da secao e em ordem, reprova.
+                 Sem pdftotext (ou se ele falhar) a checagem REPROVA.
 
 O PDF e' lido aqui mesmo, so' com a biblioteca padrao (zlib): objetos soltos e
 object streams (o pdfTeX comprime quase tudo nelas), arvore de paginas, arvore
-de nomes (/Dests) e /Outlines. Nada de qpdf/mutool na imagem do runner.
+de nomes (/Dests) e /Outlines. O texto das paginas vem do pdftotext
+(poppler-utils, que o runner ja' instala para pdfinfo/pdffonts/pdftoppm).
 
 Os textos (titulos das secoes, das tarjas e do sumario) e o teto
 $bookmark-max sao LIDOS do proprio latex.xsl, como no check-veracity.py.
@@ -43,6 +52,7 @@ $bookmark-max sao LIDOS do proprio latex.xsl, como no check-veracity.py.
 Uso:
     check-navigation.py --lang <en|pt_BR|es> --xml <fixture.xml> --tex <report.tex>
                         [--pdf <generate.pdf>] [--aux <report.aux>]
+                        [--pdftotext <pdftotext>]
                         [--bundle <suricatoos-premium-pdf/>] [--only <checagem>...]
 
 Sai 0 se tudo passa, 1 se alguma checagem reprova, 2 em erro de uso/leitura.
@@ -51,6 +61,7 @@ import argparse
 import importlib.util
 import os
 import re
+import subprocess
 import sys
 import unicodedata
 import xml.etree.ElementTree as ET
@@ -692,6 +703,119 @@ def pdf_text(b):
     return b.decode("latin-1")
 
 
+def pdf_pages_text(path, cmd):
+    """O texto de cada pagina, pelo pdftotext do poppler (-layout: uma linha do
+    sumario sai numa linha so', numero, titulo e pagina). Uma chamada para o
+    documento inteiro, com as paginas separadas por form feed -- o mesmo texto
+    de `pdftotext -f P -l P` pagina a pagina, sem 290 processos na tortura.
+    Devolve (paginas, erro): paginas[0] e' a pagina 1."""
+    try:
+        r = subprocess.run([cmd, "-layout", "-enc", "UTF-8", path, "-"],
+                           capture_output=True, timeout=900)
+    except (OSError, subprocess.SubprocessError) as e:
+        return None, "%s nao executou: %s" % (cmd, e)
+    if r.returncode != 0:
+        return None, "%s saiu %d: %s" % (cmd, r.returncode,
+                                         r.stderr.decode("utf-8", "replace").strip()[:200])
+    pages = r.stdout.decode("utf-8", "replace").split("\f")
+    if pages and not pages[-1].strip():
+        pages = pages[:-1]   # o form feed depois da ultima pagina
+    return pages, None
+
+
+def words_re(text):
+    """Um titulo como o pdftotext o escreve: as palavras na ordem, com qualquer
+    branco horizontal entre elas."""
+    return r"[ \t]+".join(re.escape(w) for w in nfc(text).split())
+
+
+def chars_re(text):
+    """Um IP ou hostname de faixa de card: os caracteres na ordem, aceitando
+    quebra de linha entre quaisquer dois (o TeX pode quebrar nos \\surjb)."""
+    return r"\s*".join(re.escape(c) for c in nfc(text) if not c.isspace())
+
+
+def check_text(pages, pdf, tree, sec_pages, nav, sheet, lang):
+    """O que o leitor VE nas paginas para onde os atalhos levam:
+      - cada marcador de secao cai na pagina que abre com "N Titulo";
+      - o sumario (a folha antes da secao 2) IMPRIME, para cada secao, a pagina
+        em que o marcador dela cai;
+      - cada marcador de card cai numa pagina que mostra o "#N" DELE, e cada
+        marcador de host numa que mostra o IP dele (o hostname, sem IP) -- cair
+        uma pagina antes, ainda dentro da secao e em ordem, nao passa mais;
+      - cada tarja da secao 5 numa pagina que a mostra."""
+    fails = []
+    if len(pages) != len(pdf.pages()):
+        return ["o pdftotext leu %d pagina(s), o PDF tem %d" % (len(pages), len(pdf.pages()))]
+
+    def text(p):
+        return nfc(pages[p - 1]) if p and 0 < p <= len(pages) else ""
+
+    for i, (t, _, _, _) in enumerate(tree[:len(SECTIONS)]):
+        n, p = i + 1, sec_pages[i]
+        title = t.split("  ", 1)[1] if "  " in t else t
+        if p and not re.search(r"(?m)^[ \t]*%d[ \t]+%s[ \t]*\r?$" % (n, words_re(title)), text(p)):
+            fails.append("secao %d: a pagina %d, do marcador, nao abre com '%d %s'" % (n, p, n, title))
+    # O sumario: a folha logo antes da que abre a secao 2.
+    if len(sec_pages) >= 2 and sec_pages[1]:
+        tp = sec_pages[1] - 1
+        page = text(tp)
+        toc_title = sheet.t("toc_title", lang)
+        if not re.search(r"(?m)^[ \t]*%s[ \t]*\r?$" % words_re(toc_title), page):
+            fails.append("a pagina %d (antes da secao 2) nao e' o sumario: sem a linha '%s'" % (tp, toc_title))
+        for i, (t, _, _, _) in enumerate(tree[:len(SECTIONS)]):
+            n = i + 1
+            title = t.split("  ", 1)[1] if "  " in t else t
+            mt = re.search(r"(?m)^[ \t]*%d[ \t]+%s[ \t]{2,}(\d+)[ \t]*\r?$" % (n, words_re(title)), page)
+            if not mt:
+                fails.append("o sumario (pagina %d) nao mostra a linha '%d %s  <pagina>'" % (tp, n, title))
+            elif sec_pages[i] and int(mt.group(1)) != sec_pages[i]:
+                fails.append("o sumario imprime a pagina %s para a secao %d, e o marcador dela cai na %d"
+                             % (mt.group(1), n, sec_pages[i]))
+    # Nivel 1: cada filho com o marcador do .tex que o declarou (mesma ordem; o
+    # que o pdf-arvore ja' reprovou por texto diferente fica de fora aqui).
+    for i, (t, _, _, kids) in enumerate(tree[:len(SECTIONS)]):
+        sec = str(i + 1)
+        bms = [b for b in nav.bookmarks if nav.section_of(b[0]) == sec]
+        for (kt, kd, _, _), b in zip(kids, bms):
+            if nfc(kt) != nfc(bm_plain(b[3])):
+                continue
+            name, k = b[2], b[5]
+            kp = pdf.dest_page(kd)
+            if kp is None:      # destino inexistente: o pdf-destinos ja' reprova
+                continue
+            page = text(kp)
+            if name.startswith("bm-fnd-"):
+                mt = re.match(r"#(\d+)", bm_plain(b[3]))
+                if mt and not re.search(r"(?<![\w#])#%s(?!\d)" % mt.group(1), page):
+                    fails.append("'%s' cai na pagina %d, que nao mostra o #%s do card"
+                                 % (kt[:60], kp, mt.group(1)))
+            elif name.startswith("bm-grp-"):
+                # O card consolidado nao imprime "#N" (o numero e' o da linha do
+                # grupo no sumario): a pagina tem de mostrar o TITULO dele, que
+                # pode quebrar de linha.
+                a = macro_at(nav.s, k, "consolidatedcard", 2)
+                title = norm_space(plain(re.sub(r"^\\hypertarget\{[^}]*\}\{\}", "", a[1])))
+                pat = r"\s+".join(re.escape(w) for w in nfc(title).split())
+                if title and not re.search(pat, page):
+                    fails.append("'%s' cai na pagina %d, que nao mostra o titulo do card ('%s')"
+                                 % (kt[:60], kp, title[:50]))
+            elif name.startswith("bm-host-"):
+                a = macro_at(nav.s, k, "hostcard", 2)
+                ip, hn = norm_space(plain(a[0])), norm_space(plain(a[1]))
+                # O IP inteiro, com fronteira dos dois lados (192.0.2.1 nao
+                # casa dentro de 192.0.2.10); sem IP, o comeco do hostname.
+                pat = (r"(?<![\w.:])%s(?![\w.:])" % chars_re(ip) if ip else
+                       r"(?<![\w.:])%s" % chars_re(hn[:30]) if hn else None)
+                if pat and not re.search(pat, page):
+                    fails.append("'%s' cai na pagina %d, que nao mostra o %s do host"
+                                 % (kt[:60], kp, "IP " + ip if ip else "hostname"))
+            elif name.startswith("bm-s5-"):
+                if not re.search(words_re(nfc(kt).upper()), page):
+                    fails.append("'%s' cai na pagina %d, que nao mostra a tarja" % (kt, kp))
+    return fails
+
+
 def expected_tree(nav, sheet, lang):
     """A arvore que o .tex declara: [(titulo da secao, [titulos dos filhos])]."""
     tree = []
@@ -702,9 +826,11 @@ def expected_tree(nav, sheet, lang):
     return tree
 
 
-def check_pdf(pdf, aux, nav, sheet, lang):
-    """pdf-arvore, pdf-destinos e pdf-paginas, numa leitura so' do PDF."""
-    out = {"pdf-arvore": [], "pdf-destinos": [], "pdf-paginas": []}
+def check_pdf(pdf, aux, nav, sheet, lang, pages=None, perr=None):
+    """pdf-arvore, pdf-destinos, pdf-paginas e pdf-texto, numa leitura so' do
+    PDF. pages/perr: o texto das paginas (pdf_pages_text) ou o erro do
+    pdftotext -- erro e' FALHA do pdf-texto, nunca checagem pulada."""
+    out = {"pdf-arvore": [], "pdf-destinos": [], "pdf-paginas": [], "pdf-texto": []}
     tree = pdf.outline()
     if not tree:
         # Sem arvore nao ha destino nem pagina a conferir: as duas checagens
@@ -763,6 +889,12 @@ def check_pdf(pdf, aux, nav, sheet, lang):
         elif i < len(sec_pages) and sec_pages[i] and tp != sec_pages[i]:
             out["pdf-destinos"].append("secao %d: o marcador cai na pagina %d e o link do sumario"
                                        " na %d" % (n, sec_pages[i], tp))
+    # O que as paginas MOSTRAM (pdftotext): o #N/IP de cada filho na pagina dele
+    # e os numeros que o sumario imprime.
+    if pages is None:
+        out["pdf-texto"].append(perr or "sem o texto das paginas (pdftotext)")
+    else:
+        out["pdf-texto"] = check_text(pages, pdf, tree, sec_pages, nav, sheet, lang)
     # A pagina impressa no sumario (rotulo suri-sec-N do .aux) e' a do marcador.
     if aux is None:
         out.pop("pdf-paginas")
@@ -799,6 +931,8 @@ def main():
     ap.add_argument("--tex", required=True)
     ap.add_argument("--pdf")
     ap.add_argument("--aux")
+    ap.add_argument("--pdftotext", default="pdftotext",
+                    help="o pdftotext do poppler (padrao: o do PATH; no runner, poppler-utils)")
     ap.add_argument("--bundle", default=os.path.join(os.path.dirname(HERE), "suricatoos-premium-pdf"))
     ap.add_argument("--only", action="append", default=[])
     args = ap.parse_args()
@@ -830,7 +964,8 @@ def main():
     if args.pdf and not (args.only and not any(o.startswith("pdf") for o in args.only)):
         try:
             pdf = Pdf(args.pdf)
-            for name, fails in check_pdf(pdf, aux, nav, sheet, args.lang).items():
+            pages, perr = pdf_pages_text(args.pdf, args.pdftotext)
+            for name, fails in check_pdf(pdf, aux, nav, sheet, args.lang, pages, perr).items():
                 if not args.only or name in args.only:
                     results.append((name, fails))
         except (OSError, PdfError, ValueError, KeyError, IndexError, zlib.error) as e:
