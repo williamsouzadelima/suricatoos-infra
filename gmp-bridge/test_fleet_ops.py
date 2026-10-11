@@ -1105,10 +1105,16 @@ class TestTaskWrites:
 
     def test_only_a_leading_fleet_prefix_is_replaced(self, gvmd):
         old = "fleet:11111111-2222-4333-8444-555555555555 "
-        gvmd.tasks[TASK]["comment"] = f"{old}{old}ver fleet:22222222-2222-4333-8444-555555555555 ok"
+        inner = "fleet:22222222-2222-4333-8444-555555555555 "
+        gvmd.tasks[TASK]["comment"] = f"{old}{old}ver {inner}ok"
         resp, code = run(gvmd, cmd("task.modify", {"task_id": TASK, "name": "n"}))
         assert_ok("task.modify", resp, code)
-        assert gvmd.tasks[TASK]["comment"] == f"fleet:{CID} ver fleet:22222222-2222-4333-8444-555555555555 ok"
+        assert gvmd.tasks[TASK]["comment"] == f"fleet:{CID} ver {inner}ok"
+        # no leading prefix: an embedded 'fleet:<uuid> ' is user text and stays
+        gvmd.tasks[TASK]["comment"] = f"ver {inner}ok"
+        resp, code = run(gvmd, cmd("task.modify", {"task_id": TASK, "name": "m"}))
+        assert_ok("task.modify", resp, code)
+        assert gvmd.tasks[TASK]["comment"] == f"fleet:{CID} ver {inner}ok"
 
     def test_modify_unlinks_schedule_with_id_zero(self, gvmd):
         gvmd.add_schedule(SCHED)
