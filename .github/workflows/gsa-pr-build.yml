@@ -124,6 +124,9 @@ jobs:
       # num catálogo só apareceria no navegador.
       - name: Catálogos de idioma (JSON válido, sem chave repetida)
         id: locales
+        # Roda mesmo com o type-check ou o build quebrados (o job continua
+        # falhando): os dois problemas aparecem no mesmo run.
+        if: ${{ !cancelled() && steps.gsa.outcome == 'success' }}
         working-directory: gsa-src
         run: |
           python3 - public/locales/*.json <<'PY'
