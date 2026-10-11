@@ -1,0 +1,48 @@
+name: compose-ci
+
+# Portao da topologia de redes do compose: o docker-socket-proxy so na rede
+# docker-api, control-plane/ingest fora da default, gvmd/ospd-openvas sem mudanca
+# de rede (mudar a rede deles obriga o deploy a recria-los e isso mata scan em
+# curso). Racional no bloco `networks:` de compose/docker-compose.override.yml.
+#
+# Sem build e sem daemon: `docker compose config` so resolve os YAMLs. O
+# verificador reprova se qualquer combinacao de COMPOSE_FILE em uso sair da
+# politica; os testes provam, por mutacao, que ele reprova de verdade.
+#
+# Local (com Docker):  python3 compose/test/check_networks.py --resolve
+# Local (sem Docker):  python3 -m unittest discover -s compose/test -v
+
+on:
+  push:
+    branches: [main, "feat/**"]
+    paths:
+      - "compose/*.yml"
+      - "compose/*.yaml"
+      - "compose/test/**"
+      - ".github/workflows/compose-ci.yml"
+  pull_request:
+    paths:
+      - "compose/*.yml"
+      - "compose/*.yaml"
+      - "compose/test/**"
+      - ".github/workflows/compose-ci.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  redes:
+    name: redes do compose (politica + resolve)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: versoes
+        run: |
+          docker --version
+          docker compose version
+          python3 --version
+      - name: self-test do verificador (controle positivo + mutacoes)
+        run: python3 -m unittest discover -s compose/test -v
+      - name: resolve as combinacoes de COMPOSE_FILE e confere a politica de redes
+        run: python3 compose/test/check_networks.py --resolve
