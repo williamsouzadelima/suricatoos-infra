@@ -87,9 +87,10 @@ ainda não recebeu o job e nada aconteceu em nenhum host. Mesmo bearer e, pelo m
 `X-Operator`), o operador vai no **corpo**, no campo `rejected_by` (`approved_by` continua aceito por
 compatibilidade). Sem operador — nem `X-Operator` nem corpo — a resposta é `400`. O job vira `REJECTED` com
 `rejected_by`/`rejected_at`; o aprovador (`approved_by`/`approved_at`) **não é alterado**. Id inexistente é
-`404`; **qualquer outro estado** — já entregue ao agente (`DELIVERED`, `ACKED`, `APPLIED`, `FAILED`) ou já
-final (`VERIFIED`, `EXPIRED`, `REJECTED`, `CLOSED`) — é `409` e o job fica como está. Para um job já entregue
-use o `close` (§3).
+`404`. Rejeitar um job que **já está `REJECTED`** responde `204` sem mudar nada (ficam o primeiro
+`rejected_by`/`rejected_at` e nada é logado: clique duplo ou reenvio não viram erro). **Qualquer outro
+estado** — já entregue ao agente (`DELIVERED`, `ACKED`, `APPLIED`, `FAILED`) ou já final (`VERIFIED`,
+`EXPIRED`, `CLOSED`) — é `409` e o job fica como está. Para um job já entregue use o `close` (§3).
 
 ```bash
 curl -sS -X POST https://scanner.suricatoos.com/agent/api/v1/remediation/jobs/<job_id>/reject \
@@ -133,8 +134,8 @@ job no próximo poll, verifica a assinatura/janela e aplica **dentro da janela**
   `APPROVED` ou `DELIVERED` sem ack viram `EXPIRED`). `ACKED` e `APPLIED` **não expiram**: o relatório
   do agente ainda é aceito depois do prazo e um job aplicado segue verificável. Jobs terminais
   (`VERIFIED`/`FAILED`/`EXPIRED`/`REJECTED`/`CLOSED`) criados há mais de 7 dias saem da fila no próximo
-  enfileiramento — **levando junto o `result`** (`before`/`rollback_token`), então anote o que precisar
-  antes; um job `ACKED`/`APPLIED` parado **não** é limpo sozinho — feche-o você, com cuidado:
+  enfileiramento — **levando junto o `result` e os `late_reports`** (`before`/`rollback_token`), então anote
+  o que precisar antes; um job `ACKED`/`APPLIED` parado **não** é limpo sozinho — feche-o você, com cuidado:
   - `APPLIED`: **prefira `verified`** (preserva o aprovador e o resultado). Use `close` só se o job não vai
     ser verificado (ex.: o fix foi revertido à mão, ou o host saiu de operação).
   - `ACKED` (o agente recebeu e sumiu): hoje o agente dá o `ack` **depois** de aplicar, então um `ACKED`
@@ -157,7 +158,7 @@ job no próximo poll, verifica a assinatura/janela e aplica **dentro da janela**
   | Quem / quando / por quê | `rejected_by`, `rejected_at` | `closed_by`, `closed_at`, `closed_reason` |
   | `approved_by` / `approved_at` | preservados | preservados |
   | `result` do agente (`before`, `rollback_token`) | não existe (nada foi entregue) | preservado |
-  | Qualquer outro estado | `409`, o job fica como está | `409`, o job fica como está |
+  | Qualquer outro estado | `409`, o job fica como está (já `REJECTED`: `204` sem efeito) | `409`, o job fica como está |
   | Log do control-plane | uma linha por rejeição efetiva | uma linha por fechamento efetivo |
 
   **Fechar** — `POST …/remediation/jobs/<job_id>/close`, mesmo bearer. O operador vai no **corpo**
@@ -177,26 +178,40 @@ job no próximo poll, verifica a assinatura/janela e aplica **dentro da janela**
   `GET …/remediation/jobs?state=CLOSED` lista os fechados (com `closed_by`/`closed_at`/`closed_reason`). O
   `close` **não recolhe** o que o agente possa estar aplicando: para impedir um agente de agir, revogue o cert
   (§5); para desfazer o efeito, §4.
-- **Relatório do agente depois de o job ficar final (`409`):** se o agente reporta um job que já está
-  `REJECTED`, `EXPIRED`, `CLOSED`, `FAILED` ou `VERIFIED`, o control-plane **não grava** o relatório — o
-  `result` já gravado nunca é sobrescrito — e responde `409` (no log do agente: `report respondeu 409`). Um
-  **reenvio idêntico** do que já está gravado (mesmos `status`, `detail`, `before`, `after`,
-  `rollback_token` e `reboot_pending`; o `reported_at` não conta) é `204` e não loga. Qualquer outro caso
-  grava **uma linha** no log do control-plane — é assim que o operador fica sabendo:
+- **Relatório do agente que o job não aceita mais (`409`):** quando o job já tem o `result` do agente — final
+  (`VERIFIED`, `FAILED`, `CLOSED`) ou `APPLIED` — ou já está encerrado sem ele (`EXPIRED`, `CLOSED` antes do
+  relatório, `REJECTED` de registro antigo), um relatório que **não é igual** ao gravado **nunca sobrescreve** o
+  `result`: o control-plane responde `409` ao agente (no log do agente: `report respondeu 409`), deixa **uma
+  linha** no log e **guarda o relatório inteiro no job**. Um **reenvio idêntico** do que já está gravado
+  (mesmos `status`, `detail`, `before`, `after`, `rollback_token` e `reboot_pending`; o `reported_at` não
+  conta) é `204` e não loga nem guarda nada. A linha de log — é assim que o operador fica sabendo — traz só o
+  status, o estado e o número do relatório:
 
   ```
-  remediation: relatório tardio recusado: job <id> está <ESTADO> e o agente reportou "<applied|failed>" (tenant="…" agent="…")
+  remediation: relatório tardio recusado: job <id> está <ESTADO> e o agente reportou "<applied|failed>" (late_report #<n>; tenant="…" agent="…")
+  ```
+
+  **Onde está o relatório:** no próprio job, em `late_reports` — a listagem (`GET …/remediation/jobs`, com o
+  bearer) e as respostas de `close`/`verified` o trazem com **tudo** que o agente mandou (`status`, `detail`,
+  `before`, `after`, `rollback_token`, `reboot_pending`; `reported_at` é a hora em que o servidor o recebeu).
+  O job guarda os **3 últimos** (o mais antigo sai) e `late_reports_total` diz quantos já foram recusados: o
+  mais novo guardado é o `#late_reports_total` da linha de log, o anterior é o `#late_reports_total − 1` e assim
+  por diante. A mesma retenção dos demais finais vale: tire o que precisar antes de o job sair da fila (7 dias).
+
+  ```bash
+  curl -sS "https://scanner.suricatoos.com/agent/api/v1/remediation/jobs?tenant=<tenant>&agent_id=<cn-do-host>" \
+    -H "Authorization: Bearer $ADMIN_SECRET"      # procure "late_reports" no job
   ```
 
   Um `applied` nessa linha quer dizer que o agente **aplicou uma mudança num job que a fila já dera por
   encerrado** — por exemplo, o job foi fechado enquanto o agente ainda aplicava, ou venceu (`EXPIRED`) antes de
-  o `ack`/relatório dele chegar (o `ack` só vem depois de aplicar). **O que fazer:** (1) confira o host: o `remediation.journal.json` tem
-  `"status":"applied"` para o `job_id` se a mudança foi feita; (2) decida se ela fica; (3) se não deve ficar, a
-  reversão é **manual** (§4): pelo `before`/`rollback_token` **gravado** no `result` do job, quando ele tem um
-  (ex.: `CLOSED` depois de `APPLIED` — veja na listagem), ou, se não tem, pelo `payload` aprovado, que diz o que
-  foi alterado. O relatório recusado **não é gravado** — nem o `before`/`rollback_token`/`detail` dele — e a
-  linha de log traz só o status; o journal do agente também guarda só status e horário. `APPLIED` não é final:
-  nele um relatório repetido continua sendo aceito em silêncio, sem sobrescrever o `result`.
+  o `ack`/relatório dele chegar (o `ack` só vem depois de aplicar). **O que fazer:** (1) leia o
+  `late_reports` do job: o `before`, o `after` e o `rollback_token` que o agente informou; (2) confira o host
+  (o `remediation.journal.json`, no diretório de estado do agente, tem `"status":"applied"` para o `job_id` se a
+  mudança foi feita — mas guarda só status e horário, nada de `before`); (3) decida se a mudança fica; (4) se
+  não deve ficar, reverta **à mão** (§4) com esse `before`/`rollback_token`. O `result` do job continua sendo o
+  do primeiro relatório. Num `APPLIED` o relatório diferente também é recusado e guardado, e o job continua
+  `APPLIED` e verificável.
 
 ## 4. Reverter (rollback)
 
@@ -204,9 +219,9 @@ job no próximo poll, verifica a assinatura/janela e aplica **dentro da janela**
   anterior) e devolve `rollback_token` + `before` no resultado.
 - Reversão hoje é **assistida/manual** (restaurar o valor `before` / usar o System Restore do lote);
   desinstalação de KB é documentada, não automática.
-- `before`/`rollback_token` só existem na nuvem se o relatório foi **gravado** (`result` do job, visível na
-  listagem e na resposta do `close`) e saem da fila com o job terminal, depois de 7 dias (§3): o journal do agente
-  guarda só status e horário. Um relatório recusado com `409` (§3) não deixa esses valores na nuvem.
+- `before`/`rollback_token` só existem na nuvem no `result` do job ou, se o relatório foi recusado com `409`
+  (§3), em `late_reports` (a listagem e a resposta do `close` mostram os dois); o journal do agente guarda só
+  status e horário. Saem da fila com o job terminal, 7 dias depois da criação (§3): anote o que precisar antes.
 - Config sob **GPO/Intune/WSUS** (`HKLM\SOFTWARE\Policies`) **não** é corrigida localmente (o domínio
   reverteria) — o achado recomenda mudar a **política**. Isso evita o fix "que não cola".
 

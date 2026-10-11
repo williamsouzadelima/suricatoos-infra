@@ -154,6 +154,12 @@ type RemediationJob struct {
 	DeliveredAt   time.Time       `json:"delivered_at,omitempty"`
 	AckedAt       time.Time       `json:"acked_at,omitempty"`
 	Result        *Result         `json:"result,omitempty"`
+	// LateReports keeps the reports the queue refused (see Registry.Report) whole, so
+	// an operator can still reach their before/rollback_token: the last maxLateReports
+	// of them, oldest dropped; LateReportsTotal counts every one ever refused, so the
+	// newest kept is #LateReportsTotal (the number the audit line quotes).
+	LateReports      []Result `json:"late_reports,omitempty"`
+	LateReportsTotal int      `json:"late_reports_total,omitempty"`
 }
 
 // EnqueueRequest is the internal request to create a PENDING_APPROVAL job. The
@@ -175,5 +181,6 @@ func (j *RemediationJob) clone() *RemediationJob {
 		r := *j.Result
 		cp.Result = &r
 	}
+	cp.LateReports = append([]Result(nil), j.LateReports...)
 	return &cp
 }

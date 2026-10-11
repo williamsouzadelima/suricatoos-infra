@@ -116,9 +116,10 @@ func (s *Service) AckHandler() http.HandlerFunc {
 // ReportHandler serves POST /v1/remediation-jobs/{id}/report: the agent reports
 // its apply result (applied/failed + before/after/rollback_token). Scoped to
 // CN+O; foreign/unknown id (or a job never handed out) → 404. APPLIED is not
-// terminal — the server verifies later by re-scan. A report that arrives after the
-// job went final (rejected, expired, closed, ...) is a 409 unless it repeats the
-// result already on record (204): see Registry.Report.
+// terminal — the server verifies later by re-scan. A report that arrives when the job
+// already holds the agent's result (final, or APPLIED) or was dropped (rejected,
+// expired, closed) is a 409 unless it repeats the result already on record (204); the
+// refused one is kept on the job (late_reports): see Registry.Report.
 func (s *Service) ReportHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id, ok := s.auth(w, r)
@@ -245,9 +246,9 @@ func (s *Service) ApproveHandler() http.HandlerFunc {
 // operator is REQUIRED and recorded as rejected_by: X-Operator, or — because nginx
 // clears that header on /agent/api/ — rejected_by in the body (approved_by is still
 // accepted for compatibility with the older runbook); the job's approver is left
-// untouched. 404 when the job does not exist; 409 when it is in any other state —
-// a job already handed to the agent is taken out of the queue with close instead.
-// See Registry.Reject.
+// untouched. 404 when the job does not exist; 204, without any change, when it is
+// already REJECTED; 409 when it is in any other state — a job already handed to the
+// agent is taken out of the queue with close instead. See Registry.Reject.
 func (s *Service) RejectHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if !s.adminOK(w, r) {
@@ -435,6 +436,12 @@ type jobView struct {
 	DeliveredAt   time.Time `json:"delivered_at,omitzero"`
 	AckedAt       time.Time `json:"acked_at,omitzero"`
 	Result        *Result   `json:"result,omitempty"` // the agent's report (status/detail/before/after/rollback_token)
+	// Reports the queue refused (409) because the job was final, or APPLIED with a
+	// different result: the last three, whole — rollback_token included, for the manual
+	// revert — and how many were ever refused (the newest kept is #late_reports_total,
+	// the number in the audit line's "late_report #n"). Omitted when there are none.
+	LateReports      []Result `json:"late_reports,omitempty"`
+	LateReportsTotal int      `json:"late_reports_total,omitempty"`
 }
 
 // newJobView projects j (callers pass a clone, so Result is safe to share).
@@ -446,7 +453,7 @@ func newJobView(j *RemediationJob) jobView {
 		ClosedBy: j.ClosedBy, ClosedAt: j.ClosedAt, ClosedReason: j.ClosedReason,
 		NotBefore: j.NotBefore, NotAfter: j.NotAfter,
 		ExpiresAt: j.ExpiresAt, CreatedAt: j.CreatedAt, DeliveredAt: j.DeliveredAt, AckedAt: j.AckedAt,
-		Result: j.Result,
+		Result: j.Result, LateReports: j.LateReports, LateReportsTotal: j.LateReportsTotal,
 	}
 }
 
