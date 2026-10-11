@@ -12749,16 +12749,16 @@ index dd0b390..9316ed8 100644
    Layers: {
 diff --git a/src/web/pages/ai-providers/AiProvidersPage.tsx b/src/web/pages/ai-providers/AiProvidersPage.tsx
 new file mode 100644
-index 0000000..51722c0
+index 0000000..b1435ce
 --- /dev/null
 +++ b/src/web/pages/ai-providers/AiProvidersPage.tsx
-@@ -0,0 +1,1013 @@
+@@ -0,0 +1,1107 @@
 +/* SPDX-FileCopyrightText: 2026 Suricatoos
 + *
 + * SPDX-License-Identifier: AGPL-3.0-or-later
 + */
 +
-+import React, {useCallback, useEffect, useState} from 'react';
++import React, {useCallback, useEffect, useRef, useState} from 'react';
 +import {
 +  Alert,
 +  Anchor,
@@ -12768,7 +12768,6 @@ index 0000000..51722c0
 +  Group,
 +  Loader,
 +  Paper,
-+  PasswordInput,
 +  Select,
 +  Stack,
 +  Switch,
@@ -12870,7 +12869,7 @@ index 0000000..51722c0
 +  presets: string[];
 +  providers: Provider[];
 +  token: string;
-+  deleting: string;
++  deleting: ReadonlySet<string>;
 +  notice: Notice | null;
 +  onSaved: (p: Provider) => void;
 +  onDelete: (p: Provider) => void;
@@ -12879,7 +12878,7 @@ index 0000000..51722c0
 +interface GenericProvidersProps {
 +  providers: Provider[];
 +  token: string;
-+  deleting: string;
++  deleting: ReadonlySet<string>;
 +  notice: Notice | null;
 +  onNotice: (n: Notice | null) => void;
 +  onSaved: (p: Provider) => void;
@@ -12973,9 +12972,8 @@ index 0000000..51722c0
 +  if (!(e instanceof ErroHttp)) {
 +    return _('Could not reach the server.');
 +  }
-+  if (e.detail !== '') {
-+    return e.detail;
-+  }
++  // For these the fixed message wins over any body: what the operator must do
++  // next does not depend on it.
 +  switch (e.status) {
 +    case 401:
 +      return _('Session expired. Sign in again to manage AI providers.');
@@ -12983,20 +12981,53 @@ index 0000000..51722c0
 +      return _('No permission to manage AI providers.');
 +    case 404:
 +      return _('Not found. Reload the page.');
-+    case 429:
-+    case 503:
-+      // nginx rate-limits this API (limit_req answers 503 by default).
-+      return _(
-+        'The server is busy or limiting requests ({{status}}). Wait a minute and try again.',
-+        {status: String(e.status)},
-+      );
 +    case 500:
 +      return _('Internal server error.');
-+    default:
-+      return _('The server answered with an error ({{status}}).', {
-+        status: String(e.status),
-+      });
 +  }
++  if (e.detail !== '') {
++    return e.detail;
++  }
++  if (e.status === 429 || e.status === 503) {
++    // nginx rate-limits this API (limit_req answers 503 by default).
++    return _(
++      'The server is busy or limiting requests ({{status}}). Wait a minute and try again.',
++      {status: String(e.status)},
++    );
++  }
++  return _('The server answered with an error ({{status}}).', {
++    status: String(e.status),
++  });
++};
++
++// Whether the component is still mounted: a save or delete that finishes after
++// the operator left the page must not touch its state. (The request itself is
++// not aborted: the server may already be applying it.)
++const useMounted = () => {
++  const mounted = useRef<boolean>(false);
++  useEffect(() => {
++    mounted.current = true;
++    return () => {
++      mounted.current = false;
++    };
++  }, []);
++  return mounted;
++};
++
++// One read in flight at a time: starting another one, or unmounting, aborts the
++// previous request, so a late answer never overwrites newer state.
++const useLatestRequest = () => {
++  const controller = useRef<AbortController | null>(null);
++  const abort = useCallback(() => {
++    controller.current?.abort();
++    controller.current = null;
++  }, []);
++  const next = useCallback((): AbortSignal => {
++    controller.current?.abort();
++    controller.current = new AbortController();
++    return controller.current.signal;
++  }, []);
++  useEffect(() => abort, [abort]);
++  return {next, abort};
 +};
 +
 +const readPolicy = (raw: Partial<Policy> | null): Policy => {
@@ -13132,20 +13163,30 @@ index 0000000..51722c0
 +  const [list, setList] = useState<ModelList>({state: 'idle'});
 +  const [saving, setSaving] = useState<boolean>(false);
 +  const [notice, setNotice] = useState<Notice | null>(null);
++  const mounted = useMounted();
++  const listRequest = useLatestRequest();
 +
 +  // OpenRouter's catalog is public; UnoRouter lists only with a stored key (the
 +  // server answers 409 without one, so do not even ask).
 +  const canList = p.has_key || p.kind === 'openrouter';
 +
 +  const loadModels = async () => {
++    const signal = listRequest.next();
 +    setList({state: 'loading'});
 +    try {
 +      const data = await pedir<{models?: ModelInfo[]}>(
 +        '/providers/' + encodeURIComponent(p.id) + '/models',
 +        token,
++        {signal},
 +      );
++      if (signal.aborted) {
++        return;
++      }
 +      setList({state: 'loaded', models: data?.models ?? []});
 +    } catch (e) {
++      if (signal.aborted) {
++        return;
++      }
 +      if (e instanceof ErroHttp && e.status === 409) {
 +        setList({state: 'needs-key'});
 +      } else if (e instanceof ErroHttp && e.status === 422) {
@@ -13198,20 +13239,30 @@ index 0000000..51722c0
 +          api_key: apiKey,
 +        }),
 +      });
++      if (!mounted.current) {
++        return;
++      }
 +      if (data?.provider) {
 +        onSaved(data.provider);
 +        setForm(presetForm(data.provider));
 +      } else {
 +        setForm(f => ({...f, apiKey: ''}));
 +      }
-+      if (apiKey !== '' && list.state !== 'loaded') {
-+        setList({state: 'idle'});
-+      }
++      // A save can fix what the list complained about (the stored key for a
++      // 409, the endpoint pinned to the official one for a 422): forget that
++      // answer, and any request still on the way, so the next open asks again.
++      // A list already loaded stays.
++      listRequest.abort();
++      setList(l => (l.state === 'loaded' ? l : {state: 'idle'}));
 +      setNotice({text: _('Provider saved.'), error: false});
 +    } catch (e) {
-+      setNotice({text: mensagemDeErro(_, e), error: true});
++      if (mounted.current) {
++        setNotice({text: mensagemDeErro(_, e), error: true});
++      }
 +    } finally {
-+      setSaving(false);
++      if (mounted.current) {
++        setSaving(false);
++      }
 +    }
 +  };
 +
@@ -13225,8 +13276,10 @@ index 0000000..51722c0
 +    badgeColor = 'green';
 +  }
 +
++  // "Recorded by…" describes the saved acknowledgement, so it shows only while
++  // the box is still checked: unchecking it means saving will withdraw it.
 +  let ackLine = _('Required to enable this provider.');
-+  if (p.data_policy_ack === true) {
++  if (form.ack && p.data_policy_ack === true) {
 +    const by = p.data_policy_ack_by ?? '';
 +    const at = p.data_policy_ack_at ?? '';
 +    const date =
@@ -13272,7 +13325,7 @@ index 0000000..51722c0
 +          </Badge>
 +        </Group>
 +
-+        <PasswordInput
++        <TextInput
 +          autoComplete="new-password"
 +          description={
 +            p.has_key
@@ -13284,6 +13337,7 @@ index 0000000..51722c0
 +          }
 +          label={_('API key')}
 +          placeholder={p.has_key ? '•••• ' + last4 : ''}
++          type="password"
 +          value={form.apiKey}
 +          onChange={e => {
 +            const apiKey = e.currentTarget.value;
@@ -13429,7 +13483,7 @@ index 0000000..51722c0
 +                  </Text>
 +                </Stack>
 +                <DeleteAction
-+                  busy={deleting === p.id}
++                  busy={deleting.has(p.id)}
 +                  name={p.name}
 +                  onConfirm={() => onDelete(p)}
 +                />
@@ -13457,6 +13511,7 @@ index 0000000..51722c0
 +  const [_] = useTranslation();
 +  const [form, setForm] = useState<FormState>({...EMPTY});
 +  const [saving, setSaving] = useState<boolean>(false);
++  const mounted = useMounted();
 +
 +  // A provider deleted while being edited leaves the form.
 +  useEffect(() => {
@@ -13500,15 +13555,22 @@ index 0000000..51722c0
 +          api_key: form.api_key.trim(),
 +        }),
 +      });
++      if (!mounted.current) {
++        return;
++      }
 +      if (data?.provider) {
 +        onSaved(data.provider);
 +      }
 +      setForm({...EMPTY});
 +      onNotice({text: _('Provider saved.'), error: false});
 +    } catch (e) {
-+      onNotice({text: mensagemDeErro(_, e), error: true});
++      if (mounted.current) {
++        onNotice({text: mensagemDeErro(_, e), error: true});
++      }
 +    } finally {
-+      setSaving(false);
++      if (mounted.current) {
++        setSaving(false);
++      }
 +    }
 +  };
 +
@@ -13544,7 +13606,7 @@ index 0000000..51722c0
 +                  {_('Edit')}
 +                </Button>
 +                <DeleteAction
-+                  busy={deleting === p.id}
++                  busy={deleting.has(p.id)}
 +                  name={p.name}
 +                  onConfirm={() => onDelete(p)}
 +                />
@@ -13639,40 +13701,61 @@ index 0000000..51722c0
 +  const [providers, setProviders] = useState<Provider[]>([]);
 +  const [loading, setLoading] = useState<boolean>(true);
 +  const [loadError, setLoadError] = useState<string>('');
-+  const [deleting, setDeleting] = useState<string>('');
++  // Ids being deleted: each delete clears only its own busy state.
++  const [deleting, setDeleting] = useState<ReadonlySet<string>>(
++    () => new Set<string>(),
++  );
 +  const [notice, setNotice] = useState<Notice | null>(null);
++  const mounted = useMounted();
 +
-+  const load = useCallback(async () => {
-+    setLoading(true);
-+    setLoadError('');
-+    try {
-+      const [rawPolicy, data] = await Promise.all([
-+        pedir<Partial<Policy>>('/policy', token).catch((e: unknown) => {
-+          if (e instanceof ErroHttp && e.status === 404) {
-+            return LEGACY_POLICY;
-+          }
-+          throw e;
-+        }),
-+        pedir<{providers?: Provider[]}>('/providers', token),
-+      ]);
-+      setPolicy(readPolicy(rawPolicy));
-+      setProviders(data?.providers ?? []);
-+    } catch (e) {
-+      setPolicy(null);
-+      setLoadError(
-+        e instanceof ErroHttp && e.status === 404 && e.detail === ''
-+          ? _(
-+              'AI provider configuration was not found on the server. Check that it is enabled (AI_CONFIG_ENABLED=true).',
-+            )
-+          : mensagemDeErro(_, e),
-+      );
-+    } finally {
-+      setLoading(false);
-+    }
-+  }, [token, _]);
++  const load = useCallback(
++    async (signal: AbortSignal) => {
++      setLoading(true);
++      setLoadError('');
++      try {
++        const [rawPolicy, data] = await Promise.all([
++          pedir<Partial<Policy>>('/policy', token, {signal}).catch(
++            (e: unknown) => {
++              if (e instanceof ErroHttp && e.status === 404) {
++                return LEGACY_POLICY;
++              }
++              throw e;
++            },
++          ),
++          pedir<{providers?: Provider[]}>('/providers', token, {signal}),
++        ]);
++        if (signal.aborted) {
++          return;
++        }
++        setPolicy(readPolicy(rawPolicy));
++        setProviders(data?.providers ?? []);
++      } catch (e) {
++        if (signal.aborted) {
++          return;
++        }
++        setPolicy(null);
++        setLoadError(
++          e instanceof ErroHttp && e.status === 404
++            ? _(
++                'AI provider configuration was not found on the server. Check that it is enabled (AI_CONFIG_ENABLED=true).',
++              )
++            : mensagemDeErro(_, e),
++        );
++      } finally {
++        if (!signal.aborted) {
++          setLoading(false);
++        }
++      }
++    },
++    [token, _],
++  );
 +
++  // Unmounting (or a new token) aborts the load in flight: its late answer
++  // must not overwrite the state of the page that replaced it.
 +  useEffect(() => {
-+    void load();
++    const controller = new AbortController();
++    void load(controller.signal);
++    return () => controller.abort();
 +  }, [load]);
 +
 +  // The POST answers with the saved provider: the list is updated in place
@@ -13692,21 +13775,32 @@ index 0000000..51722c0
 +
 +  const onDelete = useCallback(
 +    async (p: Provider) => {
-+      setDeleting(p.id);
++      setDeleting(ids => new Set(ids).add(p.id));
 +      setNotice(null);
 +      try {
 +        await pedir<null>('/providers/' + encodeURIComponent(p.id), token, {
 +          method: 'DELETE',
 +        });
++        if (!mounted.current) {
++          return;
++        }
 +        setProviders(list => list.filter(x => x.id !== p.id));
 +        setNotice({text: _('Provider deleted.'), error: false});
 +      } catch (e) {
-+        setNotice({text: mensagemDeErro(_, e), error: true});
++        if (mounted.current) {
++          setNotice({text: mensagemDeErro(_, e), error: true});
++        }
 +      } finally {
-+        setDeleting('');
++        if (mounted.current) {
++          setDeleting(ids => {
++            const rest = new Set(ids);
++            rest.delete(p.id);
++            return rest;
++          });
++        }
 +      }
 +    },
-+    [token, _],
++    [token, _, mounted],
 +  );
 +
 +  let body: React.ReactNode;
