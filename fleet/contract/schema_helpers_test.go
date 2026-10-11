@@ -34,26 +34,40 @@ type ordObj struct {
 	m    map[string]any
 }
 
-func (o *ordObj) has(k string) bool { _, ok := o.m[k]; return ok }
-func (o *ordObj) get(k string) any  { return o.m[k] }
+// The accessors are nil-safe: a missing member yields the zero value, so walks through optional schema
+// keywords need no guards.
+func (o *ordObj) has(k string) bool {
+	if o == nil {
+		return false
+	}
+	_, ok := o.m[k]
+	return ok
+}
+
+func (o *ordObj) get(k string) any {
+	if o == nil {
+		return nil
+	}
+	return o.m[k]
+}
 
 func (o *ordObj) obj(k string) *ordObj {
-	v, _ := o.m[k].(*ordObj)
+	v, _ := o.get(k).(*ordObj)
 	return v
 }
 
 func (o *ordObj) str(k string) string {
-	v, _ := o.m[k].(string)
+	v, _ := o.get(k).(string)
 	return v
 }
 
 func (o *ordObj) arr(k string) []any {
-	v, _ := o.m[k].([]any)
+	v, _ := o.get(k).([]any)
 	return v
 }
 
 func (o *ordObj) num(k string) (int64, bool) {
-	n, ok := o.m[k].(json.Number)
+	n, ok := o.get(k).(json.Number)
 	if !ok {
 		return 0, false
 	}
