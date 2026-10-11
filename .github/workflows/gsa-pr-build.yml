@@ -3,7 +3,7 @@ name: gsa-pr-build
 # Valida em PR o patch da UI (greenbone/gsa + patches/gsa-*.patch) e o do gsad
 # ANTES do merge: aplica os dois nas tags pinadas, roda o type-check (tsc) e o
 # build de produção (Vite) da UI, os testes vitest que o patch traz e confere
-# os catálogos de idioma.
+# os catálogos de idioma e as chaves das telas da Suricatoos neles.
 # Não publica nada, não usa secrets e não faz login em registry: a publicação
 # continua só no build-publish.yml (push na main).
 on:
@@ -171,6 +171,158 @@ jobs:
           sys.exit(1 if bad else 0)
           PY
 
+      # Toda chave de _()/_l() das telas da Suricatoos (os arquivos de código
+      # que o patch cria, inteiros, e as chamadas que tocam linha acrescentada
+      # nos arquivos que o patch altera) existe em pt_BR e em es, com valor
+      # não vazio, e está em inglês (o padrão do GSA). E nenhum dos dois
+      # catálogos guarda chave órfã: chave que nenhum _() de src/ usa.
+      - name: Chaves das telas da Suricatoos nos catálogos (pt_BR e es)
+        id: keys
+        if: ${{ !cancelled() && steps.gsa.outcome == 'success' }}
+        working-directory: gsa-src
+        env:
+          GSA_REF: ${{ steps.refs.outputs.gsa_ref }}
+        run: |
+          python3 - "$GITHUB_WORKSPACE/patches/gsa-${GSA_REF}.patch" <<'PY'
+          import json
+          import os
+          import re
+          import sys
+
+          SRC = ('.ts', '.tsx', '.js', '.jsx')
+          CALL = re.compile(r'(?<![\w$.])_l?\(')
+          NOT_ENGLISH = re.compile('[À-ÿ¡¿]')
+          ESC = {'n': '\n', 't': '\t', 'r': '\r', 'b': '\b', 'f': '\f',
+                 'v': '\v', '0': '\0'}
+
+
+          def literal(text, i):
+              """String literal at text[i] -> (value, end); None if dynamic."""
+              quote, out, j = text[i], [], i + 1
+              while j < len(text):
+                  c = text[j]
+                  if c == '\\':
+                      n = text[j + 1]
+                      if n == 'u' and text[j + 2] == '{':
+                          k = text.index('}', j)
+                          out.append(chr(int(text[j + 3:k], 16)))
+                          j = k + 1
+                      elif n == 'u':
+                          out.append(chr(int(text[j + 2:j + 6], 16)))
+                          j += 6
+                      elif n == 'x':
+                          out.append(chr(int(text[j + 2:j + 4], 16)))
+                          j += 4
+                      else:
+                          out.append('' if n == '\n' else ESC.get(n, n))
+                          j += 2
+                      continue
+                  if c == quote:
+                      return ''.join(out), j + 1
+                  if quote == '`' and text.startswith('${', j):
+                      return None, i
+                  out.append(c)
+                  j += 1
+              return None, i
+
+
+          def calls(text):
+              """(key, first line, last line) of each _('...') or _l('...')."""
+              for m in CALL.finditer(text):
+                  i, parts = m.end(), []
+                  while True:
+                      while i < len(text) and text[i].isspace():
+                          i += 1
+                      if i >= len(text) or text[i] not in '\'"`':
+                          break
+                      value, end = literal(text, i)
+                      if value is None:
+                          parts = []
+                          break
+                      parts.append(value)
+                      i = k = end
+                      while k < len(text) and text[k].isspace():
+                          k += 1
+                      if k < len(text) and text[k] == '+':
+                          i = k + 1
+                          continue
+                      break
+                  if parts:
+                      yield (''.join(parts), text.count('\n', 0, m.start()) + 1,
+                             text.count('\n', 0, i) + 1)
+
+
+          def is_test(path):
+              return ('/__tests__/' in path or '/__fixtures__/' in path
+                      or re.search(r'\.(test|spec)\.[jt]sx?$', path))
+
+
+          # Arquivos do patch: criado ou não, e as linhas que ele acrescenta
+          # (numeração do arquivo novo).
+          files, cur, in_hunk, n = {}, None, False, 0
+          for line in open(sys.argv[1], encoding='utf-8'):
+              line = line.rstrip('\n')
+              m = re.match(r'diff --git a/\S+ b/(\S+)$', line)
+              if m:
+                  cur, in_hunk = files.setdefault(m.group(1), [False, set()]), False
+              elif cur is None:
+                  continue
+              elif not in_hunk and line.startswith('new file mode'):
+                  cur[0] = True
+              elif line.startswith('@@ '):
+                  in_hunk = True
+                  n = int(re.match(r'@@ -\S+ \+(\d+)', line).group(1))
+              elif in_hunk and line.startswith('+'):
+                  cur[1].add(n)
+                  n += 1
+              elif in_hunk and line.startswith(' '):
+                  n += 1
+
+          used = {}
+          for path, (created, added) in sorted(files.items()):
+              if not path.endswith(SRC) or is_test(path):
+                  continue
+              for key, first, last in calls(open(path, encoding='utf-8').read()):
+                  if created or added.intersection(range(first, last + 1)):
+                      used.setdefault(key, (path, first))
+
+          cats = {lang: json.load(open(f'public/locales/gsa-{lang}.json',
+                                       encoding='utf-8'))
+                  for lang in ('pt_BR', 'es')}
+          errors = []
+          for key, (path, line) in sorted(used.items()):
+              shown = json.dumps(key, ensure_ascii=False)
+              for lang, cat in cats.items():
+                  value = cat.get(key)
+                  if not isinstance(value, str):
+                      errors.append((path, line, f'chave sem tradução em {lang}: {shown}'))
+                  elif not value.strip():
+                      errors.append((path, line, f'valor vazio em {lang}: {shown}'))
+              if NOT_ENGLISH.search(key):
+                  errors.append((path, line, f'chave fora do inglês: {shown}'))
+
+          in_src = set()
+          for dirpath, _dirs, names in os.walk('src'):
+              for name in names:
+                  path = os.path.join(dirpath, name).replace(os.sep, '/')
+                  if name.endswith(SRC) and not is_test(path):
+                      text = open(path, encoding='utf-8').read()
+                      in_src.update(key for key, _a, _b in calls(text))
+          for lang, cat in cats.items():
+              for key in cat:
+                  if key not in in_src:
+                      shown = json.dumps(key, ensure_ascii=False)
+                      errors.append((f'public/locales/gsa-{lang}.json', 1,
+                                     f'chave órfã (nenhum _() de src/ usa): {shown}'))
+
+          for path, line, msg in errors:
+              msg = msg.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
+              print(f'::error file={path},line={line}::{msg}')
+          print(f'{len(used)} chaves das telas da Suricatoos conferidas em pt_BR e es; '
+                f'{len(errors)} erro(s)')
+          sys.exit(1 if errors else 0)
+          PY
+
       - name: Resumo
         if: always()
         env:
@@ -184,6 +336,7 @@ jobs:
           R_BUILD: ${{ steps.build.outcome }}
           R_TESTS: ${{ steps.tests.outcome }}
           R_LOCALES: ${{ steps.locales.outcome }}
+          R_KEYS: ${{ steps.keys.outcome }}
         run: |
           {
             echo "### Patch do GSA/gsad — validação de PR"
@@ -199,4 +352,5 @@ jobs:
             echo "| build de produção (npm run build) | ${R_BUILD:-skipped} |"
             echo "| testes do patch (vitest) | ${R_TESTS:-skipped} |"
             echo "| catálogos de idioma | ${R_LOCALES:-skipped} |"
+            echo "| chaves das telas da Suricatoos (pt_BR, es) | ${R_KEYS:-skipped} |"
           } >> "$GITHUB_STEP_SUMMARY"
