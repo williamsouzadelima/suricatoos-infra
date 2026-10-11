@@ -10,8 +10,10 @@ inventario do agente pelo gmp-bridge (bridge.py, modo agent), como o gvmd o
 exporta depois: tarefa conteiner com o nome que o ingest da'
 (<GMP_TASK_NAME>-<agente>) e o comentario que o bridge grava ao cria-la
 ("Suricatoos Agent findings for host <host>"), o host identificado pelo
-agente, inicio e fim no MESMO instante (a hora da coleta), resultados de
-pacote em general/tcp com QoD 70 (tipo package) e nenhum detalhe de host.
+agente, inicio e fim no MESMO instante (o do registro do inventario),
+resultados de pacote em general/tcp com QoD 70 (tipo package) e nenhum
+detalhe de host (o detalhe Auth-* ou scanned_with_* e' de scan de rede e
+vetaria a leitura de inventario: veja a v19a e a v19b).
 Nao e' scan de rede: a duracao "nao se aplica" (nunca "0 s"), uma nota diz de
 onde o relatorio veio, a autenticacao "nao se aplica" (o inventario e' local
 por natureza), e as limitacoes de rede (ponto de vista do scanner, alive

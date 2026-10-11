@@ -106,14 +106,21 @@ overfull_baseline() {
     # paginas, host em dois cards, marcador acima do teto) tambem, e as da
     # secao 6 (v11 autenticacao, erros e feed; v12 tarefa que nao iniciou; v13
     # tabelas acima do teto, celulas que quebram e cortes declarados; v14 scan
-    # interrompido; v15/v16 inventario do agente; v17 concluido sem host).
+    # interrompido; v15/v16 inventario do agente; v17 concluido sem host; v18
+    # import do sensor; v19a/v19b o veto do comentario do bridge; v20a..v20i a
+    # tabela de estados).
     */v1-numeracao | */v2-indicadores-vazios | */v3-consolidado-qod | \
     */v4-instancias | */v5-acao-traduzida | */v6-vulns-unicas | \
     */v7a-faixas | */v7b-lowconf | */v7c-todos-lowconf | \
     */v8-ancora | */v9-nome-capa | */v10-navegacao | \
     */v11-escopo-autenticado | */v12-escopo-nao-iniciado | */v13-escopo-cortes | \
     */v14-escopo-interrompido | */v15-escopo-agente | */v16-escopo-agente-limpo | \
-    */v17-escopo-concluido-vazio) echo 0 ;;
+    */v17-escopo-concluido-vazio | */v18-escopo-sensor | \
+    */v19a-escopo-comentario-do-agente-auth | */v19b-escopo-comentario-do-agente-feed | \
+    */v20a-estado-em-execucao | */v20b-estado-parada-solicitada | */v20c-estado-parado | \
+    */v20d-estado-novo | */v20e-estado-solicitado | */v20f-estado-na-fila | \
+    */v20g-estado-parada-solicitada-sem-inicio | */v20h-estado-parado-sem-inicio | \
+    */v20i-estado-interrompido-sem-inicio) echo 0 ;;
     *) return 1 ;;
   esac
 }
