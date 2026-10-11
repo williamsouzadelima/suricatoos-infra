@@ -309,6 +309,40 @@ func goldenSpecs() []vectorSpec {
 	add(vectorSpec{name: "canonical/newline-shift-b", cmd: b, payload: adrPayload, expect: "bad_envelope"})
 	add(vectorSpec{name: "canonical/equals-and-colon", payload: adrPayload, expect: "bad_envelope",
 		cmd: named("canonical/equals-and-colon", TypeTaskStart, func(c *Command) { c.Tenant, c.IssuedBy = "acme=1:x", "op:7f3a=9:" })})
+	// <len> is the length in BYTES: "açaí" is 4 characters and 6 bytes (tenant=6:açaí); refused by format
+	add(vectorSpec{name: "canonical/utf8-length-in-bytes", payload: adrPayload, expect: "bad_envelope",
+		cmd: named("canonical/utf8-length-in-bytes", TypeTaskStart, func(c *Command) { c.Tenant = "açaí" })})
+
+	// the ORDER of the verification lines: each vector carries two defects and expects the earlier line's
+	// reason ("order/<a>-before-<b>" expects <a>). An implementation that checks in another order fails here.
+	resignedOrder := func(name string) Command { // same command_id as the ADR example, another canonical form
+		c := adr
+		c.Nonce = goldenNonce(name)
+		return c
+	}
+	swapped := strPtr(`{"task_id":"9a7e3c21-5b0d-4f8e-a1c6-2e4d7b9f0a35"}`)
+	add(vectorSpec{name: "order/bad_envelope-before-payload_mismatch", payload: adrPayload, sent: swapped, expect: "bad_envelope",
+		cmd: named("order/bad_envelope-before-payload_mismatch", TypeTaskStart, func(c *Command) { c.Nonce = strings.ToUpper(c.Nonce) })})
+	add(vectorSpec{name: "order/bad_envelope-before-bad_signature", payload: adrPayload, key: otherPriv, expect: "bad_envelope",
+		cmd: named("order/bad_envelope-before-bad_signature", TypeTaskStart, func(c *Command) { c.Nonce = strings.ToUpper(c.Nonce) })})
+	add(vectorSpec{name: "order/payload_mismatch-before-bad_signature", cmd: gCommand("order/payload_mismatch-before-bad_signature", TypeTaskStart),
+		payload: adrPayload, sent: swapped, key: otherPriv, expect: "payload_mismatch"})
+	add(vectorSpec{name: "order/bad_signature-before-wrong_node", cmd: gCommand("order/bad_signature-before-wrong_node", TypeTaskStart),
+		payload: adrPayload, key: otherPriv, own: "node-lab-0002", expect: "bad_signature"})
+	add(vectorSpec{name: "order/bad_signature-before-expired", cmd: gCommand("order/bad_signature-before-expired", TypeTaskStart),
+		payload: adrPayload, key: otherPriv, at: "2026-10-11T14:00:00Z", expect: "bad_signature"})
+	add(vectorSpec{name: "order/bad_window-before-not_yet_valid", payload: adrPayload, at: "2026-10-11T10:00:00Z", expect: "bad_window",
+		cmd: named("order/bad_window-before-not_yet_valid", TypeTaskStart, func(c *Command) { c.NotAfter = c.IssuedAt })})
+	add(vectorSpec{name: "order/not_yet_valid-before-wrong_node", cmd: gCommand("order/not_yet_valid-before-wrong_node", TypeTaskStart),
+		payload: adrPayload, at: "2026-10-11T11:00:00Z", own: "node-lab-0002", expect: "not_yet_valid"})
+	add(vectorSpec{name: "order/expired-before-wrong_node", cmd: gCommand("order/expired-before-wrong_node", TypeTaskStart),
+		payload: adrPayload, at: "2026-10-11T14:00:00Z", own: "node-lab-0002", expect: "expired"})
+	add(vectorSpec{name: "order/wrong_node-before-replay", cmd: resignedOrder("order/wrong_node-before-replay"),
+		payload: adrPayload, own: "node-lab-0002", seen: []string{adrCanonicalSHA256}, expect: "wrong_node"})
+	add(vectorSpec{name: "order/expired-before-replay", cmd: resignedOrder("order/expired-before-replay"),
+		payload: adrPayload, at: "2026-10-11T14:00:00Z", seen: []string{adrCanonicalSHA256}, expect: "expired"})
+	add(vectorSpec{name: "order/replay-before-bad_payload", cmd: resignedOrder("order/replay-before-bad_payload"),
+		payload: `{"task_id":"not-a-uuid"}`, seen: []string{adrCanonicalSHA256}, expect: "replay"})
 	return specs
 }
 
@@ -487,11 +521,12 @@ func lenientFields(raw string) (Command, bool) {
 	return c, err == nil
 }
 
-// TestGoldenOneDefect: every vector has exactly the defect its expect names — the signature in command_json
-// verifies over "canonical" (the bytes the generator signed) with the golden test key, except the
+// TestGoldenOneDefect: every vector outside "order/" has exactly the defect its expect names — the signature in
+// command_json verifies over "canonical" (the bytes the generator signed) with the golden test key, except the
 // other-key vector; a field-altered vector differs from the signed canonical form in that field only;
 // payload_sha256 is the sha256 of the raw payload bytes inside command_json; and the name's prefix is its
-// expect. So an implementation that checks in another order still lands on the same reason.
+// expect. So an implementation that checks in another order still lands on the same reason — which is why the
+// order itself is pinned apart, by the two-defect "order/" vectors (TestGoldenOrder).
 func TestGoldenOneDefect(t *testing.T) {
 	f := loadGolden(t)
 	names := map[string]bool{}
@@ -502,6 +537,12 @@ func TestGoldenOneDefect(t *testing.T) {
 		}
 		names[v.Name] = true
 		prefix, rest, _ := strings.Cut(v.Name, "/")
+		if sha256hex([]byte(v.Canonical)) != v.CanonicalSHA256 {
+			t.Errorf("%s: canonical_sha256", v.Name)
+		}
+		if prefix == "order" {
+			continue
+		}
 		if prefix != v.Expect && !(prefix == "canonical" && v.Expect == "bad_envelope") {
 			t.Errorf("%s: nome não começa pelo expect %s", v.Name, v.Expect)
 		}
@@ -517,9 +558,6 @@ func TestGoldenOneDefect(t *testing.T) {
 		}
 		if err != nil || !ed25519.Verify(key, []byte(v.Canonical), sig) {
 			t.Errorf("%s: a assinatura não confere com canonical", v.Name)
-		}
-		if sha256hex([]byte(v.Canonical)) != v.CanonicalSHA256 {
-			t.Errorf("%s: canonical_sha256", v.Name)
 		}
 		var outer struct {
 			Payload json.RawMessage `json:"payload"`
@@ -550,6 +588,64 @@ func TestGoldenOneDefect(t *testing.T) {
 			if string(Canonical(&sent)) != v.Canonical {
 				t.Errorf("%s: o envelope transmitido não é o assinado", v.Name)
 			}
+		}
+	}
+}
+
+// TestGoldenOrder: the two-defect "order/<a>-before-<b>" vectors pin the ADR's verification order — each one
+// expects the earlier line's reason <a> — and the later defect <b> is really there, so a vector cannot silently
+// degrade into a one-defect one. Together they cover every pair the review asked for.
+func TestGoldenOrder(t *testing.T) {
+	f := loadGolden(t)
+	skew := time.Duration(f.SkewSeconds) * time.Second
+	present := map[string]bool{}
+	for _, v := range f.Vectors {
+		pair, ok := strings.CutPrefix(v.Name, "order/")
+		if !ok {
+			continue
+		}
+		first, second, found := strings.Cut(pair, "-before-")
+		if !found || v.Expect != first {
+			t.Errorf("%s: expect %s, o nome diz %s", v.Name, v.Expect, first)
+		}
+		present[pair] = true
+		c, _ := lenientFields(v.CommandJSON)
+		at, _ := ParseUTCTime(v.VerifyAt)
+		issued, _ := ParseUTCTime(c.IssuedAt)
+		notAfter, _ := ParseUTCTime(c.NotAfter)
+		sig, _ := base64.StdEncoding.DecodeString(signatureMember.FindStringSubmatch(v.CommandJSON)[1])
+		var defect bool
+		switch second {
+		case "payload_mismatch":
+			defect = sha256hex(c.Payload) != c.PayloadSHA256
+		case "bad_signature":
+			defect = !ed25519.Verify(goldenPub, []byte(v.Canonical), sig)
+		case "not_yet_valid":
+			defect = at.Before(issued.Add(-skew))
+		case "expired":
+			defect = at.After(notAfter.Add(skew))
+		case "wrong_node":
+			defect = c.NodeID != v.OwnNodeID
+		case "replay":
+			defect = len(v.Seen) > 0 && !slices.Contains(v.Seen, v.CanonicalSHA256)
+		case "bad_payload":
+			defect = ValidatePayload(c.Type, c.Payload) != nil
+		default:
+			t.Errorf("%s: segundo defeito %q sem checagem", v.Name, second)
+			continue
+		}
+		if !defect {
+			t.Errorf("%s: o segundo defeito (%s) não está no vetor", v.Name, second)
+		}
+	}
+	for _, pair := range []string{
+		"bad_envelope-before-payload_mismatch", "bad_envelope-before-bad_signature", "payload_mismatch-before-bad_signature",
+		"bad_signature-before-wrong_node", "bad_signature-before-expired", "bad_window-before-not_yet_valid",
+		"not_yet_valid-before-wrong_node", "expired-before-wrong_node", "wrong_node-before-replay",
+		"expired-before-replay", "replay-before-bad_payload",
+	} {
+		if !present[pair] {
+			t.Errorf("falta o vetor order/%s", pair)
 		}
 	}
 }
@@ -630,6 +726,10 @@ func TestGoldenCoverage(t *testing.T) {
 	sameNonce, _ := lenientFields(byName["replay/same-nonce"].CommandJSON)
 	if sameID.CommandID != adr.CommandID || sameID.Nonce == adr.Nonce || sameNonce.Nonce != adr.Nonce || sameNonce.CommandID == adr.CommandID {
 		t.Error("vetores de replay")
+	}
+	// <len> counts BYTES: 4 characters, 6 bytes
+	if c := byName["canonical/utf8-length-in-bytes"].Canonical; !strings.Contains(c, "\ntenant=6:açaí\n") {
+		t.Errorf("comprimento em bytes: %q", c)
 	}
 	// injectivity: the a/b pair collides in the naive join, never in the canonical form
 	a, _ := lenientFields(byName["canonical/newline-shift-a"].CommandJSON)

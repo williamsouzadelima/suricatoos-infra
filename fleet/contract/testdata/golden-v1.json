@@ -851,6 +851,129 @@
       "canonical_sha256": "e30174dd894ed5fbeb570038fc66c0a0d9d0720830bb8399f58eae289a1c819d",
       "payload_sha256": "202e584626515573d531f5508c9094f8d6b705e0fc0fe6fbf29c76969fef313f",
       "expect": "bad_envelope"
+    },
+    {
+      "name": "canonical/utf8-length-in-bytes",
+      "own_node_id": "node-lab-0001",
+      "verify_at": "2026-10-11T12:30:00Z",
+      "command_json": "{\"schema_version\":\"1.0.0\",\"command_id\":\"6407e24c-25b6-48a5-a8dd-8aedfe8eb6a5\",\"node_id\":\"node-lab-0001\",\"tenant\":\"açaí\",\"type\":\"task.start\",\"issued_by\":\"op-7f3a\",\"issued_at\":\"2026-10-11T12:00:00Z\",\"not_after\":\"2026-10-11T13:00:00Z\",\"nonce\":\"774f3f3e616caf5bc46d1a841639cf74af93f52d38cd7feae24a999d39582207\",\"payload_sha256\":\"202e584626515573d531f5508c9094f8d6b705e0fc0fe6fbf29c76969fef313f\",\"payload\":{\"task_id\":\"2d5b8f0e-1c4a-4e6b-9a3d-7f0c5e1b2a49\"},\"signature\":\"suSwDWsYQsaEgK/MfmtJmFmSRkioeXyABrqGih0r5iO/vpB6Cz4uLMOYsoeweiQighBN0LEoLdAyT9n03J+6Bw==\"}",
+      "canonical": "suricatoos-fleet-command-v1\nschema_version=5:1.0.0\ncommand_id=36:6407e24c-25b6-48a5-a8dd-8aedfe8eb6a5\nnode_id=13:node-lab-0001\ntenant=6:açaí\ntype=10:task.start\nissued_by=7:op-7f3a\nissued_at=20:2026-10-11T12:00:00Z\nnot_after=20:2026-10-11T13:00:00Z\nnonce=64:774f3f3e616caf5bc46d1a841639cf74af93f52d38cd7feae24a999d39582207\npayload_sha256=64:202e584626515573d531f5508c9094f8d6b705e0fc0fe6fbf29c76969fef313f\n",
+      "canonical_sha256": "6b726f9b1cac503b1accfd9464c1d3ddd373fcc427c32b22c7bfe454c58e8c52",
+      "payload_sha256": "202e584626515573d531f5508c9094f8d6b705e0fc0fe6fbf29c76969fef313f",
+      "expect": "bad_envelope"
+    },
+    {
+      "name": "order/bad_envelope-before-payload_mismatch",
+      "own_node_id": "node-lab-0001",
+      "verify_at": "2026-10-11T12:30:00Z",
+      "command_json": "{\"schema_version\":\"1.0.0\",\"command_id\":\"a63b334c-1c09-4cfe-a635-10cc6fa1471f\",\"node_id\":\"node-lab-0001\",\"tenant\":\"acme\",\"type\":\"task.start\",\"issued_by\":\"op-7f3a\",\"issued_at\":\"2026-10-11T12:00:00Z\",\"not_after\":\"2026-10-11T13:00:00Z\",\"nonce\":\"50AE711DC9823D0768455FB9162B05359FF7F2630221AF573915B4B778087611\",\"payload_sha256\":\"202e584626515573d531f5508c9094f8d6b705e0fc0fe6fbf29c76969fef313f\",\"payload\":{\"task_id\":\"9a7e3c21-5b0d-4f8e-a1c6-2e4d7b9f0a35\"},\"signature\":\"e1b4da9mPCIHUZcb6rklfBu2u7k9fuY6mn3SWLD/rW+Vufw19y86ByIZUaGQ85PV6izt95dTZwTEM+utuNOeBA==\"}",
+      "canonical": "suricatoos-fleet-command-v1\nschema_version=5:1.0.0\ncommand_id=36:a63b334c-1c09-4cfe-a635-10cc6fa1471f\nnode_id=13:node-lab-0001\ntenant=4:acme\ntype=10:task.start\nissued_by=7:op-7f3a\nissued_at=20:2026-10-11T12:00:00Z\nnot_after=20:2026-10-11T13:00:00Z\nnonce=64:50AE711DC9823D0768455FB9162B05359FF7F2630221AF573915B4B778087611\npayload_sha256=64:202e584626515573d531f5508c9094f8d6b705e0fc0fe6fbf29c76969fef313f\n",
+      "canonical_sha256": "a2dd45013a4e653cfb8cefd6a1ccb383ea0a2a875019847ee7786fb597240bb1",
+      "payload_sha256": "9a5c9c4a8c327c169fd843c6291a89dd947bd716bf6a8e4bba6665eb66b858e4",
+      "expect": "bad_envelope"
+    },
+    {
+      "name": "order/bad_envelope-before-bad_signature",
+      "own_node_id": "node-lab-0001",
+      "verify_at": "2026-10-11T12:30:00Z",
+      "command_json": "{\"schema_version\":\"1.0.0\",\"command_id\":\"3cea2a9a-6f72-4359-91a5-0e6775f96fa3\",\"node_id\":\"node-lab-0001\",\"tenant\":\"acme\",\"type\":\"task.start\",\"issued_by\":\"op-7f3a\",\"issued_at\":\"2026-10-11T12:00:00Z\",\"not_after\":\"2026-10-11T13:00:00Z\",\"nonce\":\"50E9E3C81A056F023BA2A594807F23ABE3E7D155ACEE5FF913187508E532D292\",\"payload_sha256\":\"202e584626515573d531f5508c9094f8d6b705e0fc0fe6fbf29c76969fef313f\",\"payload\":{\"task_id\":\"2d5b8f0e-1c4a-4e6b-9a3d-7f0c5e1b2a49\"},\"signature\":\"82NhksI9w7qxKFqDLLj8/9czQZQXPsGKkU9b6FEk1oeCfINNEqkVK4S3uKHLNUcg8w7OtaC847i9k+1AllN6Bw==\"}",
+      "canonical": "suricatoos-fleet-command-v1\nschema_version=5:1.0.0\ncommand_id=36:3cea2a9a-6f72-4359-91a5-0e6775f96fa3\nnode_id=13:node-lab-0001\ntenant=4:acme\ntype=10:task.start\nissued_by=7:op-7f3a\nissued_at=20:2026-10-11T12:00:00Z\nnot_after=20:2026-10-11T13:00:00Z\nnonce=64:50E9E3C81A056F023BA2A594807F23ABE3E7D155ACEE5FF913187508E532D292\npayload_sha256=64:202e584626515573d531f5508c9094f8d6b705e0fc0fe6fbf29c76969fef313f\n",
+      "canonical_sha256": "bbb1f11480b303ec0f9665c68973c8fde6ef5f6c9c3899b8045f6f487f18490d",
+      "payload_sha256": "202e584626515573d531f5508c9094f8d6b705e0fc0fe6fbf29c76969fef313f",
+      "expect": "bad_envelope"
+    },
+    {
+      "name": "order/payload_mismatch-before-bad_signature",
+      "own_node_id": "node-lab-0001",
+      "verify_at": "2026-10-11T12:30:00Z",
+      "command_json": "{\"schema_version\":\"1.0.0\",\"command_id\":\"7bb2a8d4-fb44-4e7d-a5ad-eaf33e87eafd\",\"node_id\":\"node-lab-0001\",\"tenant\":\"acme\",\"type\":\"task.start\",\"issued_by\":\"op-7f3a\",\"issued_at\":\"2026-10-11T12:00:00Z\",\"not_after\":\"2026-10-11T13:00:00Z\",\"nonce\":\"9f22ed5a8704a5723e98ae9108e3fe61d2a8b8223a970d8ef88d9cf377a5f9bc\",\"payload_sha256\":\"202e584626515573d531f5508c9094f8d6b705e0fc0fe6fbf29c76969fef313f\",\"payload\":{\"task_id\":\"9a7e3c21-5b0d-4f8e-a1c6-2e4d7b9f0a35\"},\"signature\":\"NqtVhUGpY9gPieHTqMIK30GUtsP8xZuZs1R8EJL+6iJAosg0o+OoxHH72VoneBR8Oa4kSYNxOGAV2SaKuci9DQ==\"}",
+      "canonical": "suricatoos-fleet-command-v1\nschema_version=5:1.0.0\ncommand_id=36:7bb2a8d4-fb44-4e7d-a5ad-eaf33e87eafd\nnode_id=13:node-lab-0001\ntenant=4:acme\ntype=10:task.start\nissued_by=7:op-7f3a\nissued_at=20:2026-10-11T12:00:00Z\nnot_after=20:2026-10-11T13:00:00Z\nnonce=64:9f22ed5a8704a5723e98ae9108e3fe61d2a8b8223a970d8ef88d9cf377a5f9bc\npayload_sha256=64:202e584626515573d531f5508c9094f8d6b705e0fc0fe6fbf29c76969fef313f\n",
+      "canonical_sha256": "666b88c78fbeb5fc120421b48d206cea1853e9fca06866ef2dd970082580f0bc",
+      "payload_sha256": "9a5c9c4a8c327c169fd843c6291a89dd947bd716bf6a8e4bba6665eb66b858e4",
+      "expect": "payload_mismatch"
+    },
+    {
+      "name": "order/bad_signature-before-wrong_node",
+      "own_node_id": "node-lab-0002",
+      "verify_at": "2026-10-11T12:30:00Z",
+      "command_json": "{\"schema_version\":\"1.0.0\",\"command_id\":\"bf623360-7cec-49d7-b268-fad8b77221a9\",\"node_id\":\"node-lab-0001\",\"tenant\":\"acme\",\"type\":\"task.start\",\"issued_by\":\"op-7f3a\",\"issued_at\":\"2026-10-11T12:00:00Z\",\"not_after\":\"2026-10-11T13:00:00Z\",\"nonce\":\"5f60d925dbab70150b6a21e975461b644cbe00e81304b796a2e4172cfb9faaa9\",\"payload_sha256\":\"202e584626515573d531f5508c9094f8d6b705e0fc0fe6fbf29c76969fef313f\",\"payload\":{\"task_id\":\"2d5b8f0e-1c4a-4e6b-9a3d-7f0c5e1b2a49\"},\"signature\":\"GK5kbrS1ewGo237/r8TdkI3SIYZ1e/2kiptGVVKidiSt6HvwV389FeYHSRDy8OhbSZLsWuJR3cXVPx8VUCeGAg==\"}",
+      "canonical": "suricatoos-fleet-command-v1\nschema_version=5:1.0.0\ncommand_id=36:bf623360-7cec-49d7-b268-fad8b77221a9\nnode_id=13:node-lab-0001\ntenant=4:acme\ntype=10:task.start\nissued_by=7:op-7f3a\nissued_at=20:2026-10-11T12:00:00Z\nnot_after=20:2026-10-11T13:00:00Z\nnonce=64:5f60d925dbab70150b6a21e975461b644cbe00e81304b796a2e4172cfb9faaa9\npayload_sha256=64:202e584626515573d531f5508c9094f8d6b705e0fc0fe6fbf29c76969fef313f\n",
+      "canonical_sha256": "252c1bdc078a4ab8a337df0199941bfc6be8b4ad0ac8476a62c6e87d04510359",
+      "payload_sha256": "202e584626515573d531f5508c9094f8d6b705e0fc0fe6fbf29c76969fef313f",
+      "expect": "bad_signature"
+    },
+    {
+      "name": "order/bad_signature-before-expired",
+      "own_node_id": "node-lab-0001",
+      "verify_at": "2026-10-11T14:00:00Z",
+      "command_json": "{\"schema_version\":\"1.0.0\",\"command_id\":\"52e475fb-f08c-4704-8951-829ea5ac2f76\",\"node_id\":\"node-lab-0001\",\"tenant\":\"acme\",\"type\":\"task.start\",\"issued_by\":\"op-7f3a\",\"issued_at\":\"2026-10-11T12:00:00Z\",\"not_after\":\"2026-10-11T13:00:00Z\",\"nonce\":\"b4f44534ab036508488c9444832ccac3932d09b49e167b11c9f4ea2345232b91\",\"payload_sha256\":\"202e584626515573d531f5508c9094f8d6b705e0fc0fe6fbf29c76969fef313f\",\"payload\":{\"task_id\":\"2d5b8f0e-1c4a-4e6b-9a3d-7f0c5e1b2a49\"},\"signature\":\"MCdDwOk1KQA8bmhFTADQPY5EplAhhpUvUa9SZ5tRXZpkr/u9XC66TmBLHqVfcaRWpaJLpD+cR+CwfIfXpNgVAw==\"}",
+      "canonical": "suricatoos-fleet-command-v1\nschema_version=5:1.0.0\ncommand_id=36:52e475fb-f08c-4704-8951-829ea5ac2f76\nnode_id=13:node-lab-0001\ntenant=4:acme\ntype=10:task.start\nissued_by=7:op-7f3a\nissued_at=20:2026-10-11T12:00:00Z\nnot_after=20:2026-10-11T13:00:00Z\nnonce=64:b4f44534ab036508488c9444832ccac3932d09b49e167b11c9f4ea2345232b91\npayload_sha256=64:202e584626515573d531f5508c9094f8d6b705e0fc0fe6fbf29c76969fef313f\n",
+      "canonical_sha256": "3934758055913cbcf4fb011717de1f1c3efaa023d959fbfa0242fb358206bff6",
+      "payload_sha256": "202e584626515573d531f5508c9094f8d6b705e0fc0fe6fbf29c76969fef313f",
+      "expect": "bad_signature"
+    },
+    {
+      "name": "order/bad_window-before-not_yet_valid",
+      "own_node_id": "node-lab-0001",
+      "verify_at": "2026-10-11T10:00:00Z",
+      "command_json": "{\"schema_version\":\"1.0.0\",\"command_id\":\"6fc665ec-5c8d-41ab-9f3c-49fb9211fff7\",\"node_id\":\"node-lab-0001\",\"tenant\":\"acme\",\"type\":\"task.start\",\"issued_by\":\"op-7f3a\",\"issued_at\":\"2026-10-11T12:00:00Z\",\"not_after\":\"2026-10-11T12:00:00Z\",\"nonce\":\"795aa4d77499612fed7197403e7229f71716e7d7b94695d6c2e00c9fbbf1e66f\",\"payload_sha256\":\"202e584626515573d531f5508c9094f8d6b705e0fc0fe6fbf29c76969fef313f\",\"payload\":{\"task_id\":\"2d5b8f0e-1c4a-4e6b-9a3d-7f0c5e1b2a49\"},\"signature\":\"XcxT03mzM+IlllWB8au7tUU+6SQdnADK5bf8KRbFIV1Md0CfX0wP/IgzhT0f+Zyu6ADDcF6N/YuMV1mscjPGBA==\"}",
+      "canonical": "suricatoos-fleet-command-v1\nschema_version=5:1.0.0\ncommand_id=36:6fc665ec-5c8d-41ab-9f3c-49fb9211fff7\nnode_id=13:node-lab-0001\ntenant=4:acme\ntype=10:task.start\nissued_by=7:op-7f3a\nissued_at=20:2026-10-11T12:00:00Z\nnot_after=20:2026-10-11T12:00:00Z\nnonce=64:795aa4d77499612fed7197403e7229f71716e7d7b94695d6c2e00c9fbbf1e66f\npayload_sha256=64:202e584626515573d531f5508c9094f8d6b705e0fc0fe6fbf29c76969fef313f\n",
+      "canonical_sha256": "0a6630dd90012917c4966ce78ef5ab5a649aa5e4063eb9a5a5ff8d1bdd8d55a4",
+      "payload_sha256": "202e584626515573d531f5508c9094f8d6b705e0fc0fe6fbf29c76969fef313f",
+      "expect": "bad_window"
+    },
+    {
+      "name": "order/not_yet_valid-before-wrong_node",
+      "own_node_id": "node-lab-0002",
+      "verify_at": "2026-10-11T11:00:00Z",
+      "command_json": "{\"schema_version\":\"1.0.0\",\"command_id\":\"73911172-97a9-42a2-bb1c-1ad5323a279a\",\"node_id\":\"node-lab-0001\",\"tenant\":\"acme\",\"type\":\"task.start\",\"issued_by\":\"op-7f3a\",\"issued_at\":\"2026-10-11T12:00:00Z\",\"not_after\":\"2026-10-11T13:00:00Z\",\"nonce\":\"e0bc167329a815171e4f786549553af932644eae7b410bf11867b64059855397\",\"payload_sha256\":\"202e584626515573d531f5508c9094f8d6b705e0fc0fe6fbf29c76969fef313f\",\"payload\":{\"task_id\":\"2d5b8f0e-1c4a-4e6b-9a3d-7f0c5e1b2a49\"},\"signature\":\"ri18st/EkQwd5o/e27AuANBbKvB8KEcsNboXT+Lq0Th8JTZeiXEZ8RgJCWXYO2R4aROeeYXjVRMKDXe5EsdSDg==\"}",
+      "canonical": "suricatoos-fleet-command-v1\nschema_version=5:1.0.0\ncommand_id=36:73911172-97a9-42a2-bb1c-1ad5323a279a\nnode_id=13:node-lab-0001\ntenant=4:acme\ntype=10:task.start\nissued_by=7:op-7f3a\nissued_at=20:2026-10-11T12:00:00Z\nnot_after=20:2026-10-11T13:00:00Z\nnonce=64:e0bc167329a815171e4f786549553af932644eae7b410bf11867b64059855397\npayload_sha256=64:202e584626515573d531f5508c9094f8d6b705e0fc0fe6fbf29c76969fef313f\n",
+      "canonical_sha256": "6811821c3553820b814daf6c797ccf82e9d4fe531ab5e856b30e674cb35ffcb6",
+      "payload_sha256": "202e584626515573d531f5508c9094f8d6b705e0fc0fe6fbf29c76969fef313f",
+      "expect": "not_yet_valid"
+    },
+    {
+      "name": "order/expired-before-wrong_node",
+      "own_node_id": "node-lab-0002",
+      "verify_at": "2026-10-11T14:00:00Z",
+      "command_json": "{\"schema_version\":\"1.0.0\",\"command_id\":\"ac1035fd-76fe-49cc-b955-0655f50cc1b1\",\"node_id\":\"node-lab-0001\",\"tenant\":\"acme\",\"type\":\"task.start\",\"issued_by\":\"op-7f3a\",\"issued_at\":\"2026-10-11T12:00:00Z\",\"not_after\":\"2026-10-11T13:00:00Z\",\"nonce\":\"22dbf2fca572b514519e8fa288070d9f1dcfbf874b3ee0c30d7bf5b136ba4c18\",\"payload_sha256\":\"202e584626515573d531f5508c9094f8d6b705e0fc0fe6fbf29c76969fef313f\",\"payload\":{\"task_id\":\"2d5b8f0e-1c4a-4e6b-9a3d-7f0c5e1b2a49\"},\"signature\":\"dOt5dqmzkFxdRPqkYGZdpcn3lCL6lRpoZb2u5Uc/ebq6UF6AK23yKjU6yVQiaRF6Sk/3NMHR8AcfOsoVmF/dAA==\"}",
+      "canonical": "suricatoos-fleet-command-v1\nschema_version=5:1.0.0\ncommand_id=36:ac1035fd-76fe-49cc-b955-0655f50cc1b1\nnode_id=13:node-lab-0001\ntenant=4:acme\ntype=10:task.start\nissued_by=7:op-7f3a\nissued_at=20:2026-10-11T12:00:00Z\nnot_after=20:2026-10-11T13:00:00Z\nnonce=64:22dbf2fca572b514519e8fa288070d9f1dcfbf874b3ee0c30d7bf5b136ba4c18\npayload_sha256=64:202e584626515573d531f5508c9094f8d6b705e0fc0fe6fbf29c76969fef313f\n",
+      "canonical_sha256": "fdd7df9ecfe6bdecf43784756237b417b693b07491135cd7ab0e8f48b44aa179",
+      "payload_sha256": "202e584626515573d531f5508c9094f8d6b705e0fc0fe6fbf29c76969fef313f",
+      "expect": "expired"
+    },
+    {
+      "name": "order/wrong_node-before-replay",
+      "own_node_id": "node-lab-0002",
+      "verify_at": "2026-10-11T12:30:00Z",
+      "command_json": "{\"schema_version\":\"1.0.0\",\"command_id\":\"6f1c2a9e-3b7d-4c8a-9e21-5d4f0a7b3c18\",\"node_id\":\"node-lab-0001\",\"tenant\":\"acme\",\"type\":\"task.start\",\"issued_by\":\"op-7f3a\",\"issued_at\":\"2026-10-11T12:00:00Z\",\"not_after\":\"2026-10-11T13:00:00Z\",\"nonce\":\"511f1cc84d4b0438500ad213e7cb1d5a72c16633d24b68fe405f72f57491883f\",\"payload_sha256\":\"202e584626515573d531f5508c9094f8d6b705e0fc0fe6fbf29c76969fef313f\",\"payload\":{\"task_id\":\"2d5b8f0e-1c4a-4e6b-9a3d-7f0c5e1b2a49\"},\"signature\":\"5ZrpVh130najg0rmpsE67OPsKuNqXzlnmtyhAaaNtFlEWaVEbebp3z39ssgtPAj357wOF6uYJkyuu7uHuoD3AQ==\"}",
+      "canonical": "suricatoos-fleet-command-v1\nschema_version=5:1.0.0\ncommand_id=36:6f1c2a9e-3b7d-4c8a-9e21-5d4f0a7b3c18\nnode_id=13:node-lab-0001\ntenant=4:acme\ntype=10:task.start\nissued_by=7:op-7f3a\nissued_at=20:2026-10-11T12:00:00Z\nnot_after=20:2026-10-11T13:00:00Z\nnonce=64:511f1cc84d4b0438500ad213e7cb1d5a72c16633d24b68fe405f72f57491883f\npayload_sha256=64:202e584626515573d531f5508c9094f8d6b705e0fc0fe6fbf29c76969fef313f\n",
+      "canonical_sha256": "331944f113dd0bdca19a103e2e54d53cdc4c2366d629012922d4aac850da831c",
+      "payload_sha256": "202e584626515573d531f5508c9094f8d6b705e0fc0fe6fbf29c76969fef313f",
+      "seen": ["a9a4d1759628b5708691988ce1512e3cbfa6881f90dfc0000d3fea08edcb7d74"],
+      "expect": "wrong_node"
+    },
+    {
+      "name": "order/expired-before-replay",
+      "own_node_id": "node-lab-0001",
+      "verify_at": "2026-10-11T14:00:00Z",
+      "command_json": "{\"schema_version\":\"1.0.0\",\"command_id\":\"6f1c2a9e-3b7d-4c8a-9e21-5d4f0a7b3c18\",\"node_id\":\"node-lab-0001\",\"tenant\":\"acme\",\"type\":\"task.start\",\"issued_by\":\"op-7f3a\",\"issued_at\":\"2026-10-11T12:00:00Z\",\"not_after\":\"2026-10-11T13:00:00Z\",\"nonce\":\"c40fa20a16f3cea4d2a1c6158d705f92dcbc6e89ad60cb9c0aa92f11537f0a2a\",\"payload_sha256\":\"202e584626515573d531f5508c9094f8d6b705e0fc0fe6fbf29c76969fef313f\",\"payload\":{\"task_id\":\"2d5b8f0e-1c4a-4e6b-9a3d-7f0c5e1b2a49\"},\"signature\":\"7Efx5az02/gAgTfg/G4emcL33ZXWdY1tDF2goW4XF33OIm9QeRMNww4qISrzgWyfFDlyMdI5F6n9ciQV702fCQ==\"}",
+      "canonical": "suricatoos-fleet-command-v1\nschema_version=5:1.0.0\ncommand_id=36:6f1c2a9e-3b7d-4c8a-9e21-5d4f0a7b3c18\nnode_id=13:node-lab-0001\ntenant=4:acme\ntype=10:task.start\nissued_by=7:op-7f3a\nissued_at=20:2026-10-11T12:00:00Z\nnot_after=20:2026-10-11T13:00:00Z\nnonce=64:c40fa20a16f3cea4d2a1c6158d705f92dcbc6e89ad60cb9c0aa92f11537f0a2a\npayload_sha256=64:202e584626515573d531f5508c9094f8d6b705e0fc0fe6fbf29c76969fef313f\n",
+      "canonical_sha256": "e4711c4ca6d322c83d160e5532311fe977d4cd6224e6262ec0e3fa20d70140dc",
+      "payload_sha256": "202e584626515573d531f5508c9094f8d6b705e0fc0fe6fbf29c76969fef313f",
+      "seen": ["a9a4d1759628b5708691988ce1512e3cbfa6881f90dfc0000d3fea08edcb7d74"],
+      "expect": "expired"
+    },
+    {
+      "name": "order/replay-before-bad_payload",
+      "own_node_id": "node-lab-0001",
+      "verify_at": "2026-10-11T12:30:00Z",
+      "command_json": "{\"schema_version\":\"1.0.0\",\"command_id\":\"6f1c2a9e-3b7d-4c8a-9e21-5d4f0a7b3c18\",\"node_id\":\"node-lab-0001\",\"tenant\":\"acme\",\"type\":\"task.start\",\"issued_by\":\"op-7f3a\",\"issued_at\":\"2026-10-11T12:00:00Z\",\"not_after\":\"2026-10-11T13:00:00Z\",\"nonce\":\"e92ed941dfe0928e8bc039c3fa98da15fc01f7f80037bd06cad24c55aa4de8fc\",\"payload_sha256\":\"65e7e636f5b86fe94ebeee08ce9054f5fc93d618e4e36d3fc348ac2b3f93a888\",\"payload\":{\"task_id\":\"not-a-uuid\"},\"signature\":\"/uVWALklhV5a4LK7FuTUcHWGY8zJ5z1s3WJeZMDngbBOeJcbgi5cxHh23kLQT/F+AFezTBqIMEwAGtm0XdHkBw==\"}",
+      "canonical": "suricatoos-fleet-command-v1\nschema_version=5:1.0.0\ncommand_id=36:6f1c2a9e-3b7d-4c8a-9e21-5d4f0a7b3c18\nnode_id=13:node-lab-0001\ntenant=4:acme\ntype=10:task.start\nissued_by=7:op-7f3a\nissued_at=20:2026-10-11T12:00:00Z\nnot_after=20:2026-10-11T13:00:00Z\nnonce=64:e92ed941dfe0928e8bc039c3fa98da15fc01f7f80037bd06cad24c55aa4de8fc\npayload_sha256=64:65e7e636f5b86fe94ebeee08ce9054f5fc93d618e4e36d3fc348ac2b3f93a888\n",
+      "canonical_sha256": "c0b5e64c06f212b0c447c5f73ced4f95dda611da70ea5ebc3abcb4d7c2c1883c",
+      "payload_sha256": "65e7e636f5b86fe94ebeee08ce9054f5fc93d618e4e36d3fc348ac2b3f93a888",
+      "seen": ["a9a4d1759628b5708691988ce1512e3cbfa6881f90dfc0000d3fea08edcb7d74"],
+      "expect": "replay"
     }
   ]
 }
