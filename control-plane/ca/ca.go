@@ -198,32 +198,55 @@ func (c *CA) LoadCRLFile(path string) error {
 	return nil
 }
 
-// RevokeCertSerial adds a certificate serial (hex string) to the revocation list.
-// When LoadCRLFile was called, persists the updated list to disk (atomically). A
-// persistence error is returned, but the serial STAYS revoked in memory — IsRevoked
-// and the served CRL keep blocking it until the next restart, and the next save that
-// succeeds writes it too: dropping it would unblock a certificate an operator just
-// revoked. The caller must report the lost persistence, never swallow it.
+// RevokeCertSerials adds certificate serials (hex strings) to the revocation list and,
+// when LoadCRLFile was called, saves the list ONCE, atomically: a token with N
+// certificates costs one write of the file, not N.
 //
-// It is idempotent, so the caller can simply retry: a serial already on the list is
-// not added again (its first revocation time is kept), but the list is saved again
-// anyway — after a save that failed, the retry is what puts it on disk.
-func (c *CA) RevokeCertSerial(serialHex string, revokedAt time.Time) error {
-	serial := new(big.Int)
-	if _, ok := serial.SetString(serialHex, 16); !ok {
-		return fmt.Errorf("serial inválido: %q", serialHex)
+// It is idempotent per serial, so a caller can simply retry: a serial already on the
+// list (or repeated in the batch) is not added again and keeps its first revocation
+// time, but the list is saved again anyway — after a save that failed, the retry is
+// what puts it on disk. A persistence error is returned, yet the serials STAY revoked
+// in memory — IsRevoked and the served CRL keep blocking them until the next restart,
+// and the next save that succeeds writes them too: dropping them would unblock
+// certificates an operator just revoked. The caller must report the lost persistence,
+// never swallow it.
+//
+// It returns how many serials were newly added and the ones that are not valid hex
+// (never revoked).
+func (c *CA) RevokeCertSerials(serials []string, revokedAt time.Time) (added int, invalid []string, err error) {
+	parsed := make([]*big.Int, 0, len(serials))
+	for _, s := range serials {
+		serial := new(big.Int)
+		if _, ok := serial.SetString(s, 16); !ok {
+			invalid = append(invalid, s)
+			continue
+		}
+		parsed = append(parsed, serial)
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if !c.revokedLocked(serial) {
-		c.revoked = append(c.revoked, x509.RevocationListEntry{SerialNumber: serial, RevocationTime: revokedAt})
+	for _, serial := range parsed {
+		if !c.revokedLocked(serial) {
+			c.revoked = append(c.revoked, x509.RevocationListEntry{SerialNumber: serial, RevocationTime: revokedAt})
+			added++
+		}
 	}
 	if c.crlFile != "" {
 		if err := c.saveCRLLocked(); err != nil {
-			return fmt.Errorf("persistir crl: %w", err)
+			return added, invalid, fmt.Errorf("persistir crl: %w", err)
 		}
 	}
-	return nil
+	return added, invalid, nil
+}
+
+// RevokeCertSerial is RevokeCertSerials with one serial; a serial that is not hex is
+// an error.
+func (c *CA) RevokeCertSerial(serialHex string, revokedAt time.Time) error {
+	_, invalid, err := c.RevokeCertSerials([]string{serialHex}, revokedAt)
+	if len(invalid) > 0 {
+		return fmt.Errorf("serial inválido: %q", serialHex)
+	}
+	return err
 }
 
 // revokedLocked reports whether serial is on the revocation list. Must be called with
@@ -279,7 +302,18 @@ func (c *CA) saveCRLLocked() error {
 	if err != nil {
 		return err
 	}
-	return writeFileAtomic(c.crlFile, data)
+	return saveCRLFile(c.crlFile, data)
+}
+
+// saveCRLFile writes the revocation list file. A variable so tests can count saves.
+var saveCRLFile = writeFileAtomic
+
+// PersistsRevocations reports whether revocations are saved to disk (LoadCRLFile was
+// called). Without it the revocation list lives in memory only.
+func (c *CA) PersistsRevocations() bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.crlFile != ""
 }
 
 // syncDir flushes a directory so a rename inside it survives a power loss.

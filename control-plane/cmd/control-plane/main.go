@@ -19,7 +19,11 @@
 //	TOKEN_DB_PATH         path to BoltDB file for persistent token store (recommended)
 //	CRL_URL               public URL of the CRL endpoint (e.g. https://cp.example.com/v1/crl.der)
 //	                      when set, issued certs embed it as a CRL distribution point
-//	CRL_FILE              path to JSON file for persisting revoked serials (recommended with CRL_URL)
+//	CRL_FILE              path to JSON file for persisting revoked serials (recommended with CRL_URL).
+//	                      Unset → the revocation list lives in memory only (warned at boot;
+//	                      DELETE /api/v1/tokens/{id} answers "persisted": false). Either way,
+//	                      every boot re-revokes the certificates of all revoked tokens
+//	                      (reconciliation, one batch).
 //	INGEST_URL            public inventory endpoint handed to agents on enrollment
 //	                      (e.g. https://scanner.suricatoos.com/ingest/v1/inventory)
 //	UPDATE_MANIFEST_FILE  path to the JSON auto-update manifest (version + per
@@ -135,8 +139,11 @@ func main() {
 			log.Fatalf("CRL file: %v", err)
 		}
 		log.Printf("CRL: persisting revocations to %s", crlFile)
+	} else if tokenDBPath != "" {
+		// The boot reconciliation below rebuilds the list from the revoked tokens.
+		log.Printf("CRL: AVISO — CRL_FILE não definido: a lista de revogação fica só em memória e o DELETE de token responde \"persisted\": false; no boot ela é refeita dos tokens revogados do TOKEN_DB_PATH, com a data do boot — defina CRL_FILE para gravá-la")
 	} else {
-		log.Printf("CRL: AVISO — CRL_FILE não definido: revogações só em memória — somem no restart (o certificado de um token revogado volta a valer)")
+		log.Printf("CRL: AVISO — CRL_FILE não definido: revogações só em memória — somem no restart (o certificado de um token revogado volta a valer); o DELETE de token responde \"persisted\": false")
 	}
 
 	// Token store — BoltDB when TOKEN_DB_PATH is set; in-memory otherwise.
@@ -154,6 +161,22 @@ func main() {
 		log.Printf("token store: IN-MEMORY — set TOKEN_DB_PATH for production")
 	}
 	tm := tokens.NewManager(store)
+
+	// Boot reconciliation: the certificates of every revoked token go back on the
+	// revocation list in one batch (idempotent). It closes the window in which a token
+	// was revoked but its certificates were not — a crash between the two writes, or a
+	// restart before the operator repeated a DELETE whose save failed. A failed save is
+	// logged loudly but does not stop the boot: the list is complete in memory, and the
+	// next revocation that saves persists all of it.
+	reAdded, badSerials, err := cpapi.ReconcileRevocations(tm, authority, time.Now().UTC())
+	if err != nil {
+		log.Printf("CRL: ERRO na reconciliação de boot: %v — %d serial(is) de tokens revogados (re)adicionado(s) só em memória; corrija a causa (a próxima revogação gravada persiste a lista inteira)", err, reAdded)
+	} else {
+		log.Printf("CRL: reconciliação de boot — %d serial(is) de tokens revogados (re)adicionado(s) à lista de revogação", reAdded)
+	}
+	if len(badSerials) > 0 {
+		log.Printf("CRL: reconciliação de boot — %d serial(is) inválido(s) no token store, ignorado(s): %q", len(badSerials), badSerials)
+	}
 
 	if ingestURL != "" {
 		log.Printf("ingest URL (handed to agents on enroll): %s", ingestURL)

@@ -136,8 +136,16 @@ revogado, mas a revogação de algum certificado falhou ou não foi gravada em d
 permissão em `CRL_FILE`) e **repita o `DELETE`**: ele refaz e grava a revogação dos
 certificados e responde `409` quando todos estão revogados e gravados. O mesmo `DELETE`
 repetido também recupera um pedido interrompido entre revogar o token e revogar os
-certificados. Sem `CRL_FILE` o control-plane avisa no boot que as revogações ficam só
-em memória e somem no restart.
+certificados — e o próprio control-plane faz isso a cada boot: a **reconciliação de
+boot** devolve à lista, num lote só, os certificados de todo token revogado e loga
+`CRL: reconciliação de boot — N serial(is) …` (ou `CRL: ERRO na reconciliação de boot`,
+sem derrubar o processo, se a gravação falhar).
+
+Toda resposta do `DELETE` (200, 409 e 500) traz `"persisted"`: `true` quando a lista de
+revogação foi gravada em disco, `false` sem `CRL_FILE` — aí ela fica só em memória, e o
+control-plane avisa no boot (`CRL: AVISO — CRL_FILE não definido …`). Com
+`TOKEN_DB_PATH`, a reconciliação de boot refaz essa lista a partir dos tokens
+revogados; sem nenhum dos dois, as revogações somem no restart.
 
 ## Referências
 

@@ -169,6 +169,16 @@ func (h *Handler) listTokens(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(out)
 }
 
+// revokeResult is the body of a revocation that fully happened (200 "revoked"), or of
+// a repeated one that found everything revoked already (409 "already revoked").
+// Persisted says whether the revocation list is on disk: always false without
+// CRL_FILE, where it lives in memory only (the control-plane warns about it at boot).
+type revokeResult struct {
+	Status    string `json:"status"`
+	ID        string `json:"id"` // the token
+	Persisted bool   `json:"persisted"`
+}
+
 // revokeFailure is the 500 body of a revocation that only partly happened: the token
 // was revoked, but revoking (or persisting the revocation of) some of its
 // certificates failed.
@@ -178,6 +188,7 @@ type revokeFailure struct {
 	TokenRevoked  bool     `json:"token_revoked"`  // always true: the token store is updated first
 	CertsRevoked  int      `json:"certs_revoked"`  // certificates revoked AND persisted
 	FailedSerials []string `json:"failed_serials"` // revocation failed or was not persisted
+	Persisted     bool     `json:"persisted"`      // the revocation list was saved to disk
 	Error         string   `json:"error"`
 }
 
@@ -191,10 +202,14 @@ type revokeFailure struct {
 // DELETE. It used to be a 200 that silently lost the revocation.
 //
 // Repeating the DELETE of a token that is already revoked redoes the certificate
-// revocation (RevokeCertSerial is idempotent and saves the list again): the same 500
+// revocation (RevokeCertSerials is idempotent and saves the list again): the same 500
 // while something still fails, and 409 "already revoked" only when every serial is
 // revoked AND, with CRL_FILE set, on disk. That also covers a request that crashed
-// between the token store and the CRL, and a restart that lost an unsaved list.
+// between the token store and the CRL, and a restart that lost an unsaved list (the
+// boot reconciliation, ReconcileRevocations, covers those without anyone asking).
+//
+// Every answer but the 404/400 says "persisted": whether the revocation list is on
+// disk — always false without CRL_FILE.
 func (h *Handler) revokeToken(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {
@@ -213,9 +228,9 @@ func (h *Handler) revokeToken(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "revoke failed: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
-	revoked, failed := h.revokeCerts(id, rec.Enrollments)
+	revoked, failed, persisted := h.revokeCerts(id, rec.Enrollments)
+	w.Header().Set("Content-Type", "application/json")
 	if len(failed) > 0 {
-		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(revokeFailure{
 			Status:        "partial",
@@ -223,6 +238,7 @@ func (h *Handler) revokeToken(w http.ResponseWriter, r *http.Request) {
 			TokenRevoked:  true,
 			CertsRevoked:  revoked,
 			FailedSerials: failed,
+			Persisted:     persisted,
 			Error: fmt.Sprintf("o token foi revogado, mas a revogação de %d de %d certificado(s) falhou ou não foi gravada "+
 				"em disco — detalhes no log do control-plane; repita o DELETE: ele refaz e grava a revogação (responde 409 "+
 				"quando todos estiverem revogados e gravados). Até lá, um certificado que entrou na lista em memória segue "+
@@ -232,32 +248,75 @@ func (h *Handler) revokeToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if already {
-		http.Error(w, "already revoked", http.StatusConflict)
+		w.WriteHeader(http.StatusConflict)
+		json.NewEncoder(w).Encode(revokeResult{Status: "already revoked", ID: id, Persisted: persisted})
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"status": "revoked", "id": id})
+	json.NewEncoder(w).Encode(revokeResult{Status: "revoked", ID: id, Persisted: persisted})
 }
 
-// revokeCerts revokes, and saves, every certificate serial recorded in enrollments,
-// returning how many succeeded and which failed. It keeps going after a failure:
-// every certificate revoked, even if only in memory, is blocked right away.
-func (h *Handler) revokeCerts(tokenID string, enrollments []tokens.Enrollment) (revoked int, failed []string) {
-	now := time.Now().UTC()
-	failed = []string{}
+// revokeCerts revokes every certificate serial recorded in enrollments in ONE batch
+// (one save of the list — not one per certificate) and returns how many are revoked
+// and saved, which failed (one log line each), and whether the list is on disk. A
+// serial the save could not persist still counts as failed, although the CA keeps
+// blocking it in memory until the next restart.
+func (h *Handler) revokeCerts(tokenID string, enrollments []tokens.Enrollment) (revoked int, failed []string, persisted bool) {
+	var serials []string
 	for _, enr := range enrollments {
-		if enr.CertSerial == "" {
-			continue
+		if enr.CertSerial != "" {
+			serials = append(serials, enr.CertSerial)
 		}
-		if err := h.authority.RevokeCertSerial(enr.CertSerial, now); err != nil {
-			h.logf("api: token %s revogado, mas a revogação do certificado serial=%s falhou: %v (bloqueado em memória até o restart: %v)",
-				tokenID, enr.CertSerial, err, h.authority.IsRevoked(enr.CertSerial))
-			failed = append(failed, enr.CertSerial)
-			continue
-		}
-		revoked++
 	}
-	return revoked, failed
+	_, invalid, err := h.authority.RevokeCertSerials(serials, time.Now().UTC())
+	notHex := make(map[string]bool, len(invalid))
+	for _, s := range invalid {
+		notHex[s] = true
+	}
+	failed = []string{}
+	for _, s := range serials {
+		switch {
+		case notHex[s]:
+			h.logf("api: token %s revogado, mas o certificado serial=%s não foi revogado: serial inválido", tokenID, s)
+			failed = append(failed, s)
+		case err != nil:
+			h.logf("api: token %s revogado, mas a revogação do certificado serial=%s não foi gravada: %v (bloqueado em memória até o restart)", tokenID, s, err)
+			failed = append(failed, s)
+		default:
+			revoked++
+		}
+	}
+	return revoked, failed, err == nil && h.authority.PersistsRevocations()
+}
+
+// ReconcileRevocations puts the certificate serials of every revoked token back on
+// the CA's revocation list, in one batch (one save). Run it at boot, after the CA has
+// loaded its CRL file and with the token store open: it closes, with nobody acting,
+// the window in which a token is revoked but its certificates are not — a crash
+// between the two writes, or a restart before the operator repeated a DELETE whose
+// save failed. Without CRL_FILE it rebuilds the in-memory list from the token store.
+//
+// It is idempotent: a serial already listed is left as is; one that was missing gets
+// now as its revocation time (the original instant was lost with it; what blocks the
+// certificate is being listed). It returns how many serials were added, the ones that
+// are not valid hex, and the error of listing the tokens or of saving the list — after
+// which the serials are still revoked in memory, so the caller logs it and goes on.
+func ReconcileRevocations(tm *tokens.Manager, authority *ca.CA, now time.Time) (added int, invalid []string, err error) {
+	recs, err := tm.List()
+	if err != nil {
+		return 0, nil, fmt.Errorf("listar os tokens: %w", err)
+	}
+	var serials []string
+	for _, rec := range recs {
+		if !rec.Revoked {
+			continue
+		}
+		for _, enr := range rec.Enrollments {
+			if enr.CertSerial != "" {
+				serials = append(serials, enr.CertSerial)
+			}
+		}
+	}
+	return authority.RevokeCertSerials(serials, now)
 }
 
 // buildBundle returns the YAML content for an enrollment bundle.

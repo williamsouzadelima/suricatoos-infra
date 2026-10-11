@@ -278,16 +278,19 @@ func TestRevokeToken_Success(t *testing.T) {
 	}
 }
 
-// revokeSetup builds a handler whose CA persists revocations in dir/crl.json and a
-// token with one enrollment per serial; it returns the handler, the CA and the token id.
+// revokeSetup builds a handler whose CA persists revocations in dir/crl.json (dir ""
+// = no CRL_FILE: memory only) and a token with one enrollment per serial; it returns
+// the handler, the CA and the token id.
 func revokeSetup(t *testing.T, dir string, serials ...string) (*Handler, *ca.CA, string) {
 	t.Helper()
 	authority, err := ca.NewEphemeral(time.Now())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := authority.LoadCRLFile(filepath.Join(dir, "crl.json")); err != nil {
-		t.Fatal(err)
+	if dir != "" {
+		if err := authority.LoadCRLFile(filepath.Join(dir, "crl.json")); err != nil {
+			t.Fatal(err)
+		}
 	}
 	tm := tokens.NewManager(tokens.NewMemStore())
 	minted, err := tm.Mint(tokens.MintRequest{Type: tokens.Deployment, Scope: tokens.Scope{Tenant: "acme"}, TTL: time.Hour, MaxUses: 10})
@@ -316,7 +319,45 @@ type revokeBody struct {
 	TokenRevoked  bool     `json:"token_revoked"`
 	CertsRevoked  int      `json:"certs_revoked"`
 	FailedSerials []string `json:"failed_serials"`
+	Persisted     *bool    `json:"persisted"`
 	Error         string   `json:"error"`
+}
+
+// decodeRevoke reads a DELETE answer as JSON, failing the test otherwise.
+func decodeRevoke(t *testing.T, rr *httptest.ResponseRecorder) revokeBody {
+	t.Helper()
+	if ct := rr.Header().Get("Content-Type"); !strings.HasPrefix(ct, "application/json") {
+		t.Fatalf("Content-Type = %q, want application/json (%d %s)", ct, rr.Code, rr.Body)
+	}
+	var body revokeBody
+	if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
+		t.Fatalf("DELETE body is not JSON: %v\n%s", err, rr.Body)
+	}
+	return body
+}
+
+// The DELETE answer — 200, the 409 of a repeated one, and the 500 — says whether the
+// revocation list is on disk: false without CRL_FILE (memory only, as the boot warning
+// says), true when the list was saved.
+func TestRevokeToken_SaysWhetherTheRevocationIsPersisted(t *testing.T) {
+	for _, withFile := range []bool{false, true} {
+		dir := ""
+		if withFile {
+			dir = t.TempDir()
+		}
+		h, _, id := revokeSetup(t, dir, "0a1b2c")
+		h.logf = func(string, ...any) {}
+		for _, want := range []int{http.StatusOK, http.StatusConflict} {
+			rr := deleteToken(h, id)
+			if rr.Code != want {
+				t.Fatalf("CRL_FILE=%v: DELETE = %d, want %d: %s", withFile, rr.Code, want, rr.Body)
+			}
+			body := decodeRevoke(t, rr)
+			if body.ID != id || body.Persisted == nil || *body.Persisted != withFile {
+				t.Fatalf("CRL_FILE=%v, %d: body = %s, want the id and \"persisted\": %v", withFile, want, rr.Body, withFile)
+			}
+		}
+	}
 }
 
 // servedSerials returns how many entries the CRL the CA serves holds.
@@ -365,6 +406,9 @@ func TestRevokeToken_PersistFailureIs500(t *testing.T) {
 	if body.Status != "partial" || body.ID != id || !body.TokenRevoked || body.CertsRevoked != 0 {
 		t.Fatalf("body = %+v, want status=partial, the id, token_revoked=true, certs_revoked=0", body)
 	}
+	if body.Persisted == nil || *body.Persisted {
+		t.Fatalf("a revocation whose save failed must say \"persisted\": false: %s", rr.Body)
+	}
 	if strings.Join(body.FailedSerials, ",") != "0a1b2c,0d0e0f" {
 		t.Fatalf("failed_serials = %v, want [0a1b2c 0d0e0f]", body.FailedSerials)
 	}
@@ -402,8 +446,12 @@ func TestRevokeToken_PersistFailureIs500(t *testing.T) {
 	if err := os.Mkdir(dir, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if rr := deleteToken(h, id); rr.Code != http.StatusConflict {
+	rr = deleteToken(h, id)
+	if rr.Code != http.StatusConflict {
 		t.Fatalf("retry with the disk back = %d, want 409 (already revoked, now on disk): %s", rr.Code, rr.Body)
+	}
+	if b := decodeRevoke(t, rr); b.Persisted == nil || !*b.Persisted {
+		t.Fatalf("the 409 after a successful save must say \"persisted\": true: %s", rr.Body)
 	}
 	fresh, err := ca.NewEphemeral(time.Now()) // a restart: only what is on disk survives
 	if err != nil {
@@ -472,8 +520,89 @@ func TestRevokeToken_PartialFailureNamesOnlyTheFailedSerial(t *testing.T) {
 	if !body.TokenRevoked || body.CertsRevoked != 1 || strings.Join(body.FailedSerials, ",") != "zz-not-hex" {
 		t.Fatalf("body = %+v, want token_revoked=true, certs_revoked=1, failed_serials=[zz-not-hex]", body)
 	}
+	if body.Persisted == nil || !*body.Persisted {
+		t.Fatalf("the list (with the good serial) was saved, so \"persisted\" must be true: %s", rr.Body)
+	}
 	if !authority.IsRevoked("0a1b2c") {
 		t.Fatal("the good serial must have been revoked despite the other failure")
+	}
+}
+
+// A token revoked while its certificates never reached the saved list — a crash
+// between the token store and the CRL, or a restart before the operator repeated a
+// DELETE whose save failed — gets them back at boot, on disk, with nobody acting.
+// Certificates of tokens that are not revoked are left alone; a second run adds nothing.
+func TestReconcileRevocationsRestoresTheCertsOfRevokedTokens(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "crl.json")
+	h, _, revokedID := revokeSetup(t, dir, "0a1b2c", "0d0e0f")
+	live, err := h.tm.Mint(tokens.MintRequest{Type: tokens.SingleHost, Scope: tokens.Scope{Tenant: "acme"}, TTL: time.Hour, MaxUses: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.tm.Consume(live.Token, tokens.Enrollment{AgentID: "agent-live", CertSerial: "0f0f0f"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.tm.RevokeRecord(revokedID, "crashed-request"); err != nil { // the certs never got revoked
+		t.Fatal(err)
+	}
+
+	// The restart: a CA that loads the CRL file (nothing in it) over the same token store.
+	boot, err := ca.NewEphemeral(time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := boot.LoadCRLFile(path); err != nil {
+		t.Fatal(err)
+	}
+	added, invalid, err := ReconcileRevocations(h.tm, boot, time.Now())
+	if err != nil || added != 2 || len(invalid) != 0 {
+		t.Fatalf("reconcile: added=%d invalid=%v err=%v, want 2, none, nil", added, invalid, err)
+	}
+	fresh, _ := ca.NewEphemeral(time.Now()) // what survives the next restart is what is on disk
+	if err := fresh.LoadCRLFile(path); err != nil {
+		t.Fatal(err)
+	}
+	if !fresh.IsRevoked("0a1b2c") || !fresh.IsRevoked("0d0e0f") {
+		t.Fatal("after the boot reconciliation the revoked token's certificates must be on disk")
+	}
+	if fresh.IsRevoked("0f0f0f") || boot.IsRevoked("0f0f0f") {
+		t.Fatal("a certificate of a token that is not revoked must not be revoked")
+	}
+
+	// Idempotent: the next boot finds everything in place.
+	if added, _, err := ReconcileRevocations(h.tm, boot, time.Now()); err != nil || added != 0 {
+		t.Fatalf("second reconcile: added=%d err=%v, want 0, nil", added, err)
+	}
+	if n := servedSerials(t, boot); n != 2 {
+		t.Fatalf("served CRL has %d entries, want 2", n)
+	}
+}
+
+// A save that fails during the boot reconciliation is returned (main logs it loudly
+// and keeps running); the serials are revoked in memory anyway.
+func TestReconcileRevocationsReportsASaveFailure(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "state")
+	if err := os.Mkdir(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	h, _, id := revokeSetup(t, dir, "0a1b2c")
+	if _, err := h.tm.RevokeRecord(id, "crashed-request"); err != nil {
+		t.Fatal(err)
+	}
+	boot, _ := ca.NewEphemeral(time.Now())
+	if err := boot.LoadCRLFile(filepath.Join(dir, "crl.json")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.RemoveAll(dir); err != nil {
+		t.Fatal(err)
+	}
+	added, _, err := ReconcileRevocations(h.tm, boot, time.Now())
+	if err == nil || added != 1 {
+		t.Fatalf("reconcile with the disk gone: added=%d err=%v, want 1 and an error", added, err)
+	}
+	if !boot.IsRevoked("0a1b2c") {
+		t.Fatal("the serial must be revoked in memory even though the save failed")
 	}
 }
 

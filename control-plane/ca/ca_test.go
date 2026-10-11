@@ -405,6 +405,89 @@ func TestRevokeCertSerialIsIdempotentAndSavesAgain(t *testing.T) {
 	}
 }
 
+// countSaves makes every save of the revocation list go through a counter for the
+// rest of the test.
+func countSaves(t *testing.T) *int {
+	t.Helper()
+	n := new(int)
+	orig := saveCRLFile
+	saveCRLFile = func(path string, data []byte) error {
+		*n++
+		return orig(path, data)
+	}
+	t.Cleanup(func() { saveCRLFile = orig })
+	return n
+}
+
+// A token with N certificates is revoked in one batch and ONE save of the list (one
+// save per serial rewrote the whole file N times: O(N²) bytes). Idempotent per
+// serial, also inside the batch; serials that are not hex are returned, not revoked.
+func TestRevokeCertSerialsSavesTheListOnce(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "crl.json")
+	now := time.Unix(1700000000, 0).UTC()
+	c, _ := NewEphemeral(now)
+	if err := c.LoadCRLFile(path); err != nil {
+		t.Fatal(err)
+	}
+	saves := countSaves(t)
+
+	added, invalid, err := c.RevokeCertSerials([]string{"0a", "0b", "zz-not-hex", "0A", "0c"}, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if *saves != 1 {
+		t.Fatalf("a batch of 5 saved the list %d times, want 1", *saves)
+	}
+	if added != 3 || len(invalid) != 1 || invalid[0] != "zz-not-hex" {
+		t.Fatalf("added=%d invalid=%v, want 3 and [zz-not-hex]", added, invalid)
+	}
+	if got := servedEntries(t, c, now); len(got) != 3 {
+		t.Fatalf("served CRL has %d entries, want 3 (0a twice in the batch counts once)", len(got))
+	}
+	if got := readCRLFile(t, path); len(got) != 3 {
+		t.Fatalf("crl.json has %d entries, want 3", len(got))
+	}
+
+	// Again: nothing new, still one save (a retry is what puts a failed save on disk).
+	added, invalid, err = c.RevokeCertSerials([]string{"0a", "0b"}, now.Add(time.Hour))
+	if err != nil || added != 0 || len(invalid) != 0 || *saves != 2 {
+		t.Fatalf("repeat: added=%d invalid=%v err=%v saves=%d, want 0, none, nil, 2", added, invalid, err, *saves)
+	}
+	if got := servedEntries(t, c, now); len(got) != 3 || !got[0].RevocationTime.Equal(now) {
+		t.Fatalf("served CRL = %+v, want the same 3 entries with their first revocation time", got)
+	}
+
+	// The single-serial call is the same thing with one serial.
+	if err := c.RevokeCertSerial("0d", now); err != nil || *saves != 3 {
+		t.Fatalf("RevokeCertSerial: err=%v saves=%d, want nil and 3", err, *saves)
+	}
+	if err := c.RevokeCertSerial("nope", now); err == nil {
+		t.Fatal("RevokeCertSerial of a non-hex serial must fail")
+	}
+}
+
+// Without a CRL file nothing is saved and PersistsRevocations says so.
+func TestRevokeCertSerialsInMemoryOnly(t *testing.T) {
+	now := time.Unix(1700000000, 0).UTC()
+	c, _ := NewEphemeral(now)
+	saves := countSaves(t)
+	if c.PersistsRevocations() {
+		t.Fatal("a CA without LoadCRLFile must not claim to persist revocations")
+	}
+	if added, _, err := c.RevokeCertSerials([]string{"0a", "0b"}, now); err != nil || added != 2 || *saves != 0 {
+		t.Fatalf("added=%d err=%v saves=%d, want 2, nil, 0", added, err, *saves)
+	}
+	if !c.IsRevoked("0a") || !c.IsRevoked("0b") {
+		t.Fatal("the serials must be revoked in memory")
+	}
+	if err := c.LoadCRLFile(filepath.Join(t.TempDir(), "crl.json")); err != nil {
+		t.Fatal(err)
+	}
+	if !c.PersistsRevocations() {
+		t.Fatal("after LoadCRLFile the CA persists revocations")
+	}
+}
+
 func TestSerialsAreUnique(t *testing.T) {
 	now := time.Unix(1700000000, 0).UTC()
 	c, _ := NewEphemeral(now)
