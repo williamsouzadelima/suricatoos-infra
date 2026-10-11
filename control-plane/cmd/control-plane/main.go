@@ -336,6 +336,8 @@ func main() {
 		mux.HandleFunc("POST /v1/scan-jobs/{id}/ack", sensorJobSvc.AckHandler())
 		mux.HandleFunc("POST /v1/heartbeat", sensorJobSvc.HeartbeatHandler())
 		mux.HandleFunc("POST /api/v1/tenants/{t}/scan-jobs", sensorJobSvc.EnqueueHandler(adminSecret))
+		// Operator listing of the tenant's jobs (admin bearer; same flag as enqueue).
+		mux.HandleFunc("GET /api/v1/tenants/{t}/scan-jobs", sensorJobSvc.ListHandler(adminSecret))
 		// Feed mirror (ADR-0007): signed manifest + content-addressed blobs to the
 		// sensor's local GVM. Signed with `authority` for now (a dedicated feed key
 		// is the key-separation slice); the sensor verifies with the pinned CA pubkey.

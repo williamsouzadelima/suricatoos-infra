@@ -1,6 +1,8 @@
 package sensorjobs
 
 import (
+	"encoding/json"
+	"os"
 	"testing"
 	"time"
 )
@@ -103,9 +105,11 @@ func TestAckOwnerScope(t *testing.T) {
 	if r.Ack(acme.JobID, "acme") != true {
 		t.Fatal("ack do próprio tenant deveria funcionar")
 	}
+	// O sensor só dá ack DEPOIS de rodar o scan e empurrar o relatório, então o ack
+	// significa "concluído": DONE (e não mais ACKED).
 	got, _ := r.Get(acme.JobID, "acme")
-	if got.State != StateAcked {
-		t.Fatalf("estado deveria ser ACKED, got %s", got.State)
+	if got.State != StateDone {
+		t.Fatalf("estado deveria ser DONE, got %s", got.State)
 	}
 	// Get cross-tenant → 404.
 	if _, ok := r.Get(acme.JobID, "globex"); ok {
@@ -155,7 +159,260 @@ func TestPersistRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	got, ok := r2.Get(j.JobID, "acme")
+	if !ok || got.State != StateDone {
+		t.Fatalf("job deveria persistir como DONE, got %+v ok=%v", got, ok)
+	}
+}
+
+// t0 é o instante-base dos testes de ciclo de vida (relógio injetado via r.now).
+var t0 = time.Date(2026, 7, 1, 12, 0, 0, 0, time.UTC)
+
+// at fixa o relógio do registry em t.
+func at(t time.Time) func() time.Time { return func() time.Time { return t } }
+
+func TestAckIsIdempotentAndKeepsFirstTimestamp(t *testing.T) {
+	r := testReg(t)
+	r.now = at(t0)
+	j, _, _ := r.Enqueue(EnqueueRequest{Tenant: "acme", Targets: []string{"10.20.1.1"}})
+	r.Poll("acme")
+
+	r.now = at(t0.Add(10 * time.Minute))
+	if !r.Ack(j.JobID, "acme") {
+		t.Fatal("ack do próprio tenant deveria funcionar")
+	}
+	r.now = at(t0.Add(20 * time.Minute))
+	if !r.Ack(j.JobID, "acme") {
+		t.Fatal("ack repetido deveria ser idempotente (true)")
+	}
+	got, _ := r.Get(j.JobID, "acme")
+	if got.State != StateDone || !got.AckedAt.Equal(t0.Add(10*time.Minute)) {
+		t.Fatalf("ack repetido não pode mexer no job concluído: %+v", got)
+	}
+}
+
+func TestAckDoesNotResurrectExpired(t *testing.T) {
+	r := testReg(t)
+	r.now = at(t0)
+	j, _, _ := r.Enqueue(EnqueueRequest{Tenant: "acme", Targets: []string{"10.20.1.1"}, TTL: time.Hour})
+	r.now = at(t0.Add(2 * time.Hour))
+	r.Poll("acme") // varre o vencido → EXPIRED
+	if !r.Ack(j.JobID, "acme") {
+		t.Fatal("ack de job do tenant responde true (idempotente) mesmo se terminal")
+	}
+	if got, _ := r.Get(j.JobID, "acme"); got.State != StateExpired {
+		t.Fatalf("job EXPIRED deve continuar EXPIRED após ack, got %s", got.State)
+	}
+}
+
+// writeJobs grava um arquivo de fila com os jobs dados, para controlar estado e
+// idade sem percorrer o ciclo de vida inteiro.
+func writeJobs(t *testing.T, jobs ...ScanJob) string {
+	t.Helper()
+	path := t.TempDir() + "/jobs.json"
+	b, err := json.Marshal(jobs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, b, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+// Registros gravados por versões anteriores têm state ACKED (o Ack ainda não
+// marcava DONE). Precisam continuar legíveis, e nunca são entregues de novo.
+func TestLegacyAckedRecordsStillLoad(t *testing.T) {
+	legacy := ScanJob{
+		SchemaVersion: SchemaVersion, JobID: "legacy", CorrelationID: "c", Tenant: "acme",
+		Targets: []string{"10.20.1.1"}, State: StateAcked,
+		CreatedAt: t0.Add(-time.Hour), ExpiresAt: t0.Add(23 * time.Hour), AckedAt: t0.Add(-50 * time.Minute),
+	}
+	r, err := NewRegistry(Config{Path: writeJobs(t, legacy)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.now = at(t0)
+	got, ok := r.Get("legacy", "acme")
 	if !ok || got.State != StateAcked {
-		t.Fatalf("job deveria persistir como ACKED, got %+v ok=%v", got, ok)
+		t.Fatalf("registro legado ACKED deveria carregar intacto, got %+v ok=%v", got, ok)
+	}
+	if _, ok := r.Poll("acme"); ok {
+		t.Fatal("um job legado ACKED não deve ser entregue de novo")
+	}
+}
+
+// O colapso de pedidos idênticos (anti-storm) vale para job EM VOO; um job já
+// concluído (DONE) não pode engolir um novo pedido de re-scan.
+func TestEnqueueAfterDoneIsNotCollapsed(t *testing.T) {
+	r := testReg(t)
+	req := EnqueueRequest{Tenant: "acme", Targets: []string{"10.20.1.1"}, ScanConfig: "full-and-fast"}
+	j1, _, _ := r.Enqueue(req)
+	r.Poll("acme") // em voo (DELIVERED)
+	if j2, _, _ := r.Enqueue(req); j2.JobID != j1.JobID {
+		t.Fatal("job em voo: o enqueue idêntico deveria colapsar no mesmo job")
+	}
+	r.Ack(j1.JobID, "acme") // concluído
+	if j3, _, _ := r.Enqueue(req); j3.JobID == j1.JobID {
+		t.Fatal("job DONE não deveria engolir um novo pedido idêntico (re-scan)")
+	}
+}
+
+func TestReapDropsOldTerminalOnly(t *testing.T) {
+	// old passa da retenção padrão (7 dias); recent fica dentro dela.
+	old := t0.Add(-8 * 24 * time.Hour)
+	recent := t0.Add(-1 * 24 * time.Hour)
+	path := writeJobs(t,
+		ScanJob{JobID: "done-old", Tenant: "acme", State: StateDone, CreatedAt: old},
+		ScanJob{JobID: "expired-old", Tenant: "acme", State: StateExpired, CreatedAt: old},
+		ScanJob{JobID: "done-recent", Tenant: "acme", State: StateDone, CreatedAt: recent},
+		ScanJob{JobID: "pending-old", Tenant: "acme", State: StatePending, CreatedAt: old},
+		ScanJob{JobID: "delivered-old", Tenant: "acme", State: StateDelivered, CreatedAt: old},
+	)
+	r, err := NewRegistry(Config{Path: path})
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.now = at(t0)
+	has := func(rr *Registry, id string) bool { _, ok := rr.Get(id, "acme"); return ok }
+
+	if n := r.Reap(0); n != 2 { // 0 = retenção padrão
+		t.Fatalf("Reap(0) removeu %d, want 2 (DONE e EXPIRED antigos)", n)
+	}
+	// Terminais antigos somem; o terminal recente fica; os não-terminais NUNCA
+	// saem, por mais velhos que sejam.
+	for id, want := range map[string]bool{
+		"done-old":      false,
+		"expired-old":   false,
+		"done-recent":   true,
+		"pending-old":   true,
+		"delivered-old": true,
+	} {
+		if has(r, id) != want {
+			t.Errorf("job %s presente=%v, want %v", id, has(r, id), want)
+		}
+	}
+	// O expurgo chegou ao disco.
+	r2, _ := NewRegistry(Config{Path: path})
+	if has(r2, "done-old") || has(r2, "expired-old") || !has(r2, "done-recent") {
+		t.Error("o expurgo não foi persistido")
+	}
+	// Janela explícita menor também vale; ainda só terminais.
+	if n := r.Reap(time.Hour); n != 1 || has(r, "done-recent") || !has(r, "pending-old") {
+		t.Errorf("Reap(1h) removeu %d; deveria expurgar só done-recent", n)
+	}
+}
+
+// O expurgo roda no Enqueue (mesmo ponto da fila de remediação): a fila não cresce
+// para sempre só porque ninguém chamou Reap.
+func TestEnqueueReapsOldTerminal(t *testing.T) {
+	path := writeJobs(t,
+		ScanJob{JobID: "done-old", Tenant: "acme", State: StateDone, CreatedAt: t0.Add(-8 * 24 * time.Hour)},
+		ScanJob{JobID: "pending-old", Tenant: "acme", State: StatePending, CreatedAt: t0.Add(-8 * 24 * time.Hour)},
+	)
+	r, err := NewRegistry(Config{Path: path, ScopeOf: scopes(map[string]string{"acme": "10.20.0.0/16"})})
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.now = at(t0)
+	if _, _, err := r.Enqueue(EnqueueRequest{Tenant: "acme", Targets: []string{"10.20.1.1"}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := r.Get("done-old", "acme"); ok {
+		t.Fatal("o Enqueue deveria expurgar o terminal antigo")
+	}
+	if _, ok := r.Get("pending-old", "acme"); !ok {
+		t.Fatal("o expurgo não pode tocar job não-terminal")
+	}
+	r2, _ := NewRegistry(Config{Path: path})
+	if _, ok := r2.Get("done-old", "acme"); ok {
+		t.Fatal("o expurgo do Enqueue não foi persistido")
+	}
+}
+
+func TestListIsTenantScopedOrderedAndLimited(t *testing.T) {
+	r := testReg(t)
+	mk := func(minute int, tenant, target string) *ScanJob {
+		r.now = at(t0.Add(time.Duration(minute) * time.Minute))
+		j, _, err := r.Enqueue(EnqueueRequest{Tenant: tenant, Targets: []string{target}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return j
+	}
+	a1 := mk(0, "acme", "10.20.1.1")
+	a2 := mk(1, "acme", "10.20.1.2")
+	g1 := mk(2, "globex", "192.168.1.1")
+	a3 := mk(3, "acme", "10.20.1.3")
+	r.Poll("acme") // a1 (o mais antigo elegível) → DELIVERED
+	r.Ack(a1.JobID, "acme")
+
+	check := func(what, tenant string, f ListFilter, wantTotal int, want ...*ScanJob) {
+		t.Helper()
+		got, total := r.List(tenant, f)
+		if len(got) != len(want) || total != wantTotal {
+			t.Errorf("%s: %d job(s) total=%d, want %d total=%d", what, len(got), total, len(want), wantTotal)
+			return
+		}
+		for i := range want {
+			if got[i].JobID != want[i].JobID {
+				t.Errorf("%s: posição %d = %s, want %s", what, i, got[i].JobID, want[i].JobID)
+			}
+		}
+	}
+	check("acme: created_at desc", "acme", ListFilter{}, 3, a3, a2, a1)
+	check("globex só vê o seu", "globex", ListFilter{}, 1, g1)
+	check("tenant sem jobs", "nobody", ListFilter{}, 0)
+	check("tenant vazio nunca lista tudo", "", ListFilter{}, 0)
+	check("state=DONE", "acme", ListFilter{State: StateDone}, 1, a1)
+	check("state=PENDING", "acme", ListFilter{State: StatePending}, 2, a3, a2)
+	check("limit mantém os mais novos", "acme", ListFilter{Limit: 2}, 3, a3, a2)
+	check("limit <= 0 = padrão (nunca ilimitado)", "acme", ListFilter{Limit: -1}, 3, a3, a2, a1)
+
+	// List devolve CLONES.
+	got, _ := r.List("acme", ListFilter{})
+	got[0].State = StateDone
+	got[0].Targets[0] = "6.6.6.6"
+	if again, _ := r.List("acme", ListFilter{}); again[0].State == StateDone || again[0].Targets[0] == "6.6.6.6" {
+		t.Error("List deve devolver clones")
+	}
+}
+
+// List("") jamais vira "todos os tenants" — nem para um registro sem tenant (arquivo
+// adulterado/corrompido), que um tenant vazio casaria por igualdade.
+func TestListEmptyTenantMatchesNothing(t *testing.T) {
+	path := writeJobs(t,
+		ScanJob{JobID: "orphan", Tenant: "", State: StatePending, CreatedAt: t0},
+		ScanJob{JobID: "acme-1", Tenant: "acme", State: StatePending, CreatedAt: t0},
+	)
+	r, err := NewRegistry(Config{Path: path})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, total := r.List("", ListFilter{}); len(got) != 0 || total != 0 {
+		t.Fatalf("List(\"\") deveria vir vazio, got %d job(s) total=%d", len(got), total)
+	}
+	if got, _ := r.List("acme", ListFilter{}); len(got) != 1 || got[0].JobID != "acme-1" {
+		t.Fatalf("List(acme) deveria trazer só acme-1, got %+v", got)
+	}
+}
+
+func TestClampLimit(t *testing.T) {
+	for in, want := range map[int]int{-5: 200, 0: 200, 1: 1, 7: 7, 1000: 1000, 1001: 1000, 100000: 1000} {
+		if got := clampLimit(in); got != want {
+			t.Errorf("clampLimit(%d) = %d, want %d", in, got, want)
+		}
+	}
+}
+
+func TestJobStateValid(t *testing.T) {
+	for _, s := range []JobState{StatePending, StateDelivered, StateAcked, StateDone, StateExpired} {
+		if !s.valid() {
+			t.Errorf("%s deveria ser válido", s)
+		}
+	}
+	for _, s := range []JobState{"", "done", "BOGUS", "APPLIED"} {
+		if s.valid() {
+			t.Errorf("%q não deveria ser válido", s)
+		}
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"sort"
 	"strings"
@@ -132,12 +133,51 @@ func (r *Registry) Enqueue(req EnqueueRequest) (job *ScanJob, dropped []string, 
 		CreatedAt:     now,
 		ExpiresAt:     now.Add(ttl),
 	}
+	r.reapLocked(defaultReapRetention) // bound growth: drop old terminal jobs
 	r.jobs[jid] = nj
 	if err := r.saveLocked(); err != nil {
 		delete(r.jobs, jid)
 		return nil, dropped, err
 	}
 	return nj.clone(), dropped, nil
+}
+
+// defaultReapRetention is how long terminal jobs (DONE, EXPIRED) are kept before
+// the reaper drops them. Same window as the remediation queue.
+const defaultReapRetention = 7 * 24 * time.Hour
+
+// Reap removes terminal jobs (DONE, EXPIRED) older than retention (by CreatedAt;
+// <= 0 means defaultReapRetention), bounding the queue file's growth, and returns
+// the count removed. Non-terminal jobs are never touched, however old. Called
+// opportunistically from Enqueue — the same point where the remediation queue
+// reaps; the wiring may also call it on a timer.
+func (r *Registry) Reap(retention time.Duration) int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	n := r.reapLocked(retention)
+	if n > 0 {
+		if err := r.saveLocked(); err != nil {
+			log.Printf("sensorjobs: saveLocked após reap: %v", err)
+		}
+	}
+	return n
+}
+
+// reapLocked deletes terminal jobs older than retention (caller holds the lock,
+// caller persists). Returns the count removed.
+func (r *Registry) reapLocked(retention time.Duration) int {
+	if retention <= 0 {
+		retention = defaultReapRetention
+	}
+	cutoff := r.now().Add(-retention)
+	n := 0
+	for id, j := range r.jobs {
+		if j.State.terminal() && j.CreatedAt.Before(cutoff) {
+			delete(r.jobs, id)
+			n++
+		}
+	}
+	return n
 }
 
 // Poll returns the next deliverable job for a sensor of tenant o (FIFO by
@@ -187,9 +227,15 @@ func (r *Registry) Poll(o string) (*ScanJob, bool) {
 	return next.clone(), true
 }
 
-// Ack marks a job ACKED, but ONLY if it belongs to tenant o (owner scope). An
+// Ack marks a job DONE, but ONLY if it belongs to tenant o (owner scope). An
 // unknown id or a foreign tenant returns false (no cross-tenant ack; no
-// enumeration). Terminal jobs are left as-is (idempotent).
+// enumeration). Terminal jobs are left as-is (idempotent: a repeated ack keeps the
+// first AckedAt, and an EXPIRED job stays EXPIRED).
+//
+// DONE, not ACKED: the sensor acks only AFTER it ran the scan and pushed its
+// report (sensor/internal/supervisor.pollOnce) — on a crash or a failed push it
+// does not ack and the job is redelivered — so an ack means "concluded". AckedAt
+// records when. StateAcked is no longer assigned (legacy records still carry it).
 func (r *Registry) Ack(jobID, o string) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -198,7 +244,7 @@ func (r *Registry) Ack(jobID, o string) bool {
 		return false
 	}
 	if !j.State.terminal() {
-		j.State = StateAcked
+		j.State = StateDone
 		j.AckedAt = r.now().UTC()
 		_ = r.saveLocked()
 	}
@@ -214,6 +260,62 @@ func (r *Registry) Get(jobID, o string) (*ScanJob, bool) {
 		return nil, false
 	}
 	return j.clone(), true
+}
+
+// Listing bounds: a status listing is never unbounded.
+const (
+	defaultListLimit = 200
+	maxListLimit     = 1000
+)
+
+// clampLimit maps a requested page size to the effective one: n <= 0 means "not
+// given" (the default); anything above the cap is cut to the cap.
+func clampLimit(n int) int {
+	if n <= 0 {
+		return defaultListLimit
+	}
+	return min(n, maxListLimit)
+}
+
+// ListFilter narrows List; a zero field matches everything.
+type ListFilter struct {
+	State JobState
+	Limit int // <= 0 → defaultListLimit; capped at maxListLimit
+}
+
+// List returns clones of tenant o's jobs matching f — newest first (CreatedAt
+// desc; the job id breaks a tie so the order is stable) and at most f.Limit of
+// them — plus how many matched before the cut, so a caller can tell the listing
+// was truncated. Like every other operation here it is partitioned by tenant: a
+// foreign tenant's job is never returned, and an empty o matches NOTHING (never
+// "all tenants").
+func (r *Registry) List(o string, f ListFilter) (jobs []*ScanJob, total int) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var match []*ScanJob
+	if o != "" {
+		for _, j := range r.jobs {
+			if j.Tenant != o || (f.State != "" && j.State != f.State) {
+				continue
+			}
+			match = append(match, j)
+		}
+	}
+	sort.Slice(match, func(a, b int) bool {
+		if !match[a].CreatedAt.Equal(match[b].CreatedAt) {
+			return match[a].CreatedAt.After(match[b].CreatedAt)
+		}
+		return match[a].JobID < match[b].JobID
+	})
+	total = len(match)
+	if limit := clampLimit(f.Limit); len(match) > limit {
+		match = match[:limit]
+	}
+	jobs = make([]*ScanJob, 0, len(match))
+	for _, j := range match {
+		jobs = append(jobs, j.clone())
+	}
+	return jobs, total
 }
 
 func (r *Registry) saveLocked() error {
