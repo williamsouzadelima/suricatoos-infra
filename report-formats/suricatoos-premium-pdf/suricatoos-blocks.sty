@@ -678,7 +678,9 @@
      \colorbox{navy}{\begin{minipage}{\linewidth}%
        \vspace*{\suripx{12}}%
        % same 20px inset as the table below it, so band and body share an edge
-       \noindent\hspace{\suripx{20}}%
+       % \suri@navflush: the PDF bookmark of this host (suricatoos-page), if the
+       % XSLT announced one -- only the first card of a host carries it.
+       \noindent\hspace{\suripx{20}}\suri@navflush
        \dat{\suriFS{13}{13}\bfseries\color{white}#1}\hspace{\suripx{11}}%
        {\suriFS{11}{11}\color{onnavy}#2}\hspace{\suripx{13}}%
        % The OS chip is wider than it is tall: \fboxsep is symmetric and cannot
@@ -881,8 +883,10 @@
     % so the header goes into a box and the spine is drawn to its measure.
     \sbox{\suri@cchdr}{\begin{minipage}[t]{\linewidth}%
       \parindent=0pt
-      % title + tag
-      \noindent\begin{minipage}[t]{\dimexpr\linewidth-0.20\linewidth\relax}%
+      % title + tag.  \suri@navflush: the card's PDF bookmark (suricatoos-page),
+      % on the title's line; it is a zero-size box, so the spine measured off
+      % this header below does not move.
+      \noindent\suri@navflush\begin{minipage}[t]{\dimexpr\linewidth-0.20\linewidth\relax}%
         \raggedright\suriFS{16}{22}\suriSB\color{ink}#2%
       \end{minipage}%
       % Both minipages are [t], so the slab's own baseline lands on the title's
@@ -943,8 +947,9 @@
       % the card is unaffected — every block below carries its own leading air.
       after={\par\nopagebreak}]%
     \parindent=0pt
-    % the number carries the finding's severity, exactly like the spine beside it
-    \noindent{\dat{\suriFS{13}{17}\bfseries\color{\sevcolor{#1}}#2}}\hspace{\suripx{10}}%
+    % the number carries the finding's severity, exactly like the spine beside it.
+    % \suri@navflush: the card's PDF bookmark (suricatoos-page), on this line.
+    \noindent\suri@navflush{\dat{\suriFS{13}{17}\bfseries\color{\sevcolor{#1}}#2}}\hspace{\suripx{10}}%
     {\suriFS{15}{20}\suriSB\color{ink}#3}%
     \par\vskip\suripx{4}%
     \chiprow{#4}%

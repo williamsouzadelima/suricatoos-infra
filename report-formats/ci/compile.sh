@@ -14,8 +14,10 @@
 #            ingles: exercita o caminho do texto do FORNECEDOR com centenas de
 #            achados de nome acentuado.
 #   v*       report-formats/tests/fixtures/*.xml: uma fixture por defeito de
-#            veracidade ja' corrigido (numeracao, indicadores vazios, ...);
-#            o cabecalho de cada uma diz qual. Pequenas: segundos cada.
+#            veracidade ja' corrigido (numeracao, indicadores vazios, ...),
+#            mais a v10-navegacao (caminhos de navegacao que as outras nao
+#            percorrem); o cabecalho de cada uma diz qual. Pequenas: segundos
+#            cada.
 #
 # Para cada fixture:
 #   1. ponta a ponta: `sh ./generate <xml> > generate.pdf`, cwd = bundle montado
@@ -23,7 +25,8 @@
 #   2. diagnostico: diag-compile.sh (xsltproc + 2x pdflatex com os mesmos
 #      parametros) guardando .tex e .log;
 #   3. previews (pdftoppm -r 60, 3 primeiras paginas) e gates.sh -- que tambem
-#      roda o check-veracity.py sobre o .tex do diagnostico, contra o XML.
+#      roda o check-veracity.py sobre o .tex do diagnostico, contra o XML, e o
+#      check-navigation.py (sumario e arvore de marcadores, no PDF entregue).
 # Artefatos em <dir-de-artefatos>/<lang>/<fixture>/.
 set -euo pipefail
 
@@ -82,7 +85,10 @@ for fx in $fixtures; do
   diag_rc=0
   gvmd_run "$work" /work/bundle /work/ci/diag-compile.sh "/work/fixtures/$fx.xml" "/work/diag/$fx" || diag_rc=$?
   log "[$lang/$fx] diagnostico: exit $diag_rc, $((SECONDS - t0)) s"
-  for f in report.tex report.log report.pass1.log xsltproc.stderr; do
+  # report.aux (rotulos de pagina do sumario) e report.out (a arvore de
+  # marcadores que o hyperref escreveu) vao junto: sao o que se le quando o
+  # portao de navegacao reprova.
+  for f in report.tex report.log report.pass1.log xsltproc.stderr report.aux report.out; do
     if [ -f "$work/diag/$fx/$f" ]; then cp "$work/diag/$fx/$f" "$d/"; fi
   done
 
@@ -99,8 +105,8 @@ if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
   {
     echo "### Suricatoos Premium PDF no gvmd:stable — $lang"
     echo
-    echo "| idioma | fixture | veredito | páginas | erros TeX | Font shape undefined | Type 3 | links / alvos (+corte) | Overfull \\hbox (base) | veracidade |"
-    echo "|---|---|---|---|---|---|---|---|---|---|"
+    echo "| idioma | fixture | veredito | páginas | erros TeX | Font shape undefined | Type 3 | links / alvos (+corte) | Overfull \\hbox (base) | veracidade | navegação |"
+    echo "|---|---|---|---|---|---|---|---|---|---|---|"
     cat "$art"/*/summary.row 2>/dev/null || true
     echo
     sed 's/^/    /' "$art/ambiente.txt"

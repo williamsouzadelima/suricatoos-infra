@@ -313,9 +313,12 @@
 % The mode is compared with \ifstrequal, not \ifx on two \def'd macros: a
 % \newcommand carries a \long prefix that an \ifx also compares, so the naive
 % test silently answers "no" and every table came out labelled `confirmados'.
+% \suri@navflush (suricatoos-page): in section 5 the two slabs are entries of
+% the PDF bookmark tree, between the runs of cards they title -- the indicator
+% cards number from #1 again, and the slab is what tells the two runs apart.
 \newcommand{\suriSummaryHead}[1]{%
   \par\addvspace{\suripx{17}}%
-  \noindent
+  \noindent\suri@navflush
   \ifstrequal{#1}{indicadores}{%
     \tagboxc{medio}{\suriLblIndicators}%
     \hspace{\suripx{12}}{\suriFS{10.4}{10.4}\color{muted}\suriLblQodIndicators}%

@@ -274,6 +274,85 @@
 }
 
 % ---------------------------------------------------------------------------
+% Navegacao: a arvore de marcadores do PDF.
+%
+% O relatorio nao usa \section, entao o hyperref nao tem nada a indexar sozinho:
+% cada marcador e' um \pdfbookmark emitido aqui.  A arvore tem dois niveis:
+%   0  cada secao, "N  Titulo", posto pelo proprio \suriSection;
+%   1  o que a secao enumera -- cada host na secao 3, cada card de achado na
+%      secao 5 --, anunciado pelo XSLT com \suriBookmark logo antes da caixa.
+% O painel abre com o nivel 0 a' vista e cada secao fechada: e' o padrao do
+% hyperref (o preambulo que o XSLT escreve so' o deixa explicito na carga) e
+% quem o garante e' o portao pdf-arvore do CI (Count < 0), nao este modulo.
+%
+% Por que \suriBookmark nao escreve o marcador na hora.  Entre dois blocos, um
+% \pdfbookmark deixaria na lista vertical um \write e um \pdfdest, e whatsit
+% ali tem dois efeitos que este design nao aguenta: esconde o \lastskip do
+% \addvspace do bloco seguinte (o ar de cima do card passaria a SOMAR com o do
+% bloco anterior, em vez de tomar o maximo -- o ritmo do suricatoos-report
+% inteiro depende disso) e cria um ponto de quebra legal entre o destino e a
+% caixa (o marcador cairia no pe' da pagina anterior, e o card no alto da
+% seguinte).  Entao \suriBookmark so' GUARDA o marcador -- um \gdef, que nao
+% deixa nada na lista -- e a propria caixa o emite, dentro dela, na linha do
+% titulo, por \suri@navflush.  Quem chama \suri@navflush: \findingcard,
+% \consolidatedcard e \hostcard (suricatoos-blocks) e \suriSummaryHead
+% (suricatoos-report).  Caixa que nao tem marcador pendente nao faz nada.
+%
+% O destino SOBE \suri@navraise acima da linha de base do titulo.  Um \pdfdest
+% XYZ marca a linha de base, e o visualizador poe esse ponto no alto da
+% janela: sem subir, o salto cortaria a metade de cima do titulo.  40px poem o
+% ponto no ar que fica acima da caixa (o \suri@air dos cards e' de 22-24px; a
+% linha de base do titulo fica 18-30px abaixo da borda): o card abre inteiro,
+% com a borda a' vista.  A caixa que o leva e' de tamanho zero -- nada se mexe
+% na pagina.
+% ---------------------------------------------------------------------------
+\newcommand{\suri@navraise}{\suripx{40}}
+\let\suri@navnext\relax
+\newcommand{\suri@navname}{}
+% \suriBookmark{nivel}{nome}{texto} -- o marcador da PROXIMA caixa.
+%   nivel  1 (os de nivel 0 sao do \suriSection);
+%   nome   a ancora, so' [A-Za-z0-9-] (o \pdfbookmark acrescenta ".nivel");
+%   texto  SO' TEXTO: o XSLT ja' o escapou e cortou, e o hyperref o converte
+%          com \pdfstringdef -- nada de \surjb, \suriTruncMark ou cor aqui.
+\newcommand{\suriBookmark}[3]{%
+  \ifx\suri@navnext\relax\else
+    \PackageWarning{suricatoos-page}{Marcador `\suri@navname' descartado:
+      nenhuma caixa o emitiu antes do proximo}%
+  \fi
+  \gdef\suri@navnext{\suri@navmark{#1}{#2}{#3}}%
+  \gdef\suri@navname{#2}}
+% \suri@navflush -- a caixa emite o marcador pendente, ja' em modo horizontal,
+% na linha do titulo.
+\newcommand{\suri@navflush}{%
+  \ifx\suri@navnext\relax\else
+    \leavevmode\suri@navnext
+    \global\let\suri@navnext\relax
+  \fi}
+% Um marcador pendente quando a secao seguinte abre nao tem dono: descartado
+% (com aviso no log), para nao ir parar na primeira caixa de OUTRA secao.
+\newcommand{\suri@navdiscard}{%
+  \ifx\suri@navnext\relax\else
+    \PackageWarning{suricatoos-page}{Marcador `\suri@navname' descartado:
+      a secao acabou antes da caixa}%
+    \global\let\suri@navnext\relax
+  \fi}
+\newcommand{\suri@navmark}[3]{%
+  \raisebox{\suri@navraise}[0pt][0pt]{\pdfbookmark[#1]{#3}{#2}}}
+% O marcador de nivel 0 e o rotulo de pagina da secao, que o sumario le.
+% Ficam DEPOIS do \addvspace de abertura: um whatsit antes dele esconderia o
+% \lastskip, como acima.  E nesta ordem: o \label primeiro, o \pdfbookmark
+% depois, porque o destino do \pdfbookmark ja' sai seguido de um \nobreak do
+% hyperref -- e o \nobreak final garante que nenhum dos tres fique numa pagina
+% e o titulo na outra.  \label so' pela PAGINA (\pageref*): o link do sumario
+% vai para o \hypertarget{sec-N} explicito que o XSLT poe antes do
+% \suriSection, nao para o \@currentHref do rotulo.
+\newcommand{\suri@secnav}[2]{%
+  \suri@navdiscard
+  \label{suri-sec-#1}%
+  \pdfbookmark[0]{#1\space\space #2}{suri-sec-#1}%
+  \nobreak}
+
+% ---------------------------------------------------------------------------
 % \suriSection{1}{Resumo Executivo}
 %
 % The section opener: the number in carmine Mono BOLD 22px (the model's numeral
@@ -281,9 +360,12 @@
 % the title in Sans semibold 25.5px, sharing one baseline, with the model's air
 % below.  It also sets the header runner to the upper-cased title.  Meant to be the first thing on a
 % page (the space above is discarded there, as at any page top).
+% It is also the level-0 node of the PDF bookmark tree ("1  Resumo Executivo")
+% and the page label the contents page reads (\suri@secnav above).
 % ---------------------------------------------------------------------------
 \newcommand{\suriSection}[2]{%
   \par\addvspace{\suripx{30}}%
+  \suri@secnav{#1}{#2}%
   \setsectionrunner{#1}{\MakeUppercase{#2}}%
   \noindent
   {\suriMono\bfseries\suriFS{22}{22}\color{critico}#1}%
@@ -298,6 +380,84 @@
   \color{body}%
   \@afterindentfalse\@afterheading
 }
+
+% ---------------------------------------------------------------------------
+% Sumario (a pagina logo depois do resumo executivo).
+%
+% \suriContents{Sumario} abre a pagina: o MESMO titulo do \suriSection (Sans
+% semibold 25.5px em `ink', o mesmo aperto entre palavras), sem o numero
+% carmim -- o sumario nao e' secao, nao entra na numeracao nem na arvore de
+% marcadores -- e o runner do cabecalho passa a ser o proprio titulo, sem o
+% "§N".  A cauda e' a do \suriSection depois do ajuste do suricatoos-report
+% (cor, \nobreak, \addvspace de 8px), escrita direto.
+%
+% A ALTURA da linha do titulo e' fixa: a de um "a" acentuado (\vphantom{\'a})
+% com o titulo em \smash.  Com o \topskip de 1px do suricatoos-report, a linha
+% de base da 1a linha da folha fica a ALTURA da caixa abaixo do topo, e a
+% altura da caixa e' a do glifo mais alto: o "I" maiusculo acentuado de
+% "Indice" (18.35pt na SB de 25.5px) baixava o titulo em espanhol 3.2pt em
+% relacao a "Sumario" (o "a" acentuado, 15.15pt), e "Contents" (13.88pt)
+% subia 1.3pt.  Medido nos .tfm do subset Plex.  Com a altura do "a"
+% acentuado as tres linguas dividem a linha de base -- a de "Sumario", que nao
+% se mexe (mesma altura, mesma profundidade) -- e a regra de baixo junto.
+% O \suriSection nao foi tocado: os titulos de secao continuam como estavam.
+%
+% suritoc e' a lista: a regra de 2px em `ink' por cima, uma linha por secao com
+% o fio `hairlinetwo' embaixo, e a de 2px fechando, puxada um fio para cima para
+% engolir o ultimo -- o desenho das tabelas de pg-04/06/07.
+%
+%   \begin{suritoc}
+%     \suritocrow{\hyperlink{sec-1}{\suritocline{1}{Resumo Executivo}}}
+%     ...
+%   \end{suritoc}
+%
+% O \hyperlink fica no .tex, embrulhando a LINHA INTEIRA (numero, titulo e
+% pagina sao uma area so' de clique).  O alvo e' o \hypertarget{sec-N}{} que o
+% XSLT poe antes de cada \suriSection: os dois ficam a' vista no .tex, que e'
+% onde os portoes de links do CI os contam.  A pagina sai do rotulo
+% suri-sec-N que o proprio \suriSection grava, com \pageref* -- a ESTRELA e'
+% obrigatoria: o \pageref sem ela poe um link dentro do link da linha.  Na 1a
+% passada do pdflatex o rotulo ainda nao existe e sai "??"; a linha tem altura
+% fixa, entao isso nao mexe em quebra de pagina nenhuma e a 2a passada (a que o
+% generate entrega) le os numeros certos.
+% ---------------------------------------------------------------------------
+\newcommand{\suriContents}[1]{%
+  \par\addvspace{\suripx{30}}%
+  \gdef\suri@runner{#1}%
+  \noindent
+  {\suriSB\suriFS{25.5}{25.5}\color{ink}%
+   \spaceskip=\dimexpr\fontdimen2\font-\suripx{1.45}\relax
+     plus\fontdimen3\font minus\fontdimen4\font
+   \vphantom{\'a}\smash{#1}}%
+  \par\nobreak
+  \color{body}\nobreak\addvspace{\suripx{8}}%
+  \@afterindentfalse\@afterheading}
+% Uma regra de largura total, sem ar em volta (o \suri@hrule dos blocos, aqui
+% para o modulo continuar de pe' sozinho).
+\newcommand{\suri@navrule}[2]{\par\nointerlineskip
+  {\color{#1}\hrule height #2\relax}\par\nointerlineskip}
+\newenvironment{suritoc}{%
+  \par\addvspace{\suripx{14}}%
+  \suri@navrule{ink}{\suripx{2}}%
+}{%
+  \vskip-\suripx{1}%
+  \suri@navrule{ink}{\suripx{2}}%
+  \addvspace{\suripx{10}}}
+% \suritocrow{\hyperlink{sec-N}{\suritocline{N}{Titulo}}} -- uma linha + o fio.
+\newcommand{\suritocrow}[1]{%
+  {\parindent=0pt\noindent#1\par}%
+  \suri@navrule{hairlinetwo}{\suripx{1}}}
+% \suritocline{N}{Titulo} -- o miolo da linha, 40px de altura: o numero em Mono
+% BOLD carmim (o do \suriSection, na escala da linha), o titulo em Sans `ink' e,
+% encostada na direita, a pagina em Mono, que e' DADO (como todo numero deste
+% design).  Faces que o subset tem: plxMono-Bold, plxSans, plxMono.
+\newcommand{\suritocline}[2]{%
+  \hbox to \linewidth{%
+    \rule[-\suripx{14}]{0pt}{\suripx{40}}%
+    \hbox to \suripx{44}{\suriMono\bfseries\suriFS{15}{15}\color{critico}#1\hss}%
+    {\suriSans\suriFS{14.5}{14.5}\color{ink}#2}%
+    \hfil
+    {\suriMono\suriFS{12}{12}\color{ink}\pageref*{suri-sec-#1}}}}
 
 % ---------------------------------------------------------------------------
 % Cover (pg-01).
