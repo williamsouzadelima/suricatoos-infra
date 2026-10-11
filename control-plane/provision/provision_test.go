@@ -141,8 +141,9 @@ func TestProvisionCommandComesFromInstallcmd(t *testing.T) {
 }
 
 // Config que nao cabe com seguranca no comando do Windows (aqui, uma URL com '$('): sem
-// comando e sem token vivo; o erro nao vaza nada. Linux e macOS citam o valor para o
-// shell e seguem funcionando.
+// comando e SEM token mintado (a config e validada antes de mintar, entao um erro de
+// configuracao nao minta e revoga um token a cada pedido); o erro nao vaza nada. Linux e
+// macOS citam o valor para o shell e seguem funcionando.
 func TestProvisionWindowsRefusedWhenServerURLIsUnsafe(t *testing.T) {
 	tm := tokens.NewManager(tokens.NewMemStore())
 	svc := New(tm, "sha256:deadbeef", "https://scanner.suricatoos.com/agent/v1$(evil)")
@@ -155,10 +156,8 @@ func TestProvisionWindowsRefusedWhenServerURLIsUnsafe(t *testing.T) {
 	if body := rec.Body.String(); strings.Contains(body, "st_") || strings.Contains(body, "evil") {
 		t.Errorf("a resposta de erro vazou dado: %s", body)
 	}
-	// O token mintado para um comando que nao saiu nao fica vivo.
-	recs, _ := tm.List()
-	if len(recs) != 1 || !recs[0].Revoked {
-		t.Fatalf("o token do comando recusado deveria estar revogado: %+v", recs)
+	if recs, _ := tm.List(); len(recs) != 0 {
+		t.Fatalf("a config recusada nao deveria mintar token: %+v", recs)
 	}
 
 	rec = httptest.NewRecorder()
@@ -172,6 +171,24 @@ func TestProvisionWindowsRefusedWhenServerURLIsUnsafe(t *testing.T) {
 	}
 	if want := "--server 'https://scanner.suricatoos.com/agent/v1$(evil)'"; !strings.Contains(r.Command, want) {
 		t.Errorf("o valor deveria sair citado para o shell (%s):\n%s", want, r.Command)
+	}
+}
+
+// URL do servidor sem http(s)://host: nao ha de onde baixar o instalador. Nenhum SO tem
+// comando e nenhum token e mintado (antes saia "curl -fsSL /install.sh", que nao funciona
+// e nao diz por que).
+func TestProvisionUnusableServerURLRefusesEverythingBeforeMinting(t *testing.T) {
+	tm := tokens.NewManager(tokens.NewMemStore())
+	svc := New(tm, "sha256:deadbeef", "scanner.suricatoos.com/agent/v1")
+	for _, goos := range []string{"linux", "darwin", "windows"} {
+		rec := httptest.NewRecorder()
+		svc.Handler()(rec, gatedGet("/provision/install?os="+goos))
+		if rec.Code != http.StatusInternalServerError {
+			t.Errorf("%s com URL sem esquema deveria 500, got %d: %s", goos, rec.Code, rec.Body.String())
+		}
+	}
+	if recs, _ := tm.List(); len(recs) != 0 {
+		t.Fatalf("a config recusada nao deveria mintar token: %+v", recs)
 	}
 }
 

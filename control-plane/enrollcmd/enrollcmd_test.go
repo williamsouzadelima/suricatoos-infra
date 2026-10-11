@@ -396,8 +396,9 @@ func TestCommandsComeFromInstallcmd(t *testing.T) {
 }
 
 // Config que nao cabe com seguranca no comando do Windows (aqui, uma URL com '$('): sem
-// comando e sem token vivo; o erro nao vaza nada. Docker, linux e macOS citam o valor
-// para o shell e seguem funcionando.
+// comando e SEM token mintado (a config e validada antes de mintar, entao um erro de
+// configuracao nao minta e revoga um token a cada pedido); o erro nao vaza nada. Docker,
+// linux e macOS citam o valor para o shell e seguem funcionando.
 func TestWindowsRefusedWhenServerURLIsUnsafe(t *testing.T) {
 	tm := tokens.NewManager(tokens.NewMemStore())
 	s := New(Config{
@@ -415,10 +416,8 @@ func TestWindowsRefusedWhenServerURLIsUnsafe(t *testing.T) {
 	if body := w.Body.String(); strings.Contains(body, "st_") || strings.Contains(body, "evil") {
 		t.Errorf("a resposta de erro vazou dado: %s", body)
 	}
-	// O token mintado para um comando que nao saiu nao fica vivo.
-	recs, _ := tm.List()
-	if len(recs) != 1 || !recs[0].Revoked {
-		t.Fatalf("o token do comando recusado deveria estar revogado: %+v", recs)
+	if recs, _ := tm.List(); len(recs) != 0 {
+		t.Fatalf("a config recusada nao deveria mintar token: %+v", recs)
 	}
 
 	for target, want := range map[string]string{
@@ -437,5 +436,31 @@ func TestWindowsRefusedWhenServerURLIsUnsafe(t *testing.T) {
 		if !strings.Contains(r.Command, want) {
 			t.Errorf("%s: o valor deveria sair citado para o shell (%s):\n%s", target, want, r.Command)
 		}
+	}
+}
+
+// URL do servidor sem http(s)://host: nao ha de onde baixar o instalador, entao linux,
+// macOS e Windows recusam SEM mintar token (antes saia "curl -fsSL /install.sh"). O docker
+// nao baixa script nenhum e segue funcionando.
+func TestUnusableServerURLRefusesInstallTargetsBeforeMinting(t *testing.T) {
+	tm := tokens.NewManager(tokens.NewMemStore())
+	s := New(Config{
+		TM:          tm,
+		Known:       knownAcme,
+		CAPin:       "sha256:abc123",
+		ServerURL:   "scanner.suricatoos.com/agent/v1",
+		AdminSecret: "sekret",
+	})
+	for _, target := range []string{"linux", "darwin", "windows"} {
+		w := do(s, "GET", "/api/v1/tenants/acme/enroll-command?target="+target, "sekret")
+		if w.Code != http.StatusInternalServerError {
+			t.Errorf("%s com URL sem esquema deveria 500, got %d: %s", target, w.Code, w.Body.String())
+		}
+	}
+	if recs, _ := tm.List(); len(recs) != 0 {
+		t.Fatalf("a config recusada nao deveria mintar token: %+v", recs)
+	}
+	if w := do(s, "GET", "/api/v1/tenants/acme/enroll-command?target=docker", "sekret"); w.Code != http.StatusOK {
+		t.Errorf("docker nao depende do host dos scripts, deveria 200, got %d: %s", w.Code, w.Body.String())
 	}
 }

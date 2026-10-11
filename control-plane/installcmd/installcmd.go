@@ -83,6 +83,18 @@ const winSystemGuard = `if ((Get-Item env:TEMP).Value -like '*\Windows\Temp*') {
 // could be interpreted by the shell it is pasted into, and ErrServerURL when
 // serverURL has no usable host.
 func Windows(serverURL, token, caPin string) (string, error) {
+	base, err := windowsBase(serverURL, token, caPin)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf(
+		`powershell -NoProfile -ExecutionPolicy Bypass -Command "%[1]sif (iwr -useb %[2]s/install.ps1 -PassThru -OutFile %[3]s) { & %[3]s -Server '%[4]s' -Token '%[5]s' -CaPin '%[6]s' }"`,
+		winSystemGuard, base, winInstaller, serverURL, token, caPin), nil
+}
+
+// windowsBase validates what the Windows command interpolates and returns the base URL
+// of the install scripts. Windows and CheckWindows share it so they cannot disagree.
+func windowsBase(serverURL, token, caPin string) (string, error) {
 	for _, v := range []string{serverURL, token, caPin} {
 		if !plain(v) {
 			return "", ErrUnsafeValue
@@ -93,9 +105,40 @@ func Windows(serverURL, token, caPin string) (string, error) {
 	if base == "" {
 		return "", ErrServerURL
 	}
-	return fmt.Sprintf(
-		`powershell -NoProfile -ExecutionPolicy Bypass -Command "%[1]sif (iwr -useb %[2]s/install.ps1 -PassThru -OutFile %[3]s) { & %[3]s -Server '%[4]s' -Token '%[5]s' -CaPin '%[6]s' }"`,
-		winSystemGuard, base, winInstaller, serverURL, token, caPin), nil
+	return base, nil
+}
+
+// CheckWindows reports whether the Windows command can be rendered for this server URL
+// and CA pin: the checks Windows applies, minus the token, which comes from our own
+// generator and always fits. Callers run it BEFORE minting a token, so a configuration
+// that cannot render does not mint (and revoke) a token on every request.
+func CheckWindows(serverURL, caPin string) error {
+	_, err := windowsBase(serverURL, "", caPin)
+	return err
+}
+
+// CheckUnix is CheckWindows for Linux and macOS: only the server URL can make it fail,
+// since POSIX quoting carries any other value.
+func CheckUnix(serverURL string) error {
+	if PublicBase(serverURL) == "" {
+		return ErrServerURL
+	}
+	return nil
+}
+
+// Warning is the one line to log at startup when this server URL and CA pin cannot
+// produce every install command, or "" when they can. It says what stops working and
+// what keeps working, and never repeats the configured values.
+func Warning(serverURL, caPin string) string {
+	if CheckUnix(serverURL) != nil {
+		return "a URL do servidor (CONTROL_PLANE_URL) precisa ser http(s)://host[/caminho]: " +
+			"nenhum comando de instalação (linux, macOS, Windows) pode ser montado e os pedidos respondem 500"
+	}
+	if CheckWindows(serverURL, caPin) != nil {
+		return "a URL do servidor (CONTROL_PLANE_URL) ou o pin da CA têm caractere fora de [A-Za-z0-9._:/-]: " +
+			"o comando de instalação do Windows responde 500 (linux, macOS e docker seguem funcionando)"
+	}
+	return ""
 }
 
 // Unix renders the one-liner for Linux and macOS: pipe install.sh into sh, which

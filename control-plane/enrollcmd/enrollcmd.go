@@ -127,8 +127,9 @@ func (s *Service) SessionTenantsHandler() http.HandlerFunc {
 
 // serve is the shared core: validate tenant, mint a scoped token, render the command.
 // Query params (both handlers): target=docker|linux|darwin|windows, max_uses, ttl_hours.
-// When the command cannot be rendered safely (see installcmd) the minted token is
-// revoked and the answer is 500.
+// A configuration that cannot render the command (see installcmd) is refused with 500
+// BEFORE minting; if rendering still fails once the token exists (not expected) the
+// token is revoked.
 func (s *Service) serve(w http.ResponseWriter, r *http.Request, tenant string) {
 	if tenant == "" {
 		http.Error(w, "tenant obrigatório", http.StatusBadRequest)
@@ -148,6 +149,14 @@ func (s *Service) serve(w http.ResponseWriter, r *http.Request, tenant string) {
 	case "docker", "linux", "darwin", "windows":
 	default:
 		http.Error(w, "target deve ser docker, linux, darwin ou windows", http.StatusBadRequest)
+		return
+	}
+
+	// A configuration that cannot render a command must not cost a token (minted and
+	// revoked) on every request.
+	if err := s.check(target); err != nil {
+		log.Printf("enrollcmd: tenant %q, target %s: comando indisponível: %v", tenant, target, err)
+		http.Error(w, "falha ao montar o comando de instalação", http.StatusInternalServerError)
 		return
 	}
 
@@ -195,6 +204,19 @@ func (s *Service) serve(w http.ResponseWriter, r *http.Request, tenant string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
 	_ = json.NewEncoder(w).Encode(resp)
+}
+
+// check reports, before any token exists, whether this configuration can render the
+// command for target. Docker only quotes values, so it always can.
+func (s *Service) check(target string) error {
+	switch target {
+	case "docker":
+		return nil
+	case "windows":
+		return installcmd.CheckWindows(s.cfg.ServerURL, s.cfg.CAPin)
+	default: // linux, darwin
+		return installcmd.CheckUnix(s.cfg.ServerURL)
+	}
 }
 
 // command renders the paste-ready command with the token embedded. The linux, darwin

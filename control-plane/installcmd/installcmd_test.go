@@ -212,6 +212,75 @@ func TestRefusesUnusableServerURL(t *testing.T) {
 	}
 }
 
+// A validacao previa (antes de mintar token) concorda com os construtores: o que
+// CheckWindows/CheckUnix recusam, Windows/Unix recusam, com o mesmo erro, e vice-versa. O
+// token vem do gerador e sempre cabe; por isso a checagem previa so olha URL e pin.
+func TestCheckAgreesWithBuilders(t *testing.T) {
+	for _, c := range []struct{ server, pin string }{
+		{testServer, testPin},
+		{"https://scanner.suricatoos.com:8443/agent/v1", testPin},
+		{"http://10.0.0.5:8080/agent/v1", "sha256:" + strings.Repeat("ab12", 16)},
+		{"https://scanner.suricatoos.com", ""},
+		{testServer + "$(evil)", testPin},
+		{testServer + "?a=1", testPin},
+		{testServer, "sha256:0a 1b"},
+		{testServer, "sha256:ç"},
+		{"", testPin},
+		{"scanner.suricatoos.com/agent/v1", testPin},
+		{"ftp://scanner.suricatoos.com/agent/v1", testPin},
+		{"https://", testPin},
+		{"http://[::1]:8080/agent/v1", testPin},
+	} {
+		_, werr := Windows(c.server, testToken, c.pin)
+		if cerr := CheckWindows(c.server, c.pin); cerr != werr {
+			t.Errorf("CheckWindows(%q, %q) = %v, mas Windows(...) = %v", c.server, c.pin, cerr, werr)
+		}
+		_, uerr := Unix(c.server, testToken, c.pin)
+		if cerr := CheckUnix(c.server); cerr != uerr {
+			t.Errorf("CheckUnix(%q) = %v, mas Unix(...) = %v", c.server, cerr, uerr)
+		}
+	}
+}
+
+// Um aviso so, de uma linha, para o log de inicializacao: diz o que a config nao consegue
+// montar e o que segue funcionando, sem repetir os valores configurados.
+func TestWarning(t *testing.T) {
+	if w := Warning(testServer, testPin); w != "" {
+		t.Errorf("config sa nao deveria avisar, got %q", w)
+	}
+	for name, c := range map[string]struct{ server, pin, mention string }{
+		"URL sem host":        {"scanner.suricatoos.com/agent/v1", testPin, "http(s)://host"},
+		"URL com caractere":   {testServer + "?a=1", testPin, "[A-Za-z0-9._:/-]"},
+		"pin com caractere":   {testServer, "sha256:0a 1b", "[A-Za-z0-9._:/-]"},
+		"URL IPv6 (colchete)": {"http://[::1]:8080/agent/v1", testPin, "[A-Za-z0-9._:/-]"},
+	} {
+		w := Warning(c.server, c.pin)
+		if w == "" {
+			t.Errorf("%s: deveria avisar", name)
+			continue
+		}
+		if strings.ContainsAny(w, "\r\n") {
+			t.Errorf("%s: o aviso deve ser uma linha so, got %q", name, w)
+		}
+		if !strings.Contains(w, c.mention) {
+			t.Errorf("%s: o aviso deveria citar %q, got %q", name, c.mention, w)
+		}
+		for _, v := range []string{c.server, c.pin} {
+			if v != "" && strings.Contains(w, v) {
+				t.Errorf("%s: o aviso nao pode repetir o valor configurado %q: %q", name, v, w)
+			}
+		}
+	}
+	// So o Windows e afetado por caractere fora do alfabeto: o aviso diz que o resto segue.
+	if w := Warning(testServer+"?a=1", testPin); !strings.Contains(w, "Windows") || !strings.Contains(w, "seguem") {
+		t.Errorf("o aviso deveria dizer que so o Windows fica sem comando, got %q", w)
+	}
+	// URL sem host: nenhum comando de instalacao existe.
+	if w := Warning("", testPin); !strings.Contains(w, "linux") || !strings.Contains(w, "Windows") {
+		t.Errorf("o aviso deveria dizer que nenhum SO tem comando, got %q", w)
+	}
+}
+
 func TestPublicBase(t *testing.T) {
 	for in, want := range map[string]string{
 		"https://scanner.suricatoos.com/agent/v1":       "https://scanner.suricatoos.com",

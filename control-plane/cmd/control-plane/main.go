@@ -87,6 +87,7 @@ import (
 	"github.com/williamsouzadelima/suricatoos-infra/control-plane/enroll"
 	cpenrollcmd "github.com/williamsouzadelima/suricatoos-infra/control-plane/enrollcmd"
 	cpfeed "github.com/williamsouzadelima/suricatoos-infra/control-plane/feed"
+	"github.com/williamsouzadelima/suricatoos-infra/control-plane/installcmd"
 	cpplanner "github.com/williamsouzadelima/suricatoos-infra/control-plane/planner"
 	cpprovision "github.com/williamsouzadelima/suricatoos-infra/control-plane/provision"
 	cpremediation "github.com/williamsouzadelima/suricatoos-infra/control-plane/remediation"
@@ -240,6 +241,12 @@ func main() {
 	// Frictionless install: mints a short-lived token and returns a ready install
 	// command per OS. Guarded by nginx (GSA session), never bearer — see provision pkg.
 	provisionSvc := cpprovision.New(tm, authority.Fingerprint(), serverURL)
+	// The install one-liners (here and in enroll-command) are built from the server URL and
+	// the CA pin: say once, at startup, if they cannot be rendered, instead of answering 500
+	// to every request with no hint why.
+	if w := installcmd.Warning(serverURL, authority.Fingerprint()); w != "" {
+		log.Printf("WARNING: comandos de instalação: %s", w)
+	}
 
 	// Command channel: operators enqueue "scan_now" for an agent (admin Bearer);
 	// the agent polls + acks over its mTLS channel and re-collects immediately.

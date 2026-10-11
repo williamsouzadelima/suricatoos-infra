@@ -50,8 +50,9 @@ type response struct {
 
 // Handler serves GET /provision/install?os=<linux|darwin|windows>. It is wrapped in
 // sessiongate.Require: a request without the marker nginx sets only on session-gated
-// locations is refused (403) before any token is minted. When the command cannot be
-// rendered safely (see installcmd) the minted token is revoked and the answer is 500.
+// locations is refused (403) before any token is minted. A configuration that cannot
+// render the command (see installcmd) is refused with 500 BEFORE minting too; if
+// rendering still fails once the token exists (not expected) the token is revoked.
 func (s *Service) Handler() http.HandlerFunc {
 	return sessiongate.Require(func(w http.ResponseWriter, r *http.Request) {
 		goos := r.URL.Query().Get("os")
@@ -59,6 +60,14 @@ func (s *Service) Handler() http.HandlerFunc {
 		case "linux", "darwin", "windows":
 		default:
 			http.Error(w, "os deve ser linux, darwin ou windows", http.StatusBadRequest)
+			return
+		}
+
+		// A configuration that cannot render a command must not cost a token (minted and
+		// revoked) on every request.
+		if err := s.check(goos); err != nil {
+			log.Printf("provision: comando %s indisponível: %v", goos, err)
+			http.Error(w, "falha ao montar o comando de instalação", http.StatusInternalServerError)
 			return
 		}
 
@@ -95,6 +104,15 @@ func (s *Service) Handler() http.HandlerFunc {
 		w.Header().Set("Cache-Control", "no-store")
 		_ = json.NewEncoder(w).Encode(resp)
 	})
+}
+
+// check reports, before any token exists, whether this configuration can render the
+// command for goos.
+func (s *Service) check(goos string) error {
+	if goos == "windows" {
+		return installcmd.CheckWindows(s.serverURL, s.caPin)
+	}
+	return installcmd.CheckUnix(s.serverURL)
 }
 
 // command renders the one-liner the operator pastes. The builders live in installcmd,
