@@ -10,10 +10,10 @@ um `docker compose` simulado, entao nada aqui precisa de Docker.
 """
 import contextlib
 import copy
-import glob
 import io
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -28,6 +28,7 @@ import check_networks as cn  # noqa: E402
 COMPOSE_DIR = os.path.dirname(HERE)
 SCRIPT = os.path.join(HERE, "check_networks.py")
 FIXTURE = os.path.join(HERE, "fixtures", "resolved-ok.json")
+WORKFLOW = os.path.join(os.path.dirname(COMPOSE_DIR), ".github", "workflows", "compose-ci.yml")
 
 
 def load_ok():
@@ -41,6 +42,18 @@ def add_net(cfg, svc, net):
 
 def drop_net(cfg, svc, net):
     del cfg["services"][svc]["networks"][net]
+
+
+def bind(src, dst, ro=False):
+    """Volume de bind no formato (forma longa) que o `docker compose config` emite."""
+    v = {"type": "bind", "source": src, "target": dst, "bind": {"create_host_path": True}}
+    if ro:
+        v["read_only"] = True
+    return v
+
+
+def add_volume(cfg, svc, vol):
+    cfg["services"][svc].setdefault("volumes", []).append(vol)
 
 
 def hits(cfg, rule, needle):
@@ -265,6 +278,118 @@ class Mutations(WithTmp):
         del cfg["services"]["docker-socket-proxy"]
         self.assert_rejected(cfg, "PRES-SVC", "docker-socket-proxy")   # + exit code do CLI
 
+    # --- feed-updater nao publica porta (API admin sem auth) -----------------
+    def test_feed_updater_publishes_a_port(self):
+        cfg = load_ok()
+        cfg["services"]["feed-updater"]["ports"] = [
+            {"mode": "ingress", "target": 8008, "published": "8008", "protocol": "tcp"}]
+        self.assert_rejected(cfg, "PORTS", "feed-updater")
+
+    # --- docker.sock: so o docker-socket-proxy monta -------------------------
+    def test_other_service_mounts_the_docker_socket(self):
+        for name, src in (("gsad", "/var/run/docker.sock"), ("nginx", "/run/docker.sock"),
+                          ("ingest", "/var/run/docker.sock")):
+            cfg = load_ok()
+            add_volume(cfg, name, bind(src, "/var/run/docker.sock"))
+            self.assert_rejected(cfg, "SOCKET", name, cli=False)
+        cfg = load_ok()
+        add_volume(cfg, "feed-updater", bind("/var/run/docker.sock", "/var/run/docker.sock", True))
+        self.assert_rejected(cfg, "SOCKET", "feed-updater")       # + exit code do CLI
+
+    def test_docker_socket_mounted_at_another_target(self):
+        cfg = load_ok()
+        add_volume(cfg, "gvmd", bind("/var/run/docker.sock", "/srv/x.sock"))
+        self.assert_rejected(cfg, "SOCKET", "gvmd")
+
+    def test_docker_socket_mounted_through_a_parent_directory(self):
+        for src in ("/", "/var", "/var/run", "/run", "/var/run/"):
+            cfg = load_ok()
+            add_volume(cfg, "gsad", bind(src, "/host"))
+            self.assert_rejected(cfg, "SOCKET", "gsad", cli=False)
+
+    def test_docker_socket_in_short_syntax(self):
+        cfg = load_ok()
+        cfg["services"]["gsad"]["volumes"] = ["/var/run/docker.sock:/var/run/docker.sock:ro"]
+        self.assert_rejected(cfg, "SOCKET", "gsad")
+
+    def test_proxy_without_the_docker_socket(self):
+        cfg = load_ok()
+        cfg["services"]["docker-socket-proxy"]["volumes"] = []
+        self.assert_rejected(cfg, "SOCKET", "docker-socket-proxy")
+
+    def test_absolute_source_is_checked_whatever_the_declared_type(self):
+        # fail-safe: o tipo declarado nao desativa a conferencia do caminho
+        cfg = load_ok()
+        add_volume(cfg, "gsad", {"type": "volume", "source": "/var/run/docker.sock", "target": "/x"})
+        self.assert_rejected(cfg, "SOCKET", "gsad", cli=False)
+
+    def test_named_volume_bound_to_the_docker_socket(self):
+        # um volume local com driver_opts.device e' um bind disfarcado de volume nomeado
+        for device in ("/var/run/docker.sock", "/run/docker.sock", "/var/run", "/"):
+            cfg = load_ok()
+            cfg["volumes"] = {"sockvol": {
+                "name": "greenbone-community-edition_sockvol", "driver": "local",
+                "driver_opts": {"type": "none", "o": "bind", "device": device}}}
+            self.assert_rejected(cfg, "SOCKET", "sockvol", cli=False)
+        self.assert_rejected(cfg, "SOCKET", "sockvol")           # + exit code do CLI
+
+    def test_ordinary_named_volumes_are_not_flagged(self):
+        cfg = load_ok()
+        cfg["volumes"] = {
+            "dados": {"name": "greenbone-community-edition_dados"},
+            "ext": {"name": "soos_ext", "external": True},
+            "montado": {"name": "x_montado", "driver": "local",
+                        "driver_opts": {"type": "none", "o": "bind", "device": "/srv/exemplo/dados"}}}
+        self.assertEqual(cn.check(cfg), [])
+
+    def test_ordinary_mounts_are_not_flagged(self):
+        cfg = load_ok()
+        add_volume(cfg, "gsad", bind("/var/lib/suricatoos-cp", "/data"))
+        add_volume(cfg, "gsad", {"type": "volume", "source": "gvmd_socket_vol", "target": "/run/gvmd"})
+        add_volume(cfg, "gsad", {"type": "tmpfs", "target": "/tmp"})
+        cfg["services"]["gvmd"]["volumes"] = ["gvmd_socket_vol:/run/gvmd", "./nginx/default.conf:/x:ro"]
+        self.assertEqual(cn.check(cfg), [])
+
+    # --- declaracao das redes: nem external, nem driver, nem nome trocado -----
+    def test_external_network(self):
+        cfg = load_ok()
+        cfg["networks"]["backend"]["external"] = True
+        self.assert_rejected(cfg, "NET-DECL", "backend")
+
+    def test_non_default_network_driver(self):
+        for driver in ("host", "overlay", "macvlan", "null"):
+            cfg = load_ok()
+            cfg["networks"]["docker-api"]["driver"] = driver
+            self.assert_rejected(cfg, "NET-DECL", "docker-api", cli=False)
+
+    def test_explicit_bridge_driver_is_the_default(self):
+        cfg = load_ok()
+        cfg["networks"]["backend"]["driver"] = "bridge"
+        self.assertEqual(cn.check(cfg), [])
+
+    def test_network_aliased_to_another_network_name(self):
+        # `backend: {name: <proj>_default}` aponta a rede para a default: passaria
+        # por qualquer conferencia que so olhe as chaves
+        cfg = load_ok()
+        cfg["networks"]["backend"]["name"] = "greenbone-community-edition_default"
+        self.assert_rejected(cfg, "NET-DECL", "backend")
+        self.assertIn("greenbone-community-edition_backend", hits(cfg, "NET-DECL", "backend")[0].message)
+
+    def test_network_name_without_the_project_prefix(self):
+        cfg = load_ok()
+        cfg["networks"]["egress"]["name"] = "egress"
+        self.assert_rejected(cfg, "NET-DECL", "egress")
+
+    def test_network_without_a_name(self):
+        cfg = load_ok()
+        del cfg["networks"]["docker-api"]["name"]
+        self.assert_rejected(cfg, "NET-DECL", "docker-api")
+
+    def test_name_of_the_default_network_is_checked_too(self):
+        cfg = load_ok()
+        cfg["networks"]["default"]["name"] = "outra_default"
+        self.assert_rejected(cfg, "NET-DECL", "default")
+
     # --- o defeito original ---------------------------------------------------
     def test_original_flat_topology_is_rejected(self):
         """Tudo na `default`, sem as redes novas: o estado de antes desta fatia."""
@@ -311,6 +436,12 @@ class FailClosed(WithTmp):
             f.write("{ nao e json")
         self.assert_input_error(path, "ruim.json")
 
+    def test_missing_project_name(self):
+        # sem `name` nao da para conferir o nome das redes: nao se aprova no escuro
+        cfg = json.load(open(FIXTURE, encoding="utf-8"))
+        del cfg["name"]
+        self.assert_input_error(self.write(cfg), "name")
+
     def test_missing_file(self):
         self.assert_input_error(os.path.join(self.tmp, "nao-existe.json"), "nao-existe.json")
 
@@ -351,10 +482,10 @@ class FakeCompose(object):
         return self.rc, json.dumps(cfg), self.stderr
 
 
-def resolve(fake):
+def resolve(fake, compose_dir=COMPOSE_DIR):
     buf = io.StringIO()
     with contextlib.redirect_stdout(buf):
-        rc = cn.main(["--resolve"], runner=fake, compose_dir=COMPOSE_DIR)
+        rc = cn.main(["--resolve"], runner=fake, compose_dir=compose_dir)
     return rc, buf.getvalue()
 
 
@@ -375,17 +506,6 @@ class ResolveMode(unittest.TestCase):
         for c in fake.calls:
             self.assertEqual(c["args"][-3:], ["config", "--format", "json"])
             self.assertEqual(c["cwd"], COMPOSE_DIR)
-
-    def test_every_compose_file_in_the_repo_is_covered(self):
-        """Overlay novo sem entrar no COMBOS = rede nao conferida: reprova ate cobrir."""
-        covered = set(cn.BASE_FILES)
-        for _, extra in cn.COMBOS:
-            covered.update(extra)
-        on_disk = {os.path.basename(p) for p in glob.glob(os.path.join(COMPOSE_DIR, "docker-compose.*.yml"))}
-        on_disk |= {os.path.basename(p) for p in glob.glob(os.path.join(COMPOSE_DIR, "compose.*y*ml"))}
-        self.assertEqual(on_disk - covered, set(), "overlay(s) fora das combinacoes conferidas")
-        for name in covered:
-            self.assertTrue(os.path.exists(os.path.join(COMPOSE_DIR, name)), name)
 
     def test_environment_is_hermetic_and_fictitious(self):
         with mock.patch.dict(os.environ, {"COMPOSE_FILE": "x.yml", "COMPOSE_PROJECT_NAME": "real",
@@ -441,6 +561,378 @@ class ResolveMode(unittest.TestCase):
                 rc = cn.main(["--resolve"], compose_dir=COMPOSE_DIR)
         self.assertEqual(rc, 2, buf.getvalue())
         self.assertIn("docker", buf.getvalue())
+
+
+class HashParsing(unittest.TestCase):
+    H1 = "a" * 64
+    H2 = "b" * 64
+
+    def test_parse_hashes(self):
+        text = "gvmd %s\nospd-openvas %s\n" % (self.H1, self.H2)
+        self.assertEqual(cn.parse_hashes(text), {"gvmd": self.H1, "ospd-openvas": self.H2})
+
+    def test_parse_ignores_noise_lines(self):
+        text = "WARN algo\n\ngvmd %s\nlinha com tres palavras %s\n" % (self.H1, self.H2)
+        self.assertEqual(cn.parse_hashes(text), {"gvmd": self.H1})
+
+    def test_parse_requires_at_least_one_hash(self):
+        for text in ("", "\n\n", "so avisos\nsem hash nenhum\n", "gvmd nao-e-hex\n"):
+            with self.assertRaises(cn.InputError):
+                cn.parse_hashes(text)
+
+    def test_compare_flags_only_protected_services(self):
+        base = {"gvmd": "1", "ospd-openvas": "2", "pg-gvm": "3", "redis-server": "4", "nginx": "5"}
+        head = dict(base, nginx="9", **{"control-plane": "7"})
+        violations, changed = cn.compare_hashes(base, head)
+        self.assertEqual(violations, [])
+        self.assertEqual(changed, [("control-plane", "novo"), ("nginx", "alterado")])
+
+    def test_compare_flags_changed_and_removed_protected_services(self):
+        base = {"gvmd": "1", "ospd-openvas": "2", "pg-gvm": "3", "redis-server": "4"}
+        head = {"gvmd": "X", "ospd-openvas": "2", "pg-gvm": "3"}
+        violations, changed = cn.compare_hashes(base, head)
+        self.assertEqual(sorted(v.message.split(":")[0] for v in violations), ["gvmd", "redis-server"])
+        self.assertTrue(all(v.rule == "HASH" for v in violations))
+        self.assertEqual(changed, [("gvmd", "alterado"), ("redis-server", "removido")])
+
+
+def sha(text):
+    import hashlib
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+class FakeHashCompose(object):
+    """`docker compose config --hash=*` simulado. O "hash" de cada servico depende do
+    CONTEUDO dos arquivos que o runner encontra em `cwd` (linhas `#svc <servico>: <valor>`),
+    entao so vale se o gate exportar a arvore certa para o diretorio certo."""
+
+    def __init__(self, rc=0, stderr=""):
+        self.rc, self.stderr, self.calls = rc, stderr, []
+
+    def __call__(self, args, cwd, env):
+        files = [args[i + 1] for i, a in enumerate(args) if a == "-f"]
+        envfile = args[args.index("--env-file") + 1]
+        self.calls.append({"args": list(args), "cwd": cwd, "files": files, "envfile": envfile,
+                           "env": dict(env)})
+        if self.rc != 0:
+            return self.rc, "", self.stderr
+        vals = {}
+        for name in files:
+            with open(os.path.join(cwd, name), encoding="utf-8") as f:
+                for m in re.finditer(r"^#svc (\S+): (.*)$", f.read(), re.M):
+                    vals.setdefault(m.group(1), []).append(m.group(2))
+        lines = ["%s %s" % (s, sha(s + "|" + "|".join(v))) for s, v in sorted(vals.items())]
+        return 0, "\n".join(lines) + "\n", "WARN aviso que o gate deve ignorar\n"
+
+
+class HashGate(WithTmp):
+    """O gate de hash de recriacao, contra um repositorio git DE VERDADE (descartavel)."""
+
+    SERVICES = ("gvmd", "ospd-openvas", "pg-gvm", "redis-server", "gsad", "nginx", "ingest")
+    FILES = ["compose.yaml", "docker-compose.override.yml", "docker-compose.shared-host.yml",
+             "docker-compose.scap-order.yml", "docker-compose.standalone.yml"]
+
+    def git(self, *args):
+        cmd = ["git", "-c", "user.name=teste", "-c", "user.email=teste@example.invalid",
+               "-c", "core.autocrlf=false", "-C", self.repo] + list(args)
+        p = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                           universal_newlines=True, encoding="utf-8")
+        self.assertEqual(p.returncode, 0, "%s -> %s" % (" ".join(args), p.stderr))
+        return p.stdout.strip()
+
+    def put(self, name, text):
+        path = os.path.join(self.repo, "compose", name)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8", newline="\n") as f:
+            f.write(text)
+
+    def marker_file(self, **svc):
+        return "services: {}\n" + "".join("#svc %s: %s\n" % kv for kv in sorted(svc.items()))
+
+    def setUp(self):
+        super(HashGate, self).setUp()
+        self.repo = os.path.join(self.tmp, "repo")
+        os.makedirs(self.repo)
+        self.git("init", "-q")
+        self.git("symbolic-ref", "HEAD", "refs/heads/main")
+        self.put("compose.yaml", "services: {}\n")
+        self.put("docker-compose.override.yml", self.marker_file(**{s: "v1" for s in self.SERVICES}))
+        for name in self.FILES[2:]:
+            self.put(name, "services: {}\n")
+        self.commit_all("base")
+        self.base = self.git("rev-parse", "HEAD")
+
+    def commit_all(self, msg):
+        self.git("add", "-A")
+        self.git("commit", "-q", "-m", msg)
+
+    def branch_off(self, name="feature"):
+        self.git("checkout", "-q", "-b", name)
+
+    def run_gate(self, fake, *extra):
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = cn.main(["--hashes", "--base-ref", "main"] + list(extra), runner=fake,
+                         compose_dir=os.path.join(self.repo, "compose"))
+        return rc, buf.getvalue()
+
+    def edit_override(self, **changes):
+        vals = {s: "v1" for s in self.SERVICES}
+        vals.update(changes)
+        self.put("docker-compose.override.yml", self.marker_file(**vals))
+
+    # --- o que passa -------------------------------------------------------
+    def test_unchanged_protected_services_pass_and_the_recreate_set_is_listed(self):
+        self.branch_off()
+        self.edit_override(nginx="v2", ingest="v2")
+        self.commit_all("muda so nginx e ingest")
+        fake = FakeHashCompose()
+        rc, out = self.run_gate(fake)
+        self.assertEqual(rc, 0, out)
+        self.assertIn("ingest, nginx", out)                         # lista o que sera recriado
+        self.assertIn("gvmd, ospd-openvas, pg-gvm, redis-server", out)
+        self.assertNotIn("REPROVADO", out)
+
+    # --- o que reprova ------------------------------------------------------
+    def test_each_protected_service_is_guarded(self):
+        for svc in cn.HASH_PROTECTED:
+            self.git("checkout", "-q", "main")
+            self.git("checkout", "-q", "-B", "feature-" + svc)
+            self.edit_override(**{svc: "v2"})
+            self.commit_all("muda " + svc)
+            rc, out = self.run_gate(FakeHashCompose())
+            self.assertEqual(rc, 1, (svc, out))
+            self.assertIn("REPROVADO [HASH] %s" % svc, out)
+
+    def test_change_only_in_a_profile_overlay_is_caught_in_those_combos(self):
+        self.branch_off()
+        self.put("docker-compose.shared-host.yml", self.marker_file(gvmd="mem_limit=3g"))
+        self.commit_all("gvmd ganha limite no shared-host")
+        rc, out = self.run_gate(FakeHashCompose())
+        self.assertEqual(rc, 1, out)
+        reproved = [l for l in out.splitlines() if "REPROVADO [HASH] gvmd" in l]
+        self.assertEqual(len(reproved), 2, out)                     # shared-host e shared-host+scap-order
+        self.assertTrue(all("shared-host" in l for l in reproved))
+
+    def test_removed_protected_service_fails(self):
+        self.branch_off()
+        vals = {s: "v1" for s in self.SERVICES if s != "pg-gvm"}
+        self.put("docker-compose.override.yml", self.marker_file(**vals))
+        self.commit_all("remove pg-gvm")
+        rc, out = self.run_gate(FakeHashCompose())
+        self.assertEqual(rc, 1, out)
+        self.assertIn("REPROVADO [HASH] pg-gvm", out)
+
+    # --- o plumbing do git ----------------------------------------------------
+    def test_base_is_the_merge_base_not_the_tip_of_main(self):
+        self.branch_off()
+        self.edit_override(nginx="v2")
+        self.commit_all("feature mexe no nginx")
+        self.git("checkout", "-q", "main")
+        self.edit_override(gvmd="v-da-main")                        # a main anda DEPOIS do fork
+        self.commit_all("main mexe no gvmd")
+        self.git("checkout", "-q", "feature")
+        fake = FakeHashCompose()
+        rc, out = self.run_gate(fake)
+        self.assertEqual(rc, 0, out)                                # o gvmd da main nao conta
+        self.assertIn("base=%s" % self.base[:10], out)
+
+    def test_base_and_head_are_hashed_from_the_same_directory_and_env_file(self):
+        # o hash do Compose leva o diretorio de trabalho, os arquivos e o --env-file nos
+        # labels: se base e HEAD fossem resolvidos de caminhos diferentes, TODO servico
+        # mudaria de hash e o gate nunca passaria (ou passaria vazio)
+        self.branch_off()
+        self.edit_override(nginx="v2")
+        self.commit_all("muda nginx")
+        fake = FakeHashCompose()
+        rc, out = self.run_gate(fake)
+        self.assertEqual(rc, 0, out)
+        self.assertEqual(len(fake.calls), 8, "4 combinacoes x (base, HEAD)")
+        self.assertEqual(len({c["cwd"] for c in fake.calls}), 1)
+        self.assertEqual(len({c["envfile"] for c in fake.calls}), 1)
+        self.assertTrue(all(c["args"][-2:] == ["config", "--hash=*"] for c in fake.calls))
+        self.assertFalse([k for c in fake.calls for k in c["env"] if k.startswith("COMPOSE_")])
+
+    def test_head_equal_to_the_merge_base_has_nothing_to_compare(self):
+        fake = FakeHashCompose()
+        rc, out = self.run_gate(fake)                               # HEAD == main
+        self.assertEqual(rc, 0, out)
+        self.assertEqual(fake.calls, [])
+        self.assertIn("nada a comparar", out)
+
+    def test_unresolvable_base_ref_is_an_input_error_with_the_fetch_depth_hint(self):
+        self.branch_off()
+        fake = FakeHashCompose()
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = cn.main(["--hashes", "--base-ref", "origin/nao-existe"], runner=fake,
+                         compose_dir=os.path.join(self.repo, "compose"))
+        self.assertEqual(rc, 2, buf.getvalue())
+        self.assertIn("fetch-depth", buf.getvalue())
+        self.assertEqual(fake.calls, [])
+
+    def test_combo_without_a_base_is_skipped_with_a_notice(self):
+        self.git("checkout", "-q", "-B", "sem-standalone")
+        os.remove(os.path.join(self.repo, "compose", "docker-compose.standalone.yml"))
+        self.commit_all("base sem standalone")
+        self.git("checkout", "-q", "-B", "main")                    # esta passa a ser a main
+        self.branch_off("feature")
+        self.put("docker-compose.standalone.yml", "services: {}\n")  # overlay NOVO no HEAD
+        self.commit_all("adiciona standalone")
+        rc, out = self.run_gate(FakeHashCompose())
+        self.assertEqual(rc, 0, out)
+        self.assertIn("standalone", out)
+        self.assertIn("sem base", out)
+
+    def test_compose_failure_is_an_input_error(self):
+        self.branch_off()
+        self.edit_override(nginx="v2")
+        self.commit_all("muda nginx")
+        rc, out = self.run_gate(FakeHashCompose(rc=1, stderr="yaml invalido na base"))
+        self.assertEqual(rc, 2, out)
+        self.assertIn("yaml invalido na base", out)
+
+    def test_hashes_mode_is_exclusive_with_the_other_modes(self):
+        for argv in (["--hashes", "--resolve"], ["--hashes", FIXTURE]):
+            with self.assertRaises(SystemExit) as cm:
+                with contextlib.redirect_stderr(io.StringIO()):
+                    cn.main(argv, runner=FakeHashCompose(), compose_dir=os.path.join(self.repo, "compose"))
+            self.assertEqual(cm.exception.code, 2)
+
+
+class YamlCoverage(WithTmp):
+    """YAML novo em compose/ (qualquer extensao, qualquer subdiretorio) sem entrar nas
+    combinacoes = rede nunca conferida. O --resolve e esses testes reprovam ate cobrir."""
+
+    COVERED = ["compose.yaml", "docker-compose.override.yml", "docker-compose.shared-host.yml",
+               "docker-compose.scap-order.yml", "docker-compose.standalone.yml"]
+
+    def make_compose_dir(self, *extra):
+        d = os.path.join(self.tmp, "compose")
+        for name in list(self.COVERED) + list(extra):
+            path = os.path.join(d, *name.split("/"))
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "w", encoding="utf-8") as f:
+                f.write("services: {}\n")
+        return d
+
+    def test_every_compose_yaml_in_the_repo_is_in_a_combo(self):
+        self.assertEqual(cn.find_uncovered_yaml(COMPOSE_DIR), [])
+        covered = set(cn.BASE_FILES)
+        for _, extra in cn.COMBOS:
+            covered.update(extra)
+        for name in covered:
+            self.assertTrue(os.path.exists(os.path.join(COMPOSE_DIR, name)), name)
+
+    def test_covered_files_alone_are_clean(self):
+        self.assertEqual(cn.find_uncovered_yaml(self.make_compose_dir()), [])
+
+    def test_new_overlays_are_found_whatever_the_extension_or_depth(self):
+        d = self.make_compose_dir("docker-compose.novo.yaml", "docker-compose.outro.yml",
+                                  "overlays/extra.yml", "overlays/deep/mais.yaml")
+        self.assertEqual(cn.find_uncovered_yaml(d), [
+            "docker-compose.novo.yaml", "docker-compose.outro.yml",
+            "overlays/deep/mais.yaml", "overlays/extra.yml"])
+
+    def test_own_test_dir_and_pycache_are_not_scanned(self):
+        d = self.make_compose_dir("test/fixtures/qualquer.yml", "__pycache__/x.yaml")
+        self.assertEqual(cn.find_uncovered_yaml(d), [])
+
+    def test_explicit_allowlist_is_respected(self):
+        d = self.make_compose_dir("overlays/nao-e-compose.yml", "docker-compose.novo.yaml")
+        with mock.patch.object(cn, "IGNORED_YAML", {"overlays/nao-e-compose.yml"}):
+            self.assertEqual(cn.find_uncovered_yaml(d), ["docker-compose.novo.yaml"])
+
+    def test_resolve_fails_when_a_yaml_is_not_covered(self):
+        d = self.make_compose_dir("docker-compose.novo.yaml")
+        fake = FakeCompose()
+        rc, out = resolve(fake, compose_dir=d)
+        self.assertEqual(rc, 1, out)
+        self.assertIn("docker-compose.novo.yaml", out)
+        self.assertEqual(len(fake.calls), 4, "as combinacoes conhecidas ainda sao conferidas")
+
+
+def workflow_paths(text):
+    """{evento: [globs]} dos `paths:` do workflow (parser minimo p/ o formato deste arquivo)."""
+    out, event, in_paths = {}, None, False
+    for line in text.splitlines():
+        m = re.match(r"^  (push|pull_request):\s*$", line)
+        if m:
+            event, in_paths = m.group(1), False
+            out.setdefault(event, [])
+            continue
+        if re.match(r"^\S", line):                      # chave de topo: sai do `on:`
+            event, in_paths = None, False
+        if event and re.match(r"^    paths:\s*$", line):
+            in_paths = True
+            continue
+        if event and in_paths:
+            m = re.match(r'^      - "(.+)"\s*$', line)
+            if m:
+                out[event].append(m.group(1))
+                continue
+            in_paths = False
+    return out
+
+
+def gh_glob_match(pattern, path):
+    """Subconjunto do 'filter pattern cheat sheet' do GitHub Actions: `*` nao cruza `/`,
+    `**` casa qualquer sequencia (inclusive `/`)."""
+    rx, i = "", 0
+    while i < len(pattern):
+        if pattern.startswith("**", i):
+            rx, i = rx + ".*", i + 2
+        elif pattern[i] == "*":
+            rx, i = rx + "[^/]*", i + 1
+        else:
+            rx, i = rx + re.escape(pattern[i]), i + 1
+    return re.fullmatch(rx, path) is not None
+
+
+class WorkflowPaths(unittest.TestCase):
+    """Se o `paths:` do workflow nao pega um YAML de compose, o PR que o altera passa sem CI."""
+
+    SAMPLES = ["compose/compose.yaml", "compose/docker-compose.override.yml",
+               "compose/docker-compose.shared-host.yml", "compose/docker-compose.novo.yaml",
+               "compose/docker-compose.novo.yml", "compose/overlays/extra.yml",
+               "compose/overlays/deep/mais.yaml", "compose/test/check_networks.py",
+               ".github/workflows/compose-ci.yml"]
+
+    @staticmethod
+    def uncovered(paths, samples):
+        return [s for s in samples if not any(gh_glob_match(g, s) for g in paths)]
+
+    def read(self):
+        with open(WORKFLOW, encoding="utf-8") as f:
+            return f.read()
+
+    def test_matcher_follows_the_cheat_sheet(self):
+        self.assertTrue(gh_glob_match("compose/**.yml", "compose/a/b.yml"))
+        self.assertTrue(gh_glob_match("compose/**.yml", "compose/b.yml"))
+        self.assertFalse(gh_glob_match("compose/**.yml", "compose/b.yaml"))
+        self.assertTrue(gh_glob_match("compose/*.yml", "compose/b.yml"))
+        self.assertFalse(gh_glob_match("compose/*.yml", "compose/a/b.yml"))
+        self.assertTrue(gh_glob_match("compose/test/**", "compose/test/fixtures/x.json"))
+
+    def test_parser_reads_both_events(self):
+        paths = workflow_paths(self.read())
+        self.assertEqual(sorted(paths), ["pull_request", "push"])
+        self.assertTrue(all(paths[e] for e in paths))
+
+    def test_every_compose_yaml_triggers_push_and_pull_request(self):
+        paths = workflow_paths(self.read())
+        repo_yaml = ["compose/" + n for n in cn.covered_yaml()]
+        for event in ("push", "pull_request"):
+            self.assertEqual(self.uncovered(paths[event], self.SAMPLES + repo_yaml), [], event)
+
+    def test_dropping_the_yaml_glob_is_detected(self):
+        text = self.read()
+        for dropped in ("compose/**.yaml", "compose/**.yml"):
+            mutated = text.replace('      - "%s"\n' % dropped, "")
+            self.assertNotEqual(mutated, text, dropped)
+            paths = workflow_paths(mutated)
+            for event in ("push", "pull_request"):
+                self.assertTrue(self.uncovered(paths[event], self.SAMPLES), (dropped, event))
 
 
 if __name__ == "__main__":

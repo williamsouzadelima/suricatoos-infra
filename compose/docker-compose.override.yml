@@ -439,7 +439,8 @@ volumes:
 #
 # DEPLOY — recria SÓ nginx, control-plane, ingest, feed-updater e docker-socket-proxy
 # (os únicos cujas redes mudaram). gvmd, ospd-openvas, pg-gvm e redis-server NÃO são
-# tocados, então não há scan em curso a esperar. Nesta ordem:
+# tocados (o compose-ci compara o hash de recriação do Compose deles com o da main), então
+# não há scan em curso a esperar. Nesta ordem:
 #   docker compose up -d --no-deps nginx
 #   docker compose up -d --no-deps control-plane
 #   # conferir que /agent/v1/crl.der responde (via nginx) antes de seguir

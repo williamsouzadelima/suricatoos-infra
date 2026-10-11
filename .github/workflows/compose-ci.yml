@@ -1,29 +1,36 @@
 name: compose-ci
 
 # Portao da topologia de redes do compose: o docker-socket-proxy so na rede
-# docker-api, control-plane/ingest fora da default, gvmd/ospd-openvas sem mudanca
-# de rede (mudar a rede deles obriga o deploy a recria-los e isso mata scan em
-# curso). Racional no bloco `networks:` de compose/docker-compose.override.yml.
+# docker-api, control-plane/ingest/feed-updater fora da default, so o proxy monta o
+# docker.sock, redes locais e com o nome do projeto, e o deploy sem recriar
+# gvmd/ospd-openvas/pg-gvm/redis-server (recriar o ospd-openvas mata scan em curso).
+# Racional no bloco `networks:` de compose/docker-compose.override.yml.
 #
 # Sem build e sem daemon: `docker compose config` so resolve os YAMLs. O
 # verificador reprova se qualquer combinacao de COMPOSE_FILE em uso sair da
-# politica; os testes provam, por mutacao, que ele reprova de verdade.
+# politica; os testes provam, por mutacao, que ele reprova de verdade. O passo de hash
+# compara o hash de recriacao do Compose (o criterio que ele proprio usa para recriar um
+# container) entre o merge-base com a main e o HEAD, com o mesmo binario.
 #
 # Local (com Docker):  python3 compose/test/check_networks.py --resolve
+#                      python3 compose/test/check_networks.py --hashes   (precisa do origin/main)
 # Local (sem Docker):  python3 -m unittest discover -s compose/test -v
 
+# `**` cruza `/` no filtro de paths: `compose/**.yml` pega o YAML em qualquer subdiretorio
+# e `compose/**.yaml` pega a outra extensao (o compose.yaml base e' .yaml). Os testes
+# conferem que nenhum YAML de compose fica de fora (test_check_networks.WorkflowPaths).
 on:
   push:
     branches: [main, "feat/**"]
     paths:
-      - "compose/*.yml"
-      - "compose/*.yaml"
+      - "compose/**.yml"
+      - "compose/**.yaml"
       - "compose/test/**"
       - ".github/workflows/compose-ci.yml"
   pull_request:
     paths:
-      - "compose/*.yml"
-      - "compose/*.yaml"
+      - "compose/**.yml"
+      - "compose/**.yaml"
       - "compose/test/**"
       - ".github/workflows/compose-ci.yml"
 
@@ -37,6 +44,8 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0        # o passo de hash precisa do merge-base com a main
       - name: versoes
         run: |
           docker --version
@@ -46,3 +55,5 @@ jobs:
         run: python3 -m unittest discover -s compose/test -v
       - name: resolve as combinacoes de COMPOSE_FILE e confere a politica de redes
         run: python3 compose/test/check_networks.py --resolve
+      - name: hash de recriacao dos servicos protegidos (merge-base com a main vs HEAD)
+        run: python3 compose/test/check_networks.py --hashes

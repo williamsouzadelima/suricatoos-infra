@@ -15,14 +15,24 @@ USO
   # (CI, e dev que tenha Docker):
   python3 compose/test/check_networks.py --resolve
 
+  # Compara o hash de recriacao do Compose (`config --hash=*`) dos servicos protegidos
+  # (gvmd, ospd-openvas, pg-gvm, redis-server) entre o merge-base com a main e o HEAD,
+  # por combinacao, com o mesmo binario. Precisa de historico completo (fetch-depth: 0):
+  python3 compose/test/check_networks.py --hashes [--base-ref origin/main]
+
   # Offline: confere um JSON ja resolvido (fixture, ou saida salva do compose):
   python3 compose/test/check_networks.py arquivo.json
+
+REGRAS (ids na saida): PRES-SVC/PRES-NET (presenca), NET-INTERNAL (flag internal),
+  NET-DECL (rede local, driver padrao, nome <projeto>_<chave>), SVC-NETS (redes exatas por
+  servico), NETMODE, PORTS (nao publicam porta), SOCKET (so o proxy monta o docker.sock),
+  COVER (todo YAML de compose/ esta em alguma combinacao) e HASH (modo --hashes).
 
 SAIDA
   0  politica respeitada em tudo que foi conferido
   1  violacao da politica (ou o `docker compose` falhou numa combinacao)
   2  entrada que nao permite provar nada (JSON invalido, sem servicos, docker
-     ausente): um portao que nao consegue olhar NAO passa
+     ausente, sem merge-base): um portao que nao consegue olhar NAO passa
 
 O portao nao se contenta com ausencia de problema: exige a PRESENCA dos servicos
 e das redes que a politica descreve, entao um JSON vazio ou truncado nao passa.
@@ -33,11 +43,15 @@ from __future__ import annotations
 
 import argparse
 import collections
+import io
 import json
 import os
+import posixpath
+import re
 import shutil
 import subprocess
 import sys
+import tarfile
 import tempfile
 
 # ---------------------------------------------------------------------------
@@ -84,8 +98,19 @@ REQUIRED_SERVICES = set(PINNED) | {
     "gsad", "gvmd", "ospd-openvas", "pg-gvm", "redis-server",
 }
 
-# Nunca publicam porta no host: sao alcancaveis so por rede interna.
-NO_PUBLISHED_PORTS = {"docker-socket-proxy", "control-plane", "ingest"}
+# Nunca publicam porta no host: sao alcancaveis so por rede interna. (O :8008 do
+# feed-updater e' a API admin SEM auth propria; o portao dela e' o nginx.)
+NO_PUBLISHED_PORTS = {"docker-socket-proxy", "control-plane", "ingest", "feed-updater"}
+
+# Unico servico que pode montar o socket do docker (e' o proxy que o restringe).
+SOCKET_OWNER = "docker-socket-proxy"
+DOCKER_SOCKET_PATHS = {"/var/run/docker.sock", "/run/docker.sock"}
+# Montar um destes diretorios (ou a raiz) entrega o docker.sock junto.
+DOCKER_SOCKET_ANCESTORS = {"/", "/var", "/var/run", "/run"}
+
+# YAML dentro de compose/ que NAO e' arquivo de compose (caminho relativo a compose/,
+# com `/`). Vazio hoje: todo .yml/.yaml la dentro precisa estar em alguma combinacao.
+IGNORED_YAML = set()
 
 # Por que cada flag `internal` e' o que e' (vai na mensagem quando alguem a muda).
 WHY_INTERNAL = {
@@ -108,6 +133,13 @@ WHY_NETWORK = {
     DEFAULT: "a default e a rede do motor do GVM: control-plane/ingest/feed-updater e o "
              "proxy do docker ficam FORA dela",
 }
+
+# Servicos cujo HASH DE RECRIACAO do Compose nao pode mudar: e' o criterio que o proprio
+# Compose usa para decidir recriar um container no `up`. Recriar o ospd-openvas mata o scan
+# em curso (e o gvmd/pg-gvm/redis-server derrubam o que ele usa). Comparar com o hash da
+# main, com o MESMO binario do Compose, prova que o deploy nao encosta neles.
+HASH_PROTECTED = ("gvmd", "ospd-openvas", "pg-gvm", "redis-server")
+DEFAULT_BASE_REF = "origin/main"
 
 # Combinacoes de COMPOSE_FILE em uso (relativas a compose/). As duas primeiras
 # entradas de arquivos valem sempre; o resto e o que cada perfil acrescenta.
@@ -152,6 +184,10 @@ def validate_shape(cfg):
     nets = cfg.get("networks")
     if nets is not None and not isinstance(nets, dict):
         raise InputError("`networks` de topo nao e um objeto")
+    # O nome do projeto prefixa o nome real de toda rede (<projeto>_<chave>): sem ele
+    # nao se confere NET-DECL, e portao que nao consegue conferir nao aprova.
+    if not isinstance(cfg.get("name"), str) or not cfg["name"]:
+        raise InputError("sem `name` (projeto) no topo: nao da para conferir o nome das redes")
 
 
 def service_networks(svc):
@@ -178,6 +214,80 @@ def members(cfg):
         for net in service_networks(svc):
             out[net].add(name)
     return out
+
+
+def _socket_path_note(path):
+    """Se `path` (caminho ABSOLUTO do host) e' o docker.sock ou um diretorio que o contem,
+    devolve uma descricao; senao None."""
+    if not isinstance(path, str) or not path.startswith("/"):
+        return None
+    norm = posixpath.normpath(path)                  # '/var/run/' -> '/var/run'
+    if norm in DOCKER_SOCKET_PATHS or posixpath.basename(norm) == "docker.sock":
+        return "%s (o proprio socket)" % path
+    if norm in DOCKER_SOCKET_ANCESTORS:
+        return "%s (diretorio que contem o docker.sock)" % path
+    return None
+
+
+def socket_mounts(svc):
+    """Descricao dos volumes do servico que expoem o docker.sock (ou um diretorio que o contem).
+
+    O compose emite `volumes` como lista de objetos {type, source, target, ...}; aceita-se
+    tambem a sintaxe curta ("origem:destino[:modo]"). Fail-safe: o `type` declarado nao
+    desativa a conferencia -- so conta a ORIGEM ser um caminho absoluto do host (volume
+    nomeado e tmpfs nao tem origem assim).
+    """
+    found = []
+    for vol in svc.get("volumes") or []:
+        if isinstance(vol, dict):
+            source = vol.get("source")
+        elif isinstance(vol, str):
+            source = vol.split(":", 1)[0]
+        else:
+            continue
+        note = _socket_path_note(source)
+        if note:
+            found.append(note)
+    return found
+
+
+def socket_volumes(cfg):
+    """{volume nomeado: descricao} dos volumes de topo que sao um bind do docker.sock
+    disfarcado (driver_opts.device apontando para o socket ou um diretorio que o contem)."""
+    found = {}
+    for vname, vconf in (cfg.get("volumes") or {}).items():
+        opts = vconf.get("driver_opts") if isinstance(vconf, dict) else None
+        note = _socket_path_note((opts or {}).get("device")) if isinstance(opts, dict) else None
+        if note:
+            found[vname] = note
+    return found
+
+
+def covered_yaml():
+    """Arquivos de compose (relativos a compose/) que alguma combinacao usa."""
+    files = set(BASE_FILES)
+    for _, extra in COMBOS:
+        files.update(extra)
+    return sorted(files)
+
+
+def find_uncovered_yaml(compose_dir):
+    """YAML dentro de compose/ (recursivo, .yml e .yaml) que nenhuma combinacao usa e que
+    IGNORED_YAML nao libera. Overlay novo fora das combinacoes = rede nunca conferida."""
+    covered = set(covered_yaml()) | set(IGNORED_YAML)
+    root_dir = os.path.abspath(compose_dir)
+    found = []
+    for root, dirs, files in os.walk(root_dir):
+        skip = {"__pycache__", ".git"}
+        if os.path.abspath(root) == root_dir:
+            skip.add("test")             # o diretorio de testes (fixtures) nao e' compose
+        dirs[:] = sorted(d for d in dirs if d not in skip)
+        for fname in sorted(files):
+            if fname.endswith((".yml", ".yaml")):
+                rel = os.path.relpath(os.path.join(root, fname), root_dir).replace(os.sep, "/")
+                if rel not in covered:
+                    found.append(rel)
+    return sorted(found)
 
 
 # ---------------------------------------------------------------------------
@@ -229,6 +339,29 @@ def check(cfg):
                 "NET-INTERNAL", "rede %s: internal=%s, esperado %s (%s)"
                 % (name, str(got).lower(), str(want).lower(), why)))
 
+    # NET-DECL: toda rede e' uma bridge LOCAL do projeto, com o nome <projeto>_<chave>.
+    # Sem isto `backend: {name: <proj>_default}` passaria (as chaves estao certas, mas
+    # a "backend" seria a propria default), e `external`/outro driver trocariam o que
+    # enxerga o que sem aparecer nas chaves.
+    project = cfg["name"]
+    for key in sorted(declared):
+        conf = declared[key] if isinstance(declared[key], dict) else {}
+        if conf.get("external"):
+            out.append(Violation(
+                "NET-DECL", "rede %s e `external`: ela existe fora deste projeto e ninguem "
+                "aqui controla quem mais esta nela" % key))
+        driver = conf.get("driver")
+        if driver not in (None, "", "bridge"):
+            out.append(Violation(
+                "NET-DECL", "rede %s usa driver=%s: o isolamento depende do driver padrao "
+                "(bridge); host/overlay/macvlan/null mudam o que enxerga o que" % (key, driver)))
+        want_name = "%s_%s" % (project, key)
+        if conf.get("name") != want_name:
+            out.append(Violation(
+                "NET-DECL", "rede %s: name=%r, esperado %r (um `name:` apontando p/ outra rede, "
+                "ex. a default, desfaz o isolamento sem mudar as chaves)"
+                % (key, conf.get("name"), want_name)))
+
     # SVC-NETS: conjunto exato de redes por servico.
     for name in sorted(services):
         svc = services[name]
@@ -276,6 +409,27 @@ def check(cfg):
             out.append(Violation(
                 "PORTS", "%s publica porta(s) no host (%d): deve ser alcancavel so por "
                 "rede interna" % (name, len(ports))))
+
+    # SOCKET: so o docker-socket-proxy monta o docker.sock (ou um diretorio que o contem).
+    # O socket e' root no host; o proxy e' quem restringe a API a containers/imagens/redes.
+    owners = set()
+    for name in sorted(services):
+        mounts = socket_mounts(services[name])
+        if mounts:
+            owners.add(name)
+            if name != SOCKET_OWNER:
+                out.append(Violation(
+                    "SOCKET", "%s monta o socket do docker (%s): so o %s pode -- o socket e' "
+                    "root no host e o proxy e' quem restringe a API"
+                    % (name, "; ".join(mounts), SOCKET_OWNER)))
+    if SOCKET_OWNER in services and SOCKET_OWNER not in owners:
+        out.append(Violation(
+            "SOCKET", "%s nao monta o docker.sock: o feed-updater ficaria sem docker (e a "
+            "regra de dono unico perderia o sentido)" % SOCKET_OWNER))
+    for vname, note in sorted(socket_volumes(cfg).items()):
+        out.append(Violation(
+            "SOCKET", "o volume nomeado %s aponta (driver_opts.device) para %s: e um bind do "
+            "docker.sock disfarcado de volume nomeado" % (vname, note)))
 
     return out
 
@@ -354,6 +508,12 @@ def resolve_all(compose_dir, runner=run_docker_compose, out=None):
     out = out or sys.stdout
     tmp = tempfile.mkdtemp(prefix="compose-networks-")
     worst = 0
+    # COVER: YAML novo em compose/ fora das combinacoes e' rede nunca conferida.
+    for rel in find_uncovered_yaml(compose_dir):
+        print("  REPROVADO [COVER] %s: YAML em compose/ fora de qualquer combinacao conferida "
+              "(acrescente-o a COMBOS em check_networks.py, ou a IGNORED_YAML se nao for "
+              "arquivo de compose)" % rel, file=out)
+        worst = 1
     try:
         envfile = os.path.join(tmp, "exemplo.env")
         with open(envfile, "w", encoding="utf-8", newline="\n") as f:
@@ -392,6 +552,164 @@ def _indent(text, prefix="    "):
 
 
 # ---------------------------------------------------------------------------
+# Modo --hashes: o deploy nao pode recriar gvmd/ospd-openvas/pg-gvm/redis-server
+# ---------------------------------------------------------------------------
+_HASH_LINE = re.compile(r"^(\S+)\s+([0-9a-fA-F]{16,})$")
+
+
+def parse_hashes(text):
+    """Saida de `docker compose config --hash=*` ("<servico> <hash>" por linha) -> dict.
+    Linhas fora do formato (avisos) sao ignoradas; nenhuma linha valida = InputError."""
+    out = {}
+    for line in text.splitlines():
+        m = _HASH_LINE.match(line.strip())
+        if m:
+            out[m.group(1)] = m.group(2).lower()
+    if not out:
+        raise InputError("a saida de `docker compose config --hash` nao trouxe nenhuma "
+                         "linha 'servico hash'")
+    return out
+
+
+def compare_hashes(base, head, protected=HASH_PROTECTED):
+    """Compara {servico: hash} da base e do HEAD. Devolve (violacoes, mudancas): mudancas =
+    [(servico, 'alterado'|'novo'|'removido')] ordenada; violacao = protegido alterado/removido."""
+    changed = []
+    for svc in sorted(set(base) | set(head)):
+        if svc not in base:
+            changed.append((svc, "novo"))
+        elif svc not in head:
+            changed.append((svc, "removido"))
+        elif base[svc] != head[svc]:
+            changed.append((svc, "alterado"))
+    kinds = dict(changed)
+    violations = []
+    for svc in protected:
+        kind = kinds.get(svc)
+        if kind in ("alterado", "removido"):
+            violations.append(Violation(
+                "HASH", "%s: hash de recriacao %s em relacao a base -- o deploy recriaria o "
+                "servico (ospd-openvas/gvmd: mata scan em curso)" % (svc, kind)))
+    return violations, changed
+
+
+def _git(repo_root, *args):
+    """git -C repo_root <args>. Devolve (returncode, stdout bytes, stderr texto)."""
+    try:
+        p = subprocess.run(["git", "-C", repo_root] + list(args),
+                           stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=120)
+    except (OSError, subprocess.TimeoutExpired) as e:
+        raise InputError("git indisponivel: %s" % e)
+    return p.returncode, p.stdout, p.stderr.decode("utf-8", "replace").strip()
+
+
+def _export_compose(repo_root, rev, dest):
+    """Extrai compose/ de `rev` em dest/compose (git archive: nao toca o checkout)."""
+    rc, data, err = _git(repo_root, "archive", "--format=tar", rev, "compose")
+    if rc != 0:
+        raise InputError("git archive %s compose falhou: %s" % (rev[:10], err))
+    with tarfile.open(fileobj=io.BytesIO(data)) as tar:
+        for m in tar.getmembers():
+            if m.issym() or m.islnk() or m.name.startswith("/") or ".." in m.name.split("/"):
+                raise InputError("entrada suspeita no git archive: %r" % m.name)
+        try:
+            tar.extractall(dest, filter="data")
+        except TypeError:                                    # Python sem o parametro `filter`
+            tar.extractall(dest)
+
+
+def hash_gate(repo_root, base_ref=DEFAULT_BASE_REF, runner=run_docker_compose, out=None):
+    """Compara, por combinacao, o hash de recriacao de cada servico entre o merge-base do HEAD
+    com `base_ref` e o HEAD. Devolve 0 (ok), 1 (protegido mudou) ou 2 (nao deu para conferir).
+
+    Base e HEAD sao exportados (git archive) SEQUENCIALMENTE para o MESMO diretorio e
+    resolvidos com o MESMO --env-file e o MESMO binario: o hash do Compose leva nos labels o
+    diretorio de trabalho, os caminhos dos -f, o --env-file e a versao do Compose; com
+    qualquer um deles diferente TODO servico mudaria de hash.
+    """
+    out = out or sys.stdout
+    tmp = tempfile.mkdtemp(prefix="compose-hashes-")
+    try:
+        try:
+            rc, so, err = _git(repo_root, "rev-parse", "HEAD")
+            if rc != 0:
+                raise InputError("git rev-parse HEAD falhou: %s" % err)
+            head = so.decode().strip()
+            rc, so, err = _git(repo_root, "merge-base", "HEAD", base_ref)
+            if rc != 0 or not so.strip():
+                raise InputError("nao achei o merge-base de HEAD com %r (%s). Clone raso? Use "
+                                 "actions/checkout com `fetch-depth: 0`." % (base_ref, err))
+            base = so.decode().strip()
+            print("== hash de recriacao (docker compose config --hash=*): base=%s head=%s =="
+                  % (base[:10], head[:10]), file=out)
+            if base == head:
+                print("  HEAD e o merge-base com %s: nada a comparar." % base_ref, file=out)
+                return 0
+            envfile = os.path.join(tmp, "exemplo.env")
+            with open(envfile, "w", encoding="utf-8", newline="\n") as f:
+                f.write(FICTITIOUS_ENV)
+            env = _clean_env()
+            work = os.path.join(tmp, "work")
+            hashes = {}
+            for side, rev in (("base", base), ("head", head)):
+                shutil.rmtree(work, ignore_errors=True)
+                os.makedirs(work)
+                _export_compose(repo_root, rev, work)
+                cdir = os.path.join(work, "compose")
+                hashes[side] = {}
+                for label, extra in COMBOS:
+                    files = BASE_FILES + extra
+                    if not all(os.path.exists(os.path.join(cdir, name)) for name in files):
+                        hashes[side][label] = None
+                        continue
+                    args = ["--env-file", envfile]
+                    for name in files:
+                        args += ["-f", name]
+                    args += ["config", "--hash=*"]
+                    rc, stdout, stderr = runner(args, cdir, env)
+                    if rc != 0:
+                        raise InputError("`docker compose config --hash` falhou em %r (%s, exit "
+                                         "%d):\n%s" % (label, side, rc, _indent(stderr or stdout)))
+                    hashes[side][label] = parse_hashes(stdout)
+        except InputError as e:
+            print("  ENTRADA INVALIDA: %s" % e, file=out)
+            return 2
+
+        worst = 0
+        for label, _ in COMBOS:
+            b, h = hashes["base"][label], hashes["head"][label]
+            print("-- %s --" % label, file=out)
+            if b is None:
+                print("  sem base para comparar: a combinacao usa arquivo(s) que a base nao tem "
+                      "(overlay novo)", file=out)
+                continue
+            if h is None:
+                print("  a combinacao nao existe no HEAD (overlay removido): nada a comparar",
+                      file=out)
+                continue
+            violations, changed = compare_hashes(b, h)
+            for kind in ("alterado", "novo", "removido"):
+                names = [s for s, k in changed if k == kind]
+                if names:
+                    note = " (sera RECRIADO no deploy)" if kind == "alterado" else ""
+                    print("  hash %s%s: %s" % (kind, note, ", ".join(names)), file=out)
+            if not changed:
+                print("  nenhum servico mudou de hash", file=out)
+            kept = [s for s in HASH_PROTECTED if s in b and s in h and b[s] == h[s]]
+            print("  protegidos sem mudanca: %s" % (", ".join(kept) or "(nenhum)"), file=out)
+            for v in violations:
+                print("  REPROVADO [%s] %s (combinacao %s)" % (v.rule, v.message, label), file=out)
+                worst = 1
+        if worst:
+            print("  => o deploy desta mudanca recriaria servico(s) protegido(s)", file=out)
+        else:
+            print("  OK: o hash de recriacao dos servicos protegidos nao mudou", file=out)
+        return worst
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+# ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 def check_files(paths, out=None):
@@ -417,13 +735,20 @@ def main(argv=None, runner=run_docker_compose, compose_dir=None):
         description="Confere a politica de redes do compose (ver docstring do modulo).")
     ap.add_argument("--resolve", action="store_true",
                     help="resolve as combinacoes de COMPOSE_FILE com `docker compose config`")
+    ap.add_argument("--hashes", action="store_true",
+                    help="compara o hash de recriacao do Compose dos servicos protegidos entre "
+                         "o merge-base com --base-ref e o HEAD (precisa de historico completo)")
+    ap.add_argument("--base-ref", default=DEFAULT_BASE_REF,
+                    help="ref da base do --hashes (padrao: %(default)s)")
     ap.add_argument("files", nargs="*", help="JSON(s) ja resolvido(s) (modo offline)")
     args = ap.parse_args(argv)
-    if args.resolve == bool(args.files):
-        ap.error("use --resolve OU informe um ou mais arquivos JSON (nao os dois, nem nenhum)")
+    if int(args.resolve) + int(args.hashes) + int(bool(args.files)) != 1:
+        ap.error("use UM modo: --resolve, --hashes ou um ou mais arquivos JSON")
+    cdir = compose_dir or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     if args.resolve:
-        cdir = compose_dir or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         return resolve_all(cdir, runner=runner)
+    if args.hashes:
+        return hash_gate(os.path.dirname(os.path.abspath(cdir)), args.base_ref, runner=runner)
     return check_files(args.files)
 
 
