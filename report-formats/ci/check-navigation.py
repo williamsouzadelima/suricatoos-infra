@@ -16,8 +16,10 @@ documento -- e que cada atalho leva aonde diz:
                  o MESMO numero e o MESMO titulo que o card mostra (cortado em
                  fronteira de palavra no teto $bookmark-max); as tarjas da
                  secao 5 entram so' quando o documento as mostra;
-  hyperref       o preambulo carrega o hyperref com bookmarksopen/
-                 bookmarksopenlevel=0 (so' o nivel 0 aberto) como opcao de CARGA;
+  hyperref       o preambulo carrega o hyperref com bookmarksopen=true,
+                 bookmarksopenlevel=0 escritos -- o contrato a' vista; o efeito
+                 (cada secao fechada) e' o padrao do hyperref, e quem o garante
+                 e' o pdf-arvore (Count < 0), nao esta checagem;
 
 e, com --pdf (o PDF que o generate entregou), sobre o documento compilado:
 
@@ -850,8 +852,9 @@ def check_pdf(pdf, aux, nav, sheet, lang, pages=None, perr=None):
                        wk[diff] if diff < len(wk) else None))
     for t, _, count, kids in tree:
         if kids and not (isinstance(count, int) and count < 0):
-            out["pdf-arvore"].append("'%s' abre expandido (Count %r): bookmarksopenlevel=0 deixa o"
-                                     " nivel 0 fechado" % (t, count))
+            out["pdf-arvore"].append("'%s' abre expandido (Count %r): o painel tem de abrir com cada"
+                                     " secao fechada (Count < 0), que e' o padrao do hyperref"
+                                     % (t, count))
         for kt, _, _, gk in kids:
             if gk:
                 out["pdf-arvore"].append("'%s' tem filhos: a arvore so' tem 2 niveis" % kt)

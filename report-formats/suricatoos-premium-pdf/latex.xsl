@@ -1703,11 +1703,12 @@ SPDX-License-Identifier: GPL-2.0-or-later
 % cards). `bookmarksopen=true,bookmarksopenlevel=0' NAO e' o que produz isso:
 % o hyperref abre o item de nivel L so' quando L e' MENOR que
 % bookmarksopenlevel, entao com 0 nada abre -- exatamente o padrao dele
-% (bookmarksopen=false, tudo fechado). As opcoes ficam escritas, como opcao de
-% CARGA (em \hypersetup o hyperref avisa "Option ... has already been used" e
-% as ignora), para o contrato ficar a' vista no preambulo. Quem o GARANTE e' o
-% portao do CI: pdf-arvore (report-formats/ci/check-navigation.py) reprova
-% secao com filhos que abra expandida (/Count >= 0).
+% (bookmarksopen=false, tudo fechado). As opcoes ficam escritas na carga do
+% pacote so' para o contrato ficar a' vista no preambulo (no hyperref 7.01l
+% elas valeriam tambem num \hypersetup; depois da carga so' `bookmarks' fica
+% travada). Quem o GARANTE e' o portao do CI: pdf-arvore
+% (report-formats/ci/check-navigation.py) reprova secao com filhos que abra
+% expandida (/Count >= 0).
 \usepackage[unicode=true,hidelinks,bookmarksopen=true,bookmarksopenlevel=0]{hyperref}
 % Só metadado aqui.
 \hypersetup{pdftitle={</xsl:text>
