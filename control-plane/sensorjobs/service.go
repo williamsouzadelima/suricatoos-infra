@@ -76,8 +76,10 @@ func (s *Service) PollHandler() http.HandlerFunc {
 	}
 }
 
-// AckHandler serves POST /v1/scan-jobs/{id}/ack: mark the job accepted. Owner-
-// scoped by the sensor's tenant O; a foreign/unknown id → 404 (no enumeration).
+// AckHandler serves POST /v1/scan-jobs/{id}/ack: the sensor concludes the job
+// (DONE) — it acks only after the scan ran and its report was pushed. Owner-scoped
+// by the sensor's tenant O; a foreign/unknown id — or a job the sensor never
+// received (still PENDING) — → 404 (no enumeration). A repeated ack is a 204.
 func (s *Service) AckHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id, ok := s.auth(w, r)

@@ -98,7 +98,8 @@ func TestPollUnguessableAndDelivered(t *testing.T) {
 func TestAckOwnerScope(t *testing.T) {
 	r := testReg(t)
 	acme, _, _ := r.Enqueue(EnqueueRequest{Tenant: "acme", Targets: []string{"10.20.1.1"}})
-	// globex não pode dar ack no job da acme (IDOR).
+	r.Poll("acme") // o sensor só dá ack num job que recebeu (DELIVERED)
+	// globex não pode dar ack no job da acme (IDOR) — mesmo ele já entregue.
 	if r.Ack(acme.JobID, "globex") {
 		t.Fatal("ack cross-tenant deveria falhar")
 	}
@@ -152,6 +153,7 @@ func TestPersistRoundTrip(t *testing.T) {
 	path := t.TempDir() + "/jobs.json"
 	r, _ := NewRegistry(Config{Path: path, ScopeOf: scopes(map[string]string{"acme": "10.20.0.0/16"})})
 	j, _, _ := r.Enqueue(EnqueueRequest{Tenant: "acme", Targets: []string{"10.20.1.1"}})
+	r.Poll("acme") // DELIVERED: só um job entregue pode ser concluído pelo ack
 	r.Ack(j.JobID, "acme")
 
 	r2, err := NewRegistry(Config{Path: path, ScopeOf: scopes(map[string]string{"acme": "10.20.0.0/16"})})
@@ -187,6 +189,55 @@ func TestAckIsIdempotentAndKeepsFirstTimestamp(t *testing.T) {
 	got, _ := r.Get(j.JobID, "acme")
 	if got.State != StateDone || !got.AckedAt.Equal(t0.Add(10*time.Minute)) {
 		t.Fatalf("ack repetido não pode mexer no job concluído: %+v", got)
+	}
+}
+
+// O sensor só conclui o que recebeu: o ack de um job PENDING (nunca entregue) é
+// recusado (false) e não muda nada; depois da entrega o ack conclui o job (DONE).
+func TestAckOnlyConcludesDeliveredJobs(t *testing.T) {
+	r := testReg(t)
+	r.now = at(t0)
+	j, _, _ := r.Enqueue(EnqueueRequest{Tenant: "acme", Targets: []string{"10.20.1.1"}})
+
+	if r.Ack(j.JobID, "acme") {
+		t.Fatal("ack de um job PENDING (nunca entregue) deveria ser recusado")
+	}
+	got, _ := r.Get(j.JobID, "acme")
+	if got.State != StatePending || !got.AckedAt.IsZero() {
+		t.Fatalf("o ack recusado não pode mexer no job: %+v", got)
+	}
+
+	r.Poll("acme") // → DELIVERED
+	r.now = at(t0.Add(time.Minute))
+	if !r.Ack(j.JobID, "acme") {
+		t.Fatal("ack de um job DELIVERED deveria funcionar")
+	}
+	got, _ = r.Get(j.JobID, "acme")
+	if got.State != StateDone || !got.AckedAt.Equal(t0.Add(time.Minute)) {
+		t.Fatalf("deveria estar DONE com AckedAt=+1min: %+v", got)
+	}
+}
+
+// Um registro legado ACKED (gravado antes do Ack marcar DONE) ainda pode ser
+// concluído; o instante do ack original é preservado.
+func TestAckConcludesLegacyAckedRecord(t *testing.T) {
+	ackedAt := t0.Add(-50 * time.Minute)
+	legacy := ScanJob{
+		SchemaVersion: SchemaVersion, JobID: "legacy", CorrelationID: "c", Tenant: "acme",
+		Targets: []string{"10.20.1.1"}, State: StateAcked,
+		CreatedAt: t0.Add(-time.Hour), ExpiresAt: t0.Add(23 * time.Hour), AckedAt: ackedAt,
+	}
+	r, err := NewRegistry(Config{Path: writeJobs(t, legacy)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.now = at(t0)
+	if !r.Ack("legacy", "acme") {
+		t.Fatal("ack de um registro legado ACKED deveria funcionar")
+	}
+	got, _ := r.Get("legacy", "acme")
+	if got.State != StateDone || !got.AckedAt.Equal(ackedAt) {
+		t.Fatalf("deveria virar DONE preservando o AckedAt original: %+v", got)
 	}
 }
 

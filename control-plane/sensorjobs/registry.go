@@ -36,7 +36,7 @@ type Registry struct {
 type Config struct {
 	Path       string
 	ScopeOf    ScopeLookup   // tenant → authorized scope (required for enqueue)
-	Cooldown   time.Duration // collapse identical (tenant,targets,config) within this window
+	Cooldown   time.Duration // collapse identical (tenant,targets,config) onto the still IN-FLIGHT job within this window (see Enqueue)
 	Redeliver  time.Duration // a DELIVERED-but-unacked job becomes eligible again after this
 	DefaultTTL time.Duration // job expiry when EnqueueRequest.TTL is 0
 }
@@ -74,8 +74,10 @@ func NewRegistry(cfg Config) (*Registry, error) {
 
 // Enqueue dispatches a job for a tenant. It scope-gates the targets (dropping any
 // outside the tenant's authorized scope), collapses an identical recent request
-// (idempotency/anti-storm), and persists a PENDING job. Returns (nil, nil, err)
-// when nothing is left in scope. dropped is the list of rejected targets (log it).
+// onto the job that is still IN FLIGHT (non-terminal: idempotency/anti-storm — once
+// that job is DONE or EXPIRED a new identical request creates a new job, i.e. a
+// re-scan), and persists a PENDING job. Returns (nil, nil, err) when nothing is left
+// in scope. dropped is the list of rejected targets (log it).
 func (r *Registry) Enqueue(req EnqueueRequest) (job *ScanJob, dropped []string, err error) {
 	if req.Tenant == "" {
 		return nil, nil, fmt.Errorf("tenant obrigatório")
@@ -229,13 +231,18 @@ func (r *Registry) Poll(o string) (*ScanJob, bool) {
 
 // Ack marks a job DONE, but ONLY if it belongs to tenant o (owner scope). An
 // unknown id or a foreign tenant returns false (no cross-tenant ack; no
-// enumeration). Terminal jobs are left as-is (idempotent: a repeated ack keeps the
-// first AckedAt, and an EXPIRED job stays EXPIRED).
+// enumeration).
 //
 // DONE, not ACKED: the sensor acks only AFTER it ran the scan and pushed its
 // report (sensor/internal/supervisor.pollOnce) — on a crash or a failed push it
 // does not ack and the job is redelivered — so an ack means "concluded". AckedAt
 // records when. StateAcked is no longer assigned (legacy records still carry it).
+//
+// A sensor can only conclude a job it actually received: DELIVERED (or a legacy
+// ACKED record) becomes DONE, keeping an AckedAt that is already set; a PENDING job
+// was never handed out, so its ack is a no-op that returns false. Final jobs are
+// left as-is and answer true (idempotent: a repeated ack keeps the first AckedAt,
+// and an EXPIRED job stays EXPIRED).
 func (r *Registry) Ack(jobID, o string) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -243,9 +250,14 @@ func (r *Registry) Ack(jobID, o string) bool {
 	if !ok || j.Tenant != o {
 		return false
 	}
-	if !j.State.terminal() {
+	switch j.State {
+	case StatePending:
+		return false
+	case StateDelivered, StateAcked:
 		j.State = StateDone
-		j.AckedAt = r.now().UTC()
+		if j.AckedAt.IsZero() {
+			j.AckedAt = r.now().UTC()
+		}
 		_ = r.saveLocked()
 	}
 	return true

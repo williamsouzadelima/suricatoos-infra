@@ -115,6 +115,47 @@ func TestAckForeign404(t *testing.T) {
 	}
 }
 
+// POST /v1/scan-jobs/{id}/ack: o sensor só conclui o que recebeu. Um job ainda
+// PENDING responde 404 (como um id desconhecido) e não muda; depois do poll o ack dá
+// 204 e conclui (DONE); repetir é idempotente (204).
+func TestAckHandlerOnlyForDeliveredJobs(t *testing.T) {
+	s, r := testService(t)
+	j, _, _ := r.Enqueue(EnqueueRequest{Tenant: "acme", Targets: []string{"10.20.1.1"}})
+	ack := func() int {
+		req := sensorReq("POST", "/v1/scan-jobs/"+j.JobID+"/ack", nil)
+		req.SetPathValue("id", j.JobID)
+		w := httptest.NewRecorder()
+		s.AckHandler()(w, req)
+		return w.Code
+	}
+	stateNow := func() JobState {
+		got, _ := r.Get(j.JobID, "acme")
+		return got.State
+	}
+
+	if code := ack(); code != http.StatusNotFound {
+		t.Fatalf("ack de job PENDING = %d, want 404", code)
+	}
+	if got := stateNow(); got != StatePending {
+		t.Fatalf("o ack recusado mudou o job para %s", got)
+	}
+
+	w := httptest.NewRecorder()
+	s.PollHandler()(w, sensorReq("GET", "/v1/scan-jobs", nil)) // → DELIVERED
+	if w.Code != http.StatusOK {
+		t.Fatalf("poll = %d, want 200", w.Code)
+	}
+	if code := ack(); code != http.StatusNoContent {
+		t.Fatalf("ack de job DELIVERED = %d, want 204", code)
+	}
+	if got := stateNow(); got != StateDone {
+		t.Fatalf("estado após o ack = %s, want DONE", got)
+	}
+	if code := ack(); code != http.StatusNoContent {
+		t.Fatalf("ack repetido = %d, want 204 (idempotente)", code)
+	}
+}
+
 func TestEnqueueHandler(t *testing.T) {
 	s, _ := testService(t)
 	// Sem bearer → 401.
