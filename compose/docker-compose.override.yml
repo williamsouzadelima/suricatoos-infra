@@ -188,11 +188,17 @@ services:
       AI_PROVIDERS_FILE: "${AI_PROVIDERS_FILE:-/data/ai-providers.json}"
       # Só modelos GRATUITOS (default true, custo zero): só OpenRouter/UnoRouter e só
       # modelo com id terminado em :free (ou openrouter/free no OpenRouter); a
-      # base_url fica fixa no endpoint oficial do tipo (a enviada é ignorada), então a
-      # chave só vai ao roteador; o planner recusa qualquer outro modelo/endpoint antes
-      # de ir à rede. Modelo gratuito não garante ZDR: habilitar exige a ciência da
-      # política de dados (data_policy_ack) gravada pelo operador. "false" volta a
-      # aceitar gateway genérico, endpoint próprio e modelo pago (régua UE+ZDR).
+      # base_url fica fixa no endpoint oficial do tipo (a enviada é ignorada) e
+      # trocar tipo/endpoint de provedor com chave exige colar a chave de novo, então
+      # a chave só vai ao roteador para o qual foi colada; o planner recusa qualquer
+      # outro modelo/endpoint antes de ir à rede. Modelo gratuito não garante ZDR:
+      # habilitar exige SEMPRE a ciência da política de dados (data_policy_ack; o
+      # servidor grava quando, e "quem" fica o marcador "operator" até a identidade
+      # do gsad chegar). Na conta do OpenRouter, confira a privacidade para modelos
+      # gratuitos em openrouter.ai/settings/privacy (coerente com a ciência; se
+      # recusar provedores que treinam com os prompts, pode não sobrar endpoint
+      # gratuito). "false" volta a aceitar gateway genérico, endpoint próprio e
+      # modelo pago (régua UE+ZDR; :free fora do endpoint oficial conta como pago).
       AI_FREE_MODELS_ONLY: "${AI_FREE_MODELS_ONLY:-true}"
       # Remediation planner (IA advisory). Gatilho por operador (admin). DARK por padrão.
       AI_PLANNER_ENABLED: "${AI_PLANNER_ENABLED:-false}"
@@ -204,11 +210,15 @@ services:
       AI_PLANNER_USD_PER_1K: "${AI_PLANNER_USD_PER_1K:-0.005}"
       # Tempo total de UM rascunho (todos os provedores e formatos juntos; duração
       # Go, ex.: 90s, 5m). A rota do planner ganha prazo de escrita próprio a partir
-      # dele; o WriteTimeout geral do servidor não muda.
+      # dele; o WriteTimeout geral do servidor não muda. No nginx, a location
+      # = /agent/api/v1/remediation/plan lê por 360s (5 min + 30 s de escrita): se
+      # este valor passar de 330s, suba o proxy_read_timeout dela junto.
       AI_PLANNER_TIMEOUT: "${AI_PLANNER_TIMEOUT:-5m}"
-      # Provedores a usar: ids separados por vírgula, em ordem de prioridade (em 429,
-      # 5xx, timeout ou erro de rede tenta o próximo). Vazio = todos os habilitados:
-      # openrouter-free, depois unorouter-free, depois o resto por nome.
+      # Provedores a usar: ids separados por vírgula, em ordem de prioridade (em
+      # qualquer resposta não-2xx, timeout ou erro de rede tenta o próximo). Vazio =
+      # com AI_FREE_MODELS_ONLY=true só os presets (openrouter-free, depois
+      # unorouter-free); com false, todos os habilitados, presets primeiro e o resto
+      # por nome.
       AI_PLANNER_PROVIDER_ID: "${AI_PLANNER_PROVIDER_ID:-}"
       # TTL curto p/ certs renovados (limita latência de revogação de cert vazado).
       RENEW_CERT_TTL: 720h

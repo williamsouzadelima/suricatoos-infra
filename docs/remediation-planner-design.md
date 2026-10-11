@@ -22,7 +22,9 @@ aprova (o que dispara a assinatura do job — [ADR-0010](adr/0010-executor-remed
   prompt como **contexto imutável**, nunca como algo a calcular.
 - ❌ **Não aprova, não assina, não enfileira, não aplica** — não tem acesso às chaves nem às rotas de
   operador; a saída é texto consultivo anexado ao achado.
-- ❌ **Não recebe dado pessoal nem identidade real do host** (ver §5).
+- ❌ **Não recebe a identidade real do host como campo** — host, agente, tenant e IP do achado vão
+  pseudonimizados; título e evidência, porém, seguem como vieram e podem conter nomes de conta ou de
+  host (ver §5: fechar isso antes de ligar `AI_PLANNER_CONSENT=true`).
 - ❌ **Não é bloqueante** — se o planner estiver desligado, fora do orçamento ou indisponível, o fluxo
   segue com o humano redigindo manualmente (§8).
 
@@ -75,8 +77,11 @@ existem na saída**: se o modelo tentar inventá-los, não há onde gravá-los.
 - **Caminho gratuito (padrão do scanner, `AI_FREE_MODELS_ONLY=true`):** só modelos **gratuitos** do
   OpenRouter/UnoRouter (custo zero). Modelo gratuito **não garante ZDR** — o provedor grátis pode
   registrar/treinar com o prompt —, então habilitar exige a **ciência explícita da política de dados**
-  (`data_policy_ack`, com quem/quando gravados pelo servidor). Régua para habilitar um provedor:
-  `(UE && ZDR) || (modelo gratuito && ciência)`. Detalhes no §11.
+  (`data_policy_ack`; o servidor registra QUANDO; QUEM fica pendente da propagação da identidade do
+  gsad — atrás do nginx o valor é o marcador `operator`). Régua para habilitar um provedor — e para o
+  planner usá-lo, conferida de novo na hora do uso: com a regra ligada, modelo gratuito no endpoint
+  oficial **com** ciência, sempre (UE/ZDR autodeclarados não a substituem); com a regra desligada,
+  `(UE && ZDR) || (modelo gratuito no endpoint oficial && ciência)`. Detalhes no §11.
 - **Orçamento mensal** (~US$50) com corte: acima do teto, o planner **desliga** (não degrada silenciosamente).
   Chamada a modelo gratuito custa 0 (não consome o teto).
 - **Consentimento por finalidade, por tenant** (default **off**; só admin+MFA liga). Sem consentimento,
@@ -86,12 +91,19 @@ existem na saída**: se o modelo tentar inventá-los, não há onde gravá-los.
 
 ## 5. Pseudonimização e minimização
 
-Antes de qualquer chamada ao provedor, um **mapa server-side** substitui identidade por referência
-opaca: `hostname/IP/usuário/tenant → id opaco`. O modelo só vê **referências opacas + dado técnico do
-achado**. O mapa fica na nuvem e **não** é enviado. Allowlist explícita de campos (§3): qualquer campo
-fora dela é descartado por omissão, não por bloqueio (fail-closed de dado). Se um segredo aparecer num
-valor de config (ex.: string de conexão), ele é **redigido** antes do envio e marcado para revisão
-humana.
+Antes de qualquer chamada ao provedor, um **mapa server-side** (só em memória, por pedido) troca os
+identificadores **do achado** por referências opacas: host, agente, tenant e IP do pedido viram
+`host-1`, `agent-1`, `tenant-1`, `ip-1` — inclusive quando aparecem no título ou na evidência — e o
+mapa **não** é enviado. Host e agente vão como campo; tenant e IP, não. Allowlist explícita de campos
+(§3): qualquer campo fora dela é descartado por omissão, não por bloqueio (fail-closed de dado).
+
+**Limite atual (o que o código faz hoje, `planner/pseudonym.go`):** só esses 4 identificadores do
+pedido são trocados. **Título e evidência seguem como vieram** e podem conter nomes de conta ou de host
+— por exemplo, na regra CIS "renomear a conta de administrador" a evidência é o próprio nome da conta;
+outro hostname, IP ou domínio citado no texto também vai como está. A redação de segredo em valor de
+config (ex.: string de conexão) é desenho, ainda não implementado. **Fechar o pseudonimizador
+(conta/usuário, outros hosts/IPs/domínios, segredos no texto) é pré-requisito para ligar
+`AI_PLANNER_CONSENT=true`.**
 
 ## 6. Isolamento de chaves
 
@@ -116,23 +128,26 @@ tem as chaves de assinatura (feed/update/CA/remediação). O `OPENROUTER_API_KEY
 | Planner desligado (flag/consentimento off) | Sem rascunho; operador redige manualmente. Fluxo segue. |
 | Orçamento estourado | Planner corta; sem rascunho; alerta ao admin. |
 | Provedor indisponível / timeout | Sem rascunho; o achado continua aprovável sem ajuda de IA. |
-| Provedor responde 429/5xx, timeout ou erro de rede | Tenta o próximo provedor da lista (§11); outro 4xx é erro do pedido e para. Todos falhando → sem rascunho. |
+| Provedor responde qualquer não-2xx (depois do fallback de formato dele), timeout ou erro de rede | Tenta o próximo provedor da lista (§11). Todos falhando → sem rascunho; o erro lista cada tentativa (status + trecho curto e saneado do corpo, nunca a chave). |
 | Provedor recusa `response_format` json_schema (400 citando o formato) | Re-tenta UMA vez com `json_object` e, se de novo, sem `response_format` (§11); a saída continua tendo de passar no `parseDraft`. |
 | Modelo não gratuito com `AI_FREE_MODELS_ONLY=true` | Recusado antes de qualquer rede (403 na rota do planner); sem rascunho. |
 | Provedor fora do endpoint oficial com `AI_FREE_MODELS_ONLY=true` (registro antigo) | Recusado antes de qualquer rede (403 se for o único); salvar o provedor de novo fixa a base oficial. |
-| Tempo total do rascunho esgotado (`AI_PLANNER_TIMEOUT`, default 5 min) | A tentativa em curso é cancelada e nenhuma outra começa; 504; sem rascunho. |
+| Provedor habilitado mas fora da régua na hora do uso (ex.: sem a ciência depois de reverter para uma imagem anterior a ela) | Pulado antes de qualquer rede, com o motivo no log; o próximo é tentado (403 se nenhum serve). |
+| Tempo total do rascunho esgotado (`AI_PLANNER_TIMEOUT`, default 5 min) | A tentativa em curso é cancelada e nenhuma outra começa; 504 em JSON; sem rascunho. Atrás do nginx, a location própria do planner lê por 360 s (§11). |
 | Saída não valida no json_schema | Rascunho descartado; sem rascunho (nunca texto livre não-estruturado). |
 
 ## 9. LGPD
 
 O canal de remediação já é registrado em [data-inventory](data-inventory.md) (sem dado pessoal). O planner
-**estreita** ainda mais: allowlist técnica + pseudonimização + ZDR + UE + consentimento. Nenhum dado
-pessoal, nenhum inventário cru, nenhuma identidade real do host deixa a nuvem rumo ao provedor.
+**estreita**: allowlist técnica + pseudonimização dos identificadores do achado + consentimento (+ UE e
+ZDR no caminho pago). Inventário cru não sai. **Hoje** título e evidência seguem como vieram e podem
+conter nomes de conta ou de host (§5) — fechar o pseudonimizador antes de `AI_PLANNER_CONSENT=true`.
 
 No **caminho gratuito** (§11) não há ZDR nem garantia de região: o provedor pode registrar e usar o
-prompt. O que sai continua sendo **só** o allowlist técnico **pseudonimizado**, e só com consentimento
-(`AI_PLANNER_CONSENT`, default off) e a ciência do operador registrada no provedor (`data_policy_ack`).
-Registrado em [data-inventory](data-inventory.md) (seção da IA de planejamento).
+prompt. O que sai é **só** o allowlist técnico (host, agente, tenant e IP do achado pseudonimizados;
+título e evidência como vieram), e só com consentimento (`AI_PLANNER_CONSENT`, default off) e a ciência
+do operador registrada no provedor (`data_policy_ack`). Registrado em [data-inventory](data-inventory.md)
+(seção da IA de planejamento).
 
 ## 10. Rollout
 
@@ -149,10 +164,13 @@ Registrado em [data-inventory](data-inventory.md) (seção da IA de planejamento
 > `AI_CONFIG_ENABLED`, `AI_PLANNER_ENABLED` e `AI_PLANNER_CONSENT` seguem com default desligado.
 
 **Regra.** Modelo gratuito ⇔ id termina em `:free` (com algo antes do sufixo) **ou** é o roteador
-`openrouter/free` num provedor do tipo `openrouter`. Com `AI_FREE_MODELS_ONLY=true` (default), o
-registro só aceita os tipos `openrouter` e `unorouter` e só modelo gratuito — mesmo para guardar
-desabilitado (fora disso → HTTP 422 com mensagem em pt-BR) — e o planner **recusa** chamar modelo não
-gratuito antes de qualquer rede (defesa em profundidade, caso um registro pago antigo siga habilitado).
+`openrouter/free` num provedor do tipo `openrouter` — **e** o provedor está no endpoint **oficial** do
+roteador: fora dele (gateway genérico, endpoint próprio) `:free` não quer dizer custo zero e o modelo
+conta como pago, na governança e no orçamento, com a regra ligada ou não. Com
+`AI_FREE_MODELS_ONLY=true` (default), o registro só aceita os tipos `openrouter` e `unorouter` e só
+modelo gratuito — mesmo para guardar desabilitado (fora disso → HTTP 422 com mensagem em pt-BR) — e o
+planner **recusa** chamar modelo não gratuito antes de qualquer rede (defesa em profundidade, caso um
+registro pago antigo siga habilitado).
 
 **Endpoint fixo.** Com a regra ligada, a `base_url` é fixada no endpoint **oficial** do tipo
 (`https://openrouter.ai/api/v1`, `https://api.unorouter.com/v1`): a enviada no upsert é **ignorada**
@@ -162,6 +180,14 @@ já tem chave para um host seu e fazer o servidor mandar a chave para lá. Regis
 modelos (422) até ser salvo de novo — o que fixa a base oficial. Com a regra desligada, endpoint próprio
 continua aceito no cadastro e no planner (comportamento anterior).
 
+**A chave é do destino para o qual foi colada.** A chave guardada (e a ciência) valem para o par
+tipo + endpoint. Num update **sem** `api_key` nova, trocar o tipo — ou mudar o endpoint efetivo para
+qualquer coisa que não seja o oficial do **mesmo** tipo — dá **422** ("cole a chave de novo ao trocar o
+tipo/endpoint") e nada muda no registro, com a regra ligada ou desligada. A exceção é salvar de novo um
+registro antigo do mesmo tipo para fixar o endpoint oficial: a chave fica. Com `api_key` nova, a troca
+passa, a chave é substituída e a ciência recomeça (outro destinatário, outra ciência): o provedor só
+fica habilitado se o mesmo pedido trouxer a ciência.
+
 **Presets.** Com `AI_CONFIG_ENABLED=true`, o boot garante `openrouter-free` ("OpenRouter — modelos
 gratuitos", modelo `openrouter/free`) e `unorouter-free` ("UnoRouter — modelos gratuitos", modelo
 `deepseek-v4-flash:free`), na base padrão do tipo, **desabilitados e sem chave**. Só cria o id que não
@@ -170,13 +196,25 @@ desabilitado). Pronto para uso = colar a chave + marcar a ciência + habilitar.
 
 **Governança / privacidade.** Os provedores gratuitos **não garantem ZDR**: podem registrar e usar os
 prompts, inclusive para treino. Por isso:
-- habilitar exige `(UE && ZDR) || (modelo gratuito && data_policy_ack)`. A ciência guarda
-  `data_policy_ack_by`/`data_policy_ack_at`, preenchidos pelo **servidor** a partir do operador da
-  requisição (nunca do corpo). Retirar a ciência apaga o registro; editar mantendo-a não reescreve
-  quem/quando.
-- o que sai continua sendo **só** o allowlist pseudonimizado do §3/§5 (`host-1`, `agent-1`…; tenant e
-  IP não entram como campo e, se aparecerem no título/evidência, viram pseudônimo), e **nada** sai sem
-  `AI_PLANNER_CONSENT=true` (default off).
+- com a regra ligada, habilitar um modelo gratuito exige **sempre** a ciência (`data_policy_ack`) — as
+  marcações autodeclaradas `eu_region`/`zdr` não a substituem, porque um endpoint `:free` de roteador
+  não garante ZDR. Com a regra desligada, vale `(UE && ZDR) || (modelo gratuito no endpoint oficial &&
+  data_policy_ack)`.
+- a ciência é gravada pelo **servidor** (nunca a partir do corpo): o servidor registra **QUANDO**
+  (`data_policy_ack_at`); **QUEM** fica pendente da propagação da identidade do gsad — atrás do nginx
+  `data_policy_ack_by` é sempre o marcador `operator`, que a tela não mostra como nome. Retirar a
+  ciência apaga o registro; editar mantendo-a não reescreve quem/quando; trocar o destino (tipo ou
+  endpoint, com chave nova) recomeça a ciência.
+- o que sai é o allowlist do §3/§5: host, agente, tenant e IP do achado são pseudonimizados; **título e
+  evidência seguem como vieram e podem conter nomes de conta ou de host** (§5). **Nada** sai sem
+  `AI_PLANNER_CONSENT=true` (default off) — e ligá-lo pede, antes, fechar o pseudonimizador.
+- **Conta do OpenRouter:** confira em `openrouter.ai/settings/privacy` a configuração de privacidade
+  para **modelos gratuitos**, coerente com a ciência. Para "colar a chave e funcionar", a conta precisa
+  permitir, nos modelos gratuitos, os provedores que podem registrar/treinar com os prompts — que é o
+  que a ciência registra. Se ela recusar, o OpenRouter pode não ter endpoint gratuito para o modelo
+  (relatos citam o erro "No endpoints found matching your data policy") e o planner passa ao provedor
+  seguinte. O planner não manda `provider.data_collection: "deny"`: com modelos `:free` isso tende a
+  não deixar endpoint nenhum.
 
 **Lista viva de modelos.** `GET /ai/providers/{id}/models` (sessão: portão gsad do nginx + marca do
 `sessiongate`) e `GET /api/v1/ai/providers/{id}/models` (bearer) consultam no servidor **só** o
@@ -191,9 +229,19 @@ mensagem curta, sem repassar o corpo dele (que pode ecoar a chave). `GET /ai/pol
 `GET /api/v1/ai/policy` informam a regra e os presets para a UI.
 
 **Planner.**
-- `AI_PLANNER_PROVIDER_ID` aceita lista separada por vírgula (ordem = prioridade). Vazio = todos os
-  habilitados, `openrouter-free` antes de `unorouter-free` e o resto por nome. Em 429, 5xx, timeout ou
-  erro de rede tenta o próximo; outro 4xx é erro do pedido e para.
+- `AI_PLANNER_PROVIDER_ID` aceita lista separada por vírgula (ordem = prioridade). Vazio = com a regra
+  ligada, **só os presets** (`openrouter-free`, depois `unorouter-free`) — os demais provedores são
+  ignorados, como diz a tela; com a regra desligada, todos os habilitados, os presets primeiro e o resto
+  por nome. Em **qualquer** resposta não-2xx (depois do fallback de formato do próprio provedor),
+  timeout ou erro de rede tenta o próximo: um 4xx de um roteador (modelo fora do catálogo, política de
+  dados da conta) não diz nada do outro. Todos falhando, o erro lista cada tentativa — status e um
+  trecho curto e saneado do corpo, nunca a chave. Resposta 2xx sem conteúdo útil para.
+- Régua na hora do uso: antes de qualquer rede, cada provedor passa de novo pela **mesma** régua do
+  registro (habilitado e com chave; com a regra ligada, tipo do roteador, endpoint oficial, modelo
+  gratuito e ciência; com ela desligada, UE + ZDR ou modelo gratuito no endpoint oficial com ciência).
+  Quem falha é **pulado**, com o motivo no log (sem segredo). Ex.: reverter para uma imagem anterior à
+  ciência apaga `data_policy_ack*` na primeira gravação; ao voltar, o preset segue habilitado, mas sem
+  ciência — e o planner não o usa.
 - Formato: pede `response_format` json_schema; se o provedor responder 400 citando
   response_format/json_schema/structured, re-tenta UMA vez com `{"type":"json_object"}` e, se de novo,
   sem `response_format`. Nesses dois casos o schema vai no prompt de **sistema** (nunca como prefill).
@@ -203,4 +251,12 @@ mensagem curta, sem repassar o corpo dele (que pode ecoar a chave). `GET /ai/pol
   (default 5 min). Esgotado, a tentativa em curso é cancelada, nenhuma outra começa e a rota responde
   504. A rota do planner ganha prazo de escrita próprio (tempo total + 30 s), porque um modelo gratuito
   lento passa fácil do `WriteTimeout` geral do servidor (30 s), que não muda para as outras rotas.
+- nginx: o `/agent/api/` lê do control-plane por só 30 s, então o planner tem location própria,
+  `location = /agent/api/v1/remediation/plan` (`compose/nginx/default.conf`), cópia exata do
+  `/agent/api/` com `proxy_read_timeout 360s` (o tempo total de 5 min + os 30 s do prazo de escrita).
+  **Se `AI_PLANNER_TIMEOUT` subir acima de 330 s, o `proxy_read_timeout` dessa location tem de subir
+  junto** — senão o nginx corta antes e o operador recebe o 504 em HTML do nginx, não o do planner.
+  Confira também que o nginx do host (passthrough em modo stream) não corta uma conexão parada antes
+  disso (o `proxy_timeout` padrão do stream é 10 min). O `standalone.conf` herda o
+  `proxy_read_timeout 1h` do bloco `server`.
 - Regras Claude 5 em todas as tentativas: sem `temperature`, sem prefill.

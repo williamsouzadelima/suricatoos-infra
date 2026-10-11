@@ -5349,10 +5349,10 @@ index eaff647..d6e39ef 100644
 \ No newline at end of file
 diff --git a/public/locales/gsa-es.json b/public/locales/gsa-es.json
 new file mode 100644
-index 0000000..33305c7
+index 0000000..3af4d47
 --- /dev/null
 +++ b/public/locales/gsa-es.json
-@@ -0,0 +1,2460 @@
+@@ -0,0 +1,2461 @@
 +{
 +  "AI Providers": "Proveedores de IA",
 +  "Configure LLM providers (OpenRouter, UnoRouter and others) used to draft remediation plans. Keys are stored encrypted and never shown.": "Configure los proveedores de LLM (OpenRouter, UnoRouter y otros) usados para redactar planes de remediación. Las claves se guardan cifradas y nunca se muestran.",
@@ -5385,18 +5385,19 @@ index 0000000..33305c7
 +  "Save the key to list the models.": "Guarde la clave para listar los modelos.",
 +  "No free model found.": "No se encontró ningún modelo gratuito.",
 +  "Save this provider to pin the official endpoint.": "Guarde este proveedor para fijar el endpoint oficial.",
-+  "Free models may log or use prompts for training. Suricatoos sends the model only pseudonymized data.": "Los modelos gratuitos pueden registrar o usar los prompts para entrenamiento. Suricatoos envía al modelo solo datos seudonimizados.",
++  "Free models may log or use prompts for training. Suricatoos pseudonymizes the finding's host, agent, tenant and IP; the title and evidence are sent as they are and may contain account or host names.": "Los modelos gratuitos pueden registrar o usar los prompts para entrenamiento. Suricatoos seudonimiza el host, el agente, el tenant y la IP del hallazgo; el título y la evidencia se envían tal como vienen y pueden contener nombres de cuenta o de host.",
 +  "Acknowledgement recorded by {{- by}} on {{- date}}": "Aceptación registrada por {{- by}} el {{- date}}",
++  "Acknowledgement recorded on {{- date}}": "Aceptación registrada el {{- date}}",
 +  "Acknowledgement recorded": "Aceptación registrada",
 +  "Required to enable this provider.": "Obligatoria para habilitar este proveedor.",
 +  "To enable, paste the key and confirm the acknowledgement.": "Para habilitar, pegue la clave y marque la aceptación.",
 +  "This preset does not exist on the server yet. The control-plane creates it (disabled, without a key) when it starts.": "Este preset todavía no existe en el servidor. El control-plane lo crea (deshabilitado y sin clave) al iniciar.",
 +  "Other providers (read-only)": "Otros proveedores (solo lectura)",
-+  "Only the presets can be configured while only free models are allowed. Delete this provider and use the preset.": "Solo los presets se pueden configurar mientras solo se permiten modelos gratuitos. Elimine este proveedor y use el preset.",
++  "While only free models are allowed, only the presets can be configured and the planner uses only them: it ignores this provider (unless AI_PLANNER_PROVIDER_ID lists it). Delete this provider and use the preset.": "Mientras solo se permiten modelos gratuitos, solo los presets se pueden configurar y el planner usa solo ellos: este proveedor se ignora (salvo que AI_PLANNER_PROVIDER_ID lo incluya). Elimine este proveedor y use el preset.",
 +  "Generic (OpenAI-compatible) providers cannot be used while only free models are allowed. Delete this provider and use the preset.": "Los proveedores genéricos (compatibles con OpenAI) no se pueden usar mientras solo se permiten modelos gratuitos. Elimine este proveedor y use el preset.",
 +  "Delete the provider {{- name}}? This cannot be undone.": "¿Eliminar el proveedor {{- name}}? Esto no se puede deshacer.",
 +  "Edit": "Editar",
-+  "A provider can be enabled only if it is EU region and ZDR, or if it uses a free model with the data-policy acknowledgement.": "Un proveedor solo puede habilitarse si es región UE y ZDR, o si usa un modelo gratuito con la aceptación de la política de datos.",
++  "A provider can be enabled only if it is EU region and ZDR, or if it uses a free model on the official OpenRouter/UnoRouter endpoint with the data-policy acknowledgement.": "Un proveedor solo puede habilitarse si es región UE y ZDR, o si usa un modelo gratuito en el endpoint oficial de OpenRouter/UnoRouter con la aceptación de la política de datos.",
 +  "Not found. Reload the page.": "No encontrado. Recargue la página.",
 +  "Internal server error.": "Error interno del servidor.",
 +  "The server is busy or limiting requests ({{status}}). Wait a minute and try again.": "El servidor está ocupado o limitando las solicitudes ({{status}}). Espere un minuto e inténtelo de nuevo.",
@@ -7815,10 +7816,10 @@ index 0000000..33305c7
 +}
 \ No newline at end of file
 diff --git a/public/locales/gsa-pt_BR.json b/public/locales/gsa-pt_BR.json
-index 10e592f..68e8104 100644
+index 10e592f..c30dbc9 100644
 --- a/public/locales/gsa-pt_BR.json
 +++ b/public/locales/gsa-pt_BR.json
-@@ -1,216 +1,2460 @@
+@@ -1,216 +1,2461 @@
  {
 -  "# of OVAL Definitions": "OVAL defini\u00e7\u00e3o",
 -  "# of Operating Systems": "Sistema Operacional",
@@ -7884,18 +7885,19 @@ index 10e592f..68e8104 100644
 +  "Save the key to list the models.": "Salve a chave para listar os modelos.",
 +  "No free model found.": "Nenhum modelo gratuito encontrado.",
 +  "Save this provider to pin the official endpoint.": "Salve este provedor para fixar o endpoint oficial.",
-+  "Free models may log or use prompts for training. Suricatoos sends the model only pseudonymized data.": "Modelos gratuitos podem registrar ou usar os prompts para treinamento. O Suricatoos envia ao modelo apenas dados pseudonimizados.",
++  "Free models may log or use prompts for training. Suricatoos pseudonymizes the finding's host, agent, tenant and IP; the title and evidence are sent as they are and may contain account or host names.": "Modelos gratuitos podem registrar ou usar os prompts para treinamento. O Suricatoos pseudonimiza host, agente, tenant e IP do achado; título e evidência seguem como vieram e podem conter nomes de conta ou de host.",
 +  "Acknowledgement recorded by {{- by}} on {{- date}}": "Ciência registrada por {{- by}} em {{- date}}",
++  "Acknowledgement recorded on {{- date}}": "Ciência registrada em {{- date}}",
 +  "Acknowledgement recorded": "Ciência registrada",
 +  "Required to enable this provider.": "Obrigatória para habilitar este provedor.",
 +  "To enable, paste the key and confirm the acknowledgement.": "Para habilitar, cole a chave e marque a ciência.",
 +  "This preset does not exist on the server yet. The control-plane creates it (disabled, without a key) when it starts.": "Este preset ainda não existe no servidor. O control-plane o cria (desabilitado e sem chave) ao iniciar.",
 +  "Other providers (read-only)": "Outros provedores (somente leitura)",
-+  "Only the presets can be configured while only free models are allowed. Delete this provider and use the preset.": "Só os presets podem ser configurados enquanto só modelos gratuitos são permitidos. Exclua este provedor e use o preset.",
++  "While only free models are allowed, only the presets can be configured and the planner uses only them: it ignores this provider (unless AI_PLANNER_PROVIDER_ID lists it). Delete this provider and use the preset.": "Enquanto só modelos gratuitos são permitidos, só os presets podem ser configurados e o planner usa só eles: este provedor é ignorado (a menos que AI_PLANNER_PROVIDER_ID o liste). Exclua este provedor e use o preset.",
 +  "Generic (OpenAI-compatible) providers cannot be used while only free models are allowed. Delete this provider and use the preset.": "Provedores genéricos (compatíveis com OpenAI) não podem ser usados enquanto só modelos gratuitos são permitidos. Exclua este provedor e use o preset.",
 +  "Delete the provider {{- name}}? This cannot be undone.": "Excluir o provedor {{- name}}? Isso não pode ser desfeito.",
 +  "Edit": "Editar",
-+  "A provider can be enabled only if it is EU region and ZDR, or if it uses a free model with the data-policy acknowledgement.": "Um provedor só pode ser habilitado se for região UE e ZDR, ou se usar um modelo gratuito com a ciência da política de dados.",
++  "A provider can be enabled only if it is EU region and ZDR, or if it uses a free model on the official OpenRouter/UnoRouter endpoint with the data-policy acknowledgement.": "Um provedor só pode ser habilitado se for região UE e ZDR, ou se usar um modelo gratuito no endpoint oficial do OpenRouter/UnoRouter com a ciência da política de dados.",
 +  "Not found. Reload the page.": "Não encontrado. Recarregue a página.",
 +  "Internal server error.": "Erro interno do servidor.",
 +  "The server is busy or limiting requests ({{status}}). Wait a minute and try again.": "O servidor está ocupado ou limitando as requisições ({{status}}). Aguarde um minuto e tente novamente.",
@@ -12749,10 +12751,10 @@ index dd0b390..9316ed8 100644
    Layers: {
 diff --git a/src/web/pages/ai-providers/AiProvidersPage.tsx b/src/web/pages/ai-providers/AiProvidersPage.tsx
 new file mode 100644
-index 0000000..b1435ce
+index 0000000..b044b99
 --- /dev/null
 +++ b/src/web/pages/ai-providers/AiProvidersPage.tsx
-@@ -0,0 +1,1107 @@
+@@ -0,0 +1,1120 @@
 +/* SPDX-FileCopyrightText: 2026 Suricatoos
 + *
 + * SPDX-License-Identifier: AGPL-3.0-or-later
@@ -12895,6 +12897,11 @@ index 0000000..b1435ce
 +
 +// Kinds accepted while only free models are allowed (mirrors the control-plane).
 +const FREE_KINDS = ['openrouter', 'unorouter'];
++
++// Who the server records when the request carries no identity. Today that is
++// every request behind nginx (the gsad user is not passed on yet), so it is a
++// marker, not a person: the page never shows it as a name.
++const UNKNOWN_OPERATOR = 'operator';
 +
 +// Base URLs preset for the named routers (mirrors the control-plane defaults).
 +// Only the generic form uses them: with free models only, the server stores the
@@ -13087,7 +13094,7 @@ index 0000000..b1435ce
 +      checked={checked}
 +      description={description}
 +      label={_(
-+        'Free models may log or use prompts for training. Suricatoos sends the model only pseudonymized data.',
++        "Free models may log or use prompts for training. Suricatoos pseudonymizes the finding's host, agent, tenant and IP; the title and evidence are sent as they are and may contain account or host names.",
 +      )}
 +      onChange={e => onChange(e.currentTarget.checked)}
 +    />
@@ -13276,8 +13283,10 @@ index 0000000..b1435ce
 +    badgeColor = 'green';
 +  }
 +
-+  // "Recorded by…" describes the saved acknowledgement, so it shows only while
-+  // the box is still checked: unchecking it means saving will withdraw it.
++  // "Recorded on…" describes the saved acknowledgement, so it shows only while
++  // the box is still checked: unchecking it means saving will withdraw it. The
++  // server records WHEN; "by" only appears for a real identity, never for the
++  // UNKNOWN_OPERATOR marker.
 +  let ackLine = _('Required to enable this provider.');
 +  if (form.ack && p.data_policy_ack === true) {
 +    const by = p.data_policy_ack_by ?? '';
@@ -13286,10 +13295,16 @@ index 0000000..b1435ce
 +      at === ''
 +        ? ''
 +        : (formattedUserSettingDateTimeWithTimeZone(at, timezone) ?? at);
-+    ackLine =
-+      by !== '' && date !== ''
-+        ? _('Acknowledgement recorded by {{- by}} on {{- date}}', {by, date})
-+        : _('Acknowledgement recorded');
++    if (date === '') {
++      ackLine = _('Acknowledgement recorded');
++    } else if (by === '' || by === UNKNOWN_OPERATOR) {
++      ackLine = _('Acknowledgement recorded on {{- date}}', {date});
++    } else {
++      ackLine = _('Acknowledgement recorded by {{- by}} on {{- date}}', {
++        by,
++        date,
++      });
++    }
 +  }
 +
 +  let modelHint: string | undefined;
@@ -13427,9 +13442,9 @@ index 0000000..b1435ce
 +  const [_] = useTranslation();
 +  const isPreset = (p: Provider) =>
 +    presets.includes(p.id) && FREE_KINDS.includes(p.kind);
-+  // Only the presets are configured here. Any other provider is listed
-+  // read-only, with Delete: a generic kind cannot even be saved again while
-+  // only free models are allowed (422).
++  // Only the presets are configured here, and the planner's default order uses
++  // only them. Any other provider is listed read-only, with Delete: a generic
++  // kind cannot even be saved again while only free models are allowed (422).
 +  const others = providers.filter(p => !isPreset(p));
 +
 +  return (
@@ -13475,7 +13490,7 @@ index 0000000..b1435ce
 +                  <Text c="dimmed" size="xs">
 +                    {FREE_KINDS.includes(p.kind)
 +                      ? _(
-+                          'Only the presets can be configured while only free models are allowed. Delete this provider and use the preset.',
++                          'While only free models are allowed, only the presets can be configured and the planner uses only them: it ignores this provider (unless AI_PLANNER_PROVIDER_ID lists it). Delete this provider and use the preset.',
 +                        )
 +                      : _(
 +                          'Generic (OpenAI-compatible) providers cannot be used while only free models are allowed. Delete this provider and use the preset.',
@@ -13675,7 +13690,7 @@ index 0000000..b1435ce
 +      />
 +      <Text c="dimmed" size="xs">
 +        {_(
-+          'A provider can be enabled only if it is EU region and ZDR, or if it uses a free model with the data-policy acknowledgement.',
++          'A provider can be enabled only if it is EU region and ZDR, or if it uses a free model on the official OpenRouter/UnoRouter endpoint with the data-policy acknowledgement.',
 +        )}
 +      </Text>
 +      <Group>

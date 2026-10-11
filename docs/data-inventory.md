@@ -56,7 +56,8 @@ Coletamos apenas o mínimo necessário para **correlação de vulnerabilidade ba
 > (`job_id`/`nonce`) e o alvo técnico (KB/UpdateID/regra/chave); o resultado carrega **estado técnico
 > do SO** (ex.: valor de registro antes/depois), nunca conteúdo de usuário ou identidade de conta. A
 > redação de SID da coleta CIS (ADR-0009) continua valendo para o achado que origina o job. A IA de
-> planejamento (Fase 4) recebe dado **pseudonimizado** e **nunca decide/aprova** (ADR-0010).
+> planejamento (Fase 4) recebe os identificadores do achado **pseudonimizados** (título e evidência
+> como vieram — ver a seção abaixo) e **nunca decide/aprova** (ADR-0010).
 
 ## IA de planejamento (Fase 4) — envio a provedor de LLM
 
@@ -67,23 +68,35 @@ Coletamos apenas o mínimo necessário para **correlação de vulnerabilidade ba
 
 | Dado | Origem | Direção | Finalidade | Sensibilidade |
 |---|---|---|---|---|
-| Fatos técnicos do achado atestado (tipo, título, severidade, CVEs, regra CIS, KB, evidência, SO) | achado atestado | nuvem→provedor de LLM | redigir rascunho de plano | baixa (estado técnico) |
+| Fatos técnicos do achado atestado (tipo, título, severidade, CVEs, regra CIS, KB, evidência, SO) | achado atestado | nuvem→provedor de LLM | redigir rascunho de plano | baixa a média: estado técnico, mas título e evidência seguem como vieram e podem conter nomes de conta ou de host |
 | Host e agente **pseudonimizados** (`host-1`, `agent-1`) | achado atestado | nuvem→provedor de LLM | agrupar passos por host | baixa (pseudônimo por pedido; o mapa fica só na memória do control-plane) |
 
-> **Fora do envio:** hostname/IP/tenant reais, inventário cru, qualquer dado pessoal. Tenant e IP não
-> entram como campo; se aparecerem no título/evidência, são trocados pelo pseudônimo antes do envio.
+> **Pseudonimizados:** host, agente, tenant e IP **do achado** (os do pedido) — inclusive quando
+> aparecem no título ou na evidência; tenant e IP nem entram como campo. **Fora do envio:** inventário
+> cru. **Não pseudonimizados (limite atual):** título e evidência seguem como vieram e podem conter
+> nomes de conta ou de host (ex.: na regra CIS "renomear a conta de administrador" a evidência é o nome
+> da conta); outro hostname, IP ou domínio citado no texto também vai como está. Fechar o
+> pseudonimizador é pré-requisito para ligar `AI_PLANNER_CONSENT=true`.
 
 > **Modelos gratuitos (padrão do scanner, `AI_FREE_MODELS_ONLY=true`):** os provedores gratuitos **não
 > garantem ZDR nem região** — podem **registrar e usar os prompts, inclusive para treino**. Mitigações:
-> (1) só o allowlist técnico **pseudonimizado** acima é enviado; (2) consentimento `AI_PLANNER_CONSENT`
-> default **off**; (3) habilitar um provedor gratuito exige a **ciência explícita** do operador
-> (`data_policy_ack`), registrada com quem/quando (`data_policy_ack_by`/`data_policy_ack_at`, gravados
-> pelo servidor); (4) modelo pago só fora da regra de gratuitos e sob a régua UE + ZDR.
+> (1) só sai o allowlist técnico acima, com os identificadores do achado pseudonimizados (título e
+> evidência como vieram); (2) consentimento `AI_PLANNER_CONSENT` default **off**; (3) habilitar um
+> provedor gratuito exige **sempre** a **ciência explícita** do operador (`data_policy_ack`) — UE/ZDR
+> autodeclarados não a substituem — e o planner confere a régua de novo na hora do uso. O servidor
+> registra **quando** (`data_policy_ack_at`); **quem** (`data_policy_ack_by`) fica pendente da
+> propagação da identidade do gsad: atrás do nginx o valor é o marcador `operator`; (4) modelo pago só
+> fora da regra de gratuitos e sob a régua UE + ZDR; (5) na conta do OpenRouter, a configuração de
+> privacidade para modelos gratuitos (`openrouter.ai/settings/privacy`) deve ser coerente com a
+> ciência: se recusar provedores que podem treinar com os prompts, o OpenRouter pode ficar sem endpoint
+> gratuito para o modelo, e o planner passa ao provedor seguinte.
 
 > **Chaves de API dos provedores:** cifradas em repouso (AES-256-GCM, KEK do host), write-only pela API
 > (só os 4 últimos caracteres aparecem) e usadas só server-side, no envio ao próprio provedor. Com
-> `AI_FREE_MODELS_ONLY=true` a `base_url` fica fixa no endpoint oficial do roteador, então a chave só vai
-> a ele; a lista de modelos (rota de sessão) só consulta endpoints oficiais, com a regra ligada ou não.
+> `AI_FREE_MODELS_ONLY=true` a `base_url` fica fixa no endpoint oficial do roteador; com a regra ligada
+> ou não, trocar o tipo ou o endpoint de um provedor que tem chave exige colar a chave de novo (sem
+> chave nova → 422 e nada muda), então a chave guardada só vai ao destino para o qual foi colada. A
+> lista de modelos (rota de sessão) só consulta endpoints oficiais, com a regra ligada ou não.
 
 ## Base legal e finalidade
 
