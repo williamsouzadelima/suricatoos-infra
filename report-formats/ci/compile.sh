@@ -16,8 +16,22 @@
 #   v*       report-formats/tests/fixtures/*.xml: uma fixture por defeito de
 #            veracidade ja' corrigido (numeracao, indicadores vazios, ...),
 #            mais a v10-navegacao (caminhos de navegacao que as outras nao
-#            percorrem); o cabecalho de cada uma diz qual. Pequenas: segundos
-#            cada.
+#            percorrem) e as v11..v20 da secao 6 (escopo, metodologia e
+#            limitacoes: autenticacao, erros de scan, tarefa que nao iniciou,
+#            tabelas acima do teto, scan interrompido, inventario do agente,
+#            import do sensor, o veto do comentario do bridge); o cabecalho de
+#            cada uma diz qual. A v20a..v20i e' a TABELA DE ESTADOS: um
+#            relatorio sem host por scan_run_status, para que cada estado das
+#            listas de $scan-never-started e $scan-unfinished do latex.xsl tenha
+#            a sua fixture (o alerta da secao 1 e a nota da secao 6 mudam):
+#              iniciou e nao terminou (alerta "nao terminou"): v20a Running,
+#                v20b Stop Requested, v20c Stopped; Interrupted e' a v14 (com
+#                hosts: so' a nota);
+#              nunca iniciou (alerta "nao chegou a rodar"): v20d New,
+#                v20e Requested, v20f Queued, v20g Stop Requested, v20h Stopped,
+#                v20i Interrupted; sem o elemento, a v12;
+#              terminou sem host (alerta do alive test): v17 Done.
+#            Pequenas: segundos cada.
 #
 # Para cada fixture:
 #   1. ponta a ponta: `sh ./generate <xml> > generate.pdf`, cwd = bundle montado

@@ -451,6 +451,21 @@ SPDX-License-Identifier: GPL-2.0-or-later
     <s k="nohost_body_a" en="No host answered the alive test, so no port was scanned and no check was run. " pt="Nenhum host respondeu à detecção de host vivo, então nenhuma porta foi varrida e nenhum teste foi executado. " es="Ningún host respondió a la detección de host vivo, así que no se escaneó ningún puerto ni se ejecutó ninguna comprobación. "/>
     <s k="nohost_body_b" en="The absence of findings in this report is not evidence of the absence of vulnerabilities" pt="A ausência de achados neste relatório não é evidência de ausência de vulnerabilidades" es="La ausencia de hallazgos en este informe no es evidencia de ausencia de vulnerabilidades"/>
     <s k="nohost_body_c" en=" --- it is the absence of a measurement. The usual cause is the target answering none of the probes selected in its Alive Test (a firewall dropping ICMP, for instance). Fix that setting and scan again before treating this result as a clean scan." pt=" --- é ausência de medição. A causa usual é o alvo não responder a nenhuma das sondas escolhidas no Alive Test dele (um firewall descartando ICMP, por exemplo). Corrija essa configuração e refaça o scan antes de tratar este resultado como um scan limpo." es=" --- es ausencia de medición. La causa habitual es que el objetivo no responda a ninguna de las sondas elegidas en su Alive Test (un firewall descartando ICMP, por ejemplo). Corrija esa configuración y repita el escaneo antes de tratar este resultado como un escaneo limpio."/>
+    <!-- A mesma ausencia de medicao quando a tarefa NUNCA INICIOU (regra
+         $scan-never-started, a mesma da secao 6): ai' o alive test nao chegou
+         a rodar, e o conselho de corrigi-lo seria um diagnostico inventado. O
+         miolo em negrito e' o nohost_body_b. -->
+    <s k="never_title" en="This scan never ran" pt="Este scan não chegou a rodar" es="Este escaneo no llegó a ejecutarse"/>
+    <s k="never_body_a" en="The report records no scan start, no host and no result: the task never began scanning, so nothing was measured. " pt="O relatório não registra início de scan, host nem resultado: a tarefa não chegou a iniciar a varredura, então nada foi medido. " es="El informe no registra inicio de escaneo, host ni resultado: la tarea no llegó a iniciar el análisis, así que nada fue medido. "/>
+    <s k="never_body_c" en=" --- it is the absence of a measurement. Start the task, or find out why it did not start, before reading this report as a result." pt=" --- é ausência de medição. Inicie a tarefa, ou descubra por que ela não iniciou, antes de ler este relatório como um resultado." es=" --- es ausencia de medición. Inicie la tarea, o averigüe por qué no se inició, antes de leer este informe como un resultado."/>
+    <!-- E quando o scan INICIOU E NAO TERMINOU sem registrar host (regra
+         $scan-unfinished, a mesma da secao 6: Running, Stop Requested,
+         Stopped ou Interrupted): ainda nao ha' o que culpar. O alive test
+         pode nem ter rodado, entao o corpo e' neutro — diz o que o dado
+         sustenta, sem diagnostico. O miolo em negrito e' o nohost_body_b. -->
+    <s k="unfin_title" en="This scan did not finish" pt="Este scan não terminou" es="Este escaneo no terminó"/>
+    <s k="unfin_body_a" en="The scan did not finish and no host was recorded, so this report holds no measurement. " pt="O scan não terminou e nenhum host foi registrado, então este relatório não traz medição alguma. " es="El escaneo no terminó y no se registró ningún host, así que este informe no contiene medición alguna. "/>
+    <s k="unfin_body_c" en=" --- it is the absence of a measurement. Read the report of a scan that finished before drawing any conclusion about the target." pt=" --- é ausência de medição. Leia o relatório de um scan que terminou antes de tirar qualquer conclusão sobre o alvo." es=" --- es ausencia de medición. Lea el informe de un escaneo que haya terminado antes de sacar cualquier conclusión sobre el objetivo."/>
     <s k="risk_critical" en="CRITICAL" pt="CRÍTICO" es="CRÍTICO"/>
     <s k="risk_high" en="HIGH" pt="ALTO" es="ALTO"/>
     <s k="risk_medium" en="MEDIUM" pt="MÉDIO" es="MEDIO"/>
@@ -607,6 +622,87 @@ SPDX-License-Identifier: GPL-2.0-or-later
     <s k="hx_fam_note" en=" port-family label: the scan did NOT identify a service, so the cell is named after the family of ports it collapses and not after anything observed running on them." pt=" rótulo de família de portas: o scan NÃO identificou serviço, então a célula recebe o nome da família de portas que ela colapsa, e não de algo observado em execução nelas." es=" etiqueta de familia de puertos: el escaneo NO identificó un servicio, así que la celda recibe el nombre de la familia de puertos que colapsa, y no de algo observado en ejecución en ellos."/>
     <s k="hx_noip_note" en=" port observation(s) in the source report carry no host address. They raise no host count and contribute no address to the table." pt=" observação(ões) de porta no relatório de origem não trazem endereço de host. Elas não entram na contagem de hosts nem na lista de endereços da tabela." es=" observación(es) de puerto en el informe de origen no traen dirección de host. No entran en el conteo de hosts ni en la lista de direcciones de la tabla."/>
     <s k="hx_host_noip" en=" host record(s) in this report carry no address, so no board could be drawn for them." pt=" registro(s) de host neste relatório não trazem endereço, portanto nenhum tabuleiro pôde ser desenhado para eles." es=" registro(s) de host en este informe no traen dirección, por lo tanto no se pudo dibujar ningún tablero para ellos."/>
+    <!-- Secao 6: escopo, metodologia e limitacoes. Tudo o que ela afirma sai
+         do proprio relatorio (veja scope-section); estas sao so' as palavras.
+         Mesma regra de toda a tabela: sem caractere especial do LaTeX fora de
+         sequencia de controle intencional (\% e o travessão do TeX). -->
+    <s k="sec_scope" en="Scope, Methodology and Limitations" pt="Escopo, Metodologia e Limitações" es="Alcance, Metodología y Limitaciones"/>
+    <s k="sec_scope_run" en="SCOPE AND LIMITATIONS" pt="ESCOPO E LIMITAÇÕES" es="ALCANCE Y LIMITACIONES"/>
+    <s k="scope_intro" en="How this result was obtained and what it does not cover, from what the report itself records. Data the report does not carry is declared as such, never estimated." pt="Como este resultado foi obtido e o que ele não cobre, a partir do que o próprio relatório registra. Dado que o relatório não traz é declarado como tal, nunca estimado." es="Cómo se obtuvo este resultado y qué no cubre, a partir de lo que el propio informe registra. El dato que el informe no trae se declara como tal, nunca se estima."/>
+    <!-- O valor de todo dado ausente (\scopena / \suriLblNotStated). -->
+    <s k="scope_na" en="not stated in the report" pt="não informado no relatório" es="no informado en el informe"/>
+    <s k="scope_measured" en="Measured scope" pt="Escopo medido" es="Alcance medido"/>
+    <s k="scope_task" en="Task" pt="Tarefa" es="Tarea"/>
+    <s k="scope_target" en="Target" pt="Alvo" es="Objetivo"/>
+    <s k="scope_hosts" en="Hosts assessed" pt="Hosts avaliados" es="Hosts evaluados"/>
+    <s k="scope_duration" en="Duration" pt="Duração" es="Duración"/>
+    <!-- Ressalva de uma contagem que o gvmd declara (hosts/count,
+         errors/count) quando ela difere do que o relatorio carrega. -->
+    <s k="scope_gvmd_count" en="count declared by gvmd:" pt="contagem declarada pelo gvmd:" es="conteo declarado por gvmd:"/>
+    <s k="scope_never_started" en="The report records no scan start: the task never began scanning." pt="O relatório não registra o início do scan: a tarefa não chegou a iniciar a varredura." es="El informe no registra el inicio del escaneo: la tarea no llegó a iniciar el análisis."/>
+    <!-- Situacao do scan (scan_run_status), uma palavra por estado do gvmd;
+         estado fora desta lista sai como o gvmd o escreveu. -->
+    <s k="scope_status" en="Scan status" pt="Situação do scan" es="Estado del escaneo"/>
+    <s k="run_done" en="Done" pt="Concluído" es="Completado"/>
+    <s k="run_running" en="Running" pt="Em execução" es="En ejecución"/>
+    <s k="run_stopreq" en="Stop requested" pt="Parada solicitada" es="Detención solicitada"/>
+    <s k="run_stopped" en="Stopped" pt="Parado" es="Detenido"/>
+    <s k="run_interrupted" en="Interrupted" pt="Interrompido" es="Interrumpido"/>
+    <s k="run_requested" en="Requested" pt="Solicitado" es="Solicitado"/>
+    <s k="run_queued" en="Queued" pt="Na fila" es="En cola"/>
+    <s k="run_new" en="New" pt="Novo" es="Nuevo"/>
+    <s k="scope_unfinished_note" en="The scan did not finish: the coverage of this report is partial, and the hosts and checks it did not reach do not appear here." pt="O scan não terminou: a cobertura deste relatório é parcial, e os hosts e testes que ele não alcançou não aparecem aqui." es="El escaneo no terminó: la cobertura de este informe es parcial, y los hosts y comprobaciones que no alcanzó no aparecen aquí."/>
+    <!-- Versao do feed e do scanner: detalhes de host scanned_with_* que o
+         feed grava em todo host varrido. -->
+    <s k="scope_feed" en="Feed version" pt="Versão do feed" es="Versión del feed"/>
+    <s k="scope_scanner" en="Scanner" pt="Scanner" es="Escáner"/>
+    <!-- Importacao do inventario do agente (gmp-bridge): nao e' scan de rede. -->
+    <s k="scope_agent_na" en="not applicable: agent inventory" pt="não se aplica: inventário do agente" es="no aplica: inventario del agente"/>
+    <s k="scope_agent_note" en="This report was imported from the inventory the agent collected on the host itself (packages and configuration), not from a network scan: start and end are the same instant, the one at which the inventory was recorded." pt="Este relatório foi importado do inventário que o agente coletou no próprio host (pacotes e configurações), não de um scan de rede: início e fim são o mesmo instante em que o inventário foi registrado." es="Este informe fue importado del inventario que el agente recolectó en el propio host (paquetes y configuraciones), no de un escaneo de red: inicio y fin son el mismo instante en que se registró el inventario."/>
+    <s k="scope_filter" en="Export filter" pt="Filtro do export" es="Filtro de la exportación"/>
+    <s k="scope_term" en="Filter term" pt="Termo do filtro" es="Término del filtro"/>
+    <s k="scope_minqod" en="QoD floor" pt="Piso de QoD" es="Piso de QoD"/>
+    <s k="scope_levels" en="Severity levels included" pt="Níveis de severidade incluídos" es="Niveles de severidad incluidos"/>
+    <s k="scope_overrides" en="Overrides applied" pt="Overrides aplicados" es="Overrides aplicados"/>
+    <s k="scope_partial" en="Partial export" pt="Export parcial" es="Exportación parcial"/>
+    <s k="scope_results" en="result(s)" pt="resultado(s)" es="resultado(s)"/>
+    <s k="word_yes" en="Yes" pt="Sim" es="Sí"/>
+    <s k="word_no" en="No" pt="Não" es="No"/>
+    <!-- Letras do `levels' que nao sao classe de severidade das barras (as
+         outras cinco usam sev_critical..sev_log). Por extenso: aqui e' lista,
+         nao chip, e "Falso pos." abreviado so' cabe no chip. -->
+    <s k="lvl_falsepos" en="False positive" pt="Falso positivo" es="Falso positivo"/>
+    <s k="lvl_debug" en="Debug" pt="Debug" es="Debug"/>
+    <s k="scope_minqod_effect_a" en="The export filter dropped every result with a QoD below " pt="O filtro do export descartou os resultados com QoD abaixo de " es="El filtro de la exportación descartó los resultados con QoD por debajo de "/>
+    <s k="scope_minqod_effect_b" en=": none of them appears in this report." pt=": eles não aparecem neste relatório." es=": no aparecen en este informe."/>
+    <s k="scope_auth" en="Authentication" pt="Autenticação" es="Autenticación"/>
+    <s k="scope_auth_ok" en="Authenticated hosts" pt="Hosts autenticados" es="Hosts autenticados"/>
+    <s k="scope_auth_fail" en="Authentication failed only" pt="Só com falha de autenticação" es="Solo con fallo de autenticación"/>
+    <s k="scope_auth_none" en="No authentication record" pt="Sem registro de autenticação" es="Sin registro de autenticación"/>
+    <s k="scope_auth_na_note" en="Without that record this report cannot show that the scan was authenticated. An unauthenticated scan only sees what services expose over the network: local vulnerabilities (packages and internal configuration of the hosts) are out of its reach." pt="Sem esse registro, este relatório não comprova que o scan foi autenticado. Um scan não autenticado só vê o que os serviços expõem pela rede: vulnerabilidades locais (pacotes e configurações internas dos hosts) ficam fora do alcance dele." es="Sin ese registro, este informe no demuestra que el escaneo fuera autenticado. Un escaneo no autenticado solo ve lo que los servicios exponen por la red: las vulnerabilidades locales (paquetes y configuraciones internas de los hosts) quedan fuera de su alcance."/>
+    <s k="scope_auth_partial_note" en="Where authentication did not succeed, the limits of an unauthenticated scan apply: local vulnerabilities may have gone undetected." pt="Onde a autenticação não teve sucesso, valem os limites de um scan não autenticado: vulnerabilidades locais podem não ter sido detectadas." es="Donde la autenticación no tuvo éxito, valen los límites de un escaneo no autenticado: las vulnerabilidades locales pueden no haberse detectado."/>
+    <s k="th_host" en="Host" pt="Host" es="Host"/>
+    <s k="th_protocol" en="Protocol" pt="Protocolo" es="Protocolo"/>
+    <s k="th_result" en="Result" pt="Resultado" es="Resultado"/>
+    <s k="auth_ok" en="Success" pt="Sucesso" es="Éxito"/>
+    <s k="auth_fail" en="Failure" pt="Falha" es="Fallo"/>
+    <s k="scope_trunc_auth" en=" more authentication record(s), not listed in this report." pt=" registro(s) de autenticação a mais, não listados neste relatório." es=" registro(s) de autenticación más, no listados en este informe."/>
+    <s k="scope_errors" en="Scan errors" pt="Erros de scan" es="Errores de escaneo"/>
+    <s k="scope_err_count" en="Errors recorded" pt="Erros registrados" es="Errores registrados"/>
+    <s k="scope_err_hosts" en="Hosts with errors" pt="Hosts com erro" es="Hosts con errores"/>
+    <s k="th_description" en="Description" pt="Descrição" es="Descripción"/>
+    <s k="th_nvt" en="NVT" pt="NVT" es="NVT"/>
+    <s k="scope_err_note" en="Each error means the check named in it failed on that host and port: whatever it would have verified may not be covered by this report." pt="Cada erro indica que o teste citado falhou naquele host e porta: o que ele verificaria pode não estar coberto por este relatório." es="Cada error indica que la comprobación citada falló en ese host y puerto: lo que habría verificado puede no estar cubierto por este informe."/>
+    <s k="scope_trunc_err" en=" more error(s), not listed in this report." pt=" erro(s) a mais, não listados neste relatório." es=" error(es) más, no listados en este informe."/>
+    <s k="scope_limits" en="Limitations" pt="Limitações" es="Limitaciones"/>
+    <s k="scope_lim_view" en="Point of view: the scan only assesses what the scanner could reach over the network; services filtered by a firewall or outside its route do not appear here." pt="Ponto de vista: o scan só avalia o que estava ao alcance do scanner pela rede; serviços filtrados por firewall ou fora da rota dele não aparecem aqui." es="Punto de vista: el escaneo solo evalúa lo que el escáner alcanzaba por la red; los servicios filtrados por un firewall o fuera de su ruta no aparecen aquí."/>
+    <s k="scope_lim_alive" en="Hosts that did not answer the alive test were not assessed and are not in this report." pt="Hosts que não responderam à detecção de host vivo (alive test) não foram avaliados e não constam deste relatório." es="Los hosts que no respondieron a la detección de host vivo (alive test) no fueron evaluados y no constan en este informe."/>
+    <s k="scope_lim_agent" en="Point of view: the findings come from the local inventory the agent collected; this report did not probe network services." pt="Ponto de vista: os achados vêm do inventário local coletado pelo agente; este relatório não sondou serviços de rede." es="Punto de vista: los hallazgos vienen del inventario local recolectado por el agente; este informe no sondeó servicios de red."/>
+    <s k="scope_lim_unfinished" en="Partial coverage: the scan did not finish, so whatever it did not get to test is not in this report." pt="Cobertura parcial: o scan não terminou, então o que ele não chegou a testar não está neste relatório." es="Cobertura parcial: el escaneo no terminó, así que lo que no llegó a probar no está en este informe."/>
+    <s k="scope_lim_feed" en="Feed: the scan ran the checks of the feed version shown above; checks added to the feed after it were not run." pt="Feed: o scan rodou os testes da versão do feed indicada acima; testes acrescentados ao feed depois dela não foram executados." es="Feed: el escaneo ejecutó las comprobaciones de la versión del feed indicada arriba; las comprobaciones añadidas al feed después de ella no se ejecutaron."/>
+    <!-- O numero entre _a e _b e' o parametro $qod-min, nunca escrito aqui. -->
+    <s k="scope_lim_qod_a" en="Confidence: findings with a QoD below " pt="Confiança: achados com QoD abaixo de " es="Confianza: los hallazgos con QoD por debajo de "/>
+    <s k="scope_lim_qod_b" en=" are indicators to validate, not confirmed facts; results below the QoD floor of the export filter never reach this report." pt=" são indicadores a validar, não fatos confirmados; resultados abaixo do piso de QoD do filtro do export nem chegam a este relatório." es=" son indicadores a validar, no hechos confirmados; los resultados por debajo del piso de QoD del filtro de la exportación ni llegan a este informe."/>
   </xsl:variable>
   <xsl:variable name="i18n" select="exsl:node-set($i18n-rtf)/s"/>
 
@@ -1544,6 +1640,15 @@ SPDX-License-Identifier: GPL-2.0-or-later
       <m c="suriLblFldTech"      k="f_insight"/>
       <m c="suriLblFldDetection" k="f_detection"/>
       <m c="suriLblFldRefs"      k="f_references"/>
+      <!-- secao 6, escopo e limitacoes (suricatoos-blocks.sty) -->
+      <m c="suriLblNotStated"    k="scope_na"/>
+      <m c="suriLblHost"         k="th_host"/>
+      <m c="suriLblProtocol"     k="th_protocol"/>
+      <m c="suriLblResult"       k="th_result"/>
+      <m c="suriLblAuthOk"       k="auth_ok"/>
+      <m c="suriLblAuthFail"     k="auth_fail"/>
+      <m c="suriLblDescription"  k="th_description"/>
+      <m c="suriLblNvt"          k="th_nvt"/>
     </xsl:variable>
     <!-- Vocabulario de severidade. A CHAVE (critico|alto|...) e' DADO e nunca
          muda; a palavra impressa e' lingua, e \setsevword e' o gancho que os
@@ -1698,7 +1803,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
 % indexa nada sozinho: cada marcador e' um \pdfbookmark do design system
 % (nivel 0 = secao, posto pelo \suriSection; nivel 1 = host da secao 3 e card
 % da secao 5, anunciados abaixo com \suriBookmark -- suricatoos-page.sty).
-% O painel abre so' com as seis secoes, cada uma FECHADA, e o leitor expande a
+% O painel abre so' com as sete secoes, cada uma FECHADA, e o leitor expande a
 % que quiser (numa tortura de 180+ paginas a secao 5 sozinha tem centenas de
 % cards). `bookmarksopen=true,bookmarksopenlevel=0' NAO e' o que produz isso:
 % o hyperref abre o item de nivel L so' quando L e' MENOR que
@@ -1909,6 +2014,110 @@ SPDX-License-Identifier: GPL-2.0-or-later
     </xsl:choose>
   </xsl:template>
 
+  <!-- ===================================================================
+       O EXPORT E O FILTRO DELE, definidos UMA vez.
+
+       Tres lugares dizem se o export e' parcial — o aviso de visao parcial do
+       resumo executivo, a nota do mapa de portas e a linha "Export parcial" da
+       secao 6 — e dois leem o piso de QoD do filtro (o mesmo aviso e a
+       secao 6). Cada um tinha a sua copia da regra; agora todos leem estas
+       variaveis, entao nao ha como um dizer "parcial" e o outro nao.
+
+       Results actually carried by this XML: what the document can describe.
+       Results the SCAN produced: gvmd reports it as the text node of
+       <result_count>, with the post-filter count in <filtered> (same contract
+       the stock GVM formats rely on). Counting <result> elements instead
+       reports the size of the filter window as if it were the whole scan: any
+       export carrying a row limit then understates the total, silently and by
+       an arbitrary factor. $export-rc-known says the text node is usable — an
+       integer, and never FEWER results than the export lists; when it is not,
+       the total falls back to what the export carries (and the export is not
+       called partial, because nothing says it is).
+
+       O filtro vem de <filters><term>, o termo que o gvmd ecoa no relatorio
+       ("apply_overrides=0 levels=chmlgf rows=-1 min_qod=70 ..."). Cada valor
+       e' o texto depois de " chave=" ate' o proximo espaco, procurado com o
+       espaco na frente, num termo que comeca e termina com espaco: a chave tem
+       de ser um TOKEN inteiro. Sem a ancora, "levels=" casava dentro de
+       "compliance_levels=yniu" (o termo de auditoria da GSA) e o relatorio
+       listava as letras de conformidade como niveis de severidade. Chave
+       ausente da' string vazia, e quem le decide o que isso significa (o aviso
+       nao fala do piso; a secao 6 diz "nao informado"). -->
+  <xsl:variable name="export-total" select="count(gvm:report()/results/result)"/>
+  <xsl:variable name="export-rc-full" select="normalize-space(gvm:report()/result_count/text())"/>
+  <xsl:variable name="export-rc-known"
+    select="string-length($export-rc-full) &gt; 0 and floor(number($export-rc-full)) = number($export-rc-full) and number($export-rc-full) &gt;= $export-total"/>
+  <xsl:variable name="export-total-full">
+    <xsl:choose>
+      <xsl:when test="$export-rc-known"><xsl:value-of select="number($export-rc-full)"/></xsl:when>
+      <xsl:otherwise><xsl:value-of select="$export-total"/></xsl:otherwise>
+    </xsl:choose>
+  </xsl:variable>
+  <xsl:variable name="export-partial" select="number($export-total-full) &gt; $export-total"/>
+  <xsl:variable name="filter-term" select="string(gvm:report()/filters/term)"/>
+  <xsl:variable name="filter-term-sp" select="concat(' ', normalize-space($filter-term), ' ')"/>
+  <xsl:variable name="filter-min-qod"
+    select="substring-before(substring-after($filter-term-sp, ' min_qod='), ' ')"/>
+  <xsl:variable name="filter-levels"
+    select="substring-before(substring-after($filter-term-sp, ' levels='), ' ')"/>
+  <xsl:variable name="filter-overrides"
+    select="substring-before(substring-after($filter-term-sp, ' apply_overrides='), ' ')"/>
+
+  <!-- ===================================================================
+       O ESTADO DO SCAN, definido UMA vez para o resumo executivo (secao 1) e
+       para a secao 6, que nao podem se contradizer.
+
+       $scan-never-started  a tarefa nao chegou a iniciar a varredura: SEM
+                            scan_start (o gvmd so' o grava quando o scanner
+                            comeca), SEM host e SEM resultado — e, quando o XML
+                            traz scan_run_status, um estado compativel com isso
+                            (New, Requested, Queued, ou parado/interrompido
+                            antes de comecar). Um so' desses sinais nao basta:
+                            um export sem a data de inicio mas com hosts mediu
+                            alguma coisa, e um scan "Done" terminou — logo,
+                            comecou (sem host, e' o alive test que nao achou
+                            ninguem).
+       $scan-unfinished     comecou e nao terminou: scan_run_status Running,
+                            Stop Requested, Stopped ou Interrupted. A cobertura
+                            do relatorio e' parcial, e a secao 6 diz isso; sem
+                            host, o alerta do resumo executivo diz que o scan
+                            nao terminou, sem o conselho do alive test.
+       $agent-import        o relatorio veio do INVENTARIO do agente instalado
+                            no host, importado pelo gmp-bridge (bridge.py), e
+                            nao de um scan de rede: o bridge cria a tarefa
+                            conteiner com o comentario "Suricatoos Agent
+                            findings for host <host>" e, para um host sem
+                            achado, ancora o host com um resultado do OID
+                            marcador INVENTORY_MARKER_OID,
+                              1.3.6.1.4.1.55683.1.0.1
+                            (fora do arco da Greenbone). Qualquer um dos
+                            dois basta; os dois sao contrato com o bridge.py e
+                            mudam junto. Sem nenhum (comentario editado, por
+                            exemplo), o relatorio e' lido como scan comum —
+                            nunca o contrario. E os dois cedem a um VETO:
+                            detalhe de host Auth-* ou scanned_with_* e' rastro
+                            de scan de rede (o login do scanner, o feed que
+                            varreu o host), e o bridge nao grava detalhe de
+                            host nenhum. O comentario e' editavel pelo
+                            operador: um scan real cujo comentario comece com
+                            o prefixo do bridge continua scan comum. -->
+  <xsl:variable name="scan-status" select="normalize-space(gvm:report()/scan_run_status)"/>
+  <xsl:variable name="scan-never-started"
+    select="string-length(normalize-space(gvm:report()/scan_start)) = 0
+            and count(gvm:report()/host) = 0
+            and count(gvm:report()/results/result) = 0
+            and ($scan-status = '' or $scan-status = 'New' or $scan-status = 'Requested'
+                 or $scan-status = 'Queued' or $scan-status = 'Stop Requested'
+                 or $scan-status = 'Stopped' or $scan-status = 'Interrupted')"/>
+  <xsl:variable name="scan-unfinished"
+    select="not($scan-never-started)
+            and ($scan-status = 'Running' or $scan-status = 'Stop Requested'
+                 or $scan-status = 'Stopped' or $scan-status = 'Interrupted')"/>
+  <xsl:variable name="agent-import"
+    select="(count(gvm:report()/results/result[normalize-space(nvt/@oid) = '1.3.6.1.4.1.55683.1.0.1']) &gt; 0
+             or starts-with(normalize-space(gvm:report()/task/comment), 'Suricatoos Agent findings for host'))
+            and not(gvm:report()/host/detail[starts-with(name,'Auth-') or starts-with(name,'scanned_with_')])"/>
+
   <xsl:template name="executive-summary">
     <!-- Severity counts come from gvmd's own <result_count>, band by band, NOT
          from counting the <result> elements this export happens to carry.
@@ -1958,25 +2167,12 @@ SPDX-License-Identifier: GPL-2.0-or-later
     </xsl:variable>
     <!-- ($logc, $fpc e $rated sairam: eram calculados e nenhuma linha os lia.) -->
     <xsl:variable name="hosts" select="count(gvm:report()/host)"/>
-    <!-- Results actually carried by this XML: what the document can describe. -->
-    <xsl:variable name="total" select="count(gvm:report()/results/result)"/>
-    <!-- Results the SCAN produced. gvmd reports it as the text node of
-         <result_count>, with the post-filter count in <filtered> (same contract
-         the stock GVM formats rely on). Counting <result> elements instead
-         reports the size of the filter window as if it were the whole scan:
-         any export carrying a row limit then understates the total, silently
-         and by an arbitrary factor. Fall back to $total when it is missing or
-         inconsistent, and never claim FEWER results than we actually list. -->
-    <xsl:variable name="rc-full" select="normalize-space(gvm:report()/result_count/text())"/>
-    <xsl:variable name="total-full">
-      <xsl:choose>
-        <xsl:when test="string-length($rc-full) &gt; 0 and floor(number($rc-full)) = number($rc-full) and number($rc-full) &gt;= $total">
-          <xsl:value-of select="number($rc-full)"/>
-        </xsl:when>
-        <xsl:otherwise><xsl:value-of select="$total"/></xsl:otherwise>
-      </xsl:choose>
-    </xsl:variable>
-    <xsl:variable name="truncated" select="number($total-full) &gt; $total"/>
+    <!-- Results actually carried by this XML ($total), results the SCAN
+         produced ($total-full) and whether the export is partial: the global
+         export-* variables above, shared with the port-map note and section 6. -->
+    <xsl:variable name="total" select="$export-total"/>
+    <xsl:variable name="total-full" select="$export-total-full"/>
+    <xsl:variable name="truncated" select="$export-partial"/>
     <!-- VULNERABILIDADES unicas: NVTs distintos cuja severidade MAXIMA e' de
          achado (>= 0.1). Contava todo NVT distinto, e Log (informativo) e falso
          positivo (-1, descartado pelo analista) nao sao vulnerabilidade — o KPI
@@ -2036,7 +2232,32 @@ SPDX-License-Identifier: GPL-2.0-or-later
          result(s)... 0 findings are of High or Critical severity" — an absurd
          sentence that a reader still parses as good news.  Say what actually
          happened instead. -->
+    <!-- Three ways of measuring nothing, told apart by the rules section 6
+         uses: a task that never began scanning ($scan-never-started) has no
+         alive test to blame, so its body says so instead of sending the reader
+         to fix an Alive Test setting that never ran; a scan that started and
+         did not finish ($scan-unfinished) may have stopped before the alive
+         test answered, so its body states only that; the alive-test advice is
+         for a scan that ran its course and found no host. -->
     <xsl:choose>
+      <xsl:when test="$hosts = 0 and $scan-never-started">
+        <xsl:text>\alertbox{</xsl:text><xsl:value-of select="gvm:t('never_title')"/>
+        <xsl:text>}{</xsl:text>
+        <xsl:value-of select="gvm:t('never_body_a')"/>
+        <xsl:text>\textbf{</xsl:text><xsl:value-of select="gvm:t('nohost_body_b')"/><xsl:text>}</xsl:text>
+        <xsl:value-of select="gvm:t('never_body_c')"/>
+        <xsl:text>}
+</xsl:text>
+      </xsl:when>
+      <xsl:when test="$hosts = 0 and $scan-unfinished">
+        <xsl:text>\alertbox{</xsl:text><xsl:value-of select="gvm:t('unfin_title')"/>
+        <xsl:text>}{</xsl:text>
+        <xsl:value-of select="gvm:t('unfin_body_a')"/>
+        <xsl:text>\textbf{</xsl:text><xsl:value-of select="gvm:t('nohost_body_b')"/><xsl:text>}</xsl:text>
+        <xsl:value-of select="gvm:t('unfin_body_c')"/>
+        <xsl:text>}
+</xsl:text>
+      </xsl:when>
       <xsl:when test="$hosts = 0">
         <xsl:text>\alertbox{</xsl:text><xsl:value-of select="gvm:t('nohost_title')"/>
         <xsl:text>}{</xsl:text>
@@ -2124,16 +2345,12 @@ SPDX-License-Identifier: GPL-2.0-or-later
       <!-- Name the QoD floor when the export carried one: "N of M" alone does
            not tell the reader that what was cut is precisely the low-confidence
            population that section 4 segregates. gvmd echoes the applied filter
-           in <filters><term>. -->
-      <xsl:variable name="fterm" select="string(gvm:report()/filters/term)"/>
-      <xsl:if test="contains($fterm, 'min_qod=')">
-        <xsl:variable name="mq"
-          select="substring-before(concat(substring-after($fterm,'min_qod='),' '),' ')"/>
-        <xsl:if test="number($mq) &gt; 1">
-          <xsl:value-of select="gvm:t('sample_qod_a')"/>
-          <xsl:text>\textbf{</xsl:text><xsl:value-of select="$mq"/><xsl:text>}</xsl:text>
-          <xsl:value-of select="gvm:t('sample_qod_b')"/>
-        </xsl:if>
+           in <filters><term>; $filter-min-qod is empty without a min_qod=, and
+           number('') is NaN, so that case says nothing. -->
+      <xsl:if test="number($filter-min-qod) &gt; 1">
+        <xsl:value-of select="gvm:t('sample_qod_a')"/>
+        <xsl:text>\textbf{</xsl:text><xsl:value-of select="$filter-min-qod"/><xsl:text>}</xsl:text>
+        <xsl:value-of select="gvm:t('sample_qod_b')"/>
       </xsl:if>
       <xsl:text>}
 
@@ -4811,10 +5028,9 @@ SPDX-License-Identifier: GPL-2.0-or-later
        table and hang under it, in \portnotes. -->
   <xsl:template name="hx-notes">
     <xsl:param name="omitted"/>
-    <xsl:variable name="total" select="count(gvm:report()/results/result)"/>
-    <xsl:variable name="rc-full" select="normalize-space(gvm:report()/result_count/text())"/>
-    <xsl:variable name="partial"
-      select="string-length($rc-full) &gt; 0 and floor(number($rc-full)) = number($rc-full) and number($rc-full) &gt; $total"/>
+    <!-- Export parcial: a MESMA regra do aviso do resumo executivo e da
+         secao 6 ($export-partial). -->
+    <xsl:variable name="partial" select="$export-partial"/>
     <xsl:if test="$omitted &gt; 0">
       <xsl:text>\blocknote{</xsl:text>
       <xsl:value-of select="$omitted"/><xsl:value-of select="gvm:t('hx_omitted')"/>
@@ -4892,9 +5108,10 @@ SPDX-License-Identifier: GPL-2.0-or-later
     <xsl:variable name="hosts" select="gvm:report()/host[string-length(normalize-space(ip)) &gt; 0]"/>
     <xsl:variable name="noiph" select="$nhosts - count($hosts)"/>
     <xsl:variable name="nglobal" select="count(exsl:node-set($hx-ord-rtf)/c)"/>
-    <xsl:call-template name="section-open"><xsl:with-param name="n" select="6"/></xsl:call-template>
+    <!-- Secao 7: o apendice e' a ultima secao, depois de escopo e limitacoes. -->
+    <xsl:call-template name="section-open"><xsl:with-param name="n" select="7"/></xsl:call-template>
     <xsl:text>
-\setsectionrunner{6}{</xsl:text>
+\setsectionrunner{7}{</xsl:text>
     <xsl:value-of select="gvm:t('hx_host_runner')"/>
     <xsl:text>}
 </xsl:text>
@@ -5055,10 +5272,694 @@ SPDX-License-Identifier: GPL-2.0-or-later
   </xsl:template>
 
   <!-- ================================================================= -->
+  <!-- Escopo, metodologia e limitacoes (secao 6)                        -->
+  <!-- ================================================================= -->
+
+  <!-- A SECAO 6 diz COMO o resultado foi obtido e o que ele NAO cobre, e so'
+       com DADO do proprio relatorio: nada de port list, scan config ou outra
+       coisa que exigiria perguntar ao gvmd (o generate roda sem rede e sem
+       GMP). O que o XML nao traz sai \scopena ("nao informado no relatorio"),
+       nunca um valor padrao presumido; o gvmd tem um min_qod padrao, por
+       exemplo, mas o relatorio sem ele nao diz qual valeu.
+
+       Cinco blocos, cada um sob um \blocklabel:
+         escopo medido    tarefa (task/name) e alvo (task/target/name), cada
+                          um pelo que e', sem a cadeia de gvm:project(), que
+                          poria o nome do alvo na linha da tarefa; hosts
+                          avaliados (os <host> do relatorio, o MESMO numero do
+                          KPI do resumo executivo; se o gvmd declara outro em
+                          <hosts><count>, os dois aparecem); inicio, fim e
+                          duracao do scan; a situacao (scan_run_status); e,
+                          quando os hosts a trazem, a versao do feed e do
+                          scanner. As tres regras de estado sao as globais
+                          $scan-never-started (nota "nao chegou a iniciar", a
+                          mesma do resumo executivo), $scan-unfinished (nota
+                          de cobertura parcial; sem host, tambem o alerta do
+                          resumo executivo) e $agent-import (inventario do
+                          agente: a duracao nao se aplica, e uma nota diz de
+                          onde o relatorio veio);
+         filtro do export o termo (<filters><term>) e o que se le dele: piso de
+                          QoD, niveis de severidade, overrides e, pela regra
+                          unica $export-partial, se o export e' parcial; com o
+                          piso conhecido, uma frase diz o efeito dele;
+         autenticacao     os detalhes de host Auth-<protocolo>-Success|Failure
+                          que o scanner grava (os mesmos que a GSA le para o
+                          icone de autenticacao do host). Por host: autenticado
+                          (algum sucesso), so' com falha, ou sem registro; e a
+                          tabela host/protocolo/resultado. Sem nenhum registro,
+                          \scopena e a limitacao de um scan nao autenticado;
+                          num inventario do agente, que e' local por natureza,
+                          "nao se aplica" e nenhuma nota;
+         erros de scan    <errors>, que nenhuma outra secao le: a contagem, os
+                          hosts com erro e a tabela host/porta/descricao/NVT;
+         limitacoes       frases fixas: ponto de vista do scanner e alive test
+                          (ou, no inventario do agente, o ponto de vista dele),
+                          baixa confianca e piso de QoD, cobertura parcial
+                          quando o scan nao terminou, e o feed quando os hosts
+                          trazem a versao dele.
+       A VERSAO DO FEED esta' no relatorio: o feed grava em todo host varrido
+       os detalhes de host
+         scanned_with_feedversion (AAAAMMDDhhmm), scanned_with_feedtype,
+         scanned_with_feedname, scanned_with_feedvendor, scanned_with_scanner
+       e o gvmd so' os tira do XML com `lean' (o download da GSA pede
+       details=1 sem lean). Daqui saem a versao do feed (data e hora, com o
+       tipo do feed) e a do scanner. Sem eles (export lean, relatorio
+       importado, scan que nao rodou), as duas linhas e a limitacao do feed
+       sao omitidas, nao presumidas; hosts com versoes diferentes listam cada
+       versao distinta.
+       Tetos, todos com o corte DECLARADO do escape_break (fronteira de
+       palavra e "(+N)"): $task-name-max na tarefa e no alvo, $scope-term-max no
+       termo do filtro, $scope-desc-max na descricao de um erro e $scope-nvt-max
+       no nome do NVT. As duas tabelas param em $scope-rows-max linhas e o
+       resto e' declarado numa linha \scopetrunc ("+ N ... nao listados neste
+       relatorio"), como os outros cortes do documento; so' que aqui o resto
+       nao esta' em outra secao, e a frase diz isso. Contagens sem separador de
+       milhar, como o KPI e a narrativa do resumo executivo; o "+ N" do corte
+       usa gvm:num, como o do sumario de achados. -->
+  <xsl:param name="scope-rows-max" select="20"/>
+  <xsl:param name="scope-term-max" select="300"/>
+  <xsl:param name="scope-desc-max" select="300"/>
+  <xsl:param name="scope-nvt-max" select="120"/>
+
+  <!-- Hosts distintos entre os erros de scan (o IP e' o texto do <host>). -->
+  <xsl:key name="by-err-host" match="errors/error" use="normalize-space(host/text())"/>
+  <!-- Versoes distintas do feed, com o tipo do feed do mesmo host, e versoes
+       distintas do scanner, entre os detalhes dos hosts. -->
+  <xsl:key name="by-feed" match="host/detail[name='scanned_with_feedversion']"
+           use="concat(normalize-space(value), '|', normalize-space(../detail[name='scanned_with_feedtype']/value))"/>
+  <xsl:key name="by-scanner" match="host/detail[name='scanned_with_scanner']" use="normalize-space(value)"/>
+
+  <!-- O resultado de um detalhe de host de autenticacao: 'Success', 'Failure',
+       ou '' se o nome nao e' Auth-<protocolo>-Success|Failure com protocolo
+       nao vazio. So' le o argumento (pode ser chamada em qualquer contexto). -->
+  <func:function name="gvm:auth-res">
+    <xsl:param name="name"/>
+    <xsl:variable name="n" select="normalize-space($name)"/>
+    <xsl:variable name="rest" select="substring-after($n, 'Auth-')"/>
+    <xsl:variable name="res" select="substring-after($rest, '-')"/>
+    <xsl:choose>
+      <xsl:when test="starts-with($n, 'Auth-') and string-length(substring-before($rest, '-')) &gt; 0
+                      and ($res = 'Success' or $res = 'Failure')">
+        <func:result select="$res"/>
+      </xsl:when>
+      <xsl:otherwise><func:result select="''"/></xsl:otherwise>
+    </xsl:choose>
+  </func:function>
+
+  <!-- Uma linha \scopefact: o rotulo e' a chave de i18n; o valor ja' vem em
+       LaTeX pronto (escapado por quem chamou, ou \scopena). -->
+  <xsl:template name="scope-fact">
+    <xsl:param name="key"/>
+    <xsl:param name="value"/>
+    <xsl:text>\scopefact{</xsl:text><xsl:value-of select="gvm:t($key)"/><xsl:text>}{</xsl:text>
+    <xsl:value-of select="$value"/>
+    <xsl:text>}
+</xsl:text>
+  </xsl:template>
+
+  <!-- Texto livre num valor de fato (nome da tarefa, do alvo, termo do
+       filtro): escapado, com o teto $max e o corte declarado; vazio,
+       \scopena. -->
+  <xsl:template name="scope-name">
+    <xsl:param name="name"/>
+    <xsl:param name="max" select="$task-name-max"/>
+    <xsl:choose>
+      <xsl:when test="string-length(normalize-space($name)) &gt; 0">
+        <xsl:call-template name="escape_break">
+          <xsl:with-param name="string" select="$name"/>
+          <xsl:with-param name="max" select="$max"/>
+        </xsl:call-template>
+      </xsl:when>
+      <xsl:otherwise><xsl:text>\scopena</xsl:text></xsl:otherwise>
+    </xsl:choose>
+  </xsl:template>
+
+  <!-- Celula de tabela: o texto escapado com pontos de quebra (e, com $max,
+       o teto e o corte declarado; $wb e' a quebra de ultimo recurso, visivel
+       com hifen no nome de NVT), ou um travessao quando o relatorio a deixa
+       vazia (a celula vazia se le como defeito). -->
+  <xsl:template name="scope-cell">
+    <xsl:param name="s"/>
+    <xsl:param name="max" select="0"/>
+    <xsl:param name="wb" select="'\surwb{}'"/>
+    <xsl:choose>
+      <xsl:when test="string-length($s) &gt; 0">
+        <xsl:call-template name="escape_break">
+          <xsl:with-param name="string" select="$s"/>
+          <xsl:with-param name="max" select="$max"/>
+          <xsl:with-param name="wb" select="$wb"/>
+        </xsl:call-template>
+      </xsl:when>
+      <xsl:otherwise><xsl:text>---</xsl:text></xsl:otherwise>
+    </xsl:choose>
+  </xsl:template>
+
+  <!-- Uma contagem do relatorio e, se o gvmd declara OUTRA para a mesma coisa
+       (<hosts><count>, <errors><count>), a declarada entre parenteses. Nenhuma
+       das duas e' escolhida em silencio: a principal e' o que o relatorio
+       carrega e detalha, a mesma que o resto do documento usa. -->
+  <xsl:template name="scope-count">
+    <xsl:param name="n"/>
+    <xsl:param name="declared" select="''"/>
+    <xsl:variable name="d" select="normalize-space($declared)"/>
+    <xsl:value-of select="$n"/>
+    <xsl:if test="string-length($d) &gt; 0 and floor(number($d)) = number($d) and number($d) != number($n)">
+      <xsl:text> (</xsl:text><xsl:value-of select="gvm:t('scope_gvmd_count')"/>
+      <xsl:text> </xsl:text><xsl:value-of select="number($d)"/><xsl:text>)</xsl:text>
+    </xsl:if>
+  </xsl:template>
+
+  <!-- Data do scan no formato da capa (emit-date), ou \scopena sem ela. -->
+  <xsl:template name="scope-date">
+    <xsl:param name="date"/>
+    <xsl:choose>
+      <xsl:when test="string-length($date) &gt; 0">
+        <xsl:call-template name="emit-date"><xsl:with-param name="date" select="$date"/></xsl:call-template>
+      </xsl:when>
+      <xsl:otherwise><xsl:text>\scopena</xsl:text></xsl:otherwise>
+    </xsl:choose>
+  </xsl:template>
+
+  <!-- Duracao = fim - inicio (date:seconds, que leva o fuso de cada um em
+       conta), truncada: "N s" abaixo de um minuto, "N min" abaixo de uma hora,
+       senao "N h MM min". Sem uma das pontas, data ilegivel, ou fim antes do
+       inicio OU NO MESMO instante, \scopena: a duracao nao esta' no
+       relatorio, e conta-la de dado incoerente seria inventa-la. Fim = inicio
+       nao e' medicao, e' carimbo: o import do sensor (bridge.py,
+       network_report_to_xml) grava as duas pontas com a mesma hora, e "0 s"
+       diria que a varredura levou zero segundos. O inventario do agente, que
+       carimba igual, vem antes: "nao se aplica", nunca "0 s". -->
+  <xsl:template name="scope-duration">
+    <xsl:param name="start"/>
+    <xsl:param name="end"/>
+    <xsl:variable name="d" select="date:seconds($end) - date:seconds($start)"/>
+    <xsl:choose>
+      <xsl:when test="$agent-import"><xsl:value-of select="gvm:t('scope_agent_na')"/></xsl:when>
+      <xsl:when test="string-length($start) = 0 or string-length($end) = 0 or not($d = $d) or $d &lt;= 0">
+        <xsl:text>\scopena</xsl:text>
+      </xsl:when>
+      <xsl:when test="$d &lt; 60"><xsl:value-of select="floor($d)"/><xsl:text> s</xsl:text></xsl:when>
+      <xsl:when test="$d &lt; 3600"><xsl:value-of select="floor($d div 60)"/><xsl:text> min</xsl:text></xsl:when>
+      <xsl:otherwise>
+        <xsl:value-of select="floor($d div 3600)"/><xsl:text> h </xsl:text>
+        <xsl:value-of select="format-number(floor(($d mod 3600) div 60), '00')"/><xsl:text> min</xsl:text>
+      </xsl:otherwise>
+    </xsl:choose>
+  </xsl:template>
+
+  <!-- A situacao do scan (scan_run_status) por extenso; estado que nao esta'
+       na lista sai como o gvmd o escreveu (escapado), e sem o elemento,
+       \scopena. -->
+  <xsl:template name="scope-status">
+    <xsl:choose>
+      <xsl:when test="$scan-status = ''"><xsl:text>\scopena</xsl:text></xsl:when>
+      <xsl:when test="$scan-status = 'Done'"><xsl:value-of select="gvm:t('run_done')"/></xsl:when>
+      <xsl:when test="$scan-status = 'Running'"><xsl:value-of select="gvm:t('run_running')"/></xsl:when>
+      <xsl:when test="$scan-status = 'Stop Requested'"><xsl:value-of select="gvm:t('run_stopreq')"/></xsl:when>
+      <xsl:when test="$scan-status = 'Stopped'"><xsl:value-of select="gvm:t('run_stopped')"/></xsl:when>
+      <xsl:when test="$scan-status = 'Interrupted'"><xsl:value-of select="gvm:t('run_interrupted')"/></xsl:when>
+      <xsl:when test="$scan-status = 'Requested'"><xsl:value-of select="gvm:t('run_requested')"/></xsl:when>
+      <xsl:when test="$scan-status = 'Queued'"><xsl:value-of select="gvm:t('run_queued')"/></xsl:when>
+      <xsl:when test="$scan-status = 'New'"><xsl:value-of select="gvm:t('run_new')"/></xsl:when>
+      <xsl:otherwise>
+        <xsl:call-template name="escape_break"><xsl:with-param name="string" select="$scan-status"/></xsl:call-template>
+      </xsl:otherwise>
+    </xsl:choose>
+  </xsl:template>
+
+  <!-- Uma versao do feed (AAAAMMDDhhmm) como data e hora, no estilo do
+       emit-date sem dia da semana e sem fuso (o valor nao traz fuso): en
+       "Oct 11, 2026 04:57", pt/es "11 out 2026 04:57". Valor fora do formato
+       sai como esta' (escapado): e' o que o host gravou. -->
+  <xsl:template name="scope-feed-version">
+    <xsl:param name="v"/>
+    <xsl:variable name="ok"
+      select="string-length($v) = 12 and translate($v, '0123456789', '') = ''
+              and number(substring($v, 5, 2)) &gt;= 1 and number(substring($v, 5, 2)) &lt;= 12
+              and number(substring($v, 7, 2)) &gt;= 1 and number(substring($v, 7, 2)) &lt;= 31
+              and number(substring($v, 9, 2)) &lt;= 23 and number(substring($v, 11, 2)) &lt;= 59"/>
+    <xsl:choose>
+      <xsl:when test="$ok">
+        <xsl:variable name="mon" select="gvm:month-abbrev(number(substring($v, 5, 2)))"/>
+        <xsl:variable name="day" select="number(substring($v, 7, 2))"/>
+        <xsl:variable name="hm" select="concat(substring($v, 9, 2), ':', substring($v, 11, 2))"/>
+        <xsl:choose>
+          <xsl:when test="$L='en'">
+            <xsl:value-of select="concat($mon, ' ', $day, ', ', substring($v, 1, 4), ' ', $hm)"/>
+          </xsl:when>
+          <xsl:otherwise>
+            <xsl:value-of select="concat($day, ' ', $mon, ' ', substring($v, 1, 4), ' ', $hm)"/>
+          </xsl:otherwise>
+        </xsl:choose>
+      </xsl:when>
+      <xsl:otherwise>
+        <xsl:call-template name="escape_break"><xsl:with-param name="string" select="$v"/></xsl:call-template>
+      </xsl:otherwise>
+    </xsl:choose>
+  </xsl:template>
+
+  <!-- As letras do levels= por extenso, na ordem do termo e sem repetir: c h m
+       l g sao as classes das barras do resumo (sev_*), f falso positivo, d
+       debug; letra desconhecida sai como esta' (escapada), nunca descartada.
+       Sem recursao: a escada de inteiros, um passo por letra. -->
+  <xsl:template name="scope-levels">
+    <xsl:param name="lv"/>
+    <xsl:for-each select="$ints200/i[number(@v) &lt; string-length($lv)]
+                                    [not(contains(substring($lv, 1, number(@v)), substring($lv, number(@v) + 1, 1)))]">
+      <xsl:variable name="ch" select="substring($lv, number(@v) + 1, 1)"/>
+      <xsl:if test="position() &gt; 1"><xsl:text>, </xsl:text></xsl:if>
+      <xsl:choose>
+        <xsl:when test="$ch = 'c'"><xsl:value-of select="gvm:t('sev_critical')"/></xsl:when>
+        <xsl:when test="$ch = 'h'"><xsl:value-of select="gvm:t('sev_high')"/></xsl:when>
+        <xsl:when test="$ch = 'm'"><xsl:value-of select="gvm:t('sev_medium')"/></xsl:when>
+        <xsl:when test="$ch = 'l'"><xsl:value-of select="gvm:t('sev_low')"/></xsl:when>
+        <xsl:when test="$ch = 'g'"><xsl:value-of select="gvm:t('sev_log')"/></xsl:when>
+        <xsl:when test="$ch = 'f'"><xsl:value-of select="gvm:t('lvl_falsepos')"/></xsl:when>
+        <xsl:when test="$ch = 'd'"><xsl:value-of select="gvm:t('lvl_debug')"/></xsl:when>
+        <xsl:otherwise>
+          <xsl:call-template name="escape_text"><xsl:with-param name="string" select="$ch"/></xsl:call-template>
+        </xsl:otherwise>
+      </xsl:choose>
+    </xsl:for-each>
+  </xsl:template>
+
+  <!-- O corte declarado de uma tabela da secao 6: n linhas, $scope-rows-max
+       impressas. \scopetrunc e nao \findingtrunc: veja suricatoos-blocks.sty. -->
+  <xsl:template name="scope-trunc">
+    <xsl:param name="n"/>
+    <xsl:param name="key"/>
+    <xsl:if test="$n &gt; number($scope-rows-max)">
+      <xsl:text>\scopetrunc{\suriEllip\ + </xsl:text>
+      <xsl:value-of select="gvm:num($n - number($scope-rows-max))"/>
+      <xsl:value-of select="gvm:t($key)"/>
+      <xsl:text>}
+</xsl:text>
+    </xsl:if>
+  </xsl:template>
+
+  <xsl:template name="scope-section">
+    <xsl:variable name="rep" select="gvm:report()"/>
+    <xsl:variable name="nhosts" select="count($rep/host)"/>
+    <xsl:variable name="start" select="normalize-space($rep/scan_start)"/>
+    <xsl:variable name="end" select="normalize-space($rep/scan_end)"/>
+    <!-- Versao do feed e do scanner: um no' por valor distinto, na ordem do
+         documento (para o feed, o par versao + tipo do feed do mesmo host). -->
+    <xsl:variable name="feeds"
+      select="$rep/host/detail[name='scanned_with_feedversion'][string-length(normalize-space(value)) &gt; 0]
+                              [generate-id() = generate-id(key('by-feed', concat(normalize-space(value), '|', normalize-space(../detail[name='scanned_with_feedtype']/value)))[1])]"/>
+    <xsl:variable name="scanners"
+      select="$rep/host/detail[name='scanned_with_scanner'][string-length(normalize-space(value)) &gt; 0]
+                              [generate-id() = generate-id(key('by-scanner', normalize-space(value))[1])]"/>
+    <xsl:call-template name="section-open"><xsl:with-param name="n" select="6"/></xsl:call-template>
+    <xsl:text>
+\setsectionrunner{6}{</xsl:text><xsl:value-of select="gvm:t('sec_scope_run')"/><xsl:text>}
+\suriPara{</xsl:text><xsl:value-of select="gvm:t('scope_intro')"/><xsl:text>}
+</xsl:text>
+
+    <!-- 1. Escopo medido. -->
+    <xsl:text>\blocklabel{</xsl:text><xsl:value-of select="gvm:t('scope_measured')"/><xsl:text>}
+\begin{scopefacts}
+</xsl:text>
+    <xsl:call-template name="scope-fact">
+      <xsl:with-param name="key" select="'scope_task'"/>
+      <xsl:with-param name="value">
+        <xsl:call-template name="scope-name">
+          <xsl:with-param name="name" select="string($rep/task/name)"/>
+        </xsl:call-template>
+      </xsl:with-param>
+    </xsl:call-template>
+    <xsl:call-template name="scope-fact">
+      <xsl:with-param name="key" select="'scope_target'"/>
+      <xsl:with-param name="value">
+        <xsl:call-template name="scope-name">
+          <xsl:with-param name="name" select="string($rep/task/target/name)"/>
+        </xsl:call-template>
+      </xsl:with-param>
+    </xsl:call-template>
+    <xsl:call-template name="scope-fact">
+      <xsl:with-param name="key" select="'scope_hosts'"/>
+      <xsl:with-param name="value">
+        <xsl:call-template name="scope-count">
+          <xsl:with-param name="n" select="$nhosts"/>
+          <xsl:with-param name="declared" select="string($rep/hosts/count)"/>
+        </xsl:call-template>
+      </xsl:with-param>
+    </xsl:call-template>
+    <xsl:call-template name="scope-fact">
+      <xsl:with-param name="key" select="'lbl_scan_started'"/>
+      <xsl:with-param name="value">
+        <xsl:call-template name="scope-date"><xsl:with-param name="date" select="$start"/></xsl:call-template>
+      </xsl:with-param>
+    </xsl:call-template>
+    <xsl:call-template name="scope-fact">
+      <xsl:with-param name="key" select="'lbl_scan_completed'"/>
+      <xsl:with-param name="value">
+        <xsl:call-template name="scope-date"><xsl:with-param name="date" select="$end"/></xsl:call-template>
+      </xsl:with-param>
+    </xsl:call-template>
+    <xsl:call-template name="scope-fact">
+      <xsl:with-param name="key" select="'scope_duration'"/>
+      <xsl:with-param name="value">
+        <xsl:call-template name="scope-duration">
+          <xsl:with-param name="start" select="$start"/>
+          <xsl:with-param name="end" select="$end"/>
+        </xsl:call-template>
+      </xsl:with-param>
+    </xsl:call-template>
+    <xsl:call-template name="scope-fact">
+      <xsl:with-param name="key" select="'scope_status'"/>
+      <xsl:with-param name="value"><xsl:call-template name="scope-status"/></xsl:with-param>
+    </xsl:call-template>
+    <xsl:if test="count($feeds) &gt; 0">
+      <xsl:call-template name="scope-fact">
+        <xsl:with-param name="key" select="'scope_feed'"/>
+        <xsl:with-param name="value">
+          <xsl:for-each select="$feeds">
+            <xsl:variable name="ft" select="normalize-space(../detail[name='scanned_with_feedtype']/value)"/>
+            <xsl:if test="position() &gt; 1"><xsl:text>; </xsl:text></xsl:if>
+            <xsl:call-template name="scope-feed-version">
+              <xsl:with-param name="v" select="normalize-space(value)"/>
+            </xsl:call-template>
+            <xsl:if test="string-length($ft) &gt; 0">
+              <xsl:text> (</xsl:text>
+              <xsl:call-template name="escape_break"><xsl:with-param name="string" select="$ft"/></xsl:call-template>
+              <xsl:text>)</xsl:text>
+            </xsl:if>
+          </xsl:for-each>
+        </xsl:with-param>
+      </xsl:call-template>
+    </xsl:if>
+    <xsl:if test="count($scanners) &gt; 0">
+      <xsl:call-template name="scope-fact">
+        <xsl:with-param name="key" select="'scope_scanner'"/>
+        <xsl:with-param name="value">
+          <xsl:for-each select="$scanners">
+            <xsl:if test="position() &gt; 1"><xsl:text>; </xsl:text></xsl:if>
+            <xsl:call-template name="escape_break">
+              <xsl:with-param name="string" select="normalize-space(value)"/>
+            </xsl:call-template>
+          </xsl:for-each>
+        </xsl:with-param>
+      </xsl:call-template>
+    </xsl:if>
+    <xsl:text>\end{scopefacts}
+</xsl:text>
+    <xsl:if test="$scan-never-started">
+      <xsl:text>\blocknote{</xsl:text><xsl:value-of select="gvm:t('scope_never_started')"/><xsl:text>}
+</xsl:text>
+    </xsl:if>
+    <xsl:if test="$scan-unfinished">
+      <xsl:text>\blocknote{</xsl:text><xsl:value-of select="gvm:t('scope_unfinished_note')"/><xsl:text>}
+</xsl:text>
+    </xsl:if>
+    <xsl:if test="$agent-import">
+      <xsl:text>\blocknote{</xsl:text><xsl:value-of select="gvm:t('scope_agent_note')"/><xsl:text>}
+</xsl:text>
+    </xsl:if>
+
+    <!-- 2. Filtro do export. -->
+    <xsl:variable name="mq-known"
+      select="string-length($filter-min-qod) &gt; 0 and number($filter-min-qod) = number($filter-min-qod)"/>
+    <xsl:text>\blocklabel{</xsl:text><xsl:value-of select="gvm:t('scope_filter')"/><xsl:text>}
+\begin{scopefacts}
+</xsl:text>
+    <xsl:call-template name="scope-fact">
+      <xsl:with-param name="key" select="'scope_term'"/>
+      <xsl:with-param name="value">
+        <xsl:call-template name="scope-name">
+          <xsl:with-param name="name" select="normalize-space($filter-term)"/>
+          <xsl:with-param name="max" select="$scope-term-max"/>
+        </xsl:call-template>
+      </xsl:with-param>
+    </xsl:call-template>
+    <xsl:call-template name="scope-fact">
+      <xsl:with-param name="key" select="'scope_minqod'"/>
+      <xsl:with-param name="value">
+        <xsl:choose>
+          <xsl:when test="$mq-known"><xsl:value-of select="$filter-min-qod"/><xsl:text>\%</xsl:text></xsl:when>
+          <xsl:otherwise><xsl:text>\scopena</xsl:text></xsl:otherwise>
+        </xsl:choose>
+      </xsl:with-param>
+    </xsl:call-template>
+    <xsl:call-template name="scope-fact">
+      <xsl:with-param name="key" select="'scope_levels'"/>
+      <xsl:with-param name="value">
+        <xsl:choose>
+          <xsl:when test="string-length($filter-levels) &gt; 0">
+            <xsl:call-template name="scope-levels"><xsl:with-param name="lv" select="$filter-levels"/></xsl:call-template>
+          </xsl:when>
+          <xsl:otherwise><xsl:text>\scopena</xsl:text></xsl:otherwise>
+        </xsl:choose>
+      </xsl:with-param>
+    </xsl:call-template>
+    <xsl:call-template name="scope-fact">
+      <xsl:with-param name="key" select="'scope_overrides'"/>
+      <xsl:with-param name="value">
+        <xsl:choose>
+          <xsl:when test="$filter-overrides = '1'"><xsl:value-of select="gvm:t('word_yes')"/></xsl:when>
+          <xsl:when test="$filter-overrides = '0'"><xsl:value-of select="gvm:t('word_no')"/></xsl:when>
+          <xsl:otherwise><xsl:text>\scopena</xsl:text></xsl:otherwise>
+        </xsl:choose>
+      </xsl:with-param>
+    </xsl:call-template>
+    <!-- Export parcial: a regra unica ($export-partial) do aviso de visao
+         parcial do resumo executivo e da nota do mapa de portas. Sem um
+         result_count utilizavel o relatorio nao diz se e' parcial. -->
+    <xsl:call-template name="scope-fact">
+      <xsl:with-param name="key" select="'scope_partial'"/>
+      <xsl:with-param name="value">
+        <xsl:choose>
+          <xsl:when test="$export-rc-known">
+            <xsl:choose>
+              <xsl:when test="$export-partial"><xsl:value-of select="gvm:t('word_yes')"/></xsl:when>
+              <xsl:otherwise><xsl:value-of select="gvm:t('word_no')"/></xsl:otherwise>
+            </xsl:choose>
+            <xsl:text> --- </xsl:text><xsl:value-of select="$export-total"/>
+            <xsl:text> </xsl:text><xsl:value-of select="gvm:t('of_word')"/>
+            <xsl:text> </xsl:text><xsl:value-of select="$export-total-full"/>
+            <xsl:text> </xsl:text><xsl:value-of select="gvm:t('scope_results')"/>
+          </xsl:when>
+          <xsl:otherwise><xsl:text>\scopena</xsl:text></xsl:otherwise>
+        </xsl:choose>
+      </xsl:with-param>
+    </xsl:call-template>
+    <xsl:text>\end{scopefacts}
+</xsl:text>
+    <xsl:if test="$mq-known">
+      <xsl:text>\blocknote{</xsl:text><xsl:value-of select="gvm:t('scope_minqod_effect_a')"/>
+      <xsl:value-of select="$filter-min-qod"/><xsl:text>\%</xsl:text>
+      <xsl:value-of select="gvm:t('scope_minqod_effect_b')"/><xsl:text>}
+</xsl:text>
+    </xsl:if>
+
+    <!-- 3. Autenticacao. Uma linha de tabela por (host, detalhe) — o mesmo
+         nome de detalhe repetido no mesmo host sai uma vez — em ordem de
+         documento; o host e' o IP, ou o hostname sem IP. -->
+    <xsl:variable name="auth-rtf">
+      <xsl:for-each select="$rep/host">
+        <xsl:variable name="hip" select="normalize-space(ip)"/>
+        <xsl:variable name="hname" select="normalize-space(detail[name='hostname']/value)"/>
+        <xsl:for-each select="detail[gvm:auth-res(name) != '']
+                                    [not(normalize-space(name) = preceding-sibling::detail/name)]">
+          <r>
+            <xsl:text>\authrow{</xsl:text>
+            <xsl:choose>
+              <xsl:when test="string-length($hip) &gt; 0">
+                <xsl:call-template name="escape_break"><xsl:with-param name="string" select="$hip"/></xsl:call-template>
+              </xsl:when>
+              <xsl:otherwise>
+                <xsl:call-template name="scope-cell"><xsl:with-param name="s" select="$hname"/></xsl:call-template>
+              </xsl:otherwise>
+            </xsl:choose>
+            <xsl:text>}{</xsl:text>
+            <xsl:call-template name="escape_break">
+              <xsl:with-param name="string" select="substring-before(substring-after(normalize-space(name), 'Auth-'), '-')"/>
+            </xsl:call-template>
+            <xsl:text>}{</xsl:text>
+            <xsl:choose>
+              <xsl:when test="gvm:auth-res(name) = 'Success'"><xsl:text>ok</xsl:text></xsl:when>
+              <xsl:otherwise><xsl:text>falha</xsl:text></xsl:otherwise>
+            </xsl:choose>
+            <xsl:text>}
+</xsl:text>
+          </r>
+        </xsl:for-each>
+      </xsl:for-each>
+    </xsl:variable>
+    <xsl:variable name="auth-rows" select="exsl:node-set($auth-rtf)/r"/>
+    <xsl:variable name="n-auth-ok" select="count($rep/host[detail[gvm:auth-res(name) = 'Success']])"/>
+    <xsl:variable name="n-auth-fail"
+      select="count($rep/host[not(detail[gvm:auth-res(name) = 'Success'])][detail[gvm:auth-res(name) = 'Failure']])"/>
+    <xsl:text>\blocklabel{</xsl:text><xsl:value-of select="gvm:t('scope_auth')"/><xsl:text>}
+\begin{scopefacts}
+</xsl:text>
+    <xsl:choose>
+      <!-- Inventario do agente: coletado DENTRO do host, a pergunta "o scan
+           foi autenticado?" nao se aplica, e a limitacao de scan nao
+           autenticado seria falsa sobre ele. -->
+      <xsl:when test="count($auth-rows) = 0 and $agent-import">
+        <xsl:call-template name="scope-fact">
+          <xsl:with-param name="key" select="'scope_auth_ok'"/>
+          <xsl:with-param name="value" select="gvm:t('scope_agent_na')"/>
+        </xsl:call-template>
+        <xsl:text>\end{scopefacts}
+</xsl:text>
+      </xsl:when>
+      <xsl:when test="count($auth-rows) = 0">
+        <xsl:call-template name="scope-fact">
+          <xsl:with-param name="key" select="'scope_auth_ok'"/>
+          <xsl:with-param name="value" select="'\scopena'"/>
+        </xsl:call-template>
+        <xsl:text>\end{scopefacts}
+\blocknote{</xsl:text><xsl:value-of select="gvm:t('scope_auth_na_note')"/><xsl:text>}
+</xsl:text>
+      </xsl:when>
+      <xsl:otherwise>
+        <xsl:call-template name="scope-fact">
+          <xsl:with-param name="key" select="'scope_auth_ok'"/>
+          <xsl:with-param name="value" select="concat($n-auth-ok, ' ', gvm:t('of_word'), ' ', $nhosts)"/>
+        </xsl:call-template>
+        <xsl:call-template name="scope-fact">
+          <xsl:with-param name="key" select="'scope_auth_fail'"/>
+          <xsl:with-param name="value" select="$n-auth-fail"/>
+        </xsl:call-template>
+        <xsl:call-template name="scope-fact">
+          <xsl:with-param name="key" select="'scope_auth_none'"/>
+          <xsl:with-param name="value" select="$nhosts - $n-auth-ok - $n-auth-fail"/>
+        </xsl:call-template>
+        <xsl:text>\end{scopefacts}
+\begin{authtable}
+</xsl:text>
+        <xsl:for-each select="$auth-rows[position() &lt;= number($scope-rows-max)]">
+          <xsl:value-of select="."/>
+        </xsl:for-each>
+        <xsl:text>\end{authtable}
+</xsl:text>
+        <xsl:call-template name="scope-trunc">
+          <xsl:with-param name="n" select="count($auth-rows)"/>
+          <xsl:with-param name="key" select="'scope_trunc_auth'"/>
+        </xsl:call-template>
+        <xsl:if test="$nhosts - $n-auth-ok &gt; 0">
+          <xsl:text>\blocknote{</xsl:text><xsl:value-of select="gvm:t('scope_auth_partial_note')"/><xsl:text>}
+</xsl:text>
+        </xsl:if>
+      </xsl:otherwise>
+    </xsl:choose>
+
+    <!-- 4. Erros de scan: <errors> ausente e' \scopena; presente, a contagem
+         (com a do gvmd, se for outra), os hosts com erro e a tabela. -->
+    <xsl:variable name="errs" select="$rep/errors/error"/>
+    <xsl:text>\blocklabel{</xsl:text><xsl:value-of select="gvm:t('scope_errors')"/><xsl:text>}
+\begin{scopefacts}
+</xsl:text>
+    <xsl:choose>
+      <xsl:when test="count($rep/errors) = 0">
+        <xsl:call-template name="scope-fact">
+          <xsl:with-param name="key" select="'scope_err_count'"/>
+          <xsl:with-param name="value" select="'\scopena'"/>
+        </xsl:call-template>
+        <xsl:call-template name="scope-fact">
+          <xsl:with-param name="key" select="'scope_err_hosts'"/>
+          <xsl:with-param name="value" select="'\scopena'"/>
+        </xsl:call-template>
+      </xsl:when>
+      <xsl:otherwise>
+        <xsl:call-template name="scope-fact">
+          <xsl:with-param name="key" select="'scope_err_count'"/>
+          <xsl:with-param name="value">
+            <xsl:call-template name="scope-count">
+              <xsl:with-param name="n" select="count($errs)"/>
+              <xsl:with-param name="declared" select="string($rep/errors/count)"/>
+            </xsl:call-template>
+          </xsl:with-param>
+        </xsl:call-template>
+        <xsl:call-template name="scope-fact">
+          <xsl:with-param name="key" select="'scope_err_hosts'"/>
+          <xsl:with-param name="value"
+            select="count($errs[string-length(normalize-space(host/text())) &gt; 0]
+                               [generate-id() = generate-id(key('by-err-host', normalize-space(host/text()))[1])])"/>
+        </xsl:call-template>
+      </xsl:otherwise>
+    </xsl:choose>
+    <xsl:text>\end{scopefacts}
+</xsl:text>
+    <xsl:if test="count($errs) &gt; 0">
+      <xsl:text>\begin{errortable}
+</xsl:text>
+      <xsl:for-each select="$errs[position() &lt;= number($scope-rows-max)]">
+        <xsl:text>\errorrow{</xsl:text>
+        <xsl:call-template name="scope-cell"><xsl:with-param name="s" select="normalize-space(host/text())"/></xsl:call-template>
+        <xsl:text>}{</xsl:text>
+        <xsl:call-template name="scope-cell"><xsl:with-param name="s" select="normalize-space(port)"/></xsl:call-template>
+        <xsl:text>}{</xsl:text>
+        <xsl:call-template name="scope-cell">
+          <xsl:with-param name="s" select="normalize-space(description)"/>
+          <xsl:with-param name="max" select="$scope-desc-max"/>
+        </xsl:call-template>
+        <xsl:text>}{</xsl:text>
+        <xsl:choose>
+          <xsl:when test="string-length(normalize-space(nvt/name)) &gt; 0">
+            <xsl:call-template name="scope-cell">
+              <xsl:with-param name="s" select="normalize-space(nvt/name)"/>
+              <xsl:with-param name="max" select="$scope-nvt-max"/>
+              <xsl:with-param name="wb" select="'\surwbvis{}'"/>
+            </xsl:call-template>
+          </xsl:when>
+          <xsl:otherwise>
+            <xsl:call-template name="scope-cell"><xsl:with-param name="s" select="normalize-space(nvt/@oid)"/></xsl:call-template>
+          </xsl:otherwise>
+        </xsl:choose>
+        <xsl:text>}
+</xsl:text>
+      </xsl:for-each>
+      <xsl:text>\end{errortable}
+</xsl:text>
+      <xsl:call-template name="scope-trunc">
+        <xsl:with-param name="n" select="count($errs)"/>
+        <xsl:with-param name="key" select="'scope_trunc_err'"/>
+      </xsl:call-template>
+      <xsl:text>\blocknote{</xsl:text><xsl:value-of select="gvm:t('scope_err_note')"/><xsl:text>}
+</xsl:text>
+    </xsl:if>
+
+    <!-- 5. Limitacoes: texto fixo (o numero e' o parametro $qod-min). O
+         inventario do agente troca as duas frases de rede (ponto de vista do
+         scanner e alive test) pela do agente; cobertura parcial so' quando o
+         scan nao terminou; o feed so' quando os hosts trazem a versao dele. -->
+    <xsl:text>\blocklabel{</xsl:text><xsl:value-of select="gvm:t('scope_limits')"/><xsl:text>}
+\begin{suribullets}
+</xsl:text>
+    <xsl:choose>
+      <xsl:when test="$agent-import">
+        <xsl:text>\item </xsl:text><xsl:value-of select="gvm:t('scope_lim_agent')"/><xsl:text>
+</xsl:text>
+      </xsl:when>
+      <xsl:otherwise>
+        <xsl:text>\item </xsl:text><xsl:value-of select="gvm:t('scope_lim_view')"/><xsl:text>
+\item </xsl:text><xsl:value-of select="gvm:t('scope_lim_alive')"/><xsl:text>
+</xsl:text>
+      </xsl:otherwise>
+    </xsl:choose>
+    <xsl:text>\item </xsl:text><xsl:value-of select="gvm:t('scope_lim_qod_a')"/><xsl:value-of select="$qod-min"/>
+    <xsl:text>\%</xsl:text><xsl:value-of select="gvm:t('scope_lim_qod_b')"/><xsl:text>
+</xsl:text>
+    <xsl:if test="$scan-unfinished">
+      <xsl:text>\item </xsl:text><xsl:value-of select="gvm:t('scope_lim_unfinished')"/><xsl:text>
+</xsl:text>
+    </xsl:if>
+    <xsl:if test="count($feeds) &gt; 0">
+      <xsl:text>\item </xsl:text><xsl:value-of select="gvm:t('scope_lim_feed')"/><xsl:text>
+</xsl:text>
+    </xsl:if>
+    <xsl:text>\end{suribullets}
+</xsl:text>
+  </xsl:template>
+
+  <!-- ================================================================= -->
   <!-- Navegacao: secoes, sumario e marcadores do PDF                    -->
   <!-- ================================================================= -->
 
-  <!-- AS SEIS SECOES, numero e titulo, num lugar so'. Cada abertura de secao
+  <!-- AS SETE SECOES, numero e titulo, num lugar so'. Cada abertura de secao
        (section-open) e cada linha do sumario (contents-page) le daqui, entao o
        sumario nao tem como listar um titulo que a secao nao mostra. Elemento
        <sec>/@key e nao <s>/@k: <s k> e' a tabela de i18n, e a regua do CI
@@ -5069,7 +5970,8 @@ SPDX-License-Identifier: GPL-2.0-or-later
     <sec n="3" key="sec_hosts_ports"/>
     <sec n="4" key="sec_findings_summary"/>
     <sec n="5" key="sec_detailed"/>
-    <sec n="6" key="sec_hexmap_host"/>
+    <sec n="6" key="sec_scope"/>
+    <sec n="7" key="sec_hexmap_host"/>
   </xsl:variable>
   <xsl:variable name="sections" select="exsl:node-set($sections-rtf)/sec"/>
 
@@ -5091,7 +5993,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
     <xsl:text>}</xsl:text>
   </xsl:template>
 
-  <!-- A pagina de SUMARIO, logo depois do resumo executivo: as seis secoes,
+  <!-- A pagina de SUMARIO, logo depois do resumo executivo: as sete secoes,
        cada linha um link para o alto da secao, com a pagina em que ela abre
        (\suritocline le o rotulo que o \suriSection grava). Desenho, regras e
        faces sao do suricatoos-page.sty; daqui so' sai dado. -->
@@ -5220,7 +6122,8 @@ SPDX-License-Identifier: GPL-2.0-or-later
   <!-- ================================================================= -->
 
   <!-- O esqueleto do documento, na ordem do modelo: capa, resumo, mapa de
-       portas, hosts, sumario, detalhados, apendice, contracapa.
+       portas, hosts, sumario, detalhados, escopo e limitacoes, apendice,
+       contracapa.
        \clearpage e nao \newpage. As duas terminam a pagina, mas \newpage deixa
        material flutuante pendurado para a proxima, e o design abre CADA secao
        com \suriSection, que e' desenhado para ser a primeira coisa da folha (o
@@ -5232,8 +6135,9 @@ SPDX-License-Identifier: GPL-2.0-or-later
        `suribare' sozinhas, dentro de \suriCover / \suriBackCover.
        Numeracao das secoes, para quem emite \suriSection: 1 resumo executivo,
        2 mapa de exposicao de portas, 3 hosts e portas abertas, 4 sumario de
-       achados, 5 achados detalhados, 6 apendice (exposicao por host); a
-       tabela $sections, que section-open e o sumario leem.
+       achados, 5 achados detalhados, 6 escopo, metodologia e limitacoes,
+       7 apendice (exposicao por host); a tabela $sections, que section-open e
+       o sumario leem.
        O SUMARIO (contents-page) entra entre o resumo executivo e o mapa de
        portas, numa folha propria: o resumo continua sendo a primeira pagina
        depois da capa, e o sumario nao e' secao (sem numero). -->
@@ -5260,6 +6164,9 @@ SPDX-License-Identifier: GPL-2.0-or-later
     <xsl:text>\clearpage
 </xsl:text>
     <xsl:call-template name="detailed-findings"/>
+    <xsl:text>\clearpage
+</xsl:text>
+    <xsl:call-template name="scope-section"/>
     <xsl:text>\clearpage
 </xsl:text>
     <xsl:call-template name="hexmap-hosts-section"/>

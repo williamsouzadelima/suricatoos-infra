@@ -34,11 +34,35 @@ porque sao invariantes do documento, nao casos especiais.
                  um alvo por grupo consolidado;
   nome           o nome do projeto, quando cortado (capa, contracapa, narrativa,
                  titulo do mapa de portas), e' cortado em fronteira de palavra e
-                 o corte declarado bate.
+                 o corte declarado bate;
+  escopo         a secao 6 (escopo, metodologia e limitacoes), recalculada do
+                 XML bloco a bloco: cada \\scopefact com o rotulo e o valor
+                 certos -- tarefa, alvo, hosts (e a contagem declarada pelo
+                 gvmd quando difere), inicio, fim e duracao do scan, situacao
+                 (scan_run_status), versao do feed e do scanner (detalhes
+                 scanned_with_* dos hosts, so' quando existem), termo do
+                 filtro, piso de QoD, niveis (chave ancorada num token: nada de
+                 "levels=" dentro de "compliance_levels="), overrides, export
+                 parcial, autenticacao por host, erros de scan --, \\scopena
+                 EXATAMENTE onde o dado falta e em nenhum outro lugar; os
+                 textos livres (tarefa, alvo, termo, descricao e NVT de um
+                 erro) com o teto e o corte declarado; as tabelas de
+                 autenticacao e de erros celula a celula ate' o teto
+                 $scope-rows-max, com o corte "+ N" declarado so' acima dele e
+                 com o N certo; as notas e as limitacoes conforme o estado do
+                 scan (nunca iniciou, nao terminou, inventario do agente
+                 importado pelo gmp-bridge) e o feed;
+  alerta         o resumo executivo abre com o alerta de "nada medido" se e
+                 somente se o relatorio nao tem host, e o alerta da' a causa
+                 que o dado sustenta: tarefa que nunca iniciou (a mesma regra
+                 da secao 6) ou scan que iniciou e nao achou host (alive test).
 
-Os limiares (qod-min, group-min, adv-max, cortes do nome) e as frases do i18n
-sao LIDOS do proprio latex.xsl, para a regua nunca divergir do relatorio; um
-nome lido que esteja definido mais de uma vez la' e' erro (exit 2).
+Os limiares (qod-min, group-min, adv-max, cortes do nome, scope-rows-max e os
+tetos de texto da secao 6), as listas de meses e dias e as frases do i18n sao
+LIDOS do proprio latex.xsl, para a regua nunca divergir do relatorio; um nome
+lido que esteja definido mais de uma vez la' e' erro (exit 2). As regras de
+estado do scan (ScanState) e os dois sinais do inventario do agente sao os do
+latex.xsl, escritos de novo aqui -- regua independente, como as outras.
 
 Uso:
     check-veracity.py --lang <en|pt_BR|es> --xml <fixture.xml> --tex <report.tex>
@@ -47,6 +71,8 @@ Uso:
 Sai 0 se tudo passa, 1 se alguma checagem reprova, 2 em erro de uso/leitura.
 """
 import argparse
+import datetime
+import math
 import os
 import re
 import sys
@@ -100,8 +126,25 @@ class Stylesheet:
         if len(nodes) != 1:
             raise StylesheetError("chave de i18n %r definida %d vez(es) no latex.xsl, esperado 1"
                                   % (key, len(nodes)))
-        bucket = "pt" if lang.startswith("pt") else ("es" if lang.startswith("es") else "en")
-        return nodes[0].get(bucket) or nodes[0]["en"]
+        return nodes[0].get(bucket(lang)) or nodes[0]["en"]
+
+    def words(self, name):
+        """Uma lista de palavras do latex.xsl (select="'jan fev ...'"): os meses
+        e dias da semana que o emit-date imprime."""
+        sels = self.defs.get(name, [])
+        if len(sels) != 1:
+            raise StylesheetError("%s definido %d vez(es) no latex.xsl, esperado 1"
+                                  % (name, len(sels)))
+        mt = re.fullmatch(r"'([^']*)'", sels[0] or "")
+        if not mt:
+            raise StylesheetError("%s nao e' uma string literal no latex.xsl: select=%r"
+                                  % (name, sels[0]))
+        return mt.group(1).split()
+
+
+def bucket(lang):
+    """O $L do latex.xsl: pt | es | en."""
+    return "pt" if lang.startswith("pt") else ("es" if lang.startswith("es") else "en")
 
 
 # ---------------------------------------------------------------------------
@@ -214,6 +257,7 @@ class Model:
         # gvm:report(): o <report> interno quando ha um, senao a raiz.
         inner = root.find("report")
         rep = inner if inner is not None else root
+        self.root = root
         self.report = rep
         self.floor = sheet.num("qod-min")
         self.group_min = sheet.num("group-min")
@@ -907,33 +951,505 @@ def check_nome(m, tex, sheet, lang):
             title = title[:-3]
         places.append(("mapa de portas", 60, whole, title, None))
     for where, budget, name, vis, cut in places:
-        k = len(vis)
-        if cut is None:
-            cut = len(name) - k
-        if len(name) <= budget:
-            if cut or vis != name:
-                fails.append("%s: nome cabe (%d <= %d) e saiu '%s' (+%d)"
-                             % (where, len(name), budget, vis[:40], cut))
-            continue
-        if not name.startswith(vis) or cut != len(name) - k:
-            fails.append("%s: '%s' (+%d) nao e' o inicio do nome com o corte declarado"
-                         % (where, vis[:40], cut))
-            continue
-        back = min(budget // 2, 199)
-        spaces = [i for i in range(budget - back, budget + 1) if name[i] in WS]
-        want = spaces[-1] if spaces else budget
-        if k != want:
-            fails.append("%s: corte em %d caracteres ('...%s|%s...'), esperado %d (%s)"
-                         % (where, k, vis[-12:], name[k:k + 12], want,
-                            "fronteira de palavra" if spaces else "sem fronteira na janela"))
+        fails += cut_fails(where, budget, name, vis, cut)
     return fails
+
+
+def cut_fails(where, budget, name, vis, cut):
+    """O texto visivel `vis' de um campo cortado em `budget' caracteres e' o
+    nome inteiro (cabe) ou o seu inicio cortado na ULTIMA fronteira de palavra
+    da janela (veja check_nome), com o corte declarado `cut' (None: a marca nao
+    traz contagem) batendo com o que sobrou."""
+    k = len(vis)
+    if cut is None:
+        cut = len(name) - k
+    if len(name) <= budget:
+        if cut or vis != name:
+            return ["%s: nome cabe (%d <= %d) e saiu '%s' (+%d)"
+                    % (where, len(name), budget, vis[:40], cut)]
+        return []
+    if not name.startswith(vis) or cut != len(name) - k:
+        return ["%s: '%s' (+%d) nao e' o inicio do nome com o corte declarado"
+                % (where, vis[:40], cut)]
+    back = min(budget // 2, 199)
+    spaces = [i for i in range(budget - back, budget + 1) if name[i] in WS]
+    want = spaces[-1] if spaces else budget
+    if k != want:
+        return ["%s: corte em %d caracteres ('...%s|%s...'), esperado %d (%s)"
+                % (where, k, vis[-12:], name[k:k + 12], want,
+                   "fronteira de palavra" if spaces else "sem fronteira na janela")]
+    return []
+
+
+# ---------------------------------------------------------------------------
+# Secao 6: escopo, metodologia e limitacoes
+# ---------------------------------------------------------------------------
+NA = "\\scopena"     # o valor de todo dado que o relatorio nao traz
+# Letras do levels= que tem palavra propria (as outras saem como estao).
+LEVEL_KEYS = {"c": "sev_critical", "h": "sev_high", "m": "sev_medium", "l": "sev_low",
+              "g": "sev_log", "f": "lvl_falsepos", "d": "lvl_debug"}
+SCOPE_BLOCKS = ("scope_measured", "scope_filter", "scope_auth", "scope_errors", "scope_limits")
+ISO_DATE = re.compile(r"(-?\d{4,})-(\d\d)-(\d\d)T(\d\d):(\d\d)")
+# scan_run_status -> chave da palavra; estado fora da lista sai como esta'.
+RUN_KEYS = {"Done": "run_done", "Running": "run_running", "Stop Requested": "run_stopreq",
+            "Stopped": "run_stopped", "Interrupted": "run_interrupted",
+            "Requested": "run_requested", "Queued": "run_queued", "New": "run_new"}
+# Estados compativeis com "nunca iniciou" (vazio = sem o elemento) e os de um
+# scan que comecou e nao terminou: as listas de $scan-never-started e
+# $scan-unfinished do latex.xsl.
+NEVER_STARTED_OK = ("", "New", "Requested", "Queued", "Stop Requested", "Stopped", "Interrupted")
+UNFINISHED = ("Running", "Stop Requested", "Stopped", "Interrupted")
+# Os dois sinais que o gmp-bridge (bridge.py) grava num relatorio importado do
+# inventario do agente: o OID marcador (INVENTORY_MARKER_OID) do resultado que
+# ancora um host sem achado, e o comentario da tarefa conteiner do modo agent.
+AGENT_MARKER_OID = "1.3.6.1.4.1.55683.1.0.1"
+AGENT_COMMENT_PREFIX = "Suricatoos Agent findings for host"
+# O veto dos dois sinais: detalhe de host com um destes prefixos e' rastro de
+# scan de rede (login do scanner, feed que varreu o host), e o bridge nao grava
+# detalhe de host nenhum -- o comentario, editavel, nao vira um scan real em
+# inventario.
+NETWORK_DETAIL_PREFIXES = ("Auth-", "scanned_with_")
+
+
+def xp_text(el):
+    """string() do XPath de um elemento: todo o texto descendente; '' sem ele."""
+    return "".join(el.itertext()) if el is not None else ""
+
+
+def xp_first_text(el):
+    """O 1o no' de texto filho (o host/text() do XPath em contexto de string),
+    sem os nos so' de branco que o xsl:strip-space do latex.xsl tira."""
+    if el is None:
+        return ""
+    for piece in [el.text] + [c.tail for c in el]:
+        if piece is not None and piece.strip(WS):
+            return piece
+    return ""
+
+
+def term_value(term, key):
+    """O valor de `key=' no termo do filtro, com a chave ancorada num TOKEN:
+    substring-before(substring-after(concat(' ', normalize-space(term), ' '),
+    ' key='), ' ') -- "levels=" nao casa dentro de "compliance_levels="."""
+    t = " " + norm_space(term) + " "
+    k = t.find(" " + key + "=")
+    return t[k + len(key) + 2:].split(" ", 1)[0] if k >= 0 else ""
+
+
+def gvm_num(n, lang):
+    """gvm:num: milhar com virgula em en, com ponto em pt/es."""
+    s = "{:,}".format(int(n))
+    return s if bucket(lang) == "en" else s.replace(",", ".")
+
+
+def parse_iso(s):
+    """O instante que o date:seconds do libexslt le: ISO 8601, fuso Z ou
+    +hh:mm; sem fuso vale UTC (medido no libexslt). None se nao for data."""
+    try:
+        d = datetime.datetime.fromisoformat(s[:-1] + "+00:00" if s.endswith("Z") else s)
+    except ValueError:
+        return None
+    return d if d.tzinfo is not None else d.replace(tzinfo=datetime.timezone.utc)
+
+
+def auth_res(name):
+    """gvm:auth-res: 'Success' | 'Failure' de Auth-<protocolo>-<resultado>
+    com protocolo nao vazio; '' para qualquer outro nome."""
+    n = norm_space(name)
+    if not n.startswith("Auth-"):
+        return ""
+    proto, sep, res = n[5:].partition("-")
+    return res if sep and proto and res in ("Success", "Failure") else ""
+
+
+def detail_named(dets, name):
+    """Os <detail> de um host cujo <name> e' exatamente `name' (detail[name=...])."""
+    return [d for d in dets if xp_text(d.find("name")) == name]
+
+
+class ScanState:
+    """As tres regras de estado do latex.xsl, que a secao 1 e a secao 6 leem:
+    nunca iniciou (sem scan_start, sem host, sem resultado e estado
+    compativel), nao terminou (comecou e o estado e' de scan inacabado) e
+    inventario do agente (um dos dois sinais do gmp-bridge, e nenhum detalhe
+    de host de scan de rede)."""
+
+    def __init__(self, m):
+        rep = m.report
+        self.status = norm_space(xp_text(rep.find("scan_run_status")))
+        self.never_started = (not norm_space(xp_text(rep.find("scan_start")))
+                              and not rep.findall("host") and not m.results
+                              and self.status in NEVER_STARTED_OK)
+        self.unfinished = not self.never_started and self.status in UNFINISHED
+        comment = norm_space(xp_text(rep.find("task/comment")))
+        # starts-with(name, ...): o 1o <name> do <detail>, sem normalize-space.
+        network_trace = any(xp_text(d.find("name")).startswith(NETWORK_DETAIL_PREFIXES)
+                            for h in rep.findall("host") for d in h.findall("detail"))
+        self.agent_import = ((any(norm_space(r.oid) == AGENT_MARKER_OID for r in m.results)
+                              or comment.startswith(AGENT_COMMENT_PREFIX))
+                             and not network_trace)
+
+
+class ScopeOracle:
+    """O que a secao 6 deveria dizer, recalculado do XML: por bloco, as linhas
+    \\scopefact (rotulo, valor), as linhas de tabela, o corte declarado e as
+    notas; e os itens de limitacoes. Valor NA = \\scopena; ("corte", texto,
+    teto) = texto livre com o corte declarado do escape_break (regra do
+    check_nome); ("ilegivel", s) = data que o oraculo nao le."""
+
+    def __init__(self, m, sheet, lang):
+        self.m, self.sheet, self.lang = m, sheet, lang
+        self.cap = sheet.num("scope-rows-max")
+        st = self.state = ScanState(m)
+        rep = m.report
+        t = self.t
+        hosts = rep.findall("host")
+        nh = len(hosts)
+        b = {}
+        # 1. escopo medido
+        start = norm_space(xp_text(rep.find("scan_start")))
+        end = norm_space(xp_text(rep.find("scan_end")))
+        name_max = sheet.num("task-name-max")
+        facts = [(t("scope_task"), self.cut(xp_text(rep.find("task/name")), name_max, NA)),
+                 (t("scope_target"), self.cut(xp_text(rep.find("task/target/name")), name_max, NA)),
+                 (t("scope_hosts"), self.count(nh, xp_text(rep.find("hosts/count")))),
+                 (t("lbl_scan_started"), self.date(start)),
+                 (t("lbl_scan_completed"), self.date(end)),
+                 (t("scope_duration"),
+                  t("scope_agent_na") if st.agent_import else self.duration(start, end)),
+                 (t("scope_status"),
+                  (t(RUN_KEYS[st.status]) if st.status in RUN_KEYS else st.status) or NA)]
+        # Versao do feed: os pares (versao, tipo do feed do mesmo host)
+        # distintos; scanner: os valores distintos -- na ordem do documento.
+        feeds, scanners = [], []
+        for h in hosts:
+            dets = h.findall("detail")
+            ftype = next((norm_space(xp_text(d.find("value")))
+                          for d in detail_named(dets, "scanned_with_feedtype")), "")
+            for d in detail_named(dets, "scanned_with_feedversion"):
+                v = norm_space(xp_text(d.find("value")))
+                if v and (v, ftype) not in feeds:
+                    feeds.append((v, ftype))
+            for d in detail_named(dets, "scanned_with_scanner"):
+                v = norm_space(xp_text(d.find("value")))
+                if v and v not in scanners:
+                    scanners.append(v)
+        if feeds:
+            facts.append((t("scope_feed"), "; ".join(
+                self.feed_version(v) + (" (%s)" % ft if ft else "") for v, ft in feeds)))
+        if scanners:
+            facts.append((t("scope_scanner"), "; ".join(scanners)))
+        b["scope_measured"] = self.block(
+            facts=facts,
+            notes=([t("scope_never_started")] if st.never_started else [])
+            + ([t("scope_unfinished_note")] if st.unfinished else [])
+            + ([t("scope_agent_note")] if st.agent_import else []))
+        # 2. filtro do export
+        term = xp_text(rep.find("filters/term"))
+        mq, lv, ov = (term_value(term, k) for k in ("min_qod", "levels", "apply_overrides"))
+        mq_known = mq != "" and isnum(xnum(mq))
+        total = len(m.results)
+        rcs = norm_space(xp_first_text(rep.find("result_count")))
+        rcn = xnum(rcs)
+        if rcs and isnum(rcn) and math.floor(rcn) == rcn and rcn >= total:
+            partial = "%s --- %d %s %d %s" % (t("word_yes") if rcn > total else t("word_no"),
+                                              total, t("of_word"), int(rcn), t("scope_results"))
+        else:
+            partial = NA
+        b["scope_filter"] = self.block(
+            facts=[(t("scope_term"), self.cut(norm_space(term), sheet.num("scope-term-max"), NA)),
+                   (t("scope_minqod"), mq + "%" if mq_known else NA),
+                   (t("scope_levels"), self.levels(lv) if lv else NA),
+                   (t("scope_overrides"), {"1": t("word_yes"), "0": t("word_no")}.get(ov, NA)),
+                   (t("scope_partial"), partial)],
+            notes=([t("scope_minqod_effect_a") + mq + "\\%" + t("scope_minqod_effect_b")]
+                   if mq_known else []))
+        # 3. autenticacao
+        rows, n_ok, n_fail = [], 0, 0
+        for h in hosts:
+            dets = h.findall("detail")
+            res = [auth_res(xp_text(d.find("name"))) for d in dets]
+            if "Success" in res:
+                n_ok += 1
+            elif "Failure" in res:
+                n_fail += 1
+            hip = norm_space(xp_text(h.find("ip")))
+            hname = next((norm_space(xp_text(d.find("value"))) for d in detail_named(dets, "hostname")), "")
+            for i, d in enumerate(dets):
+                name = xp_text(d.find("name"))
+                # not(normalize-space(name) = preceding-sibling::detail/name)
+                if not res[i] or norm_space(name) in {xp_text(p.find("name")) for p in dets[:i]
+                                                      if p.find("name") is not None}:
+                    continue
+                proto = norm_space(name)[5:].partition("-")[0]
+                rows.append((hip or hname or "---", proto, "ok" if res[i] == "Success" else "falha"))
+        if rows:
+            b["scope_auth"] = self.block(
+                facts=[(t("scope_auth_ok"), "%d %s %d" % (n_ok, t("of_word"), nh)),
+                       (t("scope_auth_fail"), str(n_fail)),
+                       (t("scope_auth_none"), str(nh - n_ok - n_fail))],
+                rows=("authrow", rows), trunc=self.trunc(len(rows), "scope_trunc_auth"),
+                notes=[t("scope_auth_partial_note")] if nh - n_ok > 0 else [])
+        elif st.agent_import:
+            b["scope_auth"] = self.block(facts=[(t("scope_auth_ok"), t("scope_agent_na"))])
+        else:
+            b["scope_auth"] = self.block(facts=[(t("scope_auth_ok"), NA)],
+                                         notes=[t("scope_auth_na_note")])
+        # 4. erros de scan
+        if rep.find("errors") is None:
+            b["scope_errors"] = self.block(facts=[(t("scope_err_count"), NA),
+                                                  (t("scope_err_hosts"), NA)])
+        else:
+            errs = rep.findall("errors/error")
+            ehosts = {norm_space(xp_first_text(e.find("host"))) for e in errs} - {""}
+            desc_max, nvt_max = sheet.num("scope-desc-max"), sheet.num("scope-nvt-max")
+            erows = []
+            for e in errs:
+                nvt = e.find("nvt")
+                nname = norm_space(xp_text(nvt.find("name") if nvt is not None else None))
+                oid = norm_space(nvt.get("oid", "") if nvt is not None else "")
+                erows.append((norm_space(xp_first_text(e.find("host"))) or "---",
+                              norm_space(xp_text(e.find("port"))) or "---",
+                              self.cut(norm_space(xp_text(e.find("description"))), desc_max, "---"),
+                              self.cut(nname, nvt_max, None) or oid or "---"))
+            b["scope_errors"] = self.block(
+                facts=[(t("scope_err_count"), self.count(len(errs), xp_text(rep.find("errors/count")))),
+                       (t("scope_err_hosts"), str(len(ehosts)))],
+                rows=("errorrow", erows) if errs else None,
+                trunc=self.trunc(len(errs), "scope_trunc_err"),
+                notes=[t("scope_err_note")] if errs else [])
+        # 5. limitacoes
+        items = ([t("scope_lim_agent")] if st.agent_import
+                 else [t("scope_lim_view"), t("scope_lim_alive")])
+        items.append(t("scope_lim_qod_a") + str(m.floor) + "\\%" + t("scope_lim_qod_b"))
+        if st.unfinished:
+            items.append(t("scope_lim_unfinished"))
+        if feeds:
+            items.append(t("scope_lim_feed"))
+        b["scope_limits"] = self.block(items=items)
+        self.blocks = [(t(k), b[k]) for k in SCOPE_BLOCKS]
+
+    def t(self, key):
+        return self.sheet.t(key, self.lang)
+
+    @staticmethod
+    def block(facts=(), rows=None, trunc=(), notes=(), items=None):
+        return {"facts": list(facts), "rows": rows, "trunc": list(trunc),
+                "notes": list(notes), "items": items}
+
+    @staticmethod
+    def cut(text, budget, empty):
+        """Texto livre com teto: ("corte", texto, teto); vazio (so' branco) ->
+        `empty' (NA num fato, "---" numa celula, None para cair no seguinte)."""
+        return ("corte", text, budget) if norm_space(text) else empty
+
+    def count(self, n, declared):
+        """scope-count: n e, se o gvmd declara outro inteiro, a ressalva."""
+        d = norm_space(declared)
+        x = xnum(d)
+        if d and isnum(x) and math.floor(x) == x and x != n:
+            return "%d (%s %d)" % (n, self.t("scope_gvmd_count"), int(x))
+        return str(n)
+
+    def trunc(self, n, key):
+        if n <= self.cap:
+            return []
+        return ["\\suriEllip\\ + " + gvm_num(n - self.cap, self.lang) + self.t(key)]
+
+    def date(self, s):
+        """emit-date: "Tue Sep 1, 2026 09:00 UTC" / "ter, 1 set 2026 09:00 UTC"."""
+        if not s:
+            return NA
+        mt = ISO_DATE.match(s)
+        if not mt:
+            return ("ilegivel", s)
+        y, mo, d, hh, mi = mt.groups()
+        dow = datetime.date(int(y), int(mo), int(d)).isoweekday() % 7 + 1   # 1 = domingo
+        L = bucket(self.lang)
+        mon = self.sheet.words("mon-" + L)[int(mo) - 1]
+        dw = self.sheet.words("dow-" + L)[dow - 1]
+        root = self.m.root
+        tz = xp_text(root.find("report/timezone_abbrev") if root.get("extension") == "xml"
+                     else root.find("timezone_abbrev"))
+        if L == "en":
+            return "%s %s %d, %d %s:%s %s" % (dw, mon, int(d), int(y), hh, mi, tz)
+        return "%s, %d %s %d %s:%s %s" % (dw, int(d), mon, int(y), hh, mi, tz)
+
+    def duration(self, start, end):
+        """scope-duration: fim - inicio, truncado em s / min / h MM min; fim
+        antes do inicio ou no mesmo instante (o carimbo do import do sensor)
+        nao e' duracao medida."""
+        a, z = (parse_iso(start), parse_iso(end)) if start and end else (None, None)
+        if a is None or z is None or z <= a:
+            return NA
+        d = (z - a).total_seconds()
+        if d < 60:
+            return "%d s" % math.floor(d)
+        if d < 3600:
+            return "%d min" % math.floor(d / 60)
+        return "%d h %02d min" % (math.floor(d / 3600), math.floor((d % 3600) / 60))
+
+    def feed_version(self, v):
+        """scope-feed-version: AAAAMMDDhhmm -> "Oct 11, 2026 04:57" (en) ou
+        "11 out 2026 04:57" (pt/es); fora do formato, o valor como esta'."""
+        mt = re.fullmatch(r"(\d{4})(\d\d)(\d\d)(\d\d)(\d\d)", v)
+        if not mt:
+            return v
+        y, mo, d, hh, mi = mt.groups()
+        if not (1 <= int(mo) <= 12 and 1 <= int(d) <= 31 and int(hh) <= 23 and int(mi) <= 59):
+            return v
+        L = bucket(self.lang)
+        mon = self.sheet.words("mon-" + L)[int(mo) - 1]
+        if L == "en":
+            return "%s %d, %s %s:%s" % (mon, int(d), y, hh, mi)
+        return "%d %s %s %s:%s" % (int(d), mon, y, hh, mi)
+
+    def levels(self, lv):
+        """scope-levels: as letras por extenso, na ordem, sem repetir (ate' 200)."""
+        out = []
+        for i, ch in enumerate(lv[:200]):
+            if ch not in lv[:i]:
+                out.append(self.t(LEVEL_KEYS[ch]) if ch in LEVEL_KEYS else ch)
+        return ", ".join(out)
+
+
+def scope_value_fails(where, got, want):
+    """[] se o valor `got' (o LaTeX de um fato ou de uma celula) diz `want':
+    NA = \\scopena; ("corte", texto, teto) = o texto com o corte declarado do
+    escape_break (cut_fails); ("ilegivel", s) = sempre falha; senao, o texto
+    que o leitor ve (flat) igual."""
+    got = got.strip()
+    if isinstance(want, tuple) and want[0] == "corte":
+        if got == NA:
+            return ["%s = \\scopena, e o XML tem '%s'" % (where, norm_space(want[1])[:40])]
+        return cut_fails(where, want[2], want[1], plain(got), trunc_count(got))
+    if isinstance(want, tuple):
+        return ["%s com data ilegivel no XML (%r)" % (where, want[1])]
+    if want == NA:
+        return ([] if got == NA else
+                ["%s = '%s', esperado \\scopena (o XML nao traz o dado)" % (where, flat(got)[:60])])
+    if got == NA:
+        return ["%s = \\scopena, e o XML traz '%s'" % (where, want[:60])]
+    if flat(got) != norm_space(want):
+        return ["%s = '%s', esperado '%s'" % (where, flat(got)[:70], want[:70])]
+    return []
+
+
+def check_escopo(m, tex, sheet, lang):
+    """A secao 6 (escopo, metodologia e limitacoes) diz a verdade sobre o XML,
+    linha a linha: cada \\scopefact com o rotulo e o valor que o relatorio
+    sustenta -- \\scopena EXATAMENTE quando o dado falta, os textos livres com
+    o teto e o corte declarado --, as tabelas de autenticacao e de erros com
+    as linhas e as celulas certas, na ordem, ate' o teto $scope-rows-max, e o
+    corte declarado ("+ N") so' acima dele, com o N certo; as notas e os itens
+    de limitacoes conforme o estado do scan (nunca iniciou, nao terminou,
+    inventario do agente) e a versao do feed."""
+    fails = []
+    if 6 not in tex.sections:
+        return ["secao 6 ausente"]
+    text, _ = tex.section(6)
+    want = ScopeOracle(m, sheet, lang)
+    labels = macros(text, "blocklabel", 1)
+    got_labels = [a[0] for _, a in labels]
+    want_labels = [lbl for lbl, _ in want.blocks]
+    if got_labels != want_labels:
+        return ["blocos %s, esperado %s" % (got_labels, want_labels)]
+    intro = macros(text[:labels[0][0]], "suriPara", 1)
+    if [a[0] for _, a in intro] != [sheet.t("scope_intro", lang)]:
+        fails.append("introducao da secao: %s" % [a[0][:60] for _, a in intro])
+    n_na = 0
+    for i, (lbl, exp) in enumerate(want.blocks):
+        p = labels[i][0]
+        blk = text[p:labels[i + 1][0] if i + 1 < len(labels) else len(text)]
+        where = "secao 6 / %s" % lbl
+        # Fatos: rotulo e valor, na ordem.
+        facts = macros(blk, "scopefact", 2)
+        if [a[0] for _, a in facts] != [k for k, _ in exp["facts"]]:
+            fails.append("%s: rotulos %s, esperado %s"
+                         % (where, [a[0] for _, a in facts], [k for k, _ in exp["facts"]]))
+        else:
+            for (_, a), (k, v) in zip(facts, exp["facts"]):
+                n_na += v == NA
+                fails += scope_value_fails("%s: '%s'" % (where, k), a[1], v)
+        # Tabela (ate' o teto), celula a celula, e o corte declarado.
+        for kind, nargs in (("authrow", 3), ("errorrow", 4)):
+            got_rows = [a for _, a in macros(blk, kind, nargs)]
+            want_rows = exp["rows"][1][:want.cap] if exp["rows"] and exp["rows"][0] == kind else []
+            if len(got_rows) != len(want_rows):
+                fails.append("%s: %d \\%s, esperado %d (teto %d)"
+                             % (where, len(got_rows), kind, len(want_rows), want.cap))
+                continue
+            for r, (ga, wr) in enumerate(zip(got_rows, want_rows), 1):
+                for c, (gx, wx) in enumerate(zip(ga, wr), 1):
+                    cell = "%s: \\%s %d, coluna %d" % (where, kind, r, c)
+                    if kind == "authrow" and c == 3:
+                        if gx.strip() != wx:
+                            fails.append("%s: resultado '%s', esperado '%s'" % (cell, gx.strip(), wx))
+                    else:
+                        fails += scope_value_fails(cell, gx, wx)
+        got_trunc = [a[0] for _, a in macros(blk, "scopetrunc", 1)]
+        if got_trunc != exp["trunc"]:
+            fails.append("%s: corte declarado %s, esperado %s" % (where, got_trunc, exp["trunc"]))
+        got_notes = [a[0] for _, a in macros(blk, "blocknote", 1)]
+        if got_notes != exp["notes"]:
+            fails.append("%s: notas %s, esperado %s"
+                         % (where, [x[:50] for x in got_notes], [x[:50] for x in exp["notes"]]))
+        if exp["items"] is not None:
+            b0, b1 = blk.find("\\begin{suribullets}"), blk.find("\\end{suribullets}")
+            items = ([x.strip() for x in re.split(r"\\item(?![A-Za-z@])", blk[b0:b1])[1:]]
+                     if 0 <= b0 < b1 else [])
+            if items != exp["items"]:
+                fails.append("%s: itens %s, esperado %s"
+                             % (where, [x[:50] for x in items], [x[:50] for x in exp["items"]]))
+    # "Nao informado" so' onde o dado falta: nenhum \scopena fora dos fatos que
+    # o oraculo marcou ausentes (numa celula de tabela, numa nota...).
+    total_na = len(re.findall(r"\\scopena(?![A-Za-z@])", text))
+    if total_na != n_na:
+        fails.append("%d \\scopena na secao 6, esperado %d (um por dado ausente)" % (total_na, n_na))
+    return fails
+
+
+def check_alerta(m, tex, sheet, lang):
+    """O resumo executivo (secao 1) abre com o alerta de "nada medido" se e
+    somente se o relatorio nao tem host, e o alerta da' a causa que o dado
+    sustenta, pelas MESMAS regras das notas da secao 6: a tarefa que nunca
+    iniciou nao recebe o conselho de corrigir um alive test que nao rodou; o
+    scan que iniciou e nao terminou recebe o corpo neutro (nao terminou, nenhum
+    host registrado), sem diagnostico; so' o scan que terminou sem achar host
+    recebe o conselho do alive test."""
+    boxes = macros(tex.section(1)[0], "alertbox", 2)
+    if m.hosts > 0:
+        return ["alerta de 'nada medido' num relatorio com %d host(s)" % m.hosts] if boxes else []
+    if len(boxes) != 1:
+        return ["%d alerta(s) no resumo executivo de um relatorio sem host, esperado 1" % len(boxes)]
+
+    def t(k):
+        return sheet.t(k, lang)
+    st = ScanState(m)
+    if st.never_started:
+        want = (t("never_title"), t("never_body_a") + "\\textbf{" + t("nohost_body_b") + "}"
+                + t("never_body_c"))
+        why = "a tarefa nao iniciou"
+    elif st.unfinished:
+        want = (t("unfin_title"), t("unfin_body_a") + "\\textbf{" + t("nohost_body_b") + "}"
+                + t("unfin_body_c"))
+        why = "o scan iniciou e nao terminou (%s)" % st.status
+    else:
+        want = (t("nohost_title"), t("nohost_body_a") + "\\textbf{" + t("nohost_body_b") + "}"
+                + t("nohost_body_c"))
+        why = "o scan iniciou e nenhum host respondeu"
+    got = tuple(x.strip() for x in boxes[0][1])
+    if got != want:
+        return ["alerta '%s' ('%s...'), esperado '%s' (%s)" % (got[0], got[1][:50], want[0], why)]
+    return []
 
 
 CHECKS = [
     ("numeracao", check_numeracao), ("secoes", check_secoes),
     ("consolidado", check_consolidado), ("instancias", check_instancias),
     ("acao", None), ("vulns-unicas", check_vulns_unicas), ("faixas", check_faixas),
-    ("ancoras", check_ancoras), ("nome", check_nome),
+    ("ancoras", check_ancoras), ("nome", check_nome), ("escopo", check_escopo),
+    ("alerta", check_alerta),
 ]
 
 

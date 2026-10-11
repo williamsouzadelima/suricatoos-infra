@@ -30,19 +30,20 @@
 #                (ver a nota abaixo); se o XML tem <result>, ao menos UM link
 #                de ACHADO (fnd-/grp-): 0 links com 0 alvos fecha a conta e
 #                passaria em vazio justamente quando o sumario de achados ou
-#                os cards sumissem -- e os 6 links da pagina de sumario
+#                os cards sumissem -- e os 7 links da pagina de sumario
 #                (sec-N), que existem em todo relatorio, NAO contam para esse
-#                piso; e exatamente esses 6, sec-1..sec-6, um de cada;
+#                piso; e exatamente esses 7, sec-1..sec-7, um de cada;
 #   overfull     #`Overfull \hbox` <= linha de base de (idioma, fixture);
 #   paridade     paginas do PDF do generate == paginas do diagnostico, ou seja,
 #                os portoes de log mediram o MESMO documento que o generate
 #                entrega;
 #   veracidade   check-veracity.py: o .tex diz a verdade sobre o XML
 #                (numeracao, secoes, consolidado, instancias, acao, VULNS
-#                UNICAS, faixas, ancoras, nome do projeto);
-#   navegacao    check-navigation.py: a pagina de sumario lista as 6 secoes
+#                UNICAS, faixas, ancoras, nome do projeto e a secao 6 de
+#                escopo, metodologia e limitacoes);
+#   navegacao    check-navigation.py: a pagina de sumario lista as 7 secoes
 #                e cada linha leva ao alto da sua; o PDF do generate TEM a
-#                arvore de marcadores (6 secoes no nivel 0; hosts da secao 3 e
+#                arvore de marcadores (7 secoes no nivel 0; hosts da secao 3 e
 #                cards da secao 5 no nivel 1, com o numero e o titulo do card),
 #                todo marcador aponta para um destino que existe, dentro da
 #                secao do pai, e a pagina que o sumario imprime (rotulo do
@@ -63,9 +64,11 @@
 # exata e' portanto alvos == links + soma(N) -- que vira a igualdade quando nao
 # ha corte --, e o defeito que a regua existe para pegar (link para ancora que
 # nao existe) e' checado diretamente.
-# A pagina de sumario soma 6 links (\hyperlink{sec-N}) e 6 alvos
+# A pagina de sumario soma 7 links (\hyperlink{sec-N}) e 7 alvos
 # (\hypertarget{sec-N}{}, um antes de cada \suriSection): entram dos dois lados
-# da conta, que continua exata. Os marcadores do PDF NAO sao \hyperlink nem
+# da conta, que continua exata. Os cortes das tabelas da secao 6 (autenticacao,
+# erros de scan) saem em \scopetrunc, e NAO em \findingtrunc, justamente para
+# ficar fora desta soma: aquelas linhas nao tem card nem alvo. Os marcadores do PDF NAO sao \hyperlink nem
 # \hypertarget (sao \pdfbookmark, com destino proprio): nao mexem nesta conta, e
 # um marcador sem destino aparece no portao "destinos do PDF" (o pdfTeX avisa) e
 # no de navegacao.
@@ -100,11 +103,24 @@ overfull_baseline() {
     es/tortura)    echo 0 ;;
     # Fixtures de veracidade (report-formats/tests/fixtures/), nos 3 idiomas:
     # nascem com 0, a mesma regua das outras. v10-navegacao (secao 3 em varias
-    # paginas, host em dois cards, marcador acima do teto) tambem.
+    # paginas, host em dois cards, marcador acima do teto) tambem, e as da
+    # secao 6 (v11 autenticacao, erros e feed; v12 tarefa que nao iniciou; v13
+    # tabelas acima do teto, celulas que quebram e cortes declarados; v14 scan
+    # interrompido; v15/v16 inventario do agente; v17 concluido sem host; v18
+    # import do sensor; v19a/v19b o veto do comentario do bridge; v20a..v20i a
+    # tabela de estados).
     */v1-numeracao | */v2-indicadores-vazios | */v3-consolidado-qod | \
     */v4-instancias | */v5-acao-traduzida | */v6-vulns-unicas | \
     */v7a-faixas | */v7b-lowconf | */v7c-todos-lowconf | \
-    */v8-ancora | */v9-nome-capa | */v10-navegacao) echo 0 ;;
+    */v8-ancora | */v9-nome-capa | */v10-navegacao | \
+    */v11-escopo-autenticado | */v12-escopo-nao-iniciado | */v13-escopo-cortes | \
+    */v14-escopo-interrompido | */v15-escopo-agente | */v16-escopo-agente-limpo | \
+    */v17-escopo-concluido-vazio | */v18-escopo-sensor | \
+    */v19a-escopo-comentario-do-agente-auth | */v19b-escopo-comentario-do-agente-feed | \
+    */v20a-estado-em-execucao | */v20b-estado-parada-solicitada | */v20c-estado-parado | \
+    */v20d-estado-novo | */v20e-estado-solicitado | */v20f-estado-na-fila | \
+    */v20g-estado-parada-solicitada-sem-inicio | */v20h-estado-parado-sem-inicio | \
+    */v20i-estado-interrompido-sem-inicio) echo 0 ;;
     *) return 1 ;;
   esac
 }
@@ -297,7 +313,7 @@ if [ -s "$tex" ]; then
   detail="$n_links \\hyperlink ($n_find_links de achado, $n_toc do sumario), $n_targets \\hypertarget, corte declarado no sumario: $trunc, links sem alvo: $n_dangling"
   # A conta acima fecha com 0 = 0: sem este piso, um sumario de achados que
   # sumisse inteiro passaria. Fixture com <result> tem de ter ao menos um link
-  # de ACHADO -- os 6 da pagina de sumario existem em qualquer relatorio e nao
+  # de ACHADO -- os 7 da pagina de sumario existem em qualquer relatorio e nao
   # podem segurar o piso no lugar deles.
   n_results=0
   if [ -n "$xml" ] && [ -f "$xml" ]; then
@@ -305,8 +321,8 @@ if [ -s "$tex" ]; then
   fi
   if [ "$n_results" -gt 0 ] && [ "$n_find_links" -eq 0 ]; then
     gate falha "links/alvos" "$detail -- e o XML tem $n_results <result>: sumario de achados sem nenhum link"
-  elif [ "$toc_got" != "sec-1 sec-2 sec-3 sec-4 sec-5 sec-6 " ]; then
-    gate falha "links/alvos" "$detail -- a pagina de sumario tem de ter os 6 links sec-1..sec-6, um de cada; tem: ${toc_got:-nenhum}"
+  elif [ "$toc_got" != "sec-1 sec-2 sec-3 sec-4 sec-5 sec-6 sec-7 " ]; then
+    gate falha "links/alvos" "$detail -- a pagina de sumario tem de ter os 7 links sec-1..sec-7, um de cada; tem: ${toc_got:-nenhum}"
   elif [ "$n_dangling" -eq 0 ] && [ "$n_targets" -eq $((n_links + trunc)) ]; then
     gate ok "links/alvos" "$detail"
   else
