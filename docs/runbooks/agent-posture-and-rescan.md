@@ -99,12 +99,27 @@ o histórico guarda os últimos 20 por agente.
 |---|---|
 | `PENDING` | na fila; o agente ainda não fez poll |
 | `DELIVERED` | o agente recebeu no poll — só `ACKED` prova que executou (sem ack, é entregue de novo no próximo poll) |
-| `ACKED` | o agente confirmou que executou |
+| `ACKED` | o agente confirmou que executou (vale também o ack tardio, depois do TTL, de um comando que ele já tinha recebido) |
 | `SUPERSEDED` | um pedido mais novo substituiu este (1 pendente por agente) |
-| `EXPIRED` | passou do TTL sem ack; não é mais entregue |
+| `EXPIRED` | passou do TTL sem ack; não é mais entregue (um comando que nunca chegou ao agente fica `EXPIRED`) |
 
 > Esta consulta só existe a partir do deploy do control-plane que a inclui; antes
 > disso só o `POST` acima está disponível.
+
+### Limites e respostas de erro
+
+A fila é limitada de propósito (cada mudança regrava o arquivo inteiro sob o lock de
+todo poll do agente, e o boot carrega tudo):
+
+| Resposta | Quando |
+|---|---|
+| `400` | `<agent-id>` inválido: fora de 1..128 bytes, ou com caractere de controle ou de DN (`, = + " \ ; < >`) — a mesma regra do enrollment |
+| `404` | só no botão **Escanear agora**: o agente não está enrolado (a checagem precisa de `TOKEN_DB_PATH`; sem ele fica desligada). A rota com Bearer não faz essa checagem |
+| `503` | já há `COMMANDS_MAX_AGENTS` agentes distintos na fila (padrão 5000) e nenhum está ocioso há mais que o TTL sem comando vivo; um agente que já está na fila continua sendo aceito |
+| `500` | com `COMMANDS_FILE`, não foi possível gravar o arquivo — nada foi enfileirado (veja o log do control-plane) |
+
+Se um agente enrolado antes de o `TOKEN_DB_PATH` existir recebe `404` no botão, ele
+não está no store persistente: use a rota com Bearer ou reenrole o agente.
 
 ## Referências
 
