@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 )
 
 // fakeCRL is a RevocationList whose answer the test fixes.
@@ -40,13 +41,25 @@ func identityServer(t *testing.T, mode IdentityMode, crl RevocationList) (*Serve
 }
 
 // postAs posts an inventory claiming agentID with the identity headers nginx sets on
-// /ingest/ (an empty value = header not forwarded).
+// /ingest/ (an empty value = header not forwarded). A DN comes with
+// X-Client-Cert-Verify: SUCCESS, as nginx sends it.
 func postAs(h http.Handler, agentID, dn, serial string) *httptest.ResponseRecorder {
+	verify := ""
+	if dn != "" {
+		verify = "SUCCESS"
+	}
+	return postIdentity(h, agentID, dn, serial, verify)
+}
+
+// postIdentity is postAs with an explicit X-Client-Cert-Verify ("" = not sent).
+func postIdentity(h http.Handler, agentID, dn, serial, verify string) *httptest.ResponseRecorder {
 	body := fmt.Sprintf(`{"schema_version":"1.1.0","agent":{"agent_id":%q,"hostname":"h"},"os":{"family":"linux"},"cycle_hash":"x"}`, agentID)
 	r := httptest.NewRequest(http.MethodPost, "/v1/inventory", strings.NewReader(body))
 	if dn != "" {
 		r.Header.Set("X-Client-Cert-DN", dn)
-		r.Header.Set("X-Client-Cert-Verify", "SUCCESS")
+	}
+	if verify != "" {
+		r.Header.Set("X-Client-Cert-Verify", verify)
 	}
 	if serial != "" {
 		r.Header.Set("X-Client-Cert-Serial", serial)
@@ -56,33 +69,49 @@ func postAs(h http.Handler, agentID, dn, serial string) *httptest.ResponseRecord
 	return w
 }
 
-// The mode × case matrix of the inventory identity check.
+// noVerify, as a matrix case's verify, sends no X-Client-Cert-Verify at all.
+const noVerify = "<absent>"
+
+// The mode × case matrix of the inventory identity check. In enforce, a request whose
+// identity nginx did not establish (no DN, no serial while a CRL is wired, a Verify
+// other than SUCCESS) is refused like a mismatch; log keeps accepting it.
 func TestInventoryAgentIdentityModes(t *testing.T) {
 	type want struct{ off, log, enforce int }
 	cases := []struct {
 		name                string
 		agentID, dn, serial string
+		verify              string // "" = as nginx sends it (SUCCESS with a DN); noVerify = not sent
 		crl                 RevocationList
 		want                want
 		logged              string // the one log line expected in log/enforce ("" = none)
 	}{
-		{"CN igual", "a1", dnA1, serialOK, crlOK, want{202, 202, 202}, ""},
-		{"CN diferente", "victim", dnA1, serialOK, crlOK, want{202, 202, 403}, `ingest: agent_id≠CN (agent_id="victim" cn="a1")`},
-		{"sem DN (nginx antigo)", "a1", "", "", crlOK, want{202, 202, 202}, "sem X-Client-Cert-DN"},
-		{"sem serial", "a1", dnA1, "", crlOK, want{202, 202, 202}, "sem X-Client-Cert-Serial"},
-		{"serial revogado", "a1", dnA1, serialRevkd, crlOK, want{202, 202, 403}, "certificado revogado"},
-		{"CRL indisponível", "a1", dnA1, serialOK, crlUnknown, want{202, 202, 202}, "CRL indisponível"},
-		{"DN legado, CN igual", "a1", dnA1Legacy, serialOK, crlOK, want{202, 202, 202}, ""},
-		{"DN legado, CN diferente", "victim", dnA1Legacy, serialOK, crlOK, want{202, 202, 403}, `agent_id≠CN (agent_id="victim" cn="a1")`},
-		{"CN não-ASCII escapado pelo nginx", "estação-01", `CN=esta\C3\A7\C3\A3o-01,O=acme`, serialOK, crlOK, want{202, 202, 202}, ""},
-		{"O com vírgula escapada não injeta CN", "evil", `CN=a1,O=acme\,CN=evil`, serialOK, crlOK, want{202, 202, 403}, `agent_id≠CN (agent_id="evil" cn="a1")`},
-		{"DN sem CN", "a1", "O=acme,OU=agent-endpoint", serialOK, crlOK, want{202, 202, 403}, `agent_id≠CN (agent_id="a1" cn="")`},
+		{"CN igual", "a1", dnA1, serialOK, "", crlOK, want{202, 202, 202}, ""},
+		{"CN diferente", "victim", dnA1, serialOK, "", crlOK, want{202, 202, 403}, `ingest: agent_id≠CN (agent_id="victim" cn="a1")`},
+		{"sem DN (nginx antigo)", "a1", "", "", "", crlOK, want{202, 202, 403}, "sem X-Client-Cert-DN"},
+		{"sem serial", "a1", dnA1, "", "", crlOK, want{202, 202, 403}, "sem X-Client-Cert-Serial"},
+		{"verify ≠ SUCCESS", "a1", dnA1, serialOK, "FAILED:certificate has expired", crlOK, want{202, 202, 403}, `X-Client-Cert-Verify="FAILED:certificate has expired"`},
+		{"verify ausente (DN e serial presentes)", "a1", dnA1, serialOK, noVerify, crlOK, want{202, 202, 202}, ""},
+		{"serial revogado", "a1", dnA1, serialRevkd, "", crlOK, want{202, 202, 403}, "certificado revogado"},
+		{"CRL indisponível", "a1", dnA1, serialOK, "", crlUnknown, want{202, 202, 202}, "CRL indisponível"},
+		{"DN legado, CN igual", "a1", dnA1Legacy, serialOK, "", crlOK, want{202, 202, 202}, ""},
+		{"DN legado, CN diferente", "victim", dnA1Legacy, serialOK, "", crlOK, want{202, 202, 403}, `agent_id≠CN (agent_id="victim" cn="a1")`},
+		{"CN não-ASCII escapado pelo nginx", "estação-01", `CN=esta\C3\A7\C3\A3o-01,O=acme`, serialOK, "", crlOK, want{202, 202, 202}, ""},
+		{"O com vírgula escapada não injeta CN", "evil", `CN=a1,O=acme\,CN=evil`, serialOK, "", crlOK, want{202, 202, 403}, `agent_id≠CN (agent_id="evil" cn="a1")`},
+		{"DN sem CN", "a1", "O=acme,OU=agent-endpoint", serialOK, "", crlOK, want{202, 202, 403}, `agent_id≠CN (agent_id="a1" cn="")`},
 	}
 	for _, mode := range []IdentityMode{IdentityOff, IdentityLog, IdentityEnforce} {
 		for _, tc := range cases {
 			t.Run(string(mode)+"/"+tc.name, func(t *testing.T) {
 				s, sink, logs := identityServer(t, mode, tc.crl)
-				w := postAs(s.Handler(), tc.agentID, tc.dn, tc.serial)
+				var w *httptest.ResponseRecorder
+				switch tc.verify {
+				case "":
+					w = postAs(s.Handler(), tc.agentID, tc.dn, tc.serial)
+				case noVerify:
+					w = postIdentity(s.Handler(), tc.agentID, tc.dn, tc.serial, "")
+				default:
+					w = postIdentity(s.Handler(), tc.agentID, tc.dn, tc.serial, tc.verify)
+				}
 				code := map[IdentityMode]int{IdentityOff: tc.want.off, IdentityLog: tc.want.log, IdentityEnforce: tc.want.enforce}[mode]
 				if w.Code != code {
 					t.Fatalf("status = %d, want %d (body %q)", w.Code, code, w.Body)
@@ -109,25 +138,57 @@ func TestInventoryAgentIdentityModes(t *testing.T) {
 	}
 }
 
-// What nginx does not forward cannot be checked: accepted and logged once per agent
-// (not once per report), in every mode that checks.
+// A request whose identity nginx did not forward is logged once per agent (not once
+// per report): accepted in log (deploy transition), refused in enforce.
 func TestInventoryMissingIdentityIsLoggedOncePerAgent(t *testing.T) {
-	for _, mode := range []IdentityMode{IdentityLog, IdentityEnforce} {
+	for mode, want := range map[IdentityMode]int{IdentityLog: http.StatusAccepted, IdentityEnforce: http.StatusForbidden} {
 		s, sink, logs := identityServer(t, mode, crlOK)
 		h := s.Handler()
 		for i := range 3 {
-			if w := postAs(h, "a1", "", ""); w.Code != http.StatusAccepted {
-				t.Fatalf("%s: post #%d without identity = %d, want 202", mode, i+1, w.Code)
+			if w := postAs(h, "a1", "", ""); w.Code != want {
+				t.Fatalf("%s: post #%d without identity = %d, want %d", mode, i+1, w.Code, want)
 			}
 		}
-		if w := postAs(h, "a2", "", ""); w.Code != http.StatusAccepted {
-			t.Fatalf("%s: other agent = %d, want 202", mode, w.Code)
+		if w := postAs(h, "a2", "", ""); w.Code != want {
+			t.Fatalf("%s: other agent = %d, want %d", mode, w.Code, want)
 		}
-		if sink.Count() != 4 {
-			t.Fatalf("%s: sink = %d, want 4", mode, sink.Count())
+		if accepted := map[bool]int{true: 4, false: 0}[want == http.StatusAccepted]; sink.Count() != accepted {
+			t.Fatalf("%s: sink = %d, want %d", mode, sink.Count(), accepted)
 		}
 		if len(*logs) != 2 || !strings.Contains((*logs)[0], `"a1"`) || !strings.Contains((*logs)[1], `"a2"`) {
 			t.Fatalf("%s: want one line for a1 and one for a2, got %q", mode, *logs)
+		}
+	}
+}
+
+// agent_id comes from a body (up to 8 MB) that the agent writes: log lines and the
+// log-once keys carry at most its first 128 bytes — the enrollment maximum — cut on a
+// character boundary.
+func TestInventoryLogsBoundTheAgentID(t *testing.T) {
+	long := strings.Repeat("x", 10000)
+	s, _, logs := identityServer(t, IdentityLog, crlOK)
+	h := s.Handler()
+	postAs(h, long, dnA1, serialOK)      // agent_id≠CN line
+	postAs(h, long, "", "")              // missing-identity line, keyed for log-once
+	postAs(h, long+"tail", "", "")       // same first 128 bytes: same key, not logged again
+	accented := strings.Repeat("é", 100) // 200 bytes, 2 per character
+	postAs(h, accented, dnA1, serialOK)
+	if len(*logs) != 3 {
+		t.Fatalf("want 3 log lines, got %d: %.300q", len(*logs), *logs)
+	}
+	for _, l := range (*logs)[:2] {
+		if len(l) > 600 || !strings.Contains(l, strings.Repeat("x", 128)) || strings.Contains(l, strings.Repeat("x", 129)) {
+			t.Errorf("log line does not carry exactly the first 128 bytes of agent_id (len %d): %.300q", len(l), l)
+		}
+	}
+	if l := (*logs)[2]; !strings.Contains(l, strings.Repeat("é", 64)) || strings.Contains(l, strings.Repeat("é", 65)) || !utf8.ValidString(l) {
+		t.Errorf("accented agent_id must be cut at 64 characters (128 bytes) on a character boundary: %q", l)
+	}
+	s.noted.mu.Lock()
+	defer s.noted.mu.Unlock()
+	for k := range s.noted.seen {
+		if len(k) > 256 {
+			t.Errorf("log-once key of %d bytes: the agent_id in it is not bounded", len(k))
 		}
 	}
 }
@@ -222,7 +283,7 @@ func TestSetAgentIdentityLogsTheActiveMode(t *testing.T) {
 	}{
 		{IdentityOff, nil, []string{"INGEST_AGENT_IDENTITY", "modo=off"}},
 		{IdentityLog, crlOK, []string{"INGEST_AGENT_IDENTITY", "modo=log", "CRL"}},
-		{IdentityEnforce, crlOK, []string{"INGEST_AGENT_IDENTITY", "modo=enforce", "403", "CRL"}},
+		{IdentityEnforce, crlOK, []string{"INGEST_AGENT_IDENTITY", "modo=enforce", "403", "CRL", "mTLS"}},
 		{IdentityEnforce, nil, []string{"modo=enforce", "revogação não conferida"}},
 	} {
 		s := NewServer(&MemSink{})

@@ -154,12 +154,19 @@ docker compose stop ingest && docker compose rm -f ingest
   `ingest: agent_id≠CN (...)` / `certificado revogado` e aceita; `enforce` responde
   403; `off` desliga. Agentes ≥ 0.1.4 mandam `agent_id` = CN. Rode em `log` por pelo
   menos um ciclo de report (15 min) e só passe a `enforce` se nenhuma dessas linhas
-  aparecer. CRL indisponível ⇒ loga e aceita (fail-open de propósito: derrubar a
-  frota por CRL fora do ar seria pior). No smoke test do passo 5, o `agent_id` do
-  `inventario-de-teste.json` tem de ser o CN do `agent.crt` (`openssl x509 -noout
-  -subject -in agent.crt`), senão aparece a linha `agent_id≠CN` (e 403 em `enforce`).
-- Ordem de deploy: tanto faz. Ingest novo com nginx antigo → loga uma vez por agente
-  que o DN/serial não chegou e aceita; nginx novo com ingest antigo → headers a mais,
-  ignorados.
+  aparecer — nem `identidade do agente não estabelecida pelo nginx`. CRL indisponível
+  ⇒ loga e aceita (fail-open de propósito: derrubar a frota por CRL fora do ar seria
+  pior). No smoke test do passo 5, o `agent_id` do `inventario-de-teste.json` tem de
+  ser o CN do `agent.crt` (`openssl x509 -noout -subject -in agent.crt`), senão
+  aparece a linha `agent_id≠CN` (e 403 em `enforce`).
+- **`enforce` exige o perfil do nginx com mTLS (`default.conf`)**: nele, um pedido sem
+  `X-Client-Cert-DN`, sem `X-Client-Cert-Serial` (com CRL ligada) ou com
+  `X-Client-Cert-Verify` ≠ `SUCCESS` também leva 403. **Não use `enforce` no perfil
+  standalone** (`standalone.conf`, sem mTLS) até a fatia de paridade de mTLS: lá o
+  ingest recebe os `X-Client-Cert-*` que o cliente mandar, e a checagem não prova nada.
+- Ordem de deploy: tanto faz, com o ingest em `log`. Ingest novo com nginx antigo →
+  loga uma vez por agente que o DN/serial não chegou e aceita; nginx novo com ingest
+  antigo → headers a mais, ignorados. Só passe a `enforce` depois do nginx novo (em
+  `enforce`, o pedido sem DN/serial leva 403).
 - O ingest nunca falha o 202 para o agente: erros de correlação/import são logados,
   não propagados (store-and-forward do agente cuida do retry).

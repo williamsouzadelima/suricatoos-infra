@@ -20,8 +20,10 @@
 //	                 agent_id in the body vs the CN of the client certificate nginx
 //	                 verified (X-Client-Cert-DN), and certificate revocation
 //	                 (X-Client-Cert-Serial vs the CRL). log = log and accept;
-//	                 enforce = 403; off = no check. An unavailable CRL is logged and
-//	                 the inventory accepted (fail-open, unlike sensor-report).
+//	                 enforce = 403, also without DN/serial or with a Verify other
+//	                 than SUCCESS (needs the nginx profile with mTLS, never the
+//	                 standalone one); off = no check. An unavailable CRL is logged
+//	                 and the inventory accepted (fail-open, unlike sensor-report).
 //	SCAN_CRL_URL     control-plane CRL (DER) for the inventory and sensor-report
 //	                 revocation checks (default: http://control-plane:8080/v1/crl.der)
 package main

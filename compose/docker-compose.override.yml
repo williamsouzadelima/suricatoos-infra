@@ -256,10 +256,12 @@ services:
       # Identidade do agente no inventário: o agent_id do corpo tem de ser o CN do
       # cert que o nginx verificou, e o cert não pode estar revogado (CRL em
       # SCAN_CRL_URL). log (padrão) = só loga "ingest: agent_id≠CN" / "certificado
-      # revogado" e aceita; enforce = 403; off = não confere. Agentes >= 0.1.4 já
-      # mandam agent_id = CN. Passe a enforce só depois de rodar em log sem nenhuma
-      # dessas linhas no `docker compose logs ingest`. CRL fora do ar ⇒ loga e aceita
-      # (fail-open de propósito no inventário; sensor-report segue fail-closed).
+      # revogado" e aceita; enforce = 403 (também sem DN/serial ou com verify ≠
+      # SUCCESS: exige este nginx com mTLS, nunca o perfil standalone); off = não
+      # confere. Agentes >= 0.1.4 já mandam agent_id = CN. Passe a enforce só depois
+      # de rodar em log sem nenhuma dessas linhas no `docker compose logs ingest`.
+      # CRL fora do ar ⇒ loga e aceita (fail-open de propósito no inventário;
+      # sensor-report segue fail-closed).
       INGEST_AGENT_IDENTITY: "${INGEST_AGENT_IDENTITY:-log}"
       # --- Loop reNgine→OpenVAS (ADR-0006) — nasce DARK ---
       # enabled=false → POST /ingest/v1/scan-request responde 503; allowlist vazia

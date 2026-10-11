@@ -14,7 +14,7 @@ package ingest
 //	off      nothing is checked (the behavior before this check existed)
 //	log      (default) agent_id ≠ CN and a revoked certificate are logged, and the
 //	         inventory is accepted — the rule is observed before it is enforced
-//	enforce  both answer 403
+//	enforce  both answer 403, and so does an identity nginx did not establish
 //
 // Agents since 0.1.4 report agent_id = the CN of their certificate, so the rule
 // matches the current fleet; an older agent reports its OS hostname, which differs
@@ -29,8 +29,12 @@ package ingest
 // A launch path (scan-request) or a tenant-partitioned import (sensor-report) has a
 // different balance, so they keep failing closed.
 //
-// What nginx does not forward cannot be checked: an nginx without the DN/serial lines
-// (deploy transition) is logged once per agent and accepted, in every mode.
+// An identity nginx did not establish — no DN, no serial while a CRL is wired, an
+// X-Client-Cert-Verify other than SUCCESS — is logged once per agent: log accepts it
+// (an nginx that predates the forwarding: deploy transition), enforce refuses it. So
+// enforce requires the nginx profile with mTLS (default.conf). Never the standalone
+// profile until the mTLS parity slice: without mTLS, whatever X-Client-Cert-* the
+// client sends reaches the ingest.
 
 import (
 	"fmt"
@@ -41,6 +45,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 )
 
 // IdentityMode is what POST /v1/inventory does about the agent's client certificate
@@ -102,9 +107,11 @@ func (s *Server) SetAgentIdentity(mode IdentityMode, crl RevocationList) {
 		s.logf("%smodo=off — o agent_id do corpo não é comparado ao CN do certificado e a revogação não é conferida", head)
 		return
 	case IdentityEnforce:
-		what = "modo=enforce — agent_id≠CN do certificado ou certificado revogado → 403"
+		what = "modo=enforce — agent_id≠CN do certificado, certificado revogado ou identidade não estabelecida pelo nginx " +
+			"(sem DN, sem serial, verify≠SUCCESS) → 403; exige o nginx com mTLS (default.conf), nunca o perfil standalone"
 	default:
-		what = "modo=log (padrão) — agent_id≠CN do certificado e certificado revogado só geram log, o inventário é aceito; INGEST_AGENT_IDENTITY=enforce passa a responder 403"
+		what = "modo=log (padrão) — agent_id≠CN do certificado, certificado revogado e identidade não estabelecida pelo nginx " +
+			"só geram log, o inventário é aceito; INGEST_AGENT_IDENTITY=enforce passa a responder 403"
 	}
 	revocation := "revogação não conferida (sem CRL)"
 	if crl != nil {
@@ -115,7 +122,12 @@ func (s *Server) SetAgentIdentity(mode IdentityMode, crl RevocationList) {
 
 // agentIdentityOK applies the identity mode to an inventory whose body claims
 // agentID, against the certificate nginx verified. It writes a 403 and returns false
-// only in enforce mode.
+// only in enforce mode, which refuses, in this order:
+//   - an identity nginx did not establish: X-Client-Cert-Verify sent and not SUCCESS,
+//     no X-Client-Cert-DN, or no X-Client-Cert-Serial while a CRL is wired (log mode
+//     accepts it — an nginx without the forwarding, deploy transition);
+//   - a revoked certificate;
+//   - an agent_id that is not the certificate's CN.
 func (s *Server) agentIdentityOK(w http.ResponseWriter, r *http.Request, agentID string) bool {
 	if s.identity == IdentityOff {
 		return true
@@ -125,17 +137,45 @@ func (s *Server) agentIdentityOK(w http.ResponseWriter, r *http.Request, agentID
 	if enforce {
 		verdict = " — 403"
 	}
+	id := clipLogValue(agentID) // the body's agent_id, bounded for log lines and log-once keys
 	dn := strings.TrimSpace(r.Header.Get("X-Client-Cert-DN"))
 	serial := strings.TrimSpace(r.Header.Get("X-Client-Cert-Serial"))
+	verify, verifySent := r.Header.Get("X-Client-Cert-Verify"), len(r.Header.Values("X-Client-Cert-Verify")) > 0
 	cn := certCN(dn)
 
-	// Revocation first: what a revoked certificate claims does not matter.
+	// An identity nginx did not establish: nothing trustworthy to compare or look up.
+	var gaps []string
+	if verifySent && verify != "SUCCESS" {
+		gaps = append(gaps, fmt.Sprintf("X-Client-Cert-Verify=%q", clipLogValue(verify)))
+	}
+	if dn == "" {
+		gaps = append(gaps, "sem X-Client-Cert-DN")
+	}
+	if serial == "" && s.crl != nil {
+		gaps = append(gaps, "sem X-Client-Cert-Serial")
+	}
+	if len(gaps) > 0 {
+		what := strings.Join(gaps, ", ")
+		if s.noted.first(what + "|" + id) {
+			hint := "transição de deploy: atualize a location /ingest/ do nginx"
+			if enforce {
+				hint = "enforce exige o nginx com mTLS repassando DN, verify e serial do cert"
+			}
+			s.logf("ingest: identidade do agente não estabelecida pelo nginx (agent_id=%q: %s)%s (%s; logado uma vez por agente)", id, what, verdict, hint)
+		}
+		if enforce {
+			http.Error(w, "identidade do certificado não estabelecida", http.StatusForbidden)
+			return false
+		}
+	}
+
+	// Revocation before the CN: what a revoked certificate claims does not matter.
 	if serial != "" && s.crl != nil {
 		switch revoked, known := s.crl.Revoked(serial); {
 		case !known:
 			s.warnCRLUnavailable()
 		case revoked:
-			s.logf("ingest: certificado revogado no inventário (agent_id=%q cn=%q serial=%s)%s", agentID, cn, serial, verdict)
+			s.logf("ingest: certificado revogado no inventário (agent_id=%q cn=%q serial=%s)%s", id, clipLogValue(cn), clipLogValue(serial), verdict)
 			if enforce {
 				http.Error(w, "certificado revogado", http.StatusForbidden)
 				return false
@@ -143,26 +183,32 @@ func (s *Server) agentIdentityOK(w http.ResponseWriter, r *http.Request, agentID
 		}
 	}
 
-	var missing []string
-	if dn == "" {
-		missing = append(missing, "X-Client-Cert-DN")
-	}
-	if serial == "" && s.crl != nil {
-		missing = append(missing, "X-Client-Cert-Serial")
-	}
-	if len(missing) > 0 && s.noted.first(strings.Join(missing, "+")+"|"+agentID) {
-		s.logf("ingest: inventário sem %s do nginx (agent_id=%q) — não conferido; aceito (transição de deploy: atualize a location /ingest/ do nginx; logado uma vez por agente)",
-			strings.Join(missing, " e "), agentID)
-	}
-
 	if dn != "" && cn != agentID {
-		s.logf("ingest: agent_id≠CN (agent_id=%q cn=%q)%s", agentID, cn, verdict)
+		s.logf("ingest: agent_id≠CN (agent_id=%q cn=%q)%s", id, clipLogValue(cn), verdict)
 		if enforce {
 			http.Error(w, "agent_id difere do CN do certificado", http.StatusForbidden)
 			return false
 		}
 	}
 	return true
+}
+
+// maxLogValue bounds what a log line (or a log-once key) carries of a value the
+// client chose: the agent_id comes from a body of up to 8 MB. 128 bytes is the
+// enrollment maximum for an agent id, so a real one is never cut.
+const maxLogValue = 128
+
+// clipLogValue returns v cut to at most maxLogValue bytes on a character boundary,
+// marked with "…" when cut.
+func clipLogValue(v string) string {
+	if len(v) <= maxLogValue {
+		return v
+	}
+	cut := maxLogValue
+	for cut > 0 && !utf8.RuneStart(v[cut]) {
+		cut--
+	}
+	return v[:cut] + "…"
 }
 
 // warnCRLUnavailable logs, at most once per crlWarnEvery, that a serial could not be
