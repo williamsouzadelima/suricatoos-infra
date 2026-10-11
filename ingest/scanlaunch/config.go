@@ -8,6 +8,12 @@ import (
 	"time"
 )
 
+// DefaultFetchRetryLimit bounds the retries of a Done task whose report cannot be
+// fetched (or cached): 20 attempts ≈ 10 min at the 30 s tick — longer if each
+// attempt hits the bridge's 5 min exec timeout — enough to ride out a gvmd hiccup
+// without holding a concurrency slot forever on a persistent error.
+const DefaultFetchRetryLimit = 20
+
 // Config holds the scanlaunch service settings, all from SCAN_* env vars.
 type Config struct {
 	Enabled       bool          // SCAN_LAUNCH_ENABLED — master switch (POST 503 when false)
@@ -31,6 +37,10 @@ type Config struct {
 	CRLURL        string        // SCAN_CRL_URL — control-plane CRL (DER)
 	RequireCRL    bool          // SCAN_REQUIRE_CRL — fail-closed on missing/revoked
 	TickInterval  time.Duration // reconciler tick (fixed, not env)
+
+	// SCAN_FETCH_RETRY_LIMIT — failed fetch/cache attempts of a Done task before
+	// the job turns FAILED (0 = DefaultFetchRetryLimit).
+	FetchRetryLimit int
 }
 
 // ConfigFromEnv builds a Config from the environment with safe defaults. The
@@ -59,6 +69,8 @@ func ConfigFromEnv() Config {
 		CRLURL:        envStr("SCAN_CRL_URL", "http://control-plane:8080/v1/crl.der"),
 		RequireCRL:    envBool("SCAN_REQUIRE_CRL", true),
 		TickInterval:  30 * time.Second,
+
+		FetchRetryLimit: envInt("SCAN_FETCH_RETRY_LIMIT", DefaultFetchRetryLimit, 1, 1000),
 	}
 }
 

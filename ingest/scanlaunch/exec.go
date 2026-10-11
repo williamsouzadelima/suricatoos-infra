@@ -40,6 +40,10 @@ type bridgeResult struct {
 	Findings []Finding `json:"findings"`
 	Stopped  bool      `json:"stopped"`
 	Error    string    `json:"error"`
+	// fetch only. HostsScanned is a pointer so "absent" (a bridge older than the
+	// field → old behavior) stays distinct from 0 (the scan measured no host).
+	HostsScanned  *int `json:"hosts_scanned,omitempty"`
+	ReportMissing bool `json:"report_missing,omitempty"` // the Done task has no report
 }
 
 // bridgeRunner runs a scan_bridge.py subcommand. Injectable so the reconciler is

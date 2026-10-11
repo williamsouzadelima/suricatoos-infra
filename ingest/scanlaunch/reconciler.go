@@ -3,6 +3,7 @@ package scanlaunch
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
@@ -94,7 +95,7 @@ func (rc *reconciler) launch(ctx context.Context, j *Job) bool {
 		})
 		return false
 	}
-	log.Printf("scanlaunch: launch %s → task=%s status=%s", j.RequestID, res.TaskID, res.Status)
+	log.Printf("scanlaunch: launch %s → task=%s (%s) status=%s", j.RequestID, res.TaskID, j.taskName(), res.Status)
 	rc.reg.Update(j.RequestID, func(job *Job) {
 		job.State = StateRunning
 		job.GVMTargetID = res.TargetID
@@ -102,6 +103,7 @@ func (rc *reconciler) launch(ctx context.Context, j *Job) bool {
 		job.GVMReportID = res.ReportID
 		job.StartedAt = rc.now().UTC()
 		job.Error = ""
+		job.FetchFailures = 0 // a relaunch (job reopened after FAILED) gets a fresh retry budget
 	})
 	return true
 }
@@ -111,10 +113,23 @@ func (rc *reconciler) launch(ctx context.Context, j *Job) bool {
 // Status is checked BEFORE the SCAN_MAX_DURATION cap on purpose: a scan that gvmd
 // reports Done must be fetched regardless of how long it ran (a finished report
 // past the cap — e.g. an ingest restart during a long scan — must not be discarded
-// as EXPIRED). The cap only auto-stops a scan that is genuinely still running.
+// as EXPIRED). The cap only auto-stops a scan that is genuinely still running —
+// or one whose status gvmd cannot give at all once past the cap (below): without
+// a status nobody can tell it is Done, and the job must not hold a slot forever.
 func (rc *reconciler) poll(ctx context.Context, j *Job) {
 	res, err := rc.run(ctx, "status", j)
 	if err != nil {
+		if rc.pastMaxDuration(j) {
+			log.Printf("scanlaunch: %s sem status do gvmd além de SCAN_MAX_DURATION — parando: %v", j.RequestID, err)
+			rc.bestEffortStop(ctx, j)
+			rc.reg.Update(j.RequestID, func(job *Job) {
+				job.State = StateExpired
+				job.Error = truncErr(fmt.Sprintf("sem status do gvmd além do limite de duração (SCAN_MAX_DURATION=%s): %v",
+					rc.cfg.MaxDuration, err))
+				job.CompletedAt = rc.now().UTC()
+			})
+			return
+		}
 		log.Printf("scanlaunch: status %s falhou: %v", j.RequestID, err)
 		return // transient; retry next tick
 	}
@@ -131,11 +146,13 @@ func (rc *reconciler) poll(ctx context.Context, j *Job) {
 		})
 	default: // still New/Requested/Queued/Running/Processing
 		// Auto-stop only a scan that is confirmed still running past the cap.
-		if !j.StartedAt.IsZero() && rc.now().Sub(j.StartedAt) > rc.cfg.MaxDuration {
+		if rc.pastMaxDuration(j) {
 			log.Printf("scanlaunch: %s excedeu SCAN_MAX_DURATION — parando", j.RequestID)
-			rc.run(ctx, "stop", j) // best effort
+			rc.bestEffortStop(ctx, j)
 			rc.reg.Update(j.RequestID, func(job *Job) {
 				job.State = StateExpired
+				job.Error = fmt.Sprintf("scan ainda em execução além do limite de duração (SCAN_MAX_DURATION=%s) — parado",
+					rc.cfg.MaxDuration)
 				job.CompletedAt = rc.now().UTC()
 			})
 			return
@@ -149,15 +166,42 @@ func (rc *reconciler) poll(ctx context.Context, j *Job) {
 	}
 }
 
-// complete fetches the finished report once, caches the findings, and marks COMPLETED.
+// pastMaxDuration reports whether a launched job has run longer than SCAN_MAX_DURATION.
+func (rc *reconciler) pastMaxDuration(j *Job) bool {
+	return !j.StartedAt.IsZero() && rc.now().Sub(j.StartedAt) > rc.cfg.MaxDuration
+}
+
+// bestEffortStop asks gvmd to stop the job's task; a failure is only logged (the
+// task may then keep running in gvmd, outside the concurrency budget).
+func (rc *reconciler) bestEffortStop(ctx context.Context, j *Job) {
+	if _, err := rc.run(ctx, "stop", j); err != nil {
+		log.Printf("scanlaunch: stop %s falhou (a task pode seguir rodando no gvmd): %v", j.RequestID, err)
+	}
+}
+
+// complete fetches the finished report once, caches the findings, and marks
+// COMPLETED — but only when the report shows the scan measured something. A Done
+// task without a report, or whose report holds zero hosts (the alive test found
+// nobody), is FAILED with the reason, never a "COMPLETED, 0 findings" that reads as
+// a clean bill of health (D8); no findings are cached for it. A bridge older than
+// hosts_scanned (field absent) keeps the old behavior.
 func (rc *reconciler) complete(ctx context.Context, j *Job, statusRes *bridgeResult) {
 	res, err := rc.run(ctx, "fetch", j)
 	if err != nil {
-		log.Printf("scanlaunch: fetch %s falhou: %v", j.RequestID, err)
-		return // stay RUNNING; retry fetch next tick (scan is Done, safe to retry)
+		// Stay RUNNING; retry fetch next tick (scan is Done, safe to retry) — bounded.
+		rc.retryDone(j, statusRes, fmt.Errorf("fetch: %w", err))
+		return
+	}
+	switch {
+	case res.ReportMissing:
+		rc.failDone(j, statusRes, "task Done sem relatório")
+		return
+	case res.HostsScanned != nil && *res.HostsScanned == 0:
+		rc.failDone(j, statusRes, "scan não mediu nenhum host vivo (verifique alive test/alcance)")
+		return
 	}
 	if err := rc.writeFindings(j.RequestID, res.Findings); err != nil {
-		log.Printf("scanlaunch: cache findings %s falhou: %v", j.RequestID, err)
+		rc.retryDone(j, statusRes, fmt.Errorf("cache findings: %w", err))
 		return
 	}
 	log.Printf("scanlaunch: %s COMPLETED — %d finding(s)", j.RequestID, len(res.Findings))
@@ -169,6 +213,55 @@ func (rc *reconciler) complete(ctx context.Context, j *Job, statusRes *bridgeRes
 		}
 		job.CompletedAt = rc.now().UTC()
 	})
+}
+
+// failDone marks a job whose gvmd task is Done as FAILED with reason, keeping the
+// report id so the operator can inspect it in the GSA.
+func (rc *reconciler) failDone(j *Job, statusRes *bridgeResult, reason string) {
+	log.Printf("scanlaunch: %s FAILED — %s", j.RequestID, reason)
+	rc.reg.Update(j.RequestID, func(job *Job) {
+		job.State = StateFailed
+		job.Error = reason
+		if statusRes.ReportID != "" {
+			job.GVMReportID = statusRes.ReportID
+		}
+		job.CompletedAt = rc.now().UTC()
+	})
+}
+
+// retryDone counts a failed attempt (fetch or cache write) to turn a Done task into
+// COMPLETED. Below the limit the job stays RUNNING and the next tick retries; at the
+// limit it becomes FAILED with the last error instead of holding a concurrency slot
+// forever. The count is persisted in the Job, so an ingest restart does not reset it.
+func (rc *reconciler) retryDone(j *Job, statusRes *bridgeResult, err error) {
+	limit := rc.fetchRetryLimit()
+	job, ok := rc.reg.Update(j.RequestID, func(job *Job) {
+		job.FetchFailures++
+		if job.FetchFailures >= limit {
+			job.State = StateFailed
+			job.Error = truncErr(fmt.Sprintf("task Done, mas o relatório não foi obtido após %d tentativa(s): %v",
+				job.FetchFailures, err))
+			if statusRes.ReportID != "" {
+				job.GVMReportID = statusRes.ReportID
+			}
+			job.CompletedAt = rc.now().UTC()
+		}
+	})
+	if !ok {
+		return
+	}
+	if job.State == StateFailed {
+		log.Printf("scanlaunch: %s FAILED — %s", j.RequestID, job.Error)
+		return
+	}
+	log.Printf("scanlaunch: %s tentativa %d/%d falhou (re-tenta no próximo tick): %v", j.RequestID, job.FetchFailures, limit, err)
+}
+
+func (rc *reconciler) fetchRetryLimit() int {
+	if rc.cfg.FetchRetryLimit > 0 {
+		return rc.cfg.FetchRetryLimit
+	}
+	return DefaultFetchRetryLimit
 }
 
 // stop kills a job: RUNNING → best-effort gvmd stop; PENDING → just mark stopped.
