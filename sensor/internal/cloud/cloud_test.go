@@ -8,8 +8,10 @@ import (
 	"crypto/x509/pkix"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"io"
 	"math/big"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -122,6 +124,84 @@ func TestHeartbeat(t *testing.T) {
 	defer srv.Close()
 	if err := newTestClient(srv).Heartbeat(context.Background(), Heartbeat{SensorID: "s1", GvmdUp: true}); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// TestPushReportOutlivesClientWideTimeout guards the sensor end of the report path.
+// The ingest answers a sensor-report only AFTER it imported the findings (minutes in
+// production), so PushReport must not be bound by the short client-wide Timeout that
+// bounds poll/ack/heartbeat: a sensor that hangs up first makes the ingest cancel the
+// import mid-way, and with no ack the job is re-delivered into the same wall. The
+// other calls must KEEP the short timeout (a heartbeat into a black hole must not
+// stall the heartbeat loop for minutes).
+func TestPushReportOutlivesClientWideTimeout(t *testing.T) {
+	const (
+		importDelay   = 150 * time.Millisecond // the ingest "importing" the report
+		clientTimeout = 50 * time.Millisecond  // stands in for Config.Timeout (60 s)
+		reportTimeout = 2 * time.Second        // stands in for Config.ReportTimeout (6 min)
+	)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(importDelay)
+		w.WriteHeader(http.StatusAccepted)
+	}))
+	defer srv.Close()
+
+	cl := newTestClient(srv)
+	hc := *srv.Client() // same Transport, own Timeout
+	hc.Timeout = clientTimeout
+	cl.http = &hc
+	cl.cfg.ReportTimeout = reportTimeout
+
+	rep := Report{SchemaVersion: "1.0.0", CorrelationID: "c1", SensorID: "s1", Findings: json.RawMessage("[]")}
+	if err := cl.PushReport(context.Background(), rep); err != nil {
+		t.Fatalf("PushReport deveria esperar a resposta lenta (%v > Timeout %v, mas ReportTimeout=%v): %v",
+			importDelay, clientTimeout, reportTimeout, err)
+	}
+
+	// Same slow handler, same client, AFTER the PushReport above: the other calls must
+	// still give up at the client-wide Timeout. Running them last also proves that
+	// PushReport did not raise the shared client's Timeout in place (the heartbeat
+	// goroutine uses that client concurrently).
+	if cl.http.Timeout != clientTimeout {
+		t.Errorf("PushReport alterou o Timeout do client compartilhado: %v (esperado %v)", cl.http.Timeout, clientTimeout)
+	}
+	ctx := context.Background()
+	for _, c := range []struct {
+		name string
+		call func() error
+	}{
+		{"PollJob", func() error { _, _, err := cl.PollJob(ctx); return err }},
+		{"AckJob", func() error { return cl.AckJob(ctx, "j1") }},
+		{"Heartbeat", func() error { return cl.Heartbeat(ctx, Heartbeat{SensorID: "s1", GvmdUp: true}) }},
+	} {
+		err := c.call()
+		var ne net.Error
+		if !errors.As(err, &ne) || !ne.Timeout() {
+			t.Errorf("%s deveria estourar o Timeout do client (%v < %v), got: %v", c.name, clientTimeout, importDelay, err)
+		}
+	}
+}
+
+// TestReportTimeoutDefault pins the sensor end of the report path's timeout chain:
+//
+//	sensor PushReport  >=  ingest importTimeout+writeSlack (5m30s)  >=  nginx proxy_read_timeout (300s)
+//
+// The sensor must be the LAST to give up. The ingest budget lives in another module
+// (ingest/sensorreport/service.go) and cannot be imported here, so it is mirrored
+// below: if the ingest budget grows, this constant and defaultReportTimeout follow.
+func TestReportTimeoutDefault(t *testing.T) {
+	const ingestBudget = 5*time.Minute + 30*time.Second // ingest importTimeout + writeSlack
+	if defaultReportTimeout < ingestBudget {
+		t.Fatalf("defaultReportTimeout=%v < orçamento da ingest %v: o sensor desistiria antes da ingest terminar o import",
+			defaultReportTimeout, ingestBudget)
+	}
+	c := &Client{}
+	if got := c.reportTimeout(); got != defaultReportTimeout {
+		t.Fatalf("ReportTimeout sem valor deveria cair no default %v, got %v", defaultReportTimeout, got)
+	}
+	c.cfg.ReportTimeout = 90 * time.Second
+	if got := c.reportTimeout(); got != 90*time.Second {
+		t.Fatalf("ReportTimeout configurado deveria valer, got %v", got)
 	}
 }
 

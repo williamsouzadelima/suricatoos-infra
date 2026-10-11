@@ -14,6 +14,17 @@ import (
 	"github.com/williamsouzadelima/suricatoos-infra/ingest/scanlaunch"
 )
 
+// The timeouts of the report path form a chain, and the sensor must be the LAST link
+// to give up:
+//
+//	sensor PushReport (cloud.defaultReportTimeout, 6 min, sensor/internal/cloud/cloud.go)
+//	  >= importTimeout + writeSlack (5 min 30 s, below)
+//	  >= nginx proxy_read_timeout of /ingest/v1/sensor-report (300 s, compose/nginx/default.conf)
+//
+// If the sensor hangs up first, the connection closes, the request context is
+// cancelled and exec.CommandContext kills bridge.py mid-import; with no ack the job is
+// re-delivered every few minutes into the same wall until its TTL. Change one link and
+// revisit the others.
 const (
 	// importTimeout bounds one report import (bridge.py --mode network) together with
 	// the optional push to the Score, which shares its context.
