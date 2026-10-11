@@ -21,11 +21,20 @@ func (f *fakeLLM) Chat(_ context.Context, req ChatRequest) (ChatResponse, error)
 }
 
 type fakeResolver struct {
-	prov Provider
-	err  error
+	prov  Provider
+	provs []Provider // when set: the candidates in priority order (prov is ignored)
+	err   error
 }
 
-func (f fakeResolver) Resolve(context.Context) (Provider, error) { return f.prov, f.err }
+func (f fakeResolver) Resolve(context.Context) ([]Provider, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	if len(f.provs) > 0 {
+		return f.provs, nil
+	}
+	return []Provider{f.prov}, nil
+}
 
 func sampleReq() PlanRequest {
 	return PlanRequest{

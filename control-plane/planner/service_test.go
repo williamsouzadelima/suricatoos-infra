@@ -54,6 +54,24 @@ func TestService_ConsentOffForbidden(t *testing.T) {
 	}
 }
 
+func TestService_NonFreeModelForbidden(t *testing.T) {
+	llm := &fakeLLM{resp: ChatResponse{Content: okContent}}
+	p := New(llm, fakeResolver{prov: Provider{Name: "p", Kind: "openrouter", BaseURL: "b", APIKey: "k", Model: "openai/gpt-5.5"}},
+		Config{ConsentGranted: true, FreeModelsOnly: true})
+	m := http.NewServeMux()
+	NewService(p, "s3cret").Register(m)
+	srv := httptest.NewServer(m)
+	t.Cleanup(srv.Close)
+
+	resp, body := post(t, srv, "s3cret", reqBody)
+	if resp.StatusCode != http.StatusForbidden || !strings.Contains(body, "não gratuito") {
+		t.Fatalf("modelo pago com a regra ligada = %d %s, want 403", resp.StatusCode, body)
+	}
+	if llm.calls != 0 {
+		t.Fatalf("nenhuma chamada ao modelo pago: %d", llm.calls)
+	}
+}
+
 func TestService_HappyPathReturnsDraft(t *testing.T) {
 	srv := serviceServer(t, true)
 	resp, body := post(t, srv, "s3cret", reqBody)

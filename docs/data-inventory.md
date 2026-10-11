@@ -58,6 +58,31 @@ Coletamos apenas o mínimo necessário para **correlação de vulnerabilidade ba
 > redação de SID da coleta CIS (ADR-0009) continua valendo para o achado que origina o job. A IA de
 > planejamento (Fase 4) recebe dado **pseudonimizado** e **nunca decide/aprova** (ADR-0010).
 
+## IA de planejamento (Fase 4) — envio a provedor de LLM
+
+> Fluxo **nuvem→provedor de LLM** (OpenRouter/UnoRouter), só quando um operador pede um rascunho de
+> plano de remediação. Nasce **DARK** (`AI_CONFIG_ENABLED`/`AI_PLANNER_ENABLED` desligados) e **nada é
+> enviado** sem o consentimento por finalidade `AI_PLANNER_CONSENT` (default **off**). Desenho:
+> [remediation-planner-design](remediation-planner-design.md).
+
+| Dado | Origem | Direção | Finalidade | Sensibilidade |
+|---|---|---|---|---|
+| Fatos técnicos do achado atestado (tipo, título, severidade, CVEs, regra CIS, KB, evidência, SO) | achado atestado | nuvem→provedor de LLM | redigir rascunho de plano | baixa (estado técnico) |
+| Host e agente **pseudonimizados** (`host-1`, `agent-1`) | achado atestado | nuvem→provedor de LLM | agrupar passos por host | baixa (pseudônimo por pedido; o mapa fica só na memória do control-plane) |
+
+> **Fora do envio:** hostname/IP/tenant reais, inventário cru, qualquer dado pessoal. Tenant e IP não
+> entram como campo; se aparecerem no título/evidência, são trocados pelo pseudônimo antes do envio.
+
+> **Modelos gratuitos (padrão do scanner, `AI_FREE_MODELS_ONLY=true`):** os provedores gratuitos **não
+> garantem ZDR nem região** — podem **registrar e usar os prompts, inclusive para treino**. Mitigações:
+> (1) só o allowlist técnico **pseudonimizado** acima é enviado; (2) consentimento `AI_PLANNER_CONSENT`
+> default **off**; (3) habilitar um provedor gratuito exige a **ciência explícita** do operador
+> (`data_policy_ack`), registrada com quem/quando (`data_policy_ack_by`/`data_policy_ack_at`, gravados
+> pelo servidor); (4) modelo pago só fora da regra de gratuitos e sob a régua UE + ZDR.
+
+> **Chaves de API dos provedores:** cifradas em repouso (AES-256-GCM, KEK do host), write-only pela API
+> (só os 4 últimos caracteres aparecem) e usadas só server-side, no envio ao próprio provedor.
+
 ## Base legal e finalidade
 
 - **Finalidade única:** gestão de vulnerabilidade do parque (segurança da informação).

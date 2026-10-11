@@ -48,7 +48,7 @@ func (s *Service) planHandler() http.HandlerFunc {
 		plan, err := s.planner.Plan(r.Context(), req)
 		if err != nil {
 			switch {
-			case errors.Is(err, ErrConsentOff):
+			case errors.Is(err, ErrConsentOff), errors.Is(err, ErrNonFreeModel):
 				writeJSON(w, http.StatusForbidden, map[string]any{"error": err.Error()})
 			case errors.Is(err, ErrBudget):
 				writeJSON(w, http.StatusTooManyRequests, map[string]any{"error": err.Error()})
