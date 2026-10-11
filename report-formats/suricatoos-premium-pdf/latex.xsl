@@ -458,6 +458,14 @@ SPDX-License-Identifier: GPL-2.0-or-later
     <s k="never_title" en="This scan never ran" pt="Este scan não chegou a rodar" es="Este escaneo no llegó a ejecutarse"/>
     <s k="never_body_a" en="The report records no scan start, no host and no result: the task never began scanning, so nothing was measured. " pt="O relatório não registra início de scan, host nem resultado: a tarefa não chegou a iniciar a varredura, então nada foi medido. " es="El informe no registra inicio de escaneo, host ni resultado: la tarea no llegó a iniciar el análisis, así que nada fue medido. "/>
     <s k="never_body_c" en=" --- it is the absence of a measurement. Start the task, or find out why it did not start, before reading this report as a result." pt=" --- é ausência de medição. Inicie a tarefa, ou descubra por que ela não iniciou, antes de ler este relatório como um resultado." es=" --- es ausencia de medición. Inicie la tarea, o averigüe por qué no se inició, antes de leer este informe como un resultado."/>
+    <!-- E quando o scan INICIOU E NAO TERMINOU sem registrar host (regra
+         $scan-unfinished, a mesma da secao 6: Running, Stop Requested,
+         Stopped ou Interrupted): ainda nao ha' o que culpar. O alive test
+         pode nem ter rodado, entao o corpo e' neutro — diz o que o dado
+         sustenta, sem diagnostico. O miolo em negrito e' o nohost_body_b. -->
+    <s k="unfin_title" en="This scan did not finish" pt="Este scan não terminou" es="Este escaneo no terminó"/>
+    <s k="unfin_body_a" en="The scan did not finish and no host was recorded, so this report holds no measurement. " pt="O scan não terminou e nenhum host foi registrado, então este relatório não traz medição alguma. " es="El escaneo no terminó y no se registró ningún host, así que este informe no contiene medición alguna. "/>
+    <s k="unfin_body_c" en=" --- it is the absence of a measurement. Read the report of a scan that finished before drawing any conclusion about the target." pt=" --- é ausência de medição. Leia o relatório de um scan que terminou antes de tirar qualquer conclusão sobre o alvo." es=" --- es ausencia de medición. Lea el informe de un escaneo que haya terminado antes de sacar cualquier conclusión sobre el objetivo."/>
     <s k="risk_critical" en="CRITICAL" pt="CRÍTICO" es="CRÍTICO"/>
     <s k="risk_high" en="HIGH" pt="ALTO" es="ALTO"/>
     <s k="risk_medium" en="MEDIUM" pt="MÉDIO" es="MEDIO"/>
@@ -650,7 +658,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
     <s k="scope_scanner" en="Scanner" pt="Scanner" es="Escáner"/>
     <!-- Importacao do inventario do agente (gmp-bridge): nao e' scan de rede. -->
     <s k="scope_agent_na" en="not applicable: agent inventory" pt="não se aplica: inventário do agente" es="no aplica: inventario del agente"/>
-    <s k="scope_agent_note" en="This report was imported from the inventory the agent collected on the host itself (packages and configuration), not from a network scan: start and end are the collection time." pt="Este relatório foi importado do inventário que o agente coletou no próprio host (pacotes e configurações), não de um scan de rede: início e fim são o horário da coleta." es="Este informe fue importado del inventario que el agente recolectó en el propio host (paquetes y configuraciones), no de un escaneo de red: inicio y fin son la hora de la recolección."/>
+    <s k="scope_agent_note" en="This report was imported from the inventory the agent collected on the host itself (packages and configuration), not from a network scan: start and end are the same instant, the one at which the inventory was recorded." pt="Este relatório foi importado do inventário que o agente coletou no próprio host (pacotes e configurações), não de um scan de rede: início e fim são o mesmo instante em que o inventário foi registrado." es="Este informe fue importado del inventario que el agente recolectó en el propio host (paquetes y configuraciones), no de un escaneo de red: inicio y fin son el mismo instante en que se registró el inventario."/>
     <s k="scope_filter" en="Export filter" pt="Filtro do export" es="Filtro de la exportación"/>
     <s k="scope_term" en="Filter term" pt="Termo do filtro" es="Término del filtro"/>
     <s k="scope_minqod" en="QoD floor" pt="Piso de QoD" es="Piso de QoD"/>
@@ -2071,7 +2079,9 @@ SPDX-License-Identifier: GPL-2.0-or-later
                             ninguem).
        $scan-unfinished     comecou e nao terminou: scan_run_status Running,
                             Stop Requested, Stopped ou Interrupted. A cobertura
-                            do relatorio e' parcial, e a secao 6 diz isso.
+                            do relatorio e' parcial, e a secao 6 diz isso; sem
+                            host, o alerta do resumo executivo diz que o scan
+                            nao terminou, sem o conselho do alive test.
        $agent-import        o relatorio veio do INVENTARIO do agente instalado
                             no host, importado pelo gmp-bridge (bridge.py), e
                             nao de um scan de rede: o bridge cria a tarefa
@@ -2084,7 +2094,13 @@ SPDX-License-Identifier: GPL-2.0-or-later
                             dois basta; os dois sao contrato com o bridge.py e
                             mudam junto. Sem nenhum (comentario editado, por
                             exemplo), o relatorio e' lido como scan comum —
-                            nunca o contrario. -->
+                            nunca o contrario. E os dois cedem a um VETO:
+                            detalhe de host Auth-* ou scanned_with_* e' rastro
+                            de scan de rede (o login do scanner, o feed que
+                            varreu o host), e o bridge nao grava detalhe de
+                            host nenhum. O comentario e' editavel pelo
+                            operador: um scan real cujo comentario comece com
+                            o prefixo do bridge continua scan comum. -->
   <xsl:variable name="scan-status" select="normalize-space(gvm:report()/scan_run_status)"/>
   <xsl:variable name="scan-never-started"
     select="string-length(normalize-space(gvm:report()/scan_start)) = 0
@@ -2098,8 +2114,9 @@ SPDX-License-Identifier: GPL-2.0-or-later
             and ($scan-status = 'Running' or $scan-status = 'Stop Requested'
                  or $scan-status = 'Stopped' or $scan-status = 'Interrupted')"/>
   <xsl:variable name="agent-import"
-    select="count(gvm:report()/results/result[normalize-space(nvt/@oid) = '1.3.6.1.4.1.55683.1.0.1']) &gt; 0
-            or starts-with(normalize-space(gvm:report()/task/comment), 'Suricatoos Agent findings for host')"/>
+    select="(count(gvm:report()/results/result[normalize-space(nvt/@oid) = '1.3.6.1.4.1.55683.1.0.1']) &gt; 0
+             or starts-with(normalize-space(gvm:report()/task/comment), 'Suricatoos Agent findings for host'))
+            and not(gvm:report()/host/detail[starts-with(name,'Auth-') or starts-with(name,'scanned_with_')])"/>
 
   <xsl:template name="executive-summary">
     <!-- Severity counts come from gvmd's own <result_count>, band by band, NOT
@@ -2215,10 +2232,13 @@ SPDX-License-Identifier: GPL-2.0-or-later
          result(s)... 0 findings are of High or Critical severity" — an absurd
          sentence that a reader still parses as good news.  Say what actually
          happened instead. -->
-    <!-- Two ways of measuring nothing, told apart by the rule section 6 uses
-         ($scan-never-started): a task that never began scanning has no alive
-         test to blame, so its body says so instead of sending the reader to
-         fix an Alive Test setting that never ran. -->
+    <!-- Three ways of measuring nothing, told apart by the rules section 6
+         uses: a task that never began scanning ($scan-never-started) has no
+         alive test to blame, so its body says so instead of sending the reader
+         to fix an Alive Test setting that never ran; a scan that started and
+         did not finish ($scan-unfinished) may have stopped before the alive
+         test answered, so its body states only that; the alive-test advice is
+         for a scan that ran its course and found no host. -->
     <xsl:choose>
       <xsl:when test="$hosts = 0 and $scan-never-started">
         <xsl:text>\alertbox{</xsl:text><xsl:value-of select="gvm:t('never_title')"/>
@@ -2226,6 +2246,15 @@ SPDX-License-Identifier: GPL-2.0-or-later
         <xsl:value-of select="gvm:t('never_body_a')"/>
         <xsl:text>\textbf{</xsl:text><xsl:value-of select="gvm:t('nohost_body_b')"/><xsl:text>}</xsl:text>
         <xsl:value-of select="gvm:t('never_body_c')"/>
+        <xsl:text>}
+</xsl:text>
+      </xsl:when>
+      <xsl:when test="$hosts = 0 and $scan-unfinished">
+        <xsl:text>\alertbox{</xsl:text><xsl:value-of select="gvm:t('unfin_title')"/>
+        <xsl:text>}{</xsl:text>
+        <xsl:value-of select="gvm:t('unfin_body_a')"/>
+        <xsl:text>\textbf{</xsl:text><xsl:value-of select="gvm:t('nohost_body_b')"/><xsl:text>}</xsl:text>
+        <xsl:value-of select="gvm:t('unfin_body_c')"/>
         <xsl:text>}
 </xsl:text>
       </xsl:when>
@@ -5265,7 +5294,8 @@ SPDX-License-Identifier: GPL-2.0-or-later
                           scanner. As tres regras de estado sao as globais
                           $scan-never-started (nota "nao chegou a iniciar", a
                           mesma do resumo executivo), $scan-unfinished (nota
-                          de cobertura parcial) e $agent-import (inventario do
+                          de cobertura parcial; sem host, tambem o alerta do
+                          resumo executivo) e $agent-import (inventario do
                           agente: a duracao nao se aplica, e uma nota diz de
                           onde o relatorio veio);
          filtro do export o termo (<filters><term>) e o que se le dele: piso de
@@ -5412,17 +5442,20 @@ SPDX-License-Identifier: GPL-2.0-or-later
 
   <!-- Duracao = fim - inicio (date:seconds, que leva o fuso de cada um em
        conta), truncada: "N s" abaixo de um minuto, "N min" abaixo de uma hora,
-       senao "N h MM min". Sem uma das pontas, data ilegivel ou fim antes do
-       inicio, \scopena: a duracao nao esta' no relatorio, e conta-la de dado
-       incoerente seria inventa-la. No inventario do agente o inicio e o fim
-       sao o mesmo instante, o da coleta: "nao se aplica", nunca "0 s". -->
+       senao "N h MM min". Sem uma das pontas, data ilegivel, ou fim antes do
+       inicio OU NO MESMO instante, \scopena: a duracao nao esta' no
+       relatorio, e conta-la de dado incoerente seria inventa-la. Fim = inicio
+       nao e' medicao, e' carimbo: o import do sensor (bridge.py,
+       network_report_to_xml) grava as duas pontas com a mesma hora, e "0 s"
+       diria que a varredura levou zero segundos. O inventario do agente, que
+       carimba igual, vem antes: "nao se aplica", nunca "0 s". -->
   <xsl:template name="scope-duration">
     <xsl:param name="start"/>
     <xsl:param name="end"/>
     <xsl:variable name="d" select="date:seconds($end) - date:seconds($start)"/>
     <xsl:choose>
       <xsl:when test="$agent-import"><xsl:value-of select="gvm:t('scope_agent_na')"/></xsl:when>
-      <xsl:when test="string-length($start) = 0 or string-length($end) = 0 or not($d = $d) or $d &lt; 0">
+      <xsl:when test="string-length($start) = 0 or string-length($end) = 0 or not($d = $d) or $d &lt;= 0">
         <xsl:text>\scopena</xsl:text>
       </xsl:when>
       <xsl:when test="$d &lt; 60"><xsl:value-of select="floor($d)"/><xsl:text> s</xsl:text></xsl:when>

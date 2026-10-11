@@ -1004,6 +1004,11 @@ UNFINISHED = ("Running", "Stop Requested", "Stopped", "Interrupted")
 # ancora um host sem achado, e o comentario da tarefa conteiner do modo agent.
 AGENT_MARKER_OID = "1.3.6.1.4.1.55683.1.0.1"
 AGENT_COMMENT_PREFIX = "Suricatoos Agent findings for host"
+# O veto dos dois sinais: detalhe de host com um destes prefixos e' rastro de
+# scan de rede (login do scanner, feed que varreu o host), e o bridge nao grava
+# detalhe de host nenhum -- o comentario, editavel, nao vira um scan real em
+# inventario.
+NETWORK_DETAIL_PREFIXES = ("Auth-", "scanned_with_")
 
 
 def xp_text(el):
@@ -1066,7 +1071,8 @@ class ScanState:
     """As tres regras de estado do latex.xsl, que a secao 1 e a secao 6 leem:
     nunca iniciou (sem scan_start, sem host, sem resultado e estado
     compativel), nao terminou (comecou e o estado e' de scan inacabado) e
-    inventario do agente (um dos dois sinais do gmp-bridge)."""
+    inventario do agente (um dos dois sinais do gmp-bridge, e nenhum detalhe
+    de host de scan de rede)."""
 
     def __init__(self, m):
         rep = m.report
@@ -1076,8 +1082,12 @@ class ScanState:
                               and self.status in NEVER_STARTED_OK)
         self.unfinished = not self.never_started and self.status in UNFINISHED
         comment = norm_space(xp_text(rep.find("task/comment")))
-        self.agent_import = (any(norm_space(r.oid) == AGENT_MARKER_OID for r in m.results)
-                             or comment.startswith(AGENT_COMMENT_PREFIX))
+        # starts-with(name, ...): o 1o <name> do <detail>, sem normalize-space.
+        network_trace = any(xp_text(d.find("name")).startswith(NETWORK_DETAIL_PREFIXES)
+                            for h in rep.findall("host") for d in h.findall("detail"))
+        self.agent_import = ((any(norm_space(r.oid) == AGENT_MARKER_OID for r in m.results)
+                              or comment.startswith(AGENT_COMMENT_PREFIX))
+                             and not network_trace)
 
 
 class ScopeOracle:
@@ -1266,9 +1276,11 @@ class ScopeOracle:
         return "%s, %d %s %d %s:%s %s" % (dw, int(d), mon, int(y), hh, mi, tz)
 
     def duration(self, start, end):
-        """scope-duration: fim - inicio, truncado em s / min / h MM min."""
+        """scope-duration: fim - inicio, truncado em s / min / h MM min; fim
+        antes do inicio ou no mesmo instante (o carimbo do import do sensor)
+        nao e' duracao medida."""
         a, z = (parse_iso(start), parse_iso(end)) if start and end else (None, None)
-        if a is None or z is None or z < a:
+        if a is None or z is None or z <= a:
             return NA
         d = (z - a).total_seconds()
         if d < 60:
@@ -1400,9 +1412,11 @@ def check_escopo(m, tex, sheet, lang):
 def check_alerta(m, tex, sheet, lang):
     """O resumo executivo (secao 1) abre com o alerta de "nada medido" se e
     somente se o relatorio nao tem host, e o alerta da' a causa que o dado
-    sustenta: a tarefa que nunca iniciou (a MESMA regra da nota da secao 6)
-    nao recebe o conselho de corrigir um alive test que nao rodou; um scan que
-    iniciou e nao achou host recebe."""
+    sustenta, pelas MESMAS regras das notas da secao 6: a tarefa que nunca
+    iniciou nao recebe o conselho de corrigir um alive test que nao rodou; o
+    scan que iniciou e nao terminou recebe o corpo neutro (nao terminou, nenhum
+    host registrado), sem diagnostico; so' o scan que terminou sem achar host
+    recebe o conselho do alive test."""
     boxes = macros(tex.section(1)[0], "alertbox", 2)
     if m.hosts > 0:
         return ["alerta de 'nada medido' num relatorio com %d host(s)" % m.hosts] if boxes else []
@@ -1411,10 +1425,15 @@ def check_alerta(m, tex, sheet, lang):
 
     def t(k):
         return sheet.t(k, lang)
-    if ScanState(m).never_started:
+    st = ScanState(m)
+    if st.never_started:
         want = (t("never_title"), t("never_body_a") + "\\textbf{" + t("nohost_body_b") + "}"
                 + t("never_body_c"))
         why = "a tarefa nao iniciou"
+    elif st.unfinished:
+        want = (t("unfin_title"), t("unfin_body_a") + "\\textbf{" + t("nohost_body_b") + "}"
+                + t("unfin_body_c"))
+        why = "o scan iniciou e nao terminou (%s)" % st.status
     else:
         want = (t("nohost_title"), t("nohost_body_a") + "\\textbf{" + t("nohost_body_b") + "}"
                 + t("nohost_body_c"))
