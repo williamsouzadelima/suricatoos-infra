@@ -79,11 +79,12 @@ func (s *Service) AckHandler() http.HandlerFunc {
 
 // SessionEnqueueHandler serves POST /agents/scan?id=<agent> for the Agents UI's
 // "Escanear agora" button. It has NO auth of its own and MUST be reached only
-// through the session-gated nginx location (GSAD_SID cookie + same-origin) — the
-// same trust model as the provision endpoint. It enqueues a scan_now (the only
-// UI-triggerable command) on the SAME queue the admin/CLI handler uses. As defense in
-// depth it is wrapped in sessiongate.Require: a request without the marker nginx sets
-// only on session-gated locations is refused (403) before anything is enqueued.
+// through the nginx session gate: auth_request to the gsad, which validates the
+// GSAD_SID cookie AND the session token (plus same-origin) — the same trust model as
+// the provision endpoint. It enqueues a scan_now (the only UI-triggerable command)
+// on the SAME queue the admin/CLI handler uses. As defense in depth it is wrapped in
+// sessiongate.Require: a request without the marker nginx sets only on
+// session-gated locations is refused (403) before anything is enqueued.
 func (s *Service) SessionEnqueueHandler() http.HandlerFunc {
 	return sessiongate.Require(func(w http.ResponseWriter, r *http.Request) {
 		agentID := strings.TrimSpace(r.URL.Query().Get("id"))

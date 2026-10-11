@@ -81,8 +81,9 @@ func (s *Service) Handler() http.HandlerFunc {
 }
 
 // SessionHandler serves GET /provision/enroll-command?tenant=<t> for the GSA UI.
-// It is NOT bearer-gated: it MUST be mounted behind the nginx session gate (cookie
-// GSAD_SID + same-origin), exactly like /provision/install. The tenant comes from
+// It is NOT bearer-gated: it MUST be mounted behind the nginx session gate
+// (auth_request to the gsad, which validates the GSAD_SID cookie AND the session
+// token, plus same-origin), exactly like /provision/install. The tenant comes from
 // the ?tenant= query. The GSA is single-admin (only the admin logs into the web),
 // so the session gate is an admin gate in practice; the {t} is still validated
 // against the registry, so an unknown tenant is refused regardless. As defense in
@@ -94,8 +95,9 @@ func (s *Service) SessionHandler() http.HandlerFunc {
 	})
 }
 
-// SessionTenantsHandler serves GET /provision/tenants (session-gated by nginx) —
-// the enabled tenant names for the UI selector. No token minted, no secrets. Also
+// SessionTenantsHandler serves GET /provision/tenants (behind the same nginx
+// session gate: cookie AND session token, validated by the gsad) — the enabled
+// tenant names for the UI selector. No token minted, no secrets. Also
 // wrapped in sessiongate.Require (defense in depth), like SessionHandler.
 func (s *Service) SessionTenantsHandler() http.HandlerFunc {
 	return sessiongate.Require(func(w http.ResponseWriter, r *http.Request) {

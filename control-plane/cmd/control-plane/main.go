@@ -335,8 +335,9 @@ func main() {
 	mux.HandleFunc("POST /v1/commands/ack", cmdSvc.AckHandler())
 	// Operator/CLI trigger (admin Bearer) to enqueue an on-demand scan.
 	mux.HandleFunc("POST /api/v1/agents/{id}/commands", cmdSvc.EnqueueHandler(adminSecret))
-	// Agents UI "Escanear agora" trigger — session-gated by nginx (GSAD_SID),
-	// no bearer; shares the same command queue.
+	// Agents UI "Escanear agora" trigger — behind the nginx session gate
+	// (auth_request → gsad: GSAD_SID cookie AND session token), no bearer; shares
+	// the same command queue.
 	mux.HandleFunc("POST /agents/scan", cmdSvc.SessionEnqueueHandler())
 	mux.Handle("/api/", adminAPI.Handler())
 	// Tenant registry admin (ADR-0007) — always available, bearer-gated. More
@@ -362,8 +363,9 @@ func main() {
 	})
 	// Admin-bearer (automation/CLI).
 	mux.HandleFunc("GET /api/v1/tenants/{t}/enroll-command", enrollCmdSvc.Handler())
-	// Session-gated (GSA UI, behind nginx cookie gate) — the tenant selector + the
-	// per-tenant enrollment command with a fresh token embedded.
+	// Session-gated (GSA UI, behind the nginx session gate: auth_request → gsad,
+	// cookie AND session token) — the tenant selector + the per-tenant enrollment
+	// command with a fresh token embedded.
 	mux.HandleFunc("GET /provision/tenants", enrollCmdSvc.SessionTenantsHandler())
 	mux.HandleFunc("GET /provision/enroll-command", enrollCmdSvc.SessionHandler())
 	if sensorJobsEnabled {
