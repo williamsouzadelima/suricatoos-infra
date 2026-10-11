@@ -229,14 +229,14 @@ NÓ (só SAÍDA :443 mTLS)                                        HUB (commandce
         → sha256(ca_cert DER)==FLEET_CA_PIN e sha256(command_pubkey SPKI)==FLEET_COMMAND_KEY_PIN, senão aborta;
           pina ambos; esquece o token; auditoria: identity_changed
  3. heartbeat ── POST /fleet/v1/heartbeat {schema_versions, replay_floor, state_hashes{kind:sha},
-        unauthenticated_rejections, redeliveries, …} ─▶
+        unauthenticated_rejections, redeliveries, …} ─▶   (depois de (re)enroll ou reset do store: antes do 1º poll)
         ◀── 200 {server_time, resync:[kinds], heartbeat_interval_s, poll_wait_s, schema_versions}
  4. state ── PUT /fleet/v1/state/{kind} {content_sha256, data} — só kinds com hash novo ou em resync ─▶ ◀── 204
  5. no hub, um operador pede "iniciar a tarefa T do tenant acme no nó N": o hub monta e ASSINA o envelope
  6. poll ── GET /fleet/v1/commands?wait=25 ─▶ ◀── 200 {commands:[envelope…]}  |  204 ao fim do wait
  7. verificação LOCAL em ordem: forma → sha256(payload) → Ed25519 (chave PINADA) → já gravado? (reenvia a decisão)
         → janela ±skew → node_id → nonce → tenant → catálogo/node_kind/política/orçamento → payload → escopo
-        ⇒ decisão gravada (nonce + command_id, fsync)
+        ⇒ decisão gravada (nonce + command_id, fsync), menos bad_window/expired (finais, não gravados)
         auditoria: exec(received → executed) | reject(rejected/deferred + motivo); não autenticado: só contado
  8. ack ── POST /fleet/v1/commands/{id}/ack {decision: accepted|rejected|deferred, reason?} ─▶ ◀── 204
         (rejeição de comando AUTÊNTICO também vira o evento command.rejected_by_policy)
@@ -267,8 +267,9 @@ byte a byte.
 ### Versões e evolução
 
 - **Semântica MAJOR.MINOR.** MINOR acrescenta campo, valor de enum ou tipo; MAJOR quebra. O PATCH é só
-  editorial (descrição, exemplo) e **nunca vai ao fio**: o `schema_version` de todo corpo e de todo envelope é
-  sempre `MAJOR.MINOR.0` — no v1, `1.0.0`, o valor que entra na forma canônica assinada.
+  editorial (descrição, exemplo) e **nunca vai ao fio**: o `schema_version` de todo corpo versionado (todos,
+  menos o do `426`) e de todo envelope é sempre `MAJOR.MINOR.0` — no v1, `1.0.0`, o valor que entra na forma
+  canônica assinada.
 - **Anúncio em todo contato.** O nó manda `schema_versions` (lista de `MAJOR.MINOR`) no enroll, no renew e em
   **todo** heartbeat; o hub manda as dele na resposta do enroll e do renew e em **toda** resposta de heartbeat.
   **Nenhum lado envia corpo acima da maior versão comum** ao último anúncio do outro — um nó novo fala `1.0`
@@ -278,16 +279,19 @@ byte a byte.
   sai na versão nova. O hash de estado é sempre o da serialização na versão do envio. A idempotência do hub
   (`204` × `409`) compara valores, não bytes, para que re-serializar não vire conflito.
 - **Enroll e renew** saem na **maior** versão do nó, com o anúncio; o hub responde na maior versão comum.
-- **Versão não suportada ⇒ `426`.** O hub lê o `schema_version` do topo de todo corpo antes da validação
-  estrita:
-  - ausente ou fora da forma `MAJOR.MINOR.0` ⇒ `400`;
-  - na forma certa, mas de uma versão que o hub não suporta ⇒ `426` com o corpo
+- **Versão não suportada ⇒ `426`.** O hub lê o `schema_version` do topo de todo corpo do nó antes da validação
+  estrita. A forma tem nome, `fleet-command.schema.json#/$defs/schema_version_wire`:
+  `^(0|[1-9][0-9]{0,2})\.(0|[1-9][0-9]{0,2})\.0$`, isto é, `MAJOR.MINOR.0` com MAJOR e MINOR em decimal **sem
+  zero à esquerda** (`01.0.0` e `1.00.0` estão fora).
+  - ausente ou fora dessa forma ⇒ `400`;
+  - na forma, mas de uma versão que o hub não suporta ⇒ `426` com o corpo
     `fleet-heartbeat.schema.json#/$defs/version_unsupported` (`{"schema_versions": [...]}`, as do hub), sem
     consumir o token do enroll.
 
   São **invariantes** — nunca mudam, nem num MAJOR novo — a forma desse corpo, o membro `schema_versions` dos
-  corpos de enroll, renew e heartbeat e o nome e a posição do `schema_version` no topo de todo corpo e envelope:
-  é o que o hub lê antes de validar. Reação do nó ao `426`:
+  corpos de enroll, renew e heartbeat e o nome, a posição e a forma do `schema_version` no topo de todo corpo
+  versionado (todos, menos o do `426`, que não tem versão) e de todo envelope: é o que o hub lê antes de validar.
+  Reação do nó ao `426`:
   - recalcula a maior versão comum com esse anúncio; se existir, adota-a e reenvia o mesmo item
     re-serializado, no máximo uma vez por item;
   - se não existir, ou se o reenvio também receber `426`, entra em **`blocked_version`**. Para de enviar o tipo
@@ -450,7 +454,7 @@ destino do comando (ack em `fleet-result.schema.json#/$defs/ack`).
 | 0 | forma (`#/$defs/envelope`): JSON estrito (ver "Codificação JSON"), `schema_version` = `MAJOR.MINOR.0` de uma versão que o nó suporta, formatos exatos (tempos, nonce, assinatura), tamanhos | `bad_envelope` | sem ack (só contado) |
 | 1 | `sha256(bytes crus de payload) == payload_sha256` | `payload_mismatch` | sem ack (só contado) |
 | 2 | Ed25519 sobre a forma canônica com a chave **pinada** (1 + 2 = `Verify`) | `bad_signature` | sem ack (só contado) |
-| 2a | reentrega: a forma canônica (que inclui o nonce) já está **gravada** no store, inclusive como `replay` ⇒ reenvia o ack e o resultado gravados, sem reavaliar as linhas 3–9 e sem executar de novo. Não grava linha `received`: conta em `redeliveries` (heartbeat) e numa linha agregada periódica `redelivered` (fluxo `reject`); fica fora do orçamento, mas um poll só com reentregas ou rejeições entra no backoff | — | a decisão gravada |
+| 2a | reentrega: a forma canônica (que inclui o nonce) já está **gravada** no store, inclusive como `replay` ⇒ reenvia o ack e o resultado gravados, sem reavaliar as linhas 3–9 e sem executar de novo. Não grava linha `received`: conta em `redeliveries` (heartbeat) e numa linha agregada periódica `redelivered` (fluxo `reject`); fica fora do orçamento, mas um poll sem comando **novo** aceito entra no backoff | — | a decisão gravada |
 | 3 | `issued_at < not_after ≤ issued_at + 24 h` | `bad_window` | `rejected`, final, **não gravado** |
 | 3 | `t ≥ issued_at − skew` | `not_yet_valid` | `deferred` |
 | 3 | `t ≤ not_after + skew` (3 = `VerifyAt`; `t` = relógio de verificação, abaixo; skew = `FLEET_CLOCK_SKEW`, 2 min, máx. 10 min) | `expired` | `rejected`, final, **não gravado** |
@@ -497,9 +501,16 @@ Na linha 0, `type` só precisa casar `^[a-z][a-z_]*\.[a-z][a-z_]*$` (`command_ty
   e `not_after ≤ issued_at + 24 h` (senão `bad_window`). Logo a vida de qualquer entrada termina antes de
   `t` + skew + 24 h + 7 dias, com `t` o instante da gravação: um hub não consegue manter entrada no store além
   disso. O prazo é `not_after` + 7 dias, ≥ `not_after` + skew (o mínimo do anti-replay).
+  - A vida é limitada; o tamanho, não. Com um hub comprometido, o pior caso é ~2·10⁵ entradas e ~0,6 GB de
+    journal. A F2.4 dimensiona o store, põe teto e alerta. No teto, a gravação falha e vale a linha `unavailable`
+    (`deferred`, fail-closed).
 - **Chave de idempotência (normativo).** O hub reentrega o envelope **byte a byte** idêntico e **nunca**
   re-assina um `command_id` — nem para renovar a janela: vencido, ele emite outro comando. No nó, forma
   canônica diferente sob nonce **ou** `command_id` já gravados ⇒ `replay`. A F2.1 cria o vetor golden disso.
+  - **Lápide da linha 3.** Como `bad_window` e `expired` não são gravados, o nó **não consegue** impor essa regra
+    para esses desfechos: não sobra registro com que comparar um `command_id` re-assinado. Ali ela é
+    **normativa para o hub**: reemitir é sempre `command_id` e nonce novos. A F2.4 testa que o store fica
+    inalterado depois de uma decisão da linha 3.
 - **Reentrega ≠ replay.** O hub reentrega um comando entregue e sem ack após 60 s, até `not_after` (entrega
   ≥ 1 vez), e também um `deferred`. Mesma forma canônica já gravada ⇒ o nó **não executa de novo** nem
   reavalia janela e política (linha 2a, logo depois da assinatura): reenvia o ack e, se houver, o resultado
@@ -527,7 +538,11 @@ Na linha 0, `type` só precisa casar `^[a-z][a-z_]*\.[a-z][a-z_]*$` (`command_ty
   um **piso de replay** = `t` e rejeita (`replay`, detalhe `cache reiniciado`) todo comando com
   `issued_at < piso + skew`; depois de 24 h + skew o piso deixa de importar (janela máxima). Sem store
   gravável, nenhum comando é aceito (`deferred` com `unavailable`).
-  - O nó publica o piso como `replay_floor` (UTC) no heartbeat e no estado `node`.
+  - O nó publica o piso como `replay_floor` (UTC) no heartbeat e no estado `node`, **arredondado para cima** ao
+    segundo inteiro, e compara em segundos inteiros. A referência é o **heartbeat**; como o estado `node` pode
+    atrasar até 60 s (um ciclo de coleta) e o piso só avança, o hub usa o maior dos dois valores que viu.
+  - Depois de (re)enroll ou de reset do store no boot, o nó **DEVE** mandar um heartbeat antes do primeiro
+    poll: é ele que leva o piso novo ao hub antes de qualquer comando.
   - **Normativo para o hub:** nunca emitir comando para o nó com `issued_at < replay_floor + 10 min` (o teto de
     `FLEET_CLOCK_SKEW`, já que o hub não conhece o skew do nó), nem emitir antes de ver o `replay_floor` de
     depois de um (re)enroll. Pendente abaixo desse limite não é entregue.
@@ -538,6 +553,9 @@ Na linha 0, `type` só precisa casar `^[a-z][a-z_]*\.[a-z][a-z_]*$` (`command_ty
   seguinte mostra o que de fato aconteceu).
 - **Execução serial** (um comando por vez, na ordem recebida). Timeouts: 120 s; `report.summary` 5 min;
   `report.export` 15 min. `timeout` **não prova** ausência de efeito.
+- **Idempotência do ack (normativo).** Ack idêntico = mesmos (`command_id`, `decision`, `reason`);
+  `received_at`, `detail` e os demais campos não contam. Uma repetição com outro `received_at` recebe `204`,
+  nunca `409`; `409` é só para outra decisão final (outro `decision` ou outro `reason`).
 - **Resultado e artefato ≥ 1 vez.** Artefatos sobem **antes** do resultado que os lista; o resultado é
   reenviado com backoff até `2xx`; o hub responde `204` a repetição idêntica e `409` a conteúdo diferente, e
   aceita resultados de comando entregue por **≥ 7 dias** após `not_after` (a ação aconteceu dentro da janela).
@@ -624,7 +642,7 @@ contratual (`fleet-heartbeat.schema.json#/$defs/version_unsupported`).
 | `PUT /fleet/v1/state/{kind}` | mTLS | `fleet-state.schema.json` (`kind` == `{kind}`) | `204` sem corpo | `400` schema, `kind` ≠ caminho, `content_sha256` ≠ sha256 dos bytes de `data`; `403`; `404` kind desconhecido; `413` > 16 MiB **descomprimido** (com gzip, o hub descomprime em streaming e aborta no teto); `429` |
 | `POST /fleet/v1/events` | mTLS | `fleet-event.schema.json` | `204` sem corpo (também com `event_id` repetido) | `400`; `403`; `413`; `429` |
 | `GET /fleet/v1/commands?wait=25` | mTLS | sem corpo; `wait` inteiro 5–30 (s) | `200` + `fleet-command.schema.json#/$defs/poll_response` (1–10 comandos, mais antigo primeiro); `204` sem corpo se nada chegou até o fim do `wait` | `400` `wait` inválido; `403`; `429` |
-| `POST /fleet/v1/commands/{id}/ack` | mTLS | `fleet-result.schema.json#/$defs/ack` | `204` sem corpo (ack idêntico repetido também; ack tardio de comando `expired_undelivered` ou `unknown_outcome` também, e o hub registra o atraso) | `400`; `403`; `404` comando inexistente ou de outro nó; `409` decisão **final** diferente já registrada; um `deferred` anterior é substituído pela final, e um `deferred` que chega **depois** de uma final é ignorado com `204` (a final vence); `429` |
+| `POST /fleet/v1/commands/{id}/ack` | mTLS | `fleet-result.schema.json#/$defs/ack` | `204` sem corpo (ack idêntico — mesmos `command_id`, `decision` e `reason` — repetido também; ack tardio, até 7 dias após `not_after`, de comando `expired_undelivered` ou `unknown_outcome` também, e o hub registra o atraso) | `400`; `403`; `404` comando inexistente ou de outro nó; `409` decisão **final** diferente já registrada; um `deferred` anterior é substituído pela final, e um `deferred` que chega **depois** de uma final é ignorado com `204` (a final vence); `429` |
 | `POST /fleet/v1/commands/{id}/result` | mTLS | `fleet-result.schema.json` (`command_id` == `{id}`) | `204` sem corpo (resultado idêntico repetido também; resultado tardio, até 7 dias após `not_after`, também para comando `expired_undelivered` ou `unknown_outcome`) | `400` schema, id ≠ caminho, artefato listado e não recebido; `403`; `404`; `409` resultado diferente já registrado; `413` > 256 KiB; `429` |
 | `PUT /fleet/v1/artifacts/{command_id}/{name}` | mTLS | corpo **binário gzip** + cabeçalhos abaixo | `201` sem corpo (reenvio idêntico também) | `400` sha256 do corpo ≠ cabeçalho, cabeçalho faltando ou `name` inválido; `403`; `404` comando inexistente, de outro nó ou de tipo ≠ `report.export`; `409` outro conteúdo com o mesmo nome; `411` sem `Content-Length`; `413` > 64 MiB; `415` `Content-Type` ≠ `application/gzip`; `429` |
 
@@ -673,7 +691,7 @@ seguem essa regra: cada um passa pelas linhas 0–9.
 | lote de eventos | 1–100 eventos, ≤ 1 MiB |
 | artefato | ≤ 64 MiB (67 108 864 bytes) de gzip e ≤ 1 GiB (1 073 741 824 bytes) descomprimido; ≤ 4 por comando (v1: exatamente 1, só `report.export`) |
 | outbox de eventos | 10 000 eventos; cheio ⇒ descarta os mais antigos e conta em `outbox_dropped` |
-| intervalo de poll | ≥ 5 s entre dois polls (piso do nó, qualquer que seja o `poll_wait_s`); backoff exponencial até 5 min quando um poll só traz rejeições ou reentregas |
+| intervalo de poll | ≥ 5 s entre dois polls (piso do nó, qualquer que seja o `poll_wait_s`); backoff exponencial até 5 min quando um poll com comandos não traz nenhum novo aceito (rejeição, reentrega e adiamento contam como nada novo; o `204` do fim do `wait` não conta) |
 | auditoria local | fluxo `exec` 32 MiB × 8 arquivos; fluxo `reject` 32 MiB × 4; linha ≤ 8 KiB; ≤ 1 linha `unauthenticated` e ≤ 1 linha `redelivered` por minuto; ≤ 1 linha `version_mismatch` a cada 10 min |
 | orçamento local de comandos sensíveis | 30/h por nó (`policy.json` `sensitive_per_hour`), somando opt-in, `report.export` e `report.summary` |
 | orçamento local de comandos aceitos | 120/h por nó (`policy.json` `total_per_hour`), qualquer tipo; os sensíveis contam nos dois |
@@ -864,8 +882,9 @@ Eventos de escopo **nó** não levam `tenant`; os de escopo **tenant** levam sem
   único segredo do contrato é a **saída** do `enroll_token.create`, que nunca é escrita.
 - **Anti-enchente:** linhas 0–2 e reentregas (linha 2a) só como contagem periódica — no máximo uma linha
   `unauthenticated` e uma `redelivered` por minuto —, e no máximo uma linha `version_mismatch` a cada 10 min. O
-  nó nunca faz poll mais de uma vez a cada 5 s, qualquer que seja o `poll_wait_s`, e entra em backoff
-  exponencial (até 5 min) quando um poll só traz rejeições ou reentregas.
+  nó nunca faz poll mais de uma vez a cada 5 s, qualquer que seja o `poll_wait_s`. Entra em backoff exponencial
+  (até 5 min) quando um poll que trouxe comandos não resulta em nenhum comando **novo** aceito: rejeições,
+  reentregas e adiamentos contam como nada novo. O `204` do fim do `wait` é o ciclo normal e não conta.
 - Cada linha é gravada (`O_APPEND` + `fsync`) **antes** do efeito que registra (`rejected` antes do ack,
   `executed` antes do exec).
 - **Visível ao operador local:** os arquivos no host e a superfície local do conector (F2.2). O hub recebe as
@@ -882,13 +901,13 @@ Eventos de escopo **nó** não levam `tenant`; os de escopo **tenant** levam sem
 |---|---|---|
 | **Hub comprometido** (fila + chave de comando) | catálogo fechado (sem escopo, tenant, usuários/RBAC, credenciais de alvo, aprovação de remediação, passthrough GMP); escrita **opt-in por nó** (padrão = só operação e leitura); escopo local e inalterável remotamente (D2), re-checado também ao iniciar ou agendar tarefa; comando de objeto único; delete só para a lixeira; `report.summary` só com contagens; orçamentos locais de 120 aceitos/h e 30 sensíveis/h; auditoria local encadeada; kill switch local (`FLEET_ENABLED=false` ou parar o profile) | dentro da política local, o hub age: inicia/para tarefas existentes, lê contagens e exporta relatórios (permitidos por padrão; quem não quiser remove `task.*`/`report.*` de `allow`). Se o operador liberar os comandos de token: **(a)** `enroll_token.create` minta tokens `agent-endpoint` (≤ 1000 usos, ≤ 168 h) para qualquer tenant conhecido do nó, e um agente falso injeta inventário falso naquele tenant; **(b)** `enroll_token.revoke` revoga tokens e trava enrolls novos (DoS de onboarding) — certificados já emitidos não caem. **(c)** Com comandos permitidos, o hub faz crescer o fluxo `exec` da auditoria (3 linhas por aceito) para empurrar a rotação. O orçamento global limita isso a 120 × 24 × 3 = 8 640 linhas/dia: ~3,7 MB/dia com linhas típicas (~0,4 KiB), e os 256 MiB do `exec` guardam ~2,5 meses. No pior caso que os campos limitados permitem (`issued_by` de 128 caracteres e os 30 sensíveis/h como `target.create` opt-in com 64 hosts IPv6 na linha), ~10 MB/dia, ~4 semanas. Sem o orçamento global (~2 aceitos/s no piso de poll), seriam ~200 MB/dia, pouco mais de 1 dia. Reentregas (linha 2a) não gravam linha no `exec`, só contagem no `reject`, e não mudam a conta. A regra de lacuna do hub não ajuda aqui, porque a testemunha é o próprio atacante |
 | **MITM** nó↔hub | TLS ≥ 1.3 + mTLS; servidor verificado (`FLEET_HUB_CA_FILE` ou trust store; hostname sempre) **e pinado** (`FLEET_HUB_PIN`, obrigatório, lista para rotação — uma CA de interceptação na rede do cliente não basta); comando assinado com chave **separada** da CA e do TLS (um terminador TLS não forja comando); pins da CA da frota e da chave de comando entregues out-of-band no enroll; envelope não autenticado não gera ack nem linha individual de auditoria (só contagem), então o MITM não finaliza comando legítimo nem enche a auditoria | com TLS quebrado, o atacante lê estado/resultados e atrasa ou derruba comandos (DoS); não executa nada |
-| **Replay** | nonce **e** `command_id` indexados no store persistido, decisão final gravada antes do ack; o hub nunca re-assina um `command_id`; janela ≤ 24 h; relógio de verificação monotônico (marca d'água persistida); `node_id` e `tenant` dentro da assinatura; store ilegível ou ausente, ou (re)enroll ⇒ piso de replay publicado (`replay_floor`), e o hub não emite abaixo dele + 10 min; no (re)enroll o hub descarta os comandos nunca entregues e marca `unknown_outcome` os entregues sem desfecho | — |
+| **Replay** | nonce **e** `command_id` indexados no store persistido, decisão final gravada antes do ack (menos `bad_window`/`expired`, finais e não gravados: ali a regra de não re-assinar é normativa para o hub); o hub nunca re-assina um `command_id`; janela ≤ 24 h; relógio de verificação monotônico (marca d'água persistida); `node_id` e `tenant` dentro da assinatura; store ilegível ou ausente, ou (re)enroll ⇒ piso de replay publicado (`replay_floor`), e o hub não emite abaixo dele + 10 min; no (re)enroll o hub descarta os comandos nunca entregues e marca `unknown_outcome` os entregues sem desfecho | — |
 | **Nó comprometido** | o certificado identifica só aquele nó (CN=`node_id`, `OU=fleet-node`, CA da frota separada da CA de enroll); o hub autoriza tudo pelo CN (`403`/`404`); o nó não tem chave de assinatura; o hub trata **todo** dado de nó como não-confiável — nunca deriva autorização dele, nunca o cruza para outro nó ou tenant, e escapa ao renderizar (nomes são texto livre: XSS armazenado) | o nó mente sobre o próprio estado e resultados; revogar no hub corta o canal, não o nó |
 | **Exfiltração** | D4: estado e eventos só com metadado e contagens; `report.summary` (orçado) só devolve contagens — por severidade, por faixa de QoD, nº de hosts e por IP —, com filtro montado pelo nó, sem estreitar por host, porta ou NVT; achado detalhado (NVT, CVE, porta, evidência) só via `report.export` explícito, orçado e removível da política; nada de `comment`, inventário ou segredo; artefato com sha256 e teto; hub fora da internet (tailnet) no canário | com a política padrão, um hub comprometido vê, por relatório, **quais IPs têm quantas vulnerabilidades por severidade** (`report.summary`) e baixa relatórios completos (`report.export`), tudo no ritmo do orçamento (30/h somados) e registrado na auditoria local |
 | **Abuso de escopo** | escopo LOCAL (registro de tenants ou `FLEET_SCAN_SCOPE`); só IP/CIDR literal (sem DNS rebinding); CIDR inteiro dentro do escopo; deny absoluto (loopback, link-local/metadata, multicast, não-especificado) e de **qualquer CIDR que contenha** IP próprio (`FLEET_SELF_DENY_IPS`) ou do hub; os hosts do target são re-checados também em `task.start/resume`, `task.create/modify(target_id)` e em todo comando que liga ou altera agenda de tarefa (`schedule.create` com `task_ids`, `task.modify` com `schedule_id`, `task.clone` de tarefa com agenda, `schedule.modify`); `exclude_hosts` não salva um CIDR com IP próprio ou do hub; sem credencial/asset filter/reverse lookup em target; `sensor_job.enqueue` passa pelo portão local **e** pelo da `sensorjobs` | um target criado localmente com host fora do escopo continua existindo, mas a frota não o dispara nem o liga a uma agenda (`scope_denied`); uma tarefa assim que **já** tem agenda local segue disparando pelo gvmd, por configuração local que a frota não toca; a lacuna de CIDR do `scope.go` atual só some com a F2.4 |
 | **Roubo do token de enroll** | uso único, TTL curto, pins out-of-band, CSR com prova de posse, `node_id` único (`409`) | quem usar o token antes do dono enrola um nó falso: o hub deve confirmar o nó (CN/fingerprint) out-of-band antes de enfileirar comandos para ele |
 | **Roubo da chave do nó** | chave `0600`, TTL de 30 dias + renew, revogação no hub, alerta de sessões concorrentes do mesmo CN (obrigação do hub) | até a revogação, o ladrão consome os comandos do nó (não os executa no nó) e forja estado/resultado em nome dele |
-| **Adulteração da auditoria** (e enchente) | dois fluxos JSONL encadeados (`exec` e `reject`), cada um com `seq` monotônico e orçamento de rotação próprio — enchente de rejeição não apaga execução; orçamento global de 120 aceitos/h — uma enchente de comando permitido leva ≥ ~4 semanas para girar o `exec` (conta em "Hub comprometido"); linhas 0–2 só como contagem periódica; piso de poll e backoff; cauda dos dois fluxos como testemunha no hub, com regra de lacuna | root no nó reescreve os arquivos; o hub detecta a quebra da cadeia ou a lacuna de `seq` na próxima cauda |
+| **Adulteração da auditoria** (e enchente) | dois fluxos JSONL encadeados (`exec` e `reject`), cada um com `seq` monotônico e orçamento de rotação próprio — enchente de rejeição não apaga execução; orçamento global de 120 aceitos/h — uma enchente de comando permitido leva ≥ ~4 semanas para girar o `exec` (conta em "Hub comprometido"); linhas 0–2 e reentregas (linha 2a) só como contagem periódica; piso de poll e backoff; cauda dos dois fluxos como testemunha no hub, com regra de lacuna | root no nó reescreve os arquivos; o hub detecta a quebra da cadeia ou a lacuna de `seq` na próxima cauda |
 | **Vazamento de segredo** | `contains_secret` só em `enroll_token.create`; segredo nunca em disco/log/auditoria do nó; reinício antes da entrega ⇒ token revogado localmente + `secret_lost`; o hub não loga, cifra em repouso e mostra uma vez | — |
 
 ### Honestidade operacional
@@ -958,7 +977,8 @@ sensibilidade por dado: [docs/data-inventory.md — Canal de gestão da frota (A
   `degenerate_test.go` migram junto) e com a regra de CIDR que **contém** IP próprio ou do hub (o `scope.go`
   atual só nega IP isolado), testada, mais os IPs do hub no self-deny e o re-check de escopo das agendas e do
   `target.modify`; store anti-replay/journal (linha 2a, `redeliveries`, `replay_floor`, sem gravar
-  `bad_window`/`expired`); auditoria encadeada; orçamentos global (`total_per_hour`) e de sensíveis.
+  `bad_window`/`expired` — com teste de store inalterado depois da linha 3 —, tamanho dimensionado com teto e
+  alerta); auditoria encadeada; orçamentos global (`total_per_hour`) e de sensíveis.
 - **F2.5 — estado e eventos.** Coletores por kind com hash; outbox durável; detecção de transições.
 - **F2.6 — conector, compose e CI.** `fleet/cmd/fleet-connector` (enroll → renew → heartbeat → estado →
   long-poll → verificação → ack → execução → artefato → resultado); serviço `fleet-connector` no profile

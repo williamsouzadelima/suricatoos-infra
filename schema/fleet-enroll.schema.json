@@ -14,7 +14,7 @@
       "required": ["schema_version", "token", "node_id", "node_kind", "csr", "connector_version", "schema_versions"],
       "additionalProperties": false,
       "properties": {
-        "schema_version": { "type": "string", "const": "1.0.0" },
+        "schema_version": { "$ref": "fleet-command.schema.json#/$defs/schema_version_wire", "const": "1.0.0" },
         "token": { "type": "string", "minLength": 59, "maxLength": 196, "pattern": "^ft_[A-Za-z0-9_-]{12,64}\\.[A-Za-z0-9_-]{43,128}$", "description": "single-use, short-TTL hub token; the node discards it after a successful enroll and never logs it" },
         "node_id": { "$ref": "fleet-command.schema.json#/$defs/node_id", "description": "FLEET_NODE_ID, or 'node-' + a UUIDv4 generated and persisted on first boot; must equal the CSR CN" },
         "node_kind": { "enum": ["central", "standalone", "sensor"] },
@@ -28,7 +28,7 @@
       "required": ["schema_version", "node_id", "csr", "schema_versions"],
       "additionalProperties": false,
       "properties": {
-        "schema_version": { "type": "string", "const": "1.0.0" },
+        "schema_version": { "$ref": "fleet-command.schema.json#/$defs/schema_version_wire", "const": "1.0.0" },
         "node_id": { "$ref": "fleet-command.schema.json#/$defs/node_id", "description": "cross-check only: identity comes from the presented certificate (CN)" },
         "csr": { "$ref": "#/$defs/csr_pem" },
         "schema_versions": { "$ref": "fleet-command.schema.json#/$defs/schema_versions", "description": "versions the NODE supports (may have changed since the enroll, after an upgrade)" }
@@ -40,7 +40,7 @@
       "required": ["schema_version", "node_id", "certificate", "ca_cert", "command_pubkey", "server_time", "heartbeat_interval_s", "poll_wait_s", "schema_versions"],
       "additionalProperties": false,
       "properties": {
-        "schema_version": { "type": "string", "const": "1.0.0" },
+        "schema_version": { "$ref": "fleet-command.schema.json#/$defs/schema_version_wire", "const": "1.0.0" },
         "node_id": { "$ref": "fleet-command.schema.json#/$defs/node_id" },
         "certificate": { "$ref": "#/$defs/cert_pem", "description": "CN=<node_id>, O=<org>, OU=fleet-node; issued by the fleet CA; short TTL (30 days recommended)" },
         "ca_cert": { "$ref": "#/$defs/cert_pem", "description": "the fleet CA certificate (checked against FLEET_CA_PIN at enroll)" },

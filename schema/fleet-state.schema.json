@@ -7,7 +7,7 @@
   "required": ["schema_version", "node_id", "kind", "collected_at", "content_sha256", "data"],
   "additionalProperties": false,
   "properties": {
-    "schema_version": { "type": "string", "const": "1.0.0" },
+    "schema_version": { "$ref": "fleet-command.schema.json#/$defs/schema_version_wire", "const": "1.0.0" },
     "node_id": { "$ref": "fleet-command.schema.json#/$defs/node_id" },
     "kind": { "$ref": "#/$defs/state_kind" },
     "collected_at": { "$ref": "fleet-command.schema.json#/$defs/utc_time" },
@@ -133,7 +133,7 @@
           }
         },
         "policy_sha256": { "$ref": "fleet-command.schema.json#/$defs/sha256_hex", "description": "sha256 of the policy object serialized as compact JSON with keys sorted and 'allow' sorted — the hub can recompute it from 'policy'" },
-        "replay_floor": { "$ref": "fleet-command.schema.json#/$defs/utc_time", "description": "same value as the heartbeat's replay_floor: the hub never issues a command with issued_at < replay_floor + 10 min" }
+        "replay_floor": { "$ref": "fleet-command.schema.json#/$defs/utc_time", "description": "same value as the heartbeat's replay_floor (rounded up to the whole second), but it may lag up to 60 s (one collection cycle): the hub uses the larger of the two and never issues a command with issued_at < replay_floor + 10 min" }
       }
     },
 

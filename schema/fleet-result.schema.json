@@ -10,7 +10,7 @@
       "required": ["schema_version", "command_id", "node_id", "type", "status", "started_at", "finished_at", "contains_secret"],
       "additionalProperties": false,
       "properties": {
-        "schema_version": { "type": "string", "const": "1.0.0" },
+        "schema_version": { "$ref": "fleet-command.schema.json#/$defs/schema_version_wire", "const": "1.0.0" },
         "command_id": { "$ref": "fleet-command.schema.json#/$defs/uuid" },
         "node_id": { "$ref": "fleet-command.schema.json#/$defs/node_id" },
         "type": { "$ref": "fleet-command.schema.json#/$defs/command_type", "description": "echo of the command's type (selects the output shape)" },
@@ -60,12 +60,12 @@
     },
 
     "ack": {
-      "description": "Body of POST /fleet/v1/commands/{id}/ack, sent ONLY for envelopes that passed authentication (verification lines 0-2 never produce an ack: they are only counted, see heartbeat unauthenticated_rejections). accepted = verified, authorized, about to execute. rejected = FINAL (lines 3-9): recorded with the nonce and the command_id, except bad_window and expired (line 3), which depend only on the envelope and the clock and are recomputed identically on a redelivery; the hub never redelivers it and issues a NEW command (new id, new nonce) once the cause is fixed. deferred = retryable and NOT recorded (not_yet_valid, unavailable): the hub may redeliver the SAME envelope, byte for byte, until not_after; a later final decision supersedes a deferred one.",
+      "description": "Body of POST /fleet/v1/commands/{id}/ack, sent ONLY for envelopes that passed authentication (verification lines 0-2 never produce an ack: they are only counted, see heartbeat unauthenticated_rejections). accepted = verified, authorized, about to execute. rejected = FINAL (lines 3-9): recorded with the nonce and the command_id, except bad_window and expired (line 3), which depend only on the envelope and the clock and are recomputed identically on a redelivery; the hub never redelivers it and issues a NEW command (new id, new nonce) once the cause is fixed. deferred = retryable and NOT recorded (not_yet_valid, unavailable): the hub may redeliver the SAME envelope, byte for byte, until not_after; a later final decision supersedes a deferred one. Idempotency key at the hub: (command_id, decision, reason) — received_at, detail and the other fields do not count, so a repeat with another received_at gets 204, never 409.",
       "type": "object",
       "required": ["schema_version", "command_id", "node_id", "decision", "received_at"],
       "additionalProperties": false,
       "properties": {
-        "schema_version": { "type": "string", "const": "1.0.0" },
+        "schema_version": { "$ref": "fleet-command.schema.json#/$defs/schema_version_wire", "const": "1.0.0" },
         "command_id": { "$ref": "fleet-command.schema.json#/$defs/uuid" },
         "node_id": { "$ref": "fleet-command.schema.json#/$defs/node_id" },
         "decision": { "enum": ["accepted", "rejected", "deferred"] },

@@ -320,6 +320,33 @@
       }
     },
     {
+      "file": "invalid/command/schema_version_wire--leading-zero-major.json",
+      "target": "fleet-command.schema.json#/$defs/schema_version_wire",
+      "description": "MAJOR has no leading zero: outside the form, so 400 (not 426)",
+      "expect": {
+        "keyword": "pattern",
+        "path": ""
+      }
+    },
+    {
+      "file": "invalid/command/schema_version_wire--leading-zero-minor.json",
+      "target": "fleet-command.schema.json#/$defs/schema_version_wire",
+      "description": "MINOR has no leading zero: outside the form, so 400 (not 426)",
+      "expect": {
+        "keyword": "pattern",
+        "path": ""
+      }
+    },
+    {
+      "file": "invalid/command/schema_version_wire--with-patch.json",
+      "target": "fleet-command.schema.json#/$defs/schema_version_wire",
+      "description": "the PATCH never travels: outside the form, so 400",
+      "expect": {
+        "keyword": "pattern",
+        "path": ""
+      }
+    },
+    {
       "file": "invalid/command/sensor-job-enqueue-alive-test.json",
       "target": "fleet-command.schema.json",
       "description": "I2: the sensor applies its own alive test",
@@ -578,6 +605,15 @@
       "expect": {
         "keyword": "uniqueItems",
         "path": "/schema_versions"
+      }
+    },
+    {
+      "file": "invalid/heartbeat/heartbeat_request--schema-version-leading-zero.json",
+      "target": "fleet-heartbeat.schema.json#/$defs/heartbeat_request",
+      "description": "a node->hub body whose schema_version is outside the wire form: the hub answers 400, not 426",
+      "expect": {
+        "keyword": "pattern",
+        "path": "/schema_version"
       }
     },
     {
@@ -1249,6 +1285,16 @@
       "file": "valid/command/schedule-modify.json",
       "target": "fleet-command.schema.json",
       "description": "schedule.modify of the timezone"
+    },
+    {
+      "file": "valid/command/schema_version_wire--unsupported-minor.json",
+      "target": "fleet-command.schema.json#/$defs/schema_version_wire",
+      "description": "inside the wire form: a v1.0 hub answers 426 (version not supported), never 400"
+    },
+    {
+      "file": "valid/command/schema_version_wire--v1.json",
+      "target": "fleet-command.schema.json#/$defs/schema_version_wire",
+      "description": "the wire form of schema_version in v1 (MAJOR.MINOR.0)"
     },
     {
       "file": "valid/command/sensor-job-enqueue.json",

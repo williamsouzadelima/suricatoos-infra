@@ -7,7 +7,7 @@
   "required": ["schema_version", "node_id", "events"],
   "additionalProperties": false,
   "properties": {
-    "schema_version": { "type": "string", "const": "1.0.0" },
+    "schema_version": { "$ref": "fleet-command.schema.json#/$defs/schema_version_wire", "const": "1.0.0" },
     "node_id": { "$ref": "fleet-command.schema.json#/$defs/node_id" },
     "events": { "type": "array", "minItems": 1, "maxItems": 100, "items": { "$ref": "#/$defs/event" } }
   },
