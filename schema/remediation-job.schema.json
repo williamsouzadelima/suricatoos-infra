@@ -36,9 +36,9 @@
     "late_reports": {
       "type": "array",
       "maxItems": 3,
-      "description": "Reports the control-plane REFUSED (409) because the job was already final, or APPLIED with a different result — e.g. the agent applied a job after an operator closed it. Kept whole, rollback_token included, so an operator can revert by hand: the last 3, oldest dropped; reported_at is when the server received it. Operator-only data: set only after the job left the agent's hands, so the agent never receives it.",
+      "description": "Reports the control-plane REFUSED (409) because the job was already final, or APPLIED with a different result — e.g. the agent applied a job after an operator closed it. Kept whole, rollback_token included, so an operator can revert by hand: at most 3 — the FIRST refused report, pinned for good (usually the genuine one), and the 2 most recent, oldest of those dropped; a report equal to a kept one is not stored again; reported_at is when the server received it. Operator-only data: set only after the job left the agent's hands, so the agent never receives it.",
       "items": { "$ref": "remediation-result.schema.json" }
     },
-    "late_reports_total": { "type": "integer", "minimum": 1, "description": "how many reports were ever refused for this job; the newest one kept is number late_reports_total (the control-plane audit line says \"late_report #n\")" }
+    "late_reports_total": { "type": "integer", "minimum": 1, "description": "how many refused reports were stored for this job (a repeat of a kept one is not counted): the pinned first one is number 1, the newest kept is number late_reports_total (the control-plane audit line says \"late_report #n\")" }
   }
 }

@@ -53,8 +53,11 @@ pesam no desenho:
    preserva o aprovador e o `result`. Nenhum dos dois apaga o aprovador (a assinatura o cobre) e ambos
    deixam uma linha de auditoria. Um **relatório do agente que chega com o job já final** — ou diferente
    do `result` de um `APPLIED` — nunca sobrescreve o `result`: responde `409`, deixa uma linha de
-   auditoria e fica guardado inteiro no job (`late_reports`, os 3 últimos), porque o `rollback_token`
-   dele pode ser a única forma de reverter à mão. Operação em
+   auditoria e fica guardado inteiro no job (`late_reports`: o primeiro, fixo, e os 2 mais recentes),
+   porque o `rollback_token` dele pode ser a única forma de reverter à mão; um relatório igual a um
+   guardado recebe o mesmo `409` sem ser guardado nem logado de novo. Já um **reenvio idêntico do
+   `result` gravado** é `204` (idempotente: nada muda, nada é logado), e um relatório de job que o
+   agente **nunca recebeu** é `404` com uma linha de log própria, sem guardar nada. Operação em
    [remediation-operation](../runbooks/remediation-operation.md).
 
 4. **Executor ISOLADO no endpoint, com 3 portões antes de qualquer escrita.** O `agentd` continua
