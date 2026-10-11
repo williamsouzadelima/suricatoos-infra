@@ -2,18 +2,20 @@
   Suricatoos Agent - instalador one-shot (Windows x64).
 
   Baixa o binario do GitHub Release, verifica o SHA-256, instala, enrola no
-  control-plane e registra o servico SCM. Pensado para o fluxo sem friccao:
+  control-plane e registra o servico SCM. Exige Administrador (PowerShell ou
+  cmd.exe elevado).
 
-    irm https://scanner.suricatoos.com/install.ps1 | iex; `
-    Install-SuricatoosAgent -Server https://scanner.suricatoos.com/agent/v1 -Token <TOKEN> -CaPin <PIN>
+  O jeito sem friccao: copiar o comando que o control-plane entrega (pagina
+  "Ativar Agente"). Ele baixa este arquivo para o TEMP de quem roda, so executa se
+  o download der certo e passa -Server, -Token e -CaPin ja preenchidos.
 
-  Ou direto:
+  Ou direto, com o arquivo ja baixado:
     powershell -ExecutionPolicy Bypass -File install.ps1 -Server <URL> -Token <TOKEN> -CaPin <PIN>
   Em massa ou como SYSTEM (RMM, PsExec -s): baixe este arquivo para uma pasta protegida e rode com -File.
 
   NOTA: este arquivo e deliberadamente ASCII-only. O Windows PowerShell 5.1 le um
   script sem BOM na codepage ANSI, entao qualquer acento em UTF-8 sairia corrompido
-  quando servido por 'irm | iex' ou salvo e executado.
+  quando baixado (iwr/irm) ou salvo e executado.
 #>
 param(
   [Parameter(Mandatory = $true)][string]$Server,
