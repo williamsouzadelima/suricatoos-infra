@@ -5349,10 +5349,10 @@ index eaff647..d6e39ef 100644
 \ No newline at end of file
 diff --git a/public/locales/gsa-es.json b/public/locales/gsa-es.json
 new file mode 100644
-index 0000000..3af4d47
+index 0000000..9711a41
 --- /dev/null
 +++ b/public/locales/gsa-es.json
-@@ -0,0 +1,2461 @@
+@@ -0,0 +1,2464 @@
 +{
 +  "AI Providers": "Proveedores de IA",
 +  "Configure LLM providers (OpenRouter, UnoRouter and others) used to draft remediation plans. Keys are stored encrypted and never shown.": "Configure los proveedores de LLM (OpenRouter, UnoRouter y otros) usados para redactar planes de remediación. Las claves se guardan cifradas y nunca se muestran.",
@@ -5403,6 +5403,9 @@ index 0000000..3af4d47
 +  "The server is busy or limiting requests ({{status}}). Wait a minute and try again.": "El servidor está ocupado o limitando las solicitudes ({{status}}). Espere un minuto e inténtelo de nuevo.",
 +  "The server answered with an error ({{status}}).": "El servidor respondió con un error ({{status}}).",
 +  "AI provider configuration was not found on the server. Check that it is enabled (AI_CONFIG_ENABLED=true).": "No se encontró la configuración de proveedores de IA en el servidor. Verifique que esté habilitada (AI_CONFIG_ENABLED=true).",
++  "Session expired. Sign in again to see the endpoint agents.": "Sesión expirada. Inicie sesión de nuevo para ver los agentes de endpoint.",
++  "Session expired. Sign in again to activate agents.": "Sesión expirada. Inicie sesión de nuevo para activar agentes.",
++  "Windows: paste into a PowerShell/cmd opened as Administrator. Do not run as SYSTEM (RMM, Intune, GPO, PsExec -s) — the one-liner refuses; for mass deployment, download install.ps1 to a protected folder and run it with -File.": "Windows: péguelo en un PowerShell/cmd abierto como Administrador. No lo ejecute como SYSTEM (RMM, Intune, GPO, PsExec -s) — el one-liner se niega; para una implementación masiva, descargue install.ps1 en una carpeta protegida y ejecútelo con -File.",
 +  "\nThis could have the following reasons:\n1. The CPE might not be included in the official NVD CPE dictionary yet, and no additional information is available.\n2. You might have followed an incorrect link and the CPE does not exist.": "\nEsto podría deberse a las siguientes razones:\n1. Es posible que el CPE aún no esté incluido en el diccionario CPE oficial del NVD y no haya información adicional disponible.\n2. Es posible que haya seguido un enlace incorrecto y que el CPE no exista.",
 +  "\nThis could have the following reasons:\n1. The CVE might not be included in the SCAP database yet. For new CVEs it can take a month or more until they become available.\n2. You might have followed an incorrect link and the CVE does not exist.": "\nEsto podría deberse a las siguientes razones:\n1. Es posible que el CVE aún no esté incluido en la base de datos SCAP. Para los CVE nuevos puede pasar un mes o más hasta que estén disponibles.\n2. Es posible que haya seguido un enlace incorrecto y que el CVE no exista.",
 +  "\nYou might have followed an incorrect link and the {{entity}} does not exist.": "\nEs posible que haya seguido un enlace incorrecto y que el {{entity}} no exista.",
@@ -7816,10 +7819,10 @@ index 0000000..3af4d47
 +}
 \ No newline at end of file
 diff --git a/public/locales/gsa-pt_BR.json b/public/locales/gsa-pt_BR.json
-index 10e592f..c30dbc9 100644
+index 10e592f..c79046d 100644
 --- a/public/locales/gsa-pt_BR.json
 +++ b/public/locales/gsa-pt_BR.json
-@@ -1,216 +1,2461 @@
+@@ -1,216 +1,2464 @@
  {
 -  "# of OVAL Definitions": "OVAL defini\u00e7\u00e3o",
 -  "# of Operating Systems": "Sistema Operacional",
@@ -7903,6 +7906,9 @@ index 10e592f..c30dbc9 100644
 +  "The server is busy or limiting requests ({{status}}). Wait a minute and try again.": "O servidor está ocupado ou limitando as requisições ({{status}}). Aguarde um minuto e tente novamente.",
 +  "The server answered with an error ({{status}}).": "O servidor respondeu com um erro ({{status}}).",
 +  "AI provider configuration was not found on the server. Check that it is enabled (AI_CONFIG_ENABLED=true).": "A configuração de provedores de IA não foi encontrada no servidor. Verifique se ela está habilitada (AI_CONFIG_ENABLED=true).",
++  "Session expired. Sign in again to see the endpoint agents.": "Sessão expirada. Entre novamente para ver os agentes de endpoint.",
++  "Session expired. Sign in again to activate agents.": "Sessão expirada. Entre novamente para ativar agentes.",
++  "Windows: paste into a PowerShell/cmd opened as Administrator. Do not run as SYSTEM (RMM, Intune, GPO, PsExec -s) — the one-liner refuses; for mass deployment, download install.ps1 to a protected folder and run it with -File.": "Windows: cole num PowerShell/cmd aberto como Administrador. Não rode como SYSTEM (RMM, Intune, GPO, PsExec -s) — o one-liner recusa; para implantação em massa, baixe o install.ps1 para uma pasta protegida e rode com -File.",
 +  "\nThis could have the following reasons:\n1. The CPE might not be included in the official NVD CPE dictionary yet, and no additional information is available.\n2. You might have followed an incorrect link and the CPE does not exist.": "\nIsto pode ter os seguintes motivos:\n1. O CPE pode ainda nao estar incluido no dicionario oficial de CPE do NVD, e nenhuma informação adicional esta disponível.\n2. Voce pode ter seguido um link incorreto e o CPE nao existe.",
 +  "\nThis could have the following reasons:\n1. The CVE might not be included in the SCAP database yet. For new CVEs it can take a month or more until they become available.\n2. You might have followed an incorrect link and the CVE does not exist.": "\nIsto pode ter os seguintes motivos:\n1. O CVE pode ainda nao estar incluido no banco de dados SCAP. Para novos CVEs, pode levar um mes ou mais ate que se tornem disponíveis.\n2. Voce pode ter seguido um link incorreto e o CVE nao existe.",
 +  "\nYou might have followed an incorrect link and the {{entity}} does not exist.": "\nVoce pode ter seguido um link incorreto e o {{entity}} nao existe.",
@@ -11586,10 +11592,10 @@ index a057cf9..409c93b 100644
    },
 diff --git a/src/web/pages/downloads/DownloadsPage.tsx b/src/web/pages/downloads/DownloadsPage.tsx
 new file mode 100644
-index 0000000..326ee49
+index 0000000..427a02c
 --- /dev/null
 +++ b/src/web/pages/downloads/DownloadsPage.tsx
-@@ -0,0 +1,197 @@
+@@ -0,0 +1,243 @@
 +/* SPDX-FileCopyrightText: 2024 Greenbone AG
 + *
 + * SPDX-License-Identifier: AGPL-3.0-or-later
@@ -11597,8 +11603,9 @@ index 0000000..326ee49
 +
 +/* Suricatoos: native GSA page to activate a Suricatoos agent for a tenant in one
 + * command. Pick a TENANT + a platform → the control-plane
-+ * (/agent/provision/enroll-command, session-gated by nginx via the GSA cookie)
-+ * mints a fresh per-tenant token and returns a ready-to-run command with the token
++ * (/agent/provision/enroll-command, behind the nginx session gate: the GSA
++ * cookie plus the session token, validated by the gsad) mints a fresh
++ * per-tenant token and returns a ready-to-run command with the token
 + * already embedded — the dynamic per-tenant token. Renders inside the GSA shell. */
 +
 +import React, {useState, useCallback, useEffect} from 'react';
@@ -11606,6 +11613,7 @@ index 0000000..326ee49
 +import Layout from 'web/components/layout/Layout';
 +import PageTitle from 'web/components/layout/PageTitle';
 +import Section from 'web/components/section/Section';
++import useGmp from 'web/hooks/useGmp';
 +import useTranslation from 'web/hooks/useTranslation';
 +import Theme from 'web/utils/Theme';
 +
@@ -11649,23 +11657,57 @@ index 0000000..326ee49
 +  minWidth: '220px',
 +};
 +
++const avisoStyle: React.CSSProperties = {
++  color: Theme.darkGray,
++  fontSize: '12px',
++  borderLeft: `3px solid ${Theme.severityWarnYellow}`,
++  padding: '2px 0 2px 8px',
++  margin: '0 0 10px',
++};
++
++// Carries the HTTP status (same idiom as FeedUpdateSection and
++// AiProvidersPage), so a 401 from the nginx session gate shows as an expired
++// session instead of a bare "HTTP 401".
++class ErroHttp extends Error {
++  status: number;
++
++  constructor(status: number) {
++    super('HTTP ' + String(status));
++    this.status = status;
++  }
++}
++
++const sessaoExpirada = (e: Error): boolean =>
++  e instanceof ErroHttp && e.status === 401;
++
++// The session token goes on every call, as in FeedUpdateSection and
++// AiProvidersPage: nginx validates the session by subrequest to the gsad, which
++// requires the cookie AND the token (its CSRF defense) and answers 401 for a
++// missing or forged session. The cookie alone does not pass.
++const pedir = (p: string, token: string, init?: RequestInit) => {
++  const sep = p.includes('?') ? '&' : '?';
++  const url = p + sep + 'token=' + encodeURIComponent(token);
++  return fetch(url, {credentials: 'same-origin', ...init});
++};
++
 +const DownloadsPage = () => {
 +  const [_] = useTranslation();
++  const gmp = useGmp();
++  const token: string = gmp.session.token ?? '';
 +  const [tenants, setTenants] = useState<string[]>([]);
 +  const [tenant, setTenant] = useState<string>('');
 +  const [target, setTarget] = useState<string>('');
 +  const [resp, setResp] = useState<EnrollResponse | null>(null);
 +  const [loading, setLoading] = useState<boolean>(false);
-+  const [error, setError] = useState<string | null>(null);
++  const [error, setError] = useState<Error | null>(null);
 +  const [copied, setCopied] = useState<boolean>(false);
 +
-+  // Load the tenant list on mount (session-gated by nginx via the GSA cookie).
++  // Load the tenant list on mount (behind the nginx session gate: cookie + token).
 +  useEffect(() => {
-+    fetch('/agent/provision/tenants', {
-+      credentials: 'same-origin',
++    pedir('/agent/provision/tenants', token, {
 +      headers: {Accept: 'application/json'},
 +    })
-+      .then(r => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
++      .then(r => (r.ok ? r.json() : Promise.reject(new ErroHttp(r.status))))
 +      .then(d => {
 +        const ts: string[] = d.tenants || [];
 +        setTenants(ts);
@@ -11673,13 +11715,13 @@ index 0000000..326ee49
 +          setTenant(ts[0]);
 +        }
 +      })
-+      .catch(e => setError((e as Error).message));
-+  }, []);
++      .catch(e => setError(e as Error));
++  }, [token]);
 +
 +  const pick = useCallback(
 +    async (tgt: string) => {
 +      if (!tenant) {
-+        setError(_('Selecione um tenant primeiro'));
++        setError(new Error(_('Selecione um tenant primeiro')));
 +        return;
 +      }
 +      setTarget(tgt);
@@ -11688,21 +11730,22 @@ index 0000000..326ee49
 +      setCopied(false);
 +      setLoading(true);
 +      try {
-+        const r = await fetch(
++        const r = await pedir(
 +          `/agent/provision/enroll-command?tenant=${encodeURIComponent(tenant)}&target=${encodeURIComponent(tgt)}`,
-+          {credentials: 'same-origin', headers: {Accept: 'application/json'}},
++          token,
++          {headers: {Accept: 'application/json'}},
 +        );
 +        if (!r.ok) {
-+          throw new Error(`HTTP ${r.status}`);
++          throw new ErroHttp(r.status);
 +        }
 +        setResp(await r.json());
 +      } catch (e) {
-+        setError((e as Error).message);
++        setError(e as Error);
 +      } finally {
 +        setLoading(false);
 +      }
 +    },
-+    [tenant, _],
++    [tenant, token, _],
 +  );
 +
 +  const copy = useCallback(() => {
@@ -11756,7 +11799,9 @@ index 0000000..326ee49
 +          {loading ? <p>{_('Gerando comando…')}</p> : null}
 +          {error ? (
 +            <p style={{color: Theme.errorRed}}>
-+              {_('Erro ao gerar o comando')}: {error}
++              {sessaoExpirada(error)
++                ? _('Session expired. Sign in again to activate agents.')
++                : `${_('Erro ao gerar o comando')}: ${error.message}`}
 +            </p>
 +          ) : null}
 +          {resp ? (
@@ -11767,6 +11812,13 @@ index 0000000..326ee49
 +                {_(', rode no host:')}
 +              </p>
 +              <code style={codeBoxStyle}>{resp.command}</code>
++              {resp.target === 'windows' ? (
++                <p style={avisoStyle}>
++                  {_(
++                    'Windows: paste into a PowerShell/cmd opened as Administrator. Do not run as SYSTEM (RMM, Intune, GPO, PsExec -s) — the one-liner refuses; for mass deployment, download install.ps1 to a protected folder and run it with -File.',
++                  )}
++                </p>
++              ) : null}
 +              <Layout>
 +                <Button title={_('Copiar')} onClick={copy}>
 +                  {copied ? _('Copiado ✓') : _('Copiar')}
@@ -11789,10 +11841,10 @@ index 0000000..326ee49
 +export default DownloadsPage;
 diff --git a/src/web/pages/endpoint-agents/EndpointAgentsPage.tsx b/src/web/pages/endpoint-agents/EndpointAgentsPage.tsx
 new file mode 100644
-index 0000000..f54323b
+index 0000000..28b405a
 --- /dev/null
 +++ b/src/web/pages/endpoint-agents/EndpointAgentsPage.tsx
-@@ -0,0 +1,313 @@
+@@ -0,0 +1,348 @@
 +/* SPDX-FileCopyrightText: 2024 Greenbone AG
 + *
 + * SPDX-License-Identifier: AGPL-3.0-or-later
@@ -11801,8 +11853,9 @@ index 0000000..f54323b
 +/* Suricatoos: native GSA page for the endpoint agents (posture + online/offline
 + * + on-demand scan). Renders inside the GSA shell. Data comes from the ingest
 + * (/agents/data.json) and the "scan now" trigger from the control-plane
-+ * (/agents/scan) — both session-gated by nginx (the GSA cookie). Distinct from
-+ * Greenbone's own "Agents" feature (/agents). */
++ * (/agents/scan) — both behind the nginx session gate (the GSA cookie plus the
++ * session token, validated by the gsad). Distinct from Greenbone's own "Agents"
++ * feature (/agents). */
 +
 +import React, {useState, useEffect, useCallback, useMemo} from 'react';
 +import {showSuccessNotification} from '@greenbone/ui-lib';
@@ -11818,6 +11871,7 @@ index 0000000..f54323b
 +import TableHead from 'web/components/table/TableHead';
 +import TableHeader from 'web/components/table/TableHeader';
 +import TableRow from 'web/components/table/TableRow';
++import useGmp from 'web/hooks/useGmp';
 +import useTranslation from 'web/hooks/useTranslation';
 +import SortDirection, {type SortDirectionType} from 'web/utils/sort-direction';
 +import Theme from 'web/utils/Theme';
@@ -11840,6 +11894,31 @@ index 0000000..f54323b
 +  online: boolean;
 +  status: string;
 +}
++
++// Carries the HTTP status (same idiom as FeedUpdateSection and
++// AiProvidersPage), so a 401 from the nginx session gate shows as an expired
++// session instead of a bare "HTTP 401".
++class ErroHttp extends Error {
++  status: number;
++
++  constructor(status: number) {
++    super('HTTP ' + String(status));
++    this.status = status;
++  }
++}
++
++const sessaoExpirada = (e: Error): boolean =>
++  e instanceof ErroHttp && e.status === 401;
++
++// The session token goes on every call, as in FeedUpdateSection and
++// AiProvidersPage: nginx validates the session by subrequest to the gsad, which
++// requires the cookie AND the token (its CSRF defense) and answers 401 for a
++// missing or forged session. The cookie alone does not pass.
++const pedir = (p: string, token: string, init?: RequestInit) => {
++  const sep = p.includes('?') ? '&' : '?';
++  const url = p + sep + 'token=' + encodeURIComponent(token);
++  return fetch(url, {credentials: 'same-origin', ...init});
++};
 +
 +const relTime = (iso: string): string => {
 +  if (!iso) {
@@ -11900,30 +11979,31 @@ index 0000000..f54323b
 +
 +const EndpointAgentsPage = () => {
 +  const [_] = useTranslation();
++  const gmp = useGmp();
++  const token: string = gmp.session.token ?? '';
 +  const [agents, setAgents] = useState<Agent[]>([]);
 +  const [loading, setLoading] = useState<boolean>(true);
-+  const [error, setError] = useState<string | null>(null);
++  const [error, setError] = useState<Error | null>(null);
 +  const [sortBy, setSortBy] = useState<string>('severity');
 +  const [sortDir, setSortDir] = useState<SortDirectionType>(SortDirection.DESC);
 +
 +  const load = useCallback(async () => {
 +    try {
-+      const resp = await fetch('/agents/data.json', {
-+        credentials: 'same-origin',
++      const resp = await pedir('/agents/data.json', token, {
 +        headers: {Accept: 'application/json'},
 +      });
 +      if (!resp.ok) {
-+        throw new Error(`HTTP ${resp.status}`);
++        throw new ErroHttp(resp.status);
 +      }
 +      const data: Agent[] = await resp.json();
 +      setAgents(data);
 +      setError(null);
 +    } catch (e) {
-+      setError((e as Error).message);
++      setError(e as Error);
 +    } finally {
 +      setLoading(false);
 +    }
-+  }, []);
++  }, [token]);
 +
 +  useEffect(() => {
 +    load();
@@ -11934,12 +12014,13 @@ index 0000000..f54323b
 +  const scanNow = useCallback(
 +    async (host: string) => {
 +      try {
-+        const resp = await fetch(`/agents/scan?id=${encodeURIComponent(host)}`, {
-+          method: 'POST',
-+          credentials: 'same-origin',
-+        });
++        const resp = await pedir(
++          `/agents/scan?id=${encodeURIComponent(host)}`,
++          token,
++          {method: 'POST'},
++        );
 +        if (resp.status !== 202) {
-+          throw new Error(`HTTP ${resp.status}`);
++          throw new ErroHttp(resp.status);
 +        }
 +        showSuccessNotification(
 +          '',
@@ -11947,10 +12028,10 @@ index 0000000..f54323b
 +        );
 +        setTimeout(load, 70000);
 +      } catch (e) {
-+        setError((e as Error).message);
++        setError(e as Error);
 +      }
 +    },
-+    [load, _],
++    [load, token, _],
 +  );
 +
 +  const onSortChange = useCallback((field: string) => {
@@ -12009,7 +12090,13 @@ index 0000000..f54323b
 +              </Button>
 +            </div>
 +            {error ? (
-+              <p style={{color: Theme.errorRed}}>{_('Erro ao carregar')}: {error}</p>
++              <p style={{color: Theme.errorRed}}>
++                {sessaoExpirada(error)
++                  ? _(
++                      'Session expired. Sign in again to see the endpoint agents.',
++                    )
++                  : `${_('Erro ao carregar')}: ${error.message}`}
++              </p>
 +            ) : null}
 +            {loading ? (
 +              <p>{_('Carregando…')}</p>
@@ -12751,7 +12838,7 @@ index dd0b390..9316ed8 100644
    Layers: {
 diff --git a/src/web/pages/ai-providers/AiProvidersPage.tsx b/src/web/pages/ai-providers/AiProvidersPage.tsx
 new file mode 100644
-index 0000000..b044b99
+index 0000000..a52ca49
 --- /dev/null
 +++ b/src/web/pages/ai-providers/AiProvidersPage.tsx
 @@ -0,0 +1,1120 @@
@@ -13213,8 +13300,8 @@ index 0000000..b044b99
 +  };
 +
 +  // The live list is fetched when the selector opens, not on mount: nginx
-+  // rate-limits this API (5 r/min, burst 10) and every preset already carries
-+  // a free default model.
++  // rate-limits this API (zone ui_api, shared by the session APIs of the UI)
++  // and every preset already carries a free default model.
 +  const onDropdownOpen = () => {
 +    if (canList && list.state !== 'loading' && list.state !== 'loaded') {
 +      void loadModels();
