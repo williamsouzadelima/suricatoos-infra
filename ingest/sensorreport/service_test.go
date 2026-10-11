@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/williamsouzadelima/suricatoos-infra/ingest/scanlaunch"
 )
@@ -194,5 +195,82 @@ func TestForwarderDisabledIsNoop(t *testing.T) {
 	body := mkReport("acme", scanlaunch.Finding{Host: "10.20.5.5", Port: "443/tcp", OID: "o1"})
 	if w := serve(s, reportReq(body, "acme")); w.Code != http.StatusAccepted {
 		t.Fatalf("sem forwarder deveria 202 normal, got %d", w.Code)
+	}
+}
+
+// --- P1.9a: prazo de escrita próprio da rota ------------------------------------
+
+// clientReportReq builds a real CLIENT request carrying the headers nginx would add
+// after verifying the sensor's mTLS cert (reportReq's httptest.NewRequest builds a
+// server-side request, which http.Client refuses to send).
+func clientReportReq(t *testing.T, baseURL string, body any, dnO string) *http.Request {
+	t.Helper()
+	b, err := json.Marshal(body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req, err := http.NewRequest(http.MethodPost, baseURL+"/v1/sensor-report", bytes.NewReader(b))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("X-Client-Cert-Verify", "SUCCESS")
+	req.Header.Set("X-Client-Cert-DN", "CN=sensor-"+dnO+"-1,OU=scanner-sensor,O="+dnO)
+	req.Header.Set("X-Client-Cert-Serial", "0A1B")
+	return req
+}
+
+// O servidor do ingest tem um WriteTimeout global (30 s em cmd/ingest) e o import de
+// um report pode levar minutos. Sem prazo próprio a resposta estoura, o sensor vê
+// erro, NÃO dá ack e re-entrega — o report é importado duas vezes. Aqui um servidor
+// de WriteTimeout curto faz o papel dos 30 s e um import mais lento que ele, o dos
+// minutos; o comportamento observado é o do net/http de verdade.
+func TestSlowImportOutlivesServerWriteTimeout(t *testing.T) {
+	const writeTimeout = 50 * time.Millisecond
+	const slow = 200 * time.Millisecond // 4x o WriteTimeout
+
+	s := New(Config{}, acmeResolver(), notRevoked)
+	s.imp = func(ctx context.Context, _ TenantConfig, rep bridgeReport) ([]scanlaunch.Finding, error) {
+		select {
+		case <-time.After(slow):
+			return rep.Findings, nil
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
+	mux := http.NewServeMux()
+	s.Register(mux)
+	// Controle negativo: outra rota, COM o mesmo atraso e SEM prazo próprio, tem que
+	// continuar sujeita ao WriteTimeout global — a extensão vale só para o sensor-report.
+	mux.HandleFunc("GET /slow-other-route", func(w http.ResponseWriter, _ *http.Request) {
+		time.Sleep(slow)
+		w.Write([]byte("ok"))
+	})
+	srv := httptest.NewUnstartedServer(mux)
+	srv.Config.WriteTimeout = writeTimeout
+	srv.Start()
+	defer srv.Close()
+	client := &http.Client{Timeout: 10 * time.Second, Transport: &http.Transport{DisableKeepAlives: true}}
+
+	if resp, err := client.Get(srv.URL + "/slow-other-route"); err == nil {
+		resp.Body.Close()
+		t.Fatalf("controle: a rota SEM prazo próprio deveria ser cortada pelo WriteTimeout global de %v (status %d)",
+			writeTimeout, resp.StatusCode)
+	}
+
+	body := mkReport("acme", scanlaunch.Finding{Host: "10.20.5.5", Port: "443/tcp", OID: "o1"})
+	resp, err := client.Do(clientReportReq(t, srv.URL, body, "acme"))
+	if err != nil {
+		t.Fatalf("import lento (%v > WriteTimeout %v) deveria responder mesmo assim, got erro: %v", slow, writeTimeout, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusAccepted {
+		t.Fatalf("deveria 202, got %d", resp.StatusCode)
+	}
+	var out map[string]int
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatal(err)
+	}
+	if out["imported"] != 1 || out["quarantined"] != 0 {
+		t.Fatalf("esperado imported=1 quarantined=0, got %+v", out)
 	}
 }
