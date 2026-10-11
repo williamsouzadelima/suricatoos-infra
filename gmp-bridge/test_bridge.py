@@ -543,7 +543,12 @@ class TestReportFormatContract(unittest.TestCase):
       1. INVENTORY_MARKER_OID, the NVT OID of the synthetic "inventory collected"
          result that finding_report_to_xml() emits for a host with no findings;
       2. the container-task comment prefix "Suricatoos Agent findings for host ",
-         which run_import() sets in agent mode.
+         which run_import() sets in agent mode;
+
+    and it only trusts them when the report carries NO host <detail> named Auth-* or
+    scanned_with_* (those come from a real network scan; an operator-edited task
+    comment must not turn a scan into an "agent import"). So the agent-import XML
+    this bridge emits must never carry such details.
 
     The report-format CI is path-filtered and does not run when only gmp-bridge/
     changes, so these tests are the tripwire on this side. Changing either marker
@@ -592,3 +597,18 @@ class TestReportFormatContract(unittest.TestCase):
             self.COMMENT_SRC in inspect.getsource(run_import),
             f"run_import() no longer contains {self.COMMENT_SRC!r}. {self.HOW_TO_FIX}",
         )
+
+    def test_agent_import_xml_has_no_scan_details(self):
+        # The report vetoes the agent-import reading when a host carries Auth-* or
+        # scanned_with_* details; if this bridge ever emitted them, agent imports
+        # would silently be described as network scans.
+        for report in (SAMPLE_REPORT, {**SAMPLE_REPORT, "findings": []}):
+            root = ET.fromstring(finding_report_to_xml(report))
+            names = [d.findtext("name") or "" for d in root.iter("detail")]
+            vetoing = [n for n in names if n.startswith(("Auth-", "scanned_with_"))]
+            self.assertEqual(
+                vetoing,
+                [],
+                f"The agent-import XML now carries {vetoing!r}; the Premium PDF report "
+                f"would stop recognizing agent imports. {self.HOW_TO_FIX}",
+            )
