@@ -14,6 +14,27 @@ import (
 	"github.com/williamsouzadelima/suricatoos-infra/ingest/scanlaunch"
 )
 
+// The timeouts of the report path form a chain, and the sensor must be the LAST link
+// to give up:
+//
+//	sensor PushReport (cloud.defaultReportTimeout, 6 min, sensor/internal/cloud/cloud.go)
+//	  >= importTimeout + writeSlack (5 min 30 s, below)
+//	  >= nginx proxy_read_timeout of /ingest/v1/sensor-report (300 s, compose/nginx/default.conf)
+//
+// If the sensor hangs up first, the connection closes, the request context is
+// cancelled and exec.CommandContext kills bridge.py mid-import; with no ack the job is
+// re-delivered every few minutes into the same wall until its TTL. Change one link and
+// revisit the others.
+const (
+	// importTimeout bounds one report import (bridge.py --mode network) together with
+	// the optional push to the Score, which shares its context.
+	importTimeout = 5 * time.Minute
+
+	// writeSlack is the margin past importTimeout in which the response must still be
+	// written — also when the import hits its timeout and the handler answers 502.
+	writeSlack = 30 * time.Second
+)
+
 // RevokedFunc reports whether a client-cert serial (hex) is revoked. nil = the CRL
 // is not wired → the service denies everything (fail-closed).
 type RevokedFunc func(serialHex string) bool
@@ -111,7 +132,13 @@ func (s *Service) handle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Minute)
+	// The import below can run for minutes, far past the server-wide WriteTimeout
+	// (30 s in cmd/ingest). Extend the write deadline for THIS response only — the
+	// global timeout keeps protecting every other route. Without it the answer is cut
+	// off after a successful import: the sensor sees an error, skips the ack and
+	// re-delivers the job, and the report is imported a second time.
+	extendWriteDeadline(w, importTimeout+writeSlack)
+	ctx, cancel := context.WithTimeout(r.Context(), importTimeout)
 	defer cancel()
 	report := bridgeReport{Tenant: id.O, ScanTime: rep.CollectedAt, Findings: kept}
 	reattested, err := s.imp(ctx, tc, report)
@@ -194,6 +221,17 @@ func (s *Service) execBridge(ctx context.Context, tc TenantConfig, rep bridgeRep
 		}
 	}
 	return reatt, nil
+}
+
+// extendWriteDeadline moves this response's write deadline to now+d, overriding the
+// server-wide WriteTimeout for this connection until the next request resets it. It
+// is best-effort: a ResponseWriter that cannot do it (a wrapper without Unwrap, a
+// recorder in tests) keeps the server default, which is logged so a response cut
+// off at the global timeout is traceable.
+func extendWriteDeadline(w http.ResponseWriter, d time.Duration) {
+	if err := http.NewResponseController(w).SetWriteDeadline(time.Now().Add(d)); err != nil {
+		log.Printf("sensorreport: não foi possível estender o prazo de escrita (%v) — a resposta fica sujeita ao WriteTimeout do servidor", err)
+	}
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

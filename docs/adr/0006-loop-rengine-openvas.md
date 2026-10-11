@@ -212,7 +212,8 @@ Host→`Subdomain`/`target_domain` só se estiver na `ScanHistory`, senão quare
   **Nenhuma mutação em prod.**
 - **P1 — scanner, no escuro.** retag `:stable`→`:stable-prev`; `load` da imagem nova; env `SCAN_*`
   (`SCAN_LAUNCH_ENABLED=false`, allowlist vazia); `up -d --no-deps --force-recreate ingest`; bloco nginx
-  (`nginx -t` → `up -d --no-deps nginx`); cria usuário gvmd `suricatoos-scan` + permissão Super p/ admin.
+  (`nginx -t` → `up -d --no-deps nginx`; *hoje* com `--force-recreate`, pois o mount é de arquivo único —
+  ver `docs/runbooks/deploy-pipeline.md` §4); cria usuário gvmd `suricatoos-scan` + permissão Super p/ admin.
   *(cada = 1 ação autorizada)* Verificar: 403 sem cert, 503 com cert enquanto desabilitado; `/ingest/`,
   GSA e agentes intactos.
 - **P2 — score, enroll + plumbing.** minta token, roda `openvas_enroll`; deploy reNgine com

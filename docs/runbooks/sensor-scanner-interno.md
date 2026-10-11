@@ -42,12 +42,13 @@ docker compose logs --tail=20 control-plane ingest
 #   → confirma que o sensor está DARK.
 
 # 2) nginx: novo default.conf (adiciona a location mTLS /agent/v1/feed; as demais
-#    rotas de sensor já falham fechado). Gotcha do volume (ver deploy-pipeline.md):
-#    o nginx_config_vol vence o bind-mount, então copie pro volume + reload.
-VOL=/var/lib/docker/volumes/greenbone-community-edition_nginx_config_vol/_data
-cp compose/nginx/default.conf "$VOL/default.conf"     # (git pull o repo no host antes)
-docker compose exec nginx nginx -t
-docker compose exec nginx nginx -s reload
+#    rotas de sensor já falham fechado). Gotcha (ver deploy-pipeline.md §4): o nginx lê
+#    o default.conf por bind-mount de arquivo único; o git pull troca o arquivo (inode
+#    novo) e o reload NÃO o pega. Valide num container descartável e RECRIE o nginx.
+git pull                                              # no host, no diretório do compose
+docker compose run --rm --no-deps --entrypoint nginx nginx -t
+docker compose up -d --no-deps --force-recreate nginx
+curl -sS --resolve <dominio>:443:127.0.0.1 -o /dev/null -w 'status=%{http_code}\n' https://<dominio>/
 
 # 3) Separação das 3 chaves (emissão ≠ feed ≠ update — risco #3). As chaves de feed/
 #    update são auto-geradas no 1º boot se o path existir e o arquivo faltar. As pubkeys
@@ -102,6 +103,11 @@ no gvmd central (partição do tenant). Ligar `SENSOR_SCORE_URL` só aqui, e con
 Score recebe severity/CVE **do feed** (não do sensor — fix #2). Asserção: achados só na
 partição do piloto.
 
+Durante o scan o heartbeat do sensor segue saindo (goroutine própria) e informa
+`active_jobs=1`: o log do control-plane mostra `sensorjobs: heartbeat ... jobs=1`. Um sensor
+com a versão anterior do agente ficava sem heartbeat enquanto escaneava — não o confunda com
+sensor fora do ar.
+
 ## P4 — Fonte de descoberta
 
 Ligar descoberta Score/agente; asserção de que o scope-gate **dropa** out-of-scope; soak
@@ -120,7 +126,8 @@ gvmd/openvas + desligar os containers de feed upstream + snapshot cold-start).
 ```sh
 # Imagem: recria a tag anterior (o compose referencia :stable; pinne a digest anterior).
 docker compose up -d --no-deps control-plane ingest    # com a tag/digest boa
-# nginx: restaura o default.conf anterior no volume + nginx -s reload.
+# nginx: restaura o default.conf anterior (git), valida (nginx -t) e recria o nginx
+#   (--no-deps --force-recreate), como no passo 2 da P1.
 # chaves: remova as linhas *_SIGN_KEY_FILE do control-plane.env + recreate (schema aditivo).
 ```
 

@@ -82,7 +82,11 @@ Dispare um scan pelo reNgine e acompanhe: `docker logs -f greenbone-community-ed
 - **Flag primeiro** (instantâneo, sem redeploy): `SCAN_LAUNCH_ENABLED=false` ou
   `SURICATOOS_SCANNER_PUSH_ENABLED=False`.
 - **Imagem**: `docker tag ...suricatoos-ingest:stable-prev ...:stable` + `up -d --no-deps ingest`.
-- **nginx**: restaure a conf boa, `docker compose exec nginx nginx -t`, `up -d --no-deps nginx`.
+- **nginx**: restaure o `default.conf` anterior (git), `nginx -t` num container descartável
+  (`docker compose run --rm --no-deps --entrypoint nginx nginx -t`) e **recrie** o nginx
+  (`docker compose up -d --no-deps --force-recreate nginx`). Não use `exec nginx nginx -t` (valida o
+  arquivo antigo) nem `up -d --no-deps nginx` sozinho (não recria): o bind-mount de arquivo único segue no
+  inode antigo — ver `deploy-pipeline.md` §4.
 - **Schema reNgine** é aditivo (`ScanBridgeJob` + `Domain.send_to_scanner`); nada a reverter.
 
 ## Gotchas

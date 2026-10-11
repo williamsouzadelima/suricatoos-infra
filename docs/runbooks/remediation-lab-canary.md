@@ -66,8 +66,10 @@ REMEDIATION_ENABLED=true
 # REMEDIATION_JOBS_FILE=/data/remediation-jobs.json       (fila 0600)
 ```
 
-Recreate do control-plane + copiar o `default.conf` com a location `/agent/v1/remediation-jobs` para o
-volume do nginx e recreate. **Fumaça do gate** (antes de qualquer job):
+Recreate do control-plane e aplicação do `default.conf` com a location `/agent/v1/remediation-jobs`:
+após o `git pull`, `nginx -t` num container descartável e **recrie** o nginx
+(`docker compose up -d --no-deps --force-recreate nginx`) — o reload não pega o arquivo novo
+(bind-mount de arquivo único; ver `deploy-pipeline.md` §4). **Fumaça do gate** (antes de qualquer job):
 
 - `GET https://<lab-host>/agent/v1/remediation-jobs` **sem** cert cliente → **403** (mTLS exige
   `ssl_client_verify == SUCCESS`).

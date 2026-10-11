@@ -55,7 +55,36 @@ type Config struct {
 	CertFile     string
 	KeyFile      string
 	CAFile       string
-	Timeout      time.Duration
+
+	// Timeout bounds poll, ack and heartbeat — each a quick round trip (default 60 s).
+	Timeout time.Duration
+	// ReportTimeout bounds PushReport alone (default defaultReportTimeout).
+	ReportTimeout time.Duration
+}
+
+// defaultReportTimeout is the PushReport timeout when Config.ReportTimeout is unset.
+//
+// The ingest answers a sensor-report only AFTER it imported the findings into gvmd
+// (minutes for a big scan, versus milliseconds for poll/ack/heartbeat), so PushReport
+// cannot share the short client-wide Timeout. The timeouts of the report path form a
+// chain, and the sensor must be the LAST link to give up:
+//
+//	sensor PushReport (this constant, 6 min)
+//	  >= ingest importTimeout + writeSlack (5 min 30 s, ingest/sensorreport/service.go)
+//	  >= nginx proxy_read_timeout of /ingest/v1/sensor-report (300 s, compose/nginx/default.conf)
+//
+// If the sensor hangs up first, the connection closes, the ingest request context is
+// cancelled and exec.CommandContext kills bridge.py mid-import; with no ack the job is
+// re-delivered every few minutes into the same wall until its TTL (a silently lost or a
+// duplicated report). Change one link and revisit the others.
+const defaultReportTimeout = 6 * time.Minute
+
+// reportTimeout is how long PushReport waits for the ingest's answer.
+func (c *Client) reportTimeout() time.Duration {
+	if c.cfg.ReportTimeout > 0 {
+		return c.cfg.ReportTimeout
+	}
+	return defaultReportTimeout
 }
 
 // Client is the mTLS cloud client.
@@ -135,12 +164,19 @@ func (c *Client) AckJob(ctx context.Context, jobID string) error {
 	return nil
 }
 
-// PushReport uploads the findings report.
+// PushReport uploads the findings report. Unlike the other calls it waits up to
+// reportTimeout() — not the client-wide Timeout — because the ingest replies only
+// after importing the report (see defaultReportTimeout for the timeout chain).
 func (c *Client) PushReport(ctx context.Context, r Report) error {
 	body, _ := json.Marshal(r)
 	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, c.cfg.ReportURL, bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := c.http.Do(req)
+	// Shallow copy of the shared client: same Transport (connection pool, client cert
+	// reloaded per handshake), own Timeout. Never raise Timeout on c.http itself — the
+	// heartbeat goroutine uses it concurrently and must keep the short one.
+	rc := *c.http
+	rc.Timeout = c.reportTimeout()
+	resp, err := rc.Do(req)
 	if err != nil {
 		return err
 	}
