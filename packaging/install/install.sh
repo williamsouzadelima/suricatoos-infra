@@ -78,6 +78,8 @@ fi
 
 # --- instala o binário ---
 if [ "$OS" = "darwin" ]; then DEST=/usr/local/bin; else DEST=/usr/bin; fi
+# /usr/local/bin pode não existir (Mac Apple Silicon recém-instalado): o install não cria o diretório.
+mkdir -p "$DEST"
 install -m 0755 "$TMP/agent" "${DEST}/suricatoos-agent"
 echo ">> instalado em ${DEST}/suricatoos-agent"
 
