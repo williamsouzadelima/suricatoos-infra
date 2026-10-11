@@ -257,7 +257,7 @@
     },
 
     "data_agents": {
-      "description": "central only. NO hostname (may carry a person's name): the hub operates by agent_id.",
+      "description": "central only. There is no separate hostname field, BUT the agent_id itself is by default the host's hostname (agent --agent-id defaults to it) and may be personal data; it leaves the node here, in agent.* events/commands and in remediation. Legal basis: execution of the contracted security service; recommend non-personal agent ids at enroll (HMAC pseudonymization is an open question for v2).",
       "type": "object",
       "required": ["items", "truncated", "unattributed_count"],
       "additionalProperties": false,

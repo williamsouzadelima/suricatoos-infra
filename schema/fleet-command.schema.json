@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://suricatoos.dev/schema/fleet-command.schema.json",
   "title": "Suricatoos — Fleet Command (signed envelope)",
-  "description": "A command the fleet hub (commandcenter) queues for ONE node and the node PULLS over its outbound mTLS long-poll (GET /fleet/v1/commands, ADR-0011). The node acts only on a command whose Ed25519 signature verifies against the command key pinned at enroll (a key separate from the fleet CA). Signed bytes = the canonical form: the domain line 'suricatoos-fleet-command-v1' then one length-prefixed line 'key=<len>:<value>\\n' per field, in this exact order: schema_version, command_id, node_id, tenant, type, issued_by, issued_at, not_after, nonce, payload_sha256 (<len> = byte length in decimal; same framing as control-plane/remediation/canonical.go). payload is compact JSON and payload_sha256 is the lowercase hex SHA-256 of the EXACT bytes of the payload value as transmitted (never of a re-serialization). After the signature the node checks the window [issued_at - skew, not_after + skew], node_id == itself, the nonce against its persisted anti-replay cache, the tenant against its local registry, its local policy and its local scan scope. The root validates ONE command; $defs also holds the long-poll response, the payload of each type and the shared primitives the other fleet-*.schema.json files reference.",
+  "description": "A command the fleet hub (commandcenter) queues for ONE node and the node PULLS over its outbound mTLS long-poll (GET /fleet/v1/commands, ADR-0011). The node acts only on a command whose Ed25519 signature verifies against the command key pinned at enroll (a key separate from the fleet CA). Signed bytes = the canonical form: the domain line 'suricatoos-fleet-command-v1' then one length-prefixed line 'key=<len>:<value>\\n' per field, in this exact order: schema_version, command_id, node_id, tenant, type, issued_by, issued_at, not_after, nonce, payload_sha256 (<len> = byte length in decimal; same framing as control-plane/remediation/canonical.go). payload is compact JSON and payload_sha256 is the lowercase hex SHA-256 of the EXACT bytes of the payload value as transmitted (never of a re-serialization). After the signature the node checks the window [issued_at - skew, not_after + skew], node_id == itself, the nonce and the command_id against its persisted store, the tenant against its local registry, its local policy and its local scan scope. The root validates ONE command; $defs also holds the long-poll response, the payload of each type and the shared primitives the other fleet-*.schema.json files reference.",
   "$ref": "#/$defs/command",
   "$defs": {
     "command": {
@@ -18,7 +18,7 @@
         "issued_by": { "$ref": "#/$defs/issued_by" },
         "issued_at": { "$ref": "#/$defs/utc_time", "description": "signing time (hub clock)" },
         "not_after": { "$ref": "#/$defs/utc_time", "description": "expiry; the node requires issued_at < not_after <= issued_at + 24h" },
-        "nonce": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[0-9a-f]{64}$", "description": "32 CSPRNG bytes in hex, single-use; the node persists it until not_after + skew" },
+        "nonce": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[0-9a-f]{64}$", "description": "32 CSPRNG bytes in hex, single-use; the node keeps it in its store until not_after + 7 days (>= not_after + skew)" },
         "payload_sha256": { "$ref": "#/$defs/sha256_hex" },
         "payload": { "type": "object", "description": "compact JSON; its shape depends on type (see allOf)" },
         "signature": { "type": "string", "minLength": 88, "maxLength": 88, "pattern": "^[A-Za-z0-9+/]{86}==$", "description": "standard base64 of the 64-byte Ed25519 signature over the canonical form (not part of the canonical)" }
@@ -46,6 +46,27 @@
       ]
     },
 
+    "envelope": {
+      "description": "The shape verification line 0 checks BEFORE authentication: the command envelope with type = command_type_any (an authentic type outside the v1 catalog is then 'unsupported' at line 7) and payload = any object (per-type payload validation is line 8). Same members as #/$defs/command; kept for the F2.1 parity tests.",
+      "type": "object",
+      "required": ["schema_version", "command_id", "node_id", "tenant", "type", "issued_by", "issued_at", "not_after", "nonce", "payload_sha256", "payload", "signature"],
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": { "type": "string", "const": "1.0.0" },
+        "command_id": { "$ref": "#/$defs/uuid" },
+        "node_id": { "$ref": "#/$defs/node_id" },
+        "tenant": { "$ref": "#/$defs/tenant" },
+        "type": { "$ref": "#/$defs/command_type_any" },
+        "issued_by": { "$ref": "#/$defs/issued_by" },
+        "issued_at": { "$ref": "#/$defs/utc_time" },
+        "not_after": { "$ref": "#/$defs/utc_time" },
+        "nonce": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[0-9a-f]{64}$" },
+        "payload_sha256": { "$ref": "#/$defs/sha256_hex" },
+        "payload": { "type": "object" },
+        "signature": { "type": "string", "minLength": 88, "maxLength": 88, "pattern": "^[A-Za-z0-9+/]{86}==$" }
+      }
+    },
+
     "poll_response": {
       "description": "200 body of GET /fleet/v1/commands?wait=N: 1..10 commands for the polling node, oldest issued_at first. Nothing pending → 204 with no body.",
       "type": "object",
@@ -62,8 +83,8 @@
     },
     "uuid": { "type": "string", "format": "uuid", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", "description": "lowercase canonical UUID (also the shape of every gvmd object id)" },
     "node_id": { "type": "string", "minLength": 3, "maxLength": 64, "pattern": "^[a-z0-9][a-z0-9-]{2,63}$", "allOf": [ { "$ref": "#/$defs/no_control" } ], "description": "fleet node identity = CN of the node certificate issued by the FLEET CA (OU=fleet-node)" },
-    "tenant": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$", "allOf": [ { "$ref": "#/$defs/no_control" } ] },
-    "issued_by": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z0-9._@+-]+$", "allOf": [ { "$ref": "#/$defs/no_control" } ], "description": "hub operator who issued the command (non-repudiation; recorded in the node's local audit). Recommended: a pseudonymous operator id kept by the hub, not an e-mail (LGPD minimization)" },
+    "tenant": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$", "allOf": [ { "$ref": "#/$defs/no_control" } ], "description": "a tenant name LOCAL to the node (its TENANTS_FILE or FLEET_TENANT): two nodes may both have 'acme'. The hub keys tenants, and its RBAC, by (node_id, tenant)" },
+    "issued_by": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z0-9._+-]+$", "allOf": [ { "$ref": "#/$defs/no_control" } ], "description": "PSEUDONYMOUS id of the hub operator who issued the command (non-repudiation; recorded in the node's local audit); the hub keeps the mapping to the person. No '@' and no space: an e-mail is refused by construction (LGPD minimization)" },
     "utc_time": { "type": "string", "format": "date-time", "minLength": 20, "maxLength": 20, "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$", "description": "RFC 3339, UTC, whole seconds, 'Z' suffix — byte-identical to the canonical rendering (no fraction, no offset)" },
     "sha256_hex": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[0-9a-f]{64}$" },
     "pin": { "type": "string", "minLength": 71, "maxLength": 71, "pattern": "^sha256:[0-9a-f]{64}$", "description": "'sha256:' + hex SHA-256 of a DER structure (same format as the control-plane CA Fingerprint)" },
@@ -90,7 +111,7 @@
         "Scan Config Default"
       ]
     },
-    "agent_id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[^,=+\"\\\\;<>]+$", "allOf": [ { "$ref": "#/$defs/no_control" } ], "description": "endpoint agent id = CN of the agent's scanner certificate (same charset rule as control-plane/enroll validateAgentID)" },
+    "agent_id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[^,=+\"\\\\;<>]+$", "allOf": [ { "$ref": "#/$defs/no_control" } ], "description": "endpoint agent id = CN of the agent's scanner certificate (same charset rule as control-plane/enroll validateAgentID). By default the agent uses the host's HOSTNAME as agent_id, so it MAY be personal data (e.g. a person's name in the machine name): prefer non-personal ids at agent enroll" },
     "token_id": { "type": "string", "minLength": 8, "maxLength": 64, "pattern": "^[A-Za-z0-9_-]+$", "description": "public id of a scanner bootstrap token (st_<id>.<secret>, ADR-0004) — never the secret" },
     "command_type": {
       "enum": [
@@ -105,6 +126,7 @@
         "feed.sync_now"
       ]
     },
+    "schema_versions": { "type": "array", "minItems": 1, "maxItems": 8, "uniqueItems": true, "items": { "type": "string", "minLength": 3, "maxLength": 7, "pattern": "^[0-9]{1,3}\\.[0-9]{1,3}$", "allOf": [ { "$ref": "#/$defs/no_control" } ] }, "description": "MAJOR.MINOR contract versions the sender supports (the PATCH of schema_version is editorial only). Neither side sends a body above the highest version both support" },
     "command_type_any": { "type": "string", "minLength": 3, "maxLength": 64, "pattern": "^[a-z][a-z_]*\\.[a-z][a-z_]*$", "description": "a command type AS RECEIVED (used where a rejection must echo a type outside the v1 catalog, reason=unsupported); v1 values are command_type" },
     "report_format": { "enum": ["suricatoos-pdf", "gvm-xml", "gvm-csv-results", "gvm-pdf"], "description": "symbolic export format; the node maps (format, lang) to a local report_format id" },
     "report_lang": { "enum": ["en", "pt_BR", "es"] },

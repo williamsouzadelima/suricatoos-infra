@@ -4,5 +4,8 @@
   "node_id": "node-lab-0001",
   "node_kind": "standalone",
   "csr": "not a pem",
-  "connector_version": "1.0.0"
+  "connector_version": "1.0.0",
+  "schema_versions": [
+    "1.0"
+  ]
 }

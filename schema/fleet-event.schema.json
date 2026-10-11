@@ -134,7 +134,7 @@
       }
     },
     "data_command_rejected": {
-      "description": "an AUTHENTIC command (signature, window, node and nonce all valid) that the node refused locally; the same reason goes in the command's ack. Cryptographic/window/replay rejections appear only in the ack and the local audit.",
+      "description": "an AUTHENTIC command (signature, window, node and nonce all valid) that the node refused locally (verification lines 6-9); the same reason goes in the command's ack. Unauthenticated envelopes (lines 0-2) are only counted; window, node and replay rejections (lines 3-5) appear only in the ack and the local audit.",
       "type": "object",
       "required": ["command_id", "type", "reason"],
       "additionalProperties": false,

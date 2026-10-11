@@ -12,7 +12,8 @@ being fetched over the network.
   invalid/<schema>/<case>.json  must fail exactly as its "expect" in fleet/index.json
                                 says: {keyword, path} for a schema error (keyword +
                                 instance JSON pointer), or {check, path} for
-                                duplicate_key | payload_sha256 | signature
+                                json_syntax (not exactly one JSON value, e.g. data
+                                after it) | duplicate_key | payload_sha256 | signature
 
 A case named '<def>--<rest>.json' targets fleet-<schema>.schema.json#/$defs/<def>;
 any other case targets the schema root.
@@ -275,8 +276,7 @@ def main():
         except DuplicateKey as exc:
             failure = {"check": "duplicate_key", "path": "", "detail": f"duplicate key {exc}"}
         except ValueError as exc:
-            surprises.append(f"{rel}: not one well-formed JSON value ({exc})")
-            continue
+            failure = {"check": "json_syntax", "path": "", "detail": f"not one well-formed JSON value ({exc})"}
         errors = []
         if failure is None:
             try:

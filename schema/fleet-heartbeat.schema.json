@@ -10,13 +10,14 @@
   "$defs": {
     "heartbeat_request": {
       "type": "object",
-      "required": ["schema_version", "node_id", "sent_at", "connector_version", "state_hashes", "outbox_events", "outbox_dropped", "pending_results", "unauthenticated_rejections"],
+      "required": ["schema_version", "node_id", "sent_at", "connector_version", "schema_versions", "state_hashes", "outbox_events", "outbox_dropped", "pending_results", "unauthenticated_rejections"],
       "additionalProperties": false,
       "properties": {
         "schema_version": { "type": "string", "const": "1.0.0" },
         "node_id": { "$ref": "fleet-command.schema.json#/$defs/node_id" },
         "sent_at": { "$ref": "fleet-command.schema.json#/$defs/utc_time" },
         "connector_version": { "$ref": "fleet-command.schema.json#/$defs/version_string" },
+        "schema_versions": { "$ref": "fleet-command.schema.json#/$defs/schema_versions", "description": "versions the NODE supports (may change after an upgrade)" },
         "state_hashes": {
           "description": "kind -> content_sha256 of the node's latest snapshot of that kind",
           "type": "object",
@@ -32,14 +33,15 @@
     },
     "heartbeat_response": {
       "type": "object",
-      "required": ["schema_version", "server_time", "resync", "heartbeat_interval_s", "poll_wait_s"],
+      "required": ["schema_version", "server_time", "resync", "heartbeat_interval_s", "poll_wait_s", "schema_versions"],
       "additionalProperties": false,
       "properties": {
         "schema_version": { "type": "string", "const": "1.0.0" },
         "server_time": { "$ref": "fleet-command.schema.json#/$defs/utc_time" },
         "resync": { "type": "array", "maxItems": 12, "uniqueItems": true, "items": { "$ref": "fleet-state.schema.json#/$defs/state_kind" }, "description": "kinds to re-send in full; empty = nothing to do" },
         "heartbeat_interval_s": { "type": "integer", "minimum": 15, "maximum": 600 },
-        "poll_wait_s": { "type": "integer", "minimum": 5, "maximum": 30, "description": "long-poll wait; the node also never polls more often than once per 5 s and backs off when a poll brings only rejections" }
+        "poll_wait_s": { "type": "integer", "minimum": 5, "maximum": 30, "description": "long-poll wait; the node also never polls more often than once per 5 s and backs off when a poll brings only rejections" },
+        "schema_versions": { "$ref": "fleet-command.schema.json#/$defs/schema_versions", "description": "versions the HUB supports" }
       }
     }
   }

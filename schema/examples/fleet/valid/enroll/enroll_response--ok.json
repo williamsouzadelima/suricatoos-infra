@@ -6,5 +6,8 @@
   "command_pubkey": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAB9q67lsE3i3PULOubuP+pQXTCUwAye7O14Zsa5+EqWw=\n-----END PUBLIC KEY-----\n",
   "server_time": "2026-10-11T12:00:00Z",
   "heartbeat_interval_s": 60,
-  "poll_wait_s": 25
+  "poll_wait_s": 25,
+  "schema_versions": [
+    "1.0"
+  ]
 }

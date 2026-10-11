@@ -68,18 +68,18 @@ Coletamos apenas o mínimo necessário para **correlação de vulnerabilidade ba
 
 | Dado | Campo (schema) | Direção | Finalidade | Sensibilidade |
 |---|---|---|---|---|
-| Identidade do nó (`node_id`, `node_kind`, CSR; certificado `CN=<node_id> O=<org> OU=fleet-node`, CA da frota, chave pública de comando) | `fleet-enroll.schema.json` | nó→hub (enroll/renew); hub→nó (certificado e chaves públicas) | autenticar o nó (mTLS) e fixar a chave que assina comandos | baixa (identificador técnico) |
+| Identidade do nó (`node_id`, `node_kind`, CSR, `schema_versions`; certificado `CN=<node_id> O=<org> OU=fleet-node`, CA da frota, chave pública de comando) | `fleet-enroll.schema.json` | nó→hub (enroll/renew); hub→nó (certificado e chaves públicas) | autenticar o nó (mTLS) e fixar a chave que assina comandos | baixa (identificador técnico) |
 | Token de enroll da frota (`ft_…`) | `fleet-enroll.schema.json#/$defs/enroll_request` (`token`) | nó→hub, uma vez | autorizar a entrada do nó | alta enquanto válido (segredo de uso único; descartado após o enroll, nunca logado) |
 | Heartbeat (versão do conector, hashes de estado, contadores de fila) | `fleet-heartbeat.schema.json` | nó→hub (resposta hub→nó) | vivacidade e sincronização | baixa |
 | Estado `node` (versões, feeds e idade, saúde, capacidades, política local) | `fleet-state.schema.json#/$defs/data_node` | nó→hub | operar a frota | baixa |
 | Estado `tasks`, `schedules`, `reports` (ids, nomes, status, agendas, contagens por severidade) | `fleet-state.schema.json#/$defs/data_tasks`, `data_schedules`, `data_reports` | nó→hub | gerenciar varreduras | baixa (metadado operacional; **sem achados**) |
 | Estado `targets` e `scope` (entradas IP/CIDR literais dos alvos, CIDRs autorizados por tenant) | `fleet-state.schema.json#/$defs/data_targets`, `data_scope` | nó→hub | gerenciar alvos dentro do escopo | média (topologia da rede do cliente) |
-| Estado `agents` (agent_id, tenant, SO/arch/versão do agente, último contato, online) | `fleet-state.schema.json#/$defs/data_agents` | nó→hub | operar agentes | média (pseudônimo do host; **sem hostname**) |
+| Estado `agents` (agent_id, tenant, SO/arch/versão do agente, último contato, online) | `fleet-state.schema.json#/$defs/data_agents` | nó→hub | operar agentes | **média/alta: o `agent_id` é, por padrão, o hostname** e pode conter nome de pessoa; também sai em `remediation`, em `agent.*` e em `remediation.pending_approval`. Base legal: execução do serviço de segurança contratado; recomenda-se id não pessoal no enroll do agente |
 | Estado `tokens`, `sensors`, `scan_requests`, `remediation` (ids, tenant, estados, contagens) | `fleet-state.schema.json#/$defs/data_tokens`, `data_sensors`, `data_scan_requests`, `data_remediation` | nó→hub | operar enroll, sensores e fila de varredura; acompanhar remediação (só leitura) | baixa (sem segredo, sem alvos, sem payload de remediação) |
 | Estado `audit_tail` (caudas verbatim dos dois fluxos da auditoria local: `exec` e `reject`) | `fleet-state.schema.json#/$defs/data_audit_tail` | nó→hub | testemunha das cadeias de auditoria | média (contém `issued_by`, ids de objeto, hosts IP/CIDR dos alvos e os parâmetros dos exports — nunca segredo) |
 | Eventos (status de tarefa, report concluído com contagens, agente online/offline, feed, remediação pendente, rejeição por política) | `fleet-event.schema.json` | nó→hub | atividade da frota | baixa |
 | Comando assinado (tipo, tenant, payload, `issued_by`, janela, nonce, assinatura) | `fleet-command.schema.json` | hub→nó | executar UMA ação do catálogo | baixa/média (`issued_by` identifica o operador do hub) |
-| Ack e resultado (decisão e motivo, status, ids, valores anteriores dos campos alterados, contagens) | `fleet-result.schema.json` | nó→hub | estado do comando e rollback manual | baixa |
+| Ack e resultado (decisão e motivo, status, ids, valores anteriores dos campos alterados, contagens) | `fleet-result.schema.json` | nó→hub | estado do comando e rollback manual | média (`before.hosts` traz IPs de clientes) |
 | Resumo de report (`report.summary`: só contagens — por severidade, por faixa de QoD, nº de hosts e por IP; sem NVT, OID, nome, CVE ou porta; filtro montado pelo nó) | `fleet-result.schema.json#/$defs/output_report_summary` | nó→hub, **sob comando**, orçado | priorização | média (revela quais IPs têm quantas vulnerabilidades por severidade) |
 | Relatório (`report.export`: edição `technical`, `client` ou `executive`; completo, ou delta quando há `delta_report_id`) | artefato gzip + `fleet-result.schema.json#/$defs/artifact` | nó→hub, **só sob comando explícito** | entregar o relatório | **alta** (vulnerabilidades detalhadas por host do cliente; a edição `executive` é sumário, mas segue sob a mesma regra) |
 | Segredo de token do scanner (`enroll_token.create`, só `agent-endpoint`) | `fleet-result.schema.json#/$defs/output_enroll_token_create` (`token`) | nó→hub, uma vez, `contains_secret: true` | instalar um agente/sensor | **alta** (segredo) |
@@ -87,7 +87,8 @@ Coletamos apenas o mínimo necessário para **correlação de vulnerabilidade ba
 **O que NÃO sai do nó por este canal:**
 
 - Achados detalhados (descrição, evidência, solução, porta por host) — exceto por `report.export` explícito.
-- Hostnames de agentes e entradas não-literais (hostnames) de alvos — só contadas.
+- Entradas não-literais (hostnames) de alvos — só contadas. **Atenção:** não existe campo de hostname de agente,
+  mas o próprio `agent_id` é, por padrão, o hostname (ver a linha `agents`).
 - `comment` de objetos GVM (texto livre do operador local).
 - Inventário de pacotes e postura CIS dos agentes; payload, assinatura e resultado técnico (before/after) de
   remediação.
@@ -100,15 +101,17 @@ Coletamos apenas o mínimo necessário para **correlação de vulnerabilidade ba
 > com `report.summary` e os opt-in) e fica na auditoria local. O `report.summary` não carrega achado: só
 > contagens, com filtro que o hub não escolhe.
 >
-> **Artefatos:** gzip, ≤ 64 MiB, com sha256 do gzip e do original. O nó grava o export num arquivo temporário
+> **Artefatos:** gzip, ≤ 64 MiB comprimido e ≤ 1 GiB descomprimido (o hub descomprime em streaming com teto
+> próprio), com sha256 do gzip e do original. O nó grava o export num arquivo temporário
 > `0600` no `FLEET_STATE_DIR` e o apaga quando o hub aceita o upload (ou quando o comando termina em falha); a
 > retenção no hub é política do controlador (questão aberta do ADR-0011).
 >
 > **Segredo de `enroll_token.create`:** só em memória no nó — nunca em disco, log ou auditoria. O hub não o
 > loga, cifra em repouso e o mostra uma vez. Reinício antes da entrega ⇒ o nó revoga o token localmente.
 >
-> **`issued_by`:** recomendado um identificador **pseudônimo** do operador do hub (o hub guarda o
-> mapeamento); um e-mail aqui seria dado pessoal replicado na auditoria de cada nó.
+> **`issued_by`:** é **obrigatoriamente** um identificador pseudônimo do operador do hub — o schema recusa `@` e
+> espaço; o hub guarda o mapeamento para a pessoa. Um e-mail aqui seria dado pessoal replicado na auditoria de
+> cada nó.
 >
 > **Auditoria local:** dois fluxos append-only encadeados por hash (`FLEET_STATE_DIR/audit-exec.jsonl` com o
 > que foi aceito e executado; `audit-reject.jsonl` com rejeições, adiamentos e contagens de envelopes não

@@ -5,5 +5,8 @@
   "ca_cert": "-----BEGIN CERTIFICATE-----\nMIIBKjCB3aADAgECAgEBMAUGAytlcDAzMRswGQYDVQQDDBJGbGVldCBDQSAoZXhl\nbXBsbykxFDASBgNVBAoMC29yZy1leGVtcGxvMB4XDTI2MTAxMTEyMDAwMFoXDTM2\nMTAwODEyMDAwMFowMzEbMBkGA1UEAwwSRmxlZXQgQ0EgKGV4ZW1wbG8pMRQwEgYD\nVQQKDAtvcmctZXhlbXBsbzAqMAUGAytlcAMhAAkHyVSAm+C+JOfRt6gpEFjroXlC\nxenwn7n/pRVBc/BEoxYwFDASBgNVHRMBAf8ECDAGAQH/AgEAMAUGAytlcANBAGcX\nrlaGGjyw+rld5efXw5+fqfHqwXGWyJOOpoH+3tA81mhndnm9O6ExJvrYpFsrQFrk\neNhrGCckFm4qyWKqSgQ=\n-----END CERTIFICATE-----\n",
   "server_time": "2026-10-11T12:00:00Z",
   "heartbeat_interval_s": 60,
-  "poll_wait_s": 25
+  "poll_wait_s": 25,
+  "schema_versions": [
+    "1.0"
+  ]
 }

@@ -50,6 +50,24 @@
       }
     },
     {
+      "file": "invalid/command/envelope--fractional-seconds.json",
+      "target": "fleet-command.schema.json#/$defs/envelope",
+      "description": "line 0 is strict on time format even for an unknown type",
+      "expect": {
+        "keyword": "pattern",
+        "path": "/issued_at"
+      }
+    },
+    {
+      "file": "invalid/command/envelope--payload-not-object.json",
+      "target": "fleet-command.schema.json#/$defs/envelope",
+      "description": "payload is always a JSON object",
+      "expect": {
+        "keyword": "type",
+        "path": "/payload"
+      }
+    },
+    {
       "file": "invalid/command/feed-sync-now-with-parameter.json",
       "target": "fleet-command.schema.json",
       "description": "feed.sync_now takes no parameters",
@@ -86,6 +104,24 @@
       }
     },
     {
+      "file": "invalid/command/issued-by-email.json",
+      "target": "fleet-command.schema.json",
+      "description": "M12: issued_by is a pseudonymous operator id; an e-mail is refused",
+      "expect": {
+        "keyword": "pattern",
+        "path": "/issued_by"
+      }
+    },
+    {
+      "file": "invalid/command/key-case-different.json",
+      "target": "fleet-command.schema.json",
+      "description": "M1: member names are case-exact ('Node_ID' is an unknown member, not node_id)",
+      "expect": {
+        "keyword": "additionalProperties",
+        "path": ""
+      }
+    },
+    {
       "file": "invalid/command/missing-signature.json",
       "target": "fleet-command.schema.json",
       "description": "unsigned envelope",
@@ -110,6 +146,15 @@
       "expect": {
         "keyword": "pattern",
         "path": "/nonce"
+      }
+    },
+    {
+      "file": "invalid/command/payload-html-escaped-after-hashing.json",
+      "target": "fleet-command.schema.json",
+      "description": "M1: an HTML-escaping re-encoder (e.g. Go json.Marshal) rewrote <, >, & after the hash",
+      "expect": {
+        "check": "payload_sha256",
+        "path": ""
       }
     },
     {
@@ -347,6 +392,15 @@
       }
     },
     {
+      "file": "invalid/command/trailing-data.json",
+      "target": "fleet-command.schema.json",
+      "description": "M1: exactly one JSON value; nothing but whitespace after it",
+      "expect": {
+        "check": "json_syntax",
+        "path": ""
+      }
+    },
+    {
       "file": "invalid/command/type-outside-catalog.json",
       "target": "fleet-command.schema.json",
       "description": "scope changes are out of v1 by design (D2)",
@@ -380,6 +434,33 @@
       "expect": {
         "keyword": "pattern",
         "path": "/token"
+      }
+    },
+    {
+      "file": "invalid/enroll/enroll_request--without-schema-versions.json",
+      "target": "fleet-enroll.schema.json#/$defs/enroll_request",
+      "description": "I8: the node announces the versions it supports",
+      "expect": {
+        "keyword": "required",
+        "path": ""
+      }
+    },
+    {
+      "file": "invalid/enroll/enroll_response--empty-schema-versions.json",
+      "target": "fleet-enroll.schema.json#/$defs/enroll_response",
+      "description": "I8: the hub announces at least one version",
+      "expect": {
+        "keyword": "minItems",
+        "path": "/schema_versions"
+      }
+    },
+    {
+      "file": "invalid/enroll/enroll_response--schema-versions-with-patch.json",
+      "target": "fleet-enroll.schema.json#/$defs/enroll_response",
+      "description": "I8: versions are negotiated as MAJOR.MINOR (patch is editorial)",
+      "expect": {
+        "keyword": "pattern",
+        "path": "/schema_versions/0"
       }
     },
     {
@@ -455,6 +536,15 @@
       }
     },
     {
+      "file": "invalid/heartbeat/heartbeat_request--duplicated-schema-version.json",
+      "target": "fleet-heartbeat.schema.json#/$defs/heartbeat_request",
+      "description": "versions are unique",
+      "expect": {
+        "keyword": "uniqueItems",
+        "path": "/schema_versions"
+      }
+    },
+    {
       "file": "invalid/heartbeat/heartbeat_request--unknown-kind.json",
       "target": "fleet-heartbeat.schema.json#/$defs/heartbeat_request",
       "description": "state_hashes keys are restricted to the state kinds",
@@ -506,6 +596,15 @@
       "expect": {
         "keyword": "minimum",
         "path": "/poll_wait_s"
+      }
+    },
+    {
+      "file": "invalid/heartbeat/heartbeat_response--without-schema-versions.json",
+      "target": "fleet-heartbeat.schema.json#/$defs/heartbeat_response",
+      "description": "I8: the hub announces its versions in every heartbeat response",
+      "expect": {
+        "keyword": "required",
+        "path": ""
       }
     },
     {
@@ -569,6 +668,15 @@
       "expect": {
         "keyword": "enum",
         "path": "/decision"
+      }
+    },
+    {
+      "file": "invalid/result/artifact-original-size-over-1gib.json",
+      "target": "fleet-result.schema.json",
+      "description": "I7: original_size is capped at 1 GiB (decompression-bomb guard)",
+      "expect": {
+        "keyword": "maximum",
+        "path": "/artifacts/0/original_size"
       }
     },
     {
@@ -898,6 +1006,11 @@
       "description": "enroll_token.revoke: revokes ONLY the token (issued certificates stay valid)"
     },
     {
+      "file": "valid/command/envelope--unknown-type.json",
+      "target": "fleet-command.schema.json#/$defs/envelope",
+      "description": "M11: line 0 accepts any well-formed type (command_type_any); this authentic envelope is then rejected as unsupported at line 7"
+    },
+    {
       "file": "valid/command/feed-sync-now.json",
       "target": "fleet-command.schema.json",
       "description": "feed.sync_now (no parameters)"
@@ -986,6 +1099,11 @@
       "file": "valid/command/task-clone.json",
       "target": "fleet-command.schema.json",
       "description": "task.clone with a new name (UTF-8 payload: the hash covers the raw UTF-8 bytes)"
+    },
+    {
+      "file": "valid/command/task-create-html-chars.json",
+      "target": "fleet-command.schema.json",
+      "description": "M1: <, >, & and U+2028 travel LITERALLY in the payload bytes (no HTML-escaping re-encoder); the hash covers them"
     },
     {
       "file": "valid/command/task-create.json",

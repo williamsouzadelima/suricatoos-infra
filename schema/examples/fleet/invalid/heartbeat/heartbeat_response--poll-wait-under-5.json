@@ -5,5 +5,8 @@
     "tasks"
   ],
   "heartbeat_interval_s": 60,
-  "poll_wait_s": 2
+  "poll_wait_s": 2,
+  "schema_versions": [
+    "1.0"
+  ]
 }
