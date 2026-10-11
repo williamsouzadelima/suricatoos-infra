@@ -1,0 +1,140 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+Fixture SINTETICA do CI de veracidade do Suricatoos Premium PDF
+(report-formats/ci/check-veracity.py roda sobre o .tex desta fixture nos 3
+idiomas). Enderecos RFC 5737, nomes genericos, OIDs da faixa sintetica
+1.3.6.1.4.1.25623.1.0.99xxxx (nao existem no feed); nenhum dado de scan real.
+
+Defeito 7b ($lowconf-hi do export contra o total do scan). Todas as faixas do
+result_count presentes (o scan: 6 Alto/Critico) e o export parcial (5 de 11
+resultados, 3 Alto/Critico, 1 deles com QoD 30). A frase "exigem remediacao
+imediata, 1 de baixa confianca" comparava populacoes diferentes. Regra: a
+clausula de remediacao so' fala de confianca quando o numero de Alto/Critico e
+a contagem de baixa confianca vem da MESMA populacao; senao a frase termina no
+numero e o aviso de visao parcial explica o resto.
+-->
+<report extension="pdf" content_type="application/pdf" id="00000000-0000-4000-8000-000000003762">
+  <task id="00000000-0000-4000-8000-000000000001">
+    <name>Low Confidence Source Check Engagement</name>
+  </task>
+  <timezone>Coordinated Universal Time</timezone>
+  <timezone_abbrev>UTC</timezone_abbrev>
+  <scan_start>2026-09-01T09:00:00Z</scan_start>
+  <scan_end>2026-09-01T10:30:00Z</scan_end>
+  <result_count>11<full>11</full><filtered>5</filtered><critical><full>1</full><filtered>1</filtered></critical><high><full>5</full><filtered>2</filtered></high><medium><full>3</full><filtered>1</filtered></medium><low><full>1</full><filtered>1</filtered></low><log><full>1</full><filtered>0</filtered></log><false_positive><full>0</full><filtered>0</filtered></false_positive></result_count>
+  <filters id="00000000-0000-4000-8000-000000000002">
+    <term>apply_overrides=0 levels=chml rows=5 min_qod=1</term>
+  </filters>
+  <ports start="1" max="-1">
+    <port>443/tcp<host>192.0.2.10</host></port>
+    <port>443/tcp<host>192.0.2.20</host></port>
+    <port>22/tcp<host>192.0.2.10</host></port>
+    <port>80/tcp<host>192.0.2.10</host></port>
+    <port>161/udp<host>198.51.100.30</host></port>
+  </ports>
+  <host>
+    <ip>192.0.2.10</ip>
+    <start>2026-09-01T09:01:00Z</start>
+    <end>2026-09-01T10:29:00Z</end>
+    <detail><name>hostname</name><value>host01.example.com</value></detail>
+  </host>
+  <host>
+    <ip>192.0.2.20</ip>
+    <start>2026-09-01T09:01:00Z</start>
+    <end>2026-09-01T10:29:00Z</end>
+    <detail><name>hostname</name><value>host02.example.com</value></detail>
+  </host>
+  <host>
+    <ip>198.51.100.30</ip>
+    <start>2026-09-01T09:01:00Z</start>
+    <end>2026-09-01T10:29:00Z</end>
+    <detail><name>hostname</name><value>host03.example.com</value></detail>
+  </host>
+  <results start="1" max="-1">
+    <result id="v-0001">
+      <host>192.0.2.10<hostname>host01.example.com</hostname></host>
+      <port>443/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.990750">
+        <type>nvt</type>
+        <name>Example Remote Code Execution in Web Stack</name>
+        <family>Synthetic</family>
+        <cvss_base>9.8</cvss_base>
+        <tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags>
+        <solution type="Mitigation">Apply the configuration change described by the vendor.</solution>
+        <refs></refs>
+      </nvt>
+      <threat>Critical</threat>
+      <severity>9.8</severity>
+      <qod><value>98</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Remote Code Execution in Web Stack.</description>
+    </result>
+    <result id="v-0002">
+      <host>192.0.2.20<hostname>host02.example.com</hostname></host>
+      <port>443/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.990751">
+        <type>nvt</type>
+        <name>Example Privilege Escalation in Agent</name>
+        <family>Synthetic</family>
+        <cvss_base>7.5</cvss_base>
+        <tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags>
+        <solution type="Mitigation">Apply the configuration change described by the vendor.</solution>
+        <refs></refs>
+      </nvt>
+      <threat>High</threat>
+      <severity>7.5</severity>
+      <qod><value>30</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Privilege Escalation in Agent.</description>
+    </result>
+    <result id="v-0003">
+      <host>192.0.2.10<hostname>host01.example.com</hostname></host>
+      <port>22/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.990752">
+        <type>nvt</type>
+        <name>Example SSH Weak Key Exchange</name>
+        <family>Synthetic</family>
+        <cvss_base>7.5</cvss_base>
+        <tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags>
+        <solution type="Mitigation">Apply the configuration change described by the vendor.</solution>
+        <refs></refs>
+      </nvt>
+      <threat>High</threat>
+      <severity>7.5</severity>
+      <qod><value>98</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example SSH Weak Key Exchange.</description>
+    </result>
+    <result id="v-0004">
+      <host>192.0.2.10<hostname>host01.example.com</hostname></host>
+      <port>80/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.990753">
+        <type>nvt</type>
+        <name>Example HTTP TRACE Method Enabled</name>
+        <family>Synthetic</family>
+        <cvss_base>5.3</cvss_base>
+        <tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags>
+        <solution type="Mitigation">Apply the configuration change described by the vendor.</solution>
+        <refs></refs>
+      </nvt>
+      <threat>Medium</threat>
+      <severity>5.3</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example HTTP TRACE Method Enabled.</description>
+    </result>
+    <result id="v-0005">
+      <host>198.51.100.30<hostname>host03.example.com</hostname></host>
+      <port>161/udp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.990754">
+        <type>nvt</type>
+        <name>Example SNMP Public Community</name>
+        <family>Synthetic</family>
+        <cvss_base>2.6</cvss_base>
+        <tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags>
+        <solution type="Mitigation">Apply the configuration change described by the vendor.</solution>
+        <refs></refs>
+      </nvt>
+      <threat>Low</threat>
+      <severity>2.6</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example SNMP Public Community.</description>
+    </result>
+  </results>
+</report>

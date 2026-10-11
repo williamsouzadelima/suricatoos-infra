@@ -13,13 +13,17 @@
 #            em en a tortura usa os OIDs e nomes do catalogo pt_BR, compilados em
 #            ingles: exercita o caminho do texto do FORNECEDOR com centenas de
 #            achados de nome acentuado.
+#   v*       report-formats/tests/fixtures/*.xml: uma fixture por defeito de
+#            veracidade ja' corrigido (numeracao, indicadores vazios, ...);
+#            o cabecalho de cada uma diz qual. Pequenas: segundos cada.
 #
 # Para cada fixture:
 #   1. ponta a ponta: `sh ./generate <xml> > generate.pdf`, cwd = bundle montado
 #      pelo stage-bundle.py (o que o objeto de feed instala) -- como o gvmd faz;
 #   2. diagnostico: diag-compile.sh (xsltproc + 2x pdflatex com os mesmos
 #      parametros) guardando .tex e .log;
-#   3. previews (pdftoppm -r 60, 3 primeiras paginas) e gates.sh.
+#   3. previews (pdftoppm -r 60, 3 primeiras paginas) e gates.sh -- que tambem
+#      roda o check-veracity.py sobre o .tex do diagnostico, contra o XML.
 # Artefatos em <dir-de-artefatos>/<lang>/<fixture>/.
 set -euo pipefail
 
@@ -42,6 +46,14 @@ torture_src=$lang
 if [ "$lang" = en ]; then torture_src=pt_BR; fi
 ( cd "$BUNDLE_SRC" && python3 -X utf8 tools/build-torture-fixture.py "$torture_src" ) \
   > "$work/fixtures/tortura.xml"
+fixtures="sample tortura"
+for f in "$RF_DIR"/tests/fixtures/*.xml; do
+  [ -f "$f" ] || continue
+  fx=$(basename "$f" .xml)
+  cp "$f" "$work/fixtures/$fx.xml"
+  fixtures="$fixtures $fx"
+done
+log "fixtures: $fixtures"
 open_perms "$work"
 
 log "ambiente dentro da imagem:"
@@ -54,7 +66,7 @@ gvmd_run "$work" /work -c '
 docker image inspect --format 'imagem: {{join .RepoDigests ", "}}' "$GVMD_IMAGE" | tee -a "$art/ambiente.txt"
 
 overall=0
-for fx in sample tortura; do
+for fx in $fixtures; do
   d="$art/$fx"
   mkdir -p "$d"
 
@@ -78,7 +90,7 @@ for fx in sample tortura; do
     pdftoppm -r 60 -f 1 -l 3 -png "$d/generate.pdf" "$d/pagina" || log "[$lang/$fx] pdftoppm falhou"
   fi
 
-  if ! "$CI_DIR/gates.sh" "$lang" "$fx" "$d" "$work/diag/$fx" "$e2e_rc"; then
+  if ! "$CI_DIR/gates.sh" "$lang" "$fx" "$d" "$work/diag/$fx" "$e2e_rc" "$work/fixtures/$fx.xml"; then
     overall=1
   fi
 done
@@ -87,8 +99,8 @@ if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
   {
     echo "### Suricatoos Premium PDF no gvmd:stable — $lang"
     echo
-    echo "| idioma | fixture | veredito | páginas | erros TeX | Font shape undefined | Type 3 | links / alvos (+corte) | Overfull \\hbox (base) |"
-    echo "|---|---|---|---|---|---|---|---|---|"
+    echo "| idioma | fixture | veredito | páginas | erros TeX | Font shape undefined | Type 3 | links / alvos (+corte) | Overfull \\hbox (base) | veracidade |"
+    echo "|---|---|---|---|---|---|---|---|---|---|"
     cat "$art"/*/summary.row 2>/dev/null || true
     echo
     sed 's/^/    /' "$art/ambiente.txt"

@@ -1,0 +1,148 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+Fixture SINTETICA do CI de veracidade do Suricatoos Premium PDF
+(report-formats/ci/check-veracity.py roda sobre o .tex desta fixture nos 3
+idiomas). Enderecos RFC 5737, nomes genericos e nenhum dado de scan real. Os
+OIDs sao da faixa sintetica 1.3.6.1.4.1.25623.1.0.99xxxx (nao existem no feed),
+EXCETO os cinco advisories do grupo, que usam de proposito OIDs PUBLICOS do
+feed, presentes nos catalogos de traducao pt_BR e es.
+
+Defeito 5 (acao do card consolidado sem traducao). Cinco advisories VendorFix
+do mesmo produto, com OIDs que EXISTEM nos catalogos pt_BR e es (nome e
+solucao do fornecedor aqui sao sinteticos e marcados VENDOR-RAW). Em pt_BR/es
+a acao unica tem de sair do catalogo, como nos cards normais, e nao o texto
+cru do fornecedor.
+-->
+<report extension="pdf" content_type="application/pdf" id="00000000-0000-4000-8000-000000000035">
+  <task id="00000000-0000-4000-8000-000000000001">
+    <name>Translated Action Check Engagement</name>
+  </task>
+  <timezone>Coordinated Universal Time</timezone>
+  <timezone_abbrev>UTC</timezone_abbrev>
+  <scan_start>2026-09-01T09:00:00Z</scan_start>
+  <scan_end>2026-09-01T10:30:00Z</scan_end>
+  <result_count>6<full>6</full><filtered>6</filtered><critical><full>1</full><filtered>1</filtered></critical><high><full>1</full><filtered>1</filtered></high><medium><full>4</full><filtered>4</filtered></medium><low><full>0</full><filtered>0</filtered></low><log><full>0</full><filtered>0</filtered></log><false_positive><full>0</full><filtered>0</filtered></false_positive></result_count>
+  <filters id="00000000-0000-4000-8000-000000000002">
+    <term>apply_overrides=0 levels=chmlgf rows=-1 min_qod=1</term>
+  </filters>
+  <ports start="1" max="-1">
+    <port>8080/tcp<host>192.0.2.10</host></port>
+    <port>443/tcp<host>192.0.2.20</host></port>
+  </ports>
+  <host>
+    <ip>192.0.2.10</ip>
+    <start>2026-09-01T09:01:00Z</start>
+    <end>2026-09-01T10:29:00Z</end>
+    <detail><name>hostname</name><value>host01.example.com</value></detail>
+  </host>
+  <host>
+    <ip>192.0.2.20</ip>
+    <start>2026-09-01T09:01:00Z</start>
+    <end>2026-09-01T10:29:00Z</end>
+    <detail><name>hostname</name><value>host02.example.com</value></detail>
+  </host>
+  <results start="1" max="-1">
+    <result id="v-0001">
+      <host>192.0.2.10<hostname>host01.example.com</hostname></host>
+      <port>8080/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.105000">
+        <type>nvt</type>
+        <name>Tailspin Toolkit Security Advisory (TT-01)</name>
+        <family>Synthetic</family>
+        <cvss_base>9.1</cvss_base>
+        <tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=VendorFix</tags>
+        <solution type="VendorFix">VENDOR-RAW-1: upgrade the Tailspin Toolkit package to the fixed release.</solution>
+        <refs></refs>
+      </nvt>
+      <threat>Critical</threat>
+      <severity>9.1</severity>
+      <qod><value>98</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Tailspin Toolkit Security Advisory (TT-01).</description>
+    </result>
+    <result id="v-0002">
+      <host>192.0.2.10<hostname>host01.example.com</hostname></host>
+      <port>8080/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.141635">
+        <type>nvt</type>
+        <name>Tailspin Toolkit Security Advisory (TT-02)</name>
+        <family>Synthetic</family>
+        <cvss_base>7.4</cvss_base>
+        <tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=VendorFix</tags>
+        <solution type="VendorFix">VENDOR-RAW-2: upgrade the Tailspin Toolkit package to the fixed release.</solution>
+        <refs></refs>
+      </nvt>
+      <threat>High</threat>
+      <severity>7.4</severity>
+      <qod><value>98</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Tailspin Toolkit Security Advisory (TT-02).</description>
+    </result>
+    <result id="v-0003">
+      <host>192.0.2.10<hostname>host01.example.com</hostname></host>
+      <port>8080/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.119134">
+        <type>nvt</type>
+        <name>Tailspin Toolkit Security Advisory (TT-03)</name>
+        <family>Synthetic</family>
+        <cvss_base>6.8</cvss_base>
+        <tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=VendorFix</tags>
+        <solution type="VendorFix">VENDOR-RAW-3: upgrade the Tailspin Toolkit package to the fixed release.</solution>
+        <refs></refs>
+      </nvt>
+      <threat>Medium</threat>
+      <severity>6.8</severity>
+      <qod><value>98</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Tailspin Toolkit Security Advisory (TT-03).</description>
+    </result>
+    <result id="v-0004">
+      <host>192.0.2.10<hostname>host01.example.com</hostname></host>
+      <port>8080/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.149574">
+        <type>nvt</type>
+        <name>Tailspin Toolkit Security Advisory (TT-04)</name>
+        <family>Synthetic</family>
+        <cvss_base>5.6</cvss_base>
+        <tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=VendorFix</tags>
+        <solution type="VendorFix">VENDOR-RAW-4: upgrade the Tailspin Toolkit package to the fixed release.</solution>
+        <refs></refs>
+      </nvt>
+      <threat>Medium</threat>
+      <severity>5.6</severity>
+      <qod><value>98</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Tailspin Toolkit Security Advisory (TT-04).</description>
+    </result>
+    <result id="v-0005">
+      <host>192.0.2.10<hostname>host01.example.com</hostname></host>
+      <port>8080/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.103932">
+        <type>nvt</type>
+        <name>Tailspin Toolkit Security Advisory (TT-05)</name>
+        <family>Synthetic</family>
+        <cvss_base>4.9</cvss_base>
+        <tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=VendorFix</tags>
+        <solution type="VendorFix">VENDOR-RAW-5: upgrade the Tailspin Toolkit package to the fixed release.</solution>
+        <refs></refs>
+      </nvt>
+      <threat>Medium</threat>
+      <severity>4.9</severity>
+      <qod><value>98</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Tailspin Toolkit Security Advisory (TT-05).</description>
+    </result>
+    <result id="v-0006">
+      <host>192.0.2.20<hostname>host02.example.com</hostname></host>
+      <port>443/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.990510">
+        <type>nvt</type>
+        <name>Example TLS Certificate Expired</name>
+        <family>Synthetic</family>
+        <cvss_base>5.0</cvss_base>
+        <tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags>
+        <solution type="Mitigation">Apply the configuration change described by the vendor.</solution>
+        <refs></refs>
+      </nvt>
+      <threat>Medium</threat>
+      <severity>5.0</severity>
+      <qod><value>98</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example TLS Certificate Expired.</description>
+    </result>
+  </results>
+</report>

@@ -8,10 +8,13 @@ name: report-formats-ci
 # Jobs:
 #   feed-sync  os 3 feed XMLs versionados batem com o bundle (build-feed-xml.py);
 #   compile    por idioma: `sh ./generate` ponta a ponta + compilacao de
-#              diagnostico (sample e tortura) com os portoes de log/fontes/links
-#              (report-formats/ci/gates.sh), o controle negativo (o generate tem
-#              de falhar alto) e os artefatos (PDFs, .log, .tex, PNG das 3
-#              primeiras paginas).
+#              diagnostico de cada fixture -- sample, tortura e as de
+#              veracidade (report-formats/tests/fixtures/, uma por defeito ja'
+#              corrigido) -- com os portoes de log/fontes/links/destinos e o de
+#              veracidade (check-veracity.py: o .tex diz a verdade sobre o XML),
+#              todos em report-formats/ci/gates.sh; o controle negativo (o
+#              generate tem de falhar alto) e os artefatos (PDFs, .log, .tex,
+#              PNG das 3 primeiras paginas).
 on:
   pull_request:
     paths:

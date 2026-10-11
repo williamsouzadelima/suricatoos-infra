@@ -43,13 +43,15 @@
 
 set -eu
 
+# printf e nao echo: o echo do dash INTERPRETA barra invertida ("\n", "\c"),
+# e a mensagem leva caminho e nome de arquivo -- dado, nao formato.
 die () {
-  echo "generate: ERROR: $*" >&2
+  printf 'generate: ERROR: %s\n' "$*" >&2
   exit 1
 }
 
 warn () {
-  echo "generate: warning: $*" >&2
+  printf 'generate: warning: %s\n' "$*" >&2
 }
 
 # First lines of a file on stderr, indented so they read as an excerpt.

@@ -1,0 +1,190 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+Fixture SINTETICA do CI de veracidade do Suricatoos Premium PDF
+(report-formats/ci/check-veracity.py roda sobre o .tex desta fixture nos 3
+idiomas). Enderecos RFC 5737, nomes genericos, OIDs da faixa sintetica
+1.3.6.1.4.1.25623.1.0.99xxxx (nao existem no feed); nenhum dado de scan real.
+
+Defeito 6 ("VULNS UNICAS" contava Log e falso positivo). Quatro NVTs com
+severidade maxima >= 0.1 (um deles com uma instancia falso positivo e outra
+Media), dois informativos (Log) e um falso positivo (-1). O KPI dizia 7.
+Invariante: VULNS UNICAS == NVTs distintos cuja severidade maxima e' >= 0.1.
+-->
+<report extension="pdf" content_type="application/pdf" id="00000000-0000-4000-8000-000000000036">
+  <task id="00000000-0000-4000-8000-000000000001">
+    <name>Unique Vulns Check Engagement</name>
+  </task>
+  <timezone>Coordinated Universal Time</timezone>
+  <timezone_abbrev>UTC</timezone_abbrev>
+  <scan_start>2026-09-01T09:00:00Z</scan_start>
+  <scan_end>2026-09-01T10:30:00Z</scan_end>
+  <result_count>8<full>8</full><filtered>8</filtered><critical><full>0</full><filtered>0</filtered></critical><high><full>1</full><filtered>1</filtered></high><medium><full>2</full><filtered>2</filtered></medium><low><full>1</full><filtered>1</filtered></low><log><full>2</full><filtered>2</filtered></log><false_positive><full>2</full><filtered>2</filtered></false_positive></result_count>
+  <filters id="00000000-0000-4000-8000-000000000002">
+    <term>apply_overrides=0 levels=chmlgf rows=-1 min_qod=1</term>
+  </filters>
+  <ports start="1" max="-1">
+    <port>443/tcp<host>192.0.2.10</host></port>
+    <port>123/udp<host>192.0.2.20</host></port>
+    <port>general/tcp<host>192.0.2.10</host></port>
+    <port>general/tcp<host>192.0.2.20</host></port>
+    <port>8080/tcp<host>192.0.2.20</host></port>
+    <port>3306/tcp<host>192.0.2.10</host></port>
+    <port>3306/tcp<host>198.51.100.30</host></port>
+  </ports>
+  <host>
+    <ip>192.0.2.10</ip>
+    <start>2026-09-01T09:01:00Z</start>
+    <end>2026-09-01T10:29:00Z</end>
+    <detail><name>hostname</name><value>host01.example.com</value></detail>
+  </host>
+  <host>
+    <ip>192.0.2.20</ip>
+    <start>2026-09-01T09:01:00Z</start>
+    <end>2026-09-01T10:29:00Z</end>
+    <detail><name>hostname</name><value>host02.example.com</value></detail>
+  </host>
+  <host>
+    <ip>198.51.100.30</ip>
+    <start>2026-09-01T09:01:00Z</start>
+    <end>2026-09-01T10:29:00Z</end>
+    <detail><name>hostname</name><value>host03.example.com</value></detail>
+  </host>
+  <results start="1" max="-1">
+    <result id="v-0001">
+      <host>192.0.2.10<hostname>host01.example.com</hostname></host>
+      <port>443/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.990600">
+        <type>nvt</type>
+        <name>Example Web Application Reflected XSS</name>
+        <family>Synthetic</family>
+        <cvss_base>7.5</cvss_base>
+        <tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags>
+        <solution type="Mitigation">Apply the configuration change described by the vendor.</solution>
+        <refs></refs>
+      </nvt>
+      <threat>High</threat>
+      <severity>7.5</severity>
+      <qod><value>98</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Web Application Reflected XSS.</description>
+    </result>
+    <result id="v-0002">
+      <host>192.0.2.10<hostname>host01.example.com</hostname></host>
+      <port>443/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.990601">
+        <type>nvt</type>
+        <name>Example TLS Server Accepts TLSv1.0</name>
+        <family>Synthetic</family>
+        <cvss_base>5.3</cvss_base>
+        <tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags>
+        <solution type="Mitigation">Apply the configuration change described by the vendor.</solution>
+        <refs></refs>
+      </nvt>
+      <threat>Medium</threat>
+      <severity>5.3</severity>
+      <qod><value>98</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example TLS Server Accepts TLSv1.0.</description>
+    </result>
+    <result id="v-0003">
+      <host>192.0.2.20<hostname>host02.example.com</hostname></host>
+      <port>123/udp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.990602">
+        <type>nvt</type>
+        <name>Example NTP Server Mode 6 Query Enabled</name>
+        <family>Synthetic</family>
+        <cvss_base>2.6</cvss_base>
+        <tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags>
+        <solution type="Mitigation">Apply the configuration change described by the vendor.</solution>
+        <refs></refs>
+      </nvt>
+      <threat>Low</threat>
+      <severity>2.6</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example NTP Server Mode 6 Query Enabled.</description>
+    </result>
+    <result id="v-0004">
+      <host>192.0.2.10<hostname>host01.example.com</hostname></host>
+      <port>general/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.990603">
+        <type>nvt</type>
+        <name>Example Traceroute Information</name>
+        <family>Synthetic</family>
+        <cvss_base></cvss_base>
+        <tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags>
+        <solution type="Mitigation">Apply the configuration change described by the vendor.</solution>
+        <refs></refs>
+      </nvt>
+      <threat>Log</threat>
+      <severity>0.0</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Traceroute Information.</description>
+    </result>
+    <result id="v-0005">
+      <host>192.0.2.20<hostname>host02.example.com</hostname></host>
+      <port>general/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.990604">
+        <type>nvt</type>
+        <name>Example Service Detection Summary</name>
+        <family>Synthetic</family>
+        <cvss_base></cvss_base>
+        <tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags>
+        <solution type="Mitigation">Apply the configuration change described by the vendor.</solution>
+        <refs></refs>
+      </nvt>
+      <threat>Log</threat>
+      <severity>0.0</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Service Detection Summary.</description>
+    </result>
+    <result id="v-0006">
+      <host>192.0.2.20<hostname>host02.example.com</hostname></host>
+      <port>8080/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.990605">
+        <type>nvt</type>
+        <name>Example Proxy Open Relay</name>
+        <family>Synthetic</family>
+        <cvss_base></cvss_base>
+        <tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags>
+        <solution type="Mitigation">Apply the configuration change described by the vendor.</solution>
+        <refs></refs>
+      </nvt>
+      <threat>False Positive</threat>
+      <severity>-1.0</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Proxy Open Relay.</description>
+    </result>
+    <result id="v-0007">
+      <host>192.0.2.10<hostname>host01.example.com</hostname></host>
+      <port>3306/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.990606">
+        <type>nvt</type>
+        <name>Example Database Default Credentials</name>
+        <family>Synthetic</family>
+        <cvss_base></cvss_base>
+        <tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags>
+        <solution type="Mitigation">Apply the configuration change described by the vendor.</solution>
+        <refs></refs>
+      </nvt>
+      <threat>False Positive</threat>
+      <severity>-1.0</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Database Default Credentials.</description>
+    </result>
+    <result id="v-0008">
+      <host>198.51.100.30<hostname>host03.example.com</hostname></host>
+      <port>3306/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.990606">
+        <type>nvt</type>
+        <name>Example Database Default Credentials</name>
+        <family>Synthetic</family>
+        <cvss_base>4.3</cvss_base>
+        <tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags>
+        <solution type="Mitigation">Apply the configuration change described by the vendor.</solution>
+        <refs></refs>
+      </nvt>
+      <threat>Medium</threat>
+      <severity>4.3</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Database Default Credentials.</description>
+    </result>
+  </results>
+</report>

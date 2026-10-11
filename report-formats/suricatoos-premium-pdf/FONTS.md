@@ -34,8 +34,38 @@ Seis faces, que são exatamente as que o design usa:
 | `plxMono-Bold` | dados em destaque |
 
 Mais os `.tfm`/`.vf` de T1 e TS1, os `.enc`, os `.fd` e um `plex.map` filtrado só
-para essas faces. **Pedir qualquer outro peso** (Light, Thin, Medium, Text,
-Condensed) gera `Font shape ... undefined` — eles não estão no subset.
+para essas faces.
+
+### Combinações (série/forma) que o subset TEM
+
+| família NFSS | `m/n` | `m/it` | `b/n` | `sb/n` | qualquer outra |
+|---|---|---|---|---|---|
+| `plxSans-TLF` (T1, TS1, OT1) | sim | sim | sim | sim | **não** |
+| `plxMono-TLF` (T1, TS1, OT1) | sim | não | sim | não | **não** |
+
+(`sl` é `ssub` para `it` no próprio `.fd`, então `m/sl` em Sans cai em `m/it`.)
+
+**Pedir qualquer outra combinação é ERRO FATAL**, não aviso: os `.fd` vêm inteiros
+do pacote `plex` e DECLARAM todas as formas (Light, Medium, Text, Condensed,
+`b/it`, `sb/it`, Mono itálico...), só que o `.tfm` delas não está no tarball. O
+`pdflatex` para com `Font T1/plxSans-TLF/sb/it/... not loadable: Metric (TFM)
+file not found`, e o `generate` (que falha alto) não entrega o PDF.
+
+Regras para quem escreve `.sty` ou `latex.xsl`:
+
+- `plex-sans` é carregado com `[semibold]`: em Sans, `\bfseries`/`\textbf` é a
+  série **`sb`**, e não existe `sb/it`. Nada em itálico pode ficar DENTRO de
+  `\textbf`, `\bfseries` ou `\suriSB` sem fixar a própria série — é por isso que
+  `\suriTruncMark` faz `\suriSans\mdseries\itshape`.
+- Mono não tem itálico: itálico só em Sans (troque de família antes, como fazem
+  `\suriTruncMark` e o aparte da lista de IPs).
+- `\fontseries{b}` (Bold de verdade) só em Sans e sem itálico (título da capa).
+
+Auditoria desta tabela contra o design (out/2026): o itálico aparece em três
+lugares — `\suriTruncMark`, o aparte `{\suriSans\itshape ...}` da lista de IPs
+(célula Mono regular) e o `\textit` da nota de nível de host (`\blocknote`, Sans
+regular); só o primeiro podia cair dentro de negrito (o nome do projeto na
+narrativa executiva, quando passa de `$task-name-max`).
 
 ## Proveniência e licença
 
@@ -56,5 +86,11 @@ correspondentes de `fonts/map/dvips/plex/plex.map`. Empacote com
 `tar czf plex-min.tar.gz -C <subárvore> .`.
 
 Depois **prove** que ficou completo: compile o relatório e confirme que o log não
-tem nenhum `Font shape ... undefined` e que o `pdffonts` do PDF lista só faces
-`plx*` — nenhuma Computer Modern.
+tem nenhum `Font shape ... undefined` nem `not loadable`, e que o `pdffonts` do
+PDF lista só faces `plx*` — nenhuma Computer Modern. O CI de relatório
+(`report-formats/ci/`) faz isso em toda fixture, nos 3 idiomas.
+
+Atenção à versão: o CTAN só guarda o `plex` mais recente, e os `.fd` do tarball
+atual são de 2025-07-27 (veja o `\ProvidesFile` deles). Acrescentar uma face
+tirada de um `plex.tds.zip` mais novo misturaria versões; regere o tarball
+inteiro a partir de um único download.
