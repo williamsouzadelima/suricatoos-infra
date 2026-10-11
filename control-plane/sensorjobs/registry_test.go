@@ -564,6 +564,50 @@ func TestPollLogsWhenPersistingTheDeliveryFails(t *testing.T) {
 	}
 }
 
+// O Ack conclui o job e grava; se a gravação falha, o job segue concluído na memória (o
+// sensor já rodou o scan e empurrou o relatório), mas a falha não pode ser silenciosa:
+// sai no log com o id do job e o erro — como no Poll. Um ack que grava não loga.
+func TestAckLogsWhenPersistingFails(t *testing.T) {
+	logs := captureLog(t)
+	path := t.TempDir() + "/jobs.json"
+	r, err := NewRegistry(Config{Path: path, ScopeOf: scopes(map[string]string{"acme": "10.20.0.0/16"})})
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, _, _ := r.Enqueue(EnqueueRequest{Tenant: "acme", Targets: []string{"10.20.1.1"}})
+	r.Poll("acme")
+	if !r.Ack(first.JobID, "acme") {
+		t.Fatal("o ack do primeiro job deveria funcionar")
+	}
+	if lines := saveLines(logs); len(lines) != 0 {
+		t.Fatalf("um ack que gravou não deve logar: %q", lines)
+	}
+
+	second, _, _ := r.Enqueue(EnqueueRequest{Tenant: "acme", Targets: []string{"10.20.2.2"}})
+	if got, ok := r.Poll("acme"); !ok || got.JobID != second.JobID {
+		t.Fatalf("o segundo job deveria ser entregue, got %+v ok=%v", got, ok)
+	}
+	failSaves(t, r)
+	if !r.Ack(second.JobID, "acme") {
+		t.Fatal("o ack deve concluir o job mesmo sem conseguir gravar")
+	}
+	if g, _ := r.Get(second.JobID, "acme"); g.State != StateDone {
+		t.Errorf("o job deveria estar DONE na memória, got %s", g.State)
+	}
+	lines := saveLines(logs)
+	if len(lines) != 1 {
+		t.Fatalf("a falha de gravação do ack deveria sair no log (1 linha), got %d: %q", len(lines), lines)
+	}
+	for _, want := range []string{second.JobID, "jobs.json.tmp"} { // o id do job e o erro do SO
+		if !strings.Contains(lines[0], want) {
+			t.Errorf("a linha de log deveria conter %q: %s", want, lines[0])
+		}
+	}
+	if strings.Contains(logs.String(), "10.20.2.2") {
+		t.Errorf("o log não deve trazer os alvos do job: %s", logs.String())
+	}
+}
+
 // Quando o Poll só varre jobs vencidos (nada elegível), a gravação da varredura
 // também não pode falhar em silêncio.
 func TestPollLogsWhenPersistingTheExpirySweepFails(t *testing.T) {

@@ -266,7 +266,11 @@ func (r *Registry) Ack(jobID, o string) bool {
 		if j.AckedAt.IsZero() {
 			j.AckedAt = r.now().UTC()
 		}
-		_ = r.saveLocked()
+		// Se a gravação falhou o job segue DONE na memória (o sensor já empurrou o
+		// relatório), mas a falha não é silenciosa — só o id do job e o erro vão ao log.
+		if err := r.saveLocked(); err != nil {
+			log.Printf("sensorjobs: saveLocked após ack job=%s: %v", jobID, err)
+		}
 	}
 	return true
 }
