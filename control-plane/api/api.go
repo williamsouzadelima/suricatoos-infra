@@ -8,10 +8,11 @@
 package api
 
 import (
+	"crypto/subtle"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/williamsouzadelima/suricatoos-infra/control-plane/ca"
@@ -25,6 +26,7 @@ type Handler struct {
 	serverURL   string
 	ingestURL   string
 	adminSecret string
+	logf        func(format string, args ...any) // log.Printf; tests capture it
 }
 
 // New returns an admin Handler. serverURL is the public URL of the control-plane
@@ -34,7 +36,7 @@ type Handler struct {
 // agent also learns it from the enrollment response). adminSecret is the shared
 // secret expected in "Authorization: Bearer <secret>" admin requests.
 func New(tm *tokens.Manager, authority *ca.CA, serverURL, ingestURL, adminSecret string) *Handler {
-	return &Handler{tm: tm, authority: authority, serverURL: serverURL, ingestURL: ingestURL, adminSecret: adminSecret}
+	return &Handler{tm: tm, authority: authority, serverURL: serverURL, ingestURL: ingestURL, adminSecret: adminSecret, logf: log.Printf}
 }
 
 // Handler returns an http.Handler serving all /api/v1/ routes.
@@ -49,13 +51,22 @@ func (h *Handler) Handler() http.Handler {
 // withAuth wraps a handler with admin secret authentication.
 func (h *Handler) withAuth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		auth := r.Header.Get("Authorization")
-		if !strings.HasPrefix(auth, "Bearer ") || strings.TrimPrefix(auth, "Bearer ") != h.adminSecret {
+		if !bearerOK(r, h.adminSecret) {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
 		next(w, r)
 	}
+}
+
+// bearerOK reports whether r carries exactly "Authorization: Bearer <secret>". The
+// compare is constant-time (no timing side channel on the secret) and an empty
+// secret never matches: "Bearer " with an empty token would otherwise open the API.
+func bearerOK(r *http.Request, secret string) bool {
+	if secret == "" {
+		return false
+	}
+	return subtle.ConstantTimeCompare([]byte(r.Header.Get("Authorization")), []byte("Bearer "+secret)) == 1
 }
 
 // mintRequest is the JSON body for POST /api/v1/tokens.
@@ -157,8 +168,26 @@ func (h *Handler) listTokens(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(out)
 }
 
+// revokeFailure is the 500 body of a revocation that only partly happened: the token
+// was revoked, but revoking (or persisting the revocation of) some of its
+// certificates failed.
+type revokeFailure struct {
+	Status        string   `json:"status"`         // always "partial"
+	ID            string   `json:"id"`             // the token
+	TokenRevoked  bool     `json:"token_revoked"`  // always true: the token store is updated first
+	CertsRevoked  int      `json:"certs_revoked"`  // certificates revoked AND persisted
+	FailedSerials []string `json:"failed_serials"` // revocation failed or was not persisted
+	Error         string   `json:"error"`
+}
+
 // revokeToken revokes a token by ID and invalidates all mTLS certificates that
 // were issued under it by adding their serials to the CA's revocation list.
+//
+// The token is revoked first. A certificate whose revocation fails — or is kept only
+// in memory because CRL_FILE could not be written, and so would come back to life at
+// the next restart — is logged with its serial and turns the answer into a 500 that
+// says exactly that: the token IS revoked (a retry answers 409) and which serials
+// failed. It used to be a 200 that silently lost the revocation.
 func (h *Handler) revokeToken(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {
@@ -177,18 +206,38 @@ func (h *Handler) revokeToken(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	// Revoke all mTLS certs that were issued via this token's enrollments.
+	// Revoke all mTLS certs that were issued via this token's enrollments. Keep going
+	// after a failure: every certificate revoked (even only in memory) is blocked now.
 	now := time.Now().UTC()
+	revoked, failed := 0, []string{}
 	for _, enr := range rec.Enrollments {
 		if enr.CertSerial == "" {
 			continue
 		}
 		if err := h.authority.RevokeCertSerial(enr.CertSerial, now); err != nil {
-			// Log but don't fail — token is already revoked.
-			_ = err
+			h.logf("api: token %s revogado, mas a revogação do certificado serial=%s falhou: %v (bloqueado em memória até o restart: %v)",
+				id, enr.CertSerial, err, h.authority.IsRevoked(enr.CertSerial))
+			failed = append(failed, enr.CertSerial)
+			continue
 		}
+		revoked++
 	}
 	w.Header().Set("Content-Type", "application/json")
+	if len(failed) > 0 {
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(revokeFailure{
+			Status:        "partial",
+			ID:            id,
+			TokenRevoked:  true,
+			CertsRevoked:  revoked,
+			FailedSerials: failed,
+			Error: fmt.Sprintf("o token foi revogado (repetir o DELETE responde 409), mas a revogação de %d de %d certificado(s) "+
+				"falhou ou não foi gravada em disco — detalhes no log do control-plane. Um certificado que entrou na lista "+
+				"em memória segue bloqueado só até o próximo restart; a próxima revogação gravada com sucesso persiste a lista inteira.",
+				len(failed), len(failed)+revoked),
+		})
+		return
+	}
 	json.NewEncoder(w).Encode(map[string]string{"status": "revoked", "id": id})
 }
 

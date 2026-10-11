@@ -55,6 +55,51 @@ func TestNoBearer401(t *testing.T) {
 	}
 }
 
+// Every near miss of "Bearer <secret>" is refused, an empty configured secret never
+// matches (fail closed), and nothing is minted on a refusal.
+func TestBearerVariantsAreRefused(t *testing.T) {
+	s, tm := newSvc(knownAcme)
+	call := func(s *Service, auth string) int {
+		mux := http.NewServeMux()
+		mux.HandleFunc("GET /api/v1/tenants/{t}/enroll-command", s.Handler())
+		req := httptest.NewRequest("GET", "/api/v1/tenants/acme/enroll-command", nil)
+		if auth != "" {
+			req.Header.Set("Authorization", auth)
+		}
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, req)
+		return w.Code
+	}
+	for name, auth := range map[string]string{
+		"no header":             "",
+		"wrong secret":          "Bearer wrong",
+		"scheme only":           "Bearer",
+		"empty token":           "Bearer ",
+		"other scheme":          "Basic sekret",
+		"secret without scheme": "sekret",
+		"lowercase scheme":      "bearer sekret",
+		"trailing junk":         "Bearer sekret ",
+		"prefix of the secret":  "Bearer sekre",
+	} {
+		if code := call(s, auth); code != http.StatusUnauthorized {
+			t.Errorf("%s: enroll-command = %d, want 401", name, code)
+		}
+	}
+	empty := New(Config{TM: tm, Known: knownAcme, CAPin: "sha256:abc123", ServerURL: "https://x/agent/v1"})
+	for _, auth := range []string{"", "Bearer ", "Bearer"} {
+		if code := call(empty, auth); code != http.StatusUnauthorized {
+			t.Errorf("empty secret, Authorization %q: enroll-command = %d, want 401", auth, code)
+		}
+	}
+	if recs, _ := tm.List(); len(recs) != 0 {
+		t.Fatalf("a refused request minted a token: %+v", recs)
+	}
+	// Positive control: the right bearer still works.
+	if code := call(s, "Bearer sekret"); code != http.StatusOK {
+		t.Fatalf("right bearer = %d, want 200", code)
+	}
+}
+
 func TestUnknownTenant404(t *testing.T) {
 	s, _ := newSvc(knownAcme)
 	// globex is not known → must NOT mint (cross-tenant guard).

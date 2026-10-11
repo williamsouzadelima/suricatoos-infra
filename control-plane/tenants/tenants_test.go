@@ -76,6 +76,69 @@ func TestServiceAuth(t *testing.T) {
 	}
 }
 
+// Every near miss of "Bearer <secret>" is refused on every route, and an empty
+// configured secret never matches (fail closed).
+func TestServiceRefusesWrongAndEmptyBearers(t *testing.T) {
+	r, _ := NewRegistry("")
+	r.Put(Record{Name: "acme", Enabled: true})
+	routes := func(s *Service) map[string]func() (http.HandlerFunc, *http.Request) {
+		return map[string]func() (http.HandlerFunc, *http.Request){
+			"PUT": func() (http.HandlerFunc, *http.Request) {
+				req := httptest.NewRequest("PUT", "/api/v1/tenants/evil", bytes.NewReader([]byte(`{"scope":"0.0.0.0/0"}`)))
+				req.SetPathValue("t", "evil")
+				return s.PutHandler(), req
+			},
+			"GET": func() (http.HandlerFunc, *http.Request) {
+				req := httptest.NewRequest("GET", "/api/v1/tenants/acme", nil)
+				req.SetPathValue("t", "acme")
+				return s.GetHandler(), req
+			},
+			"LIST": func() (http.HandlerFunc, *http.Request) {
+				return s.ListHandler(), httptest.NewRequest("GET", "/api/v1/tenants", nil)
+			},
+		}
+	}
+	try := func(s *Service, label, auth string) {
+		t.Helper()
+		for name, build := range routes(s) {
+			h, req := build()
+			if auth != "" {
+				req.Header.Set("Authorization", auth)
+			}
+			w := httptest.NewRecorder()
+			h(w, req)
+			if w.Code != http.StatusUnauthorized {
+				t.Errorf("%s: %s = %d, want 401", label, name, w.Code)
+			}
+			if bytes.Contains(w.Body.Bytes(), []byte("acme")) {
+				t.Errorf("%s: %s leaked tenant data: %s", label, name, w.Body)
+			}
+		}
+	}
+
+	s := NewService(r, "s3cret")
+	for name, auth := range map[string]string{
+		"no header":             "",
+		"wrong secret":          "Bearer wrong",
+		"scheme only":           "Bearer",
+		"empty token":           "Bearer ",
+		"other scheme":          "Basic s3cret",
+		"secret without scheme": "s3cret",
+		"lowercase scheme":      "bearer s3cret",
+		"trailing junk":         "Bearer s3cret ",
+		"prefix of the secret":  "Bearer s3cre",
+	} {
+		try(s, name, auth)
+	}
+	empty := NewService(r, "")
+	for _, auth := range []string{"", "Bearer ", "Bearer"} {
+		try(empty, "empty secret, Authorization "+auth, auth)
+	}
+	if _, ok := r.Get("evil"); ok {
+		t.Fatal("a refused PUT created a tenant")
+	}
+}
+
 func TestServiceListAndGet(t *testing.T) {
 	r, _ := NewRegistry("")
 	r.Put(Record{Name: "acme", Enabled: true})

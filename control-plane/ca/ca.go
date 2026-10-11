@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"math/big"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -198,7 +199,11 @@ func (c *CA) LoadCRLFile(path string) error {
 }
 
 // RevokeCertSerial adds a certificate serial (hex string) to the revocation list.
-// When LoadCRLFile was called, persists the updated list to disk.
+// When LoadCRLFile was called, persists the updated list to disk (atomically). A
+// persistence error is returned, but the serial STAYS revoked in memory — IsRevoked
+// and the served CRL keep blocking it until the next restart, and the next save that
+// succeeds writes it too: dropping it would unblock a certificate an operator just
+// revoked. The caller must report the lost persistence, never swallow it.
 func (c *CA) RevokeCertSerial(serialHex string, revokedAt time.Time) error {
 	serial := new(big.Int)
 	if _, ok := serial.SetString(serialHex, 16); !ok {
@@ -251,7 +256,8 @@ func (c *CA) IssueCRL(now time.Time) ([]byte, error) {
 	return x509.CreateRevocationList(rand.Reader, tmpl, c.cert, c.key)
 }
 
-// saveCRLLocked persists c.revoked to c.crlFile. Must be called with c.mu held.
+// saveCRLLocked persists c.revoked to c.crlFile, atomically. Must be called with
+// c.mu held.
 func (c *CA) saveCRLLocked() error {
 	entries := make([]crlEntry, len(c.revoked))
 	for i, r := range c.revoked {
@@ -261,7 +267,60 @@ func (c *CA) saveCRLLocked() error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(c.crlFile, data, 0o600)
+	return writeFileAtomic(c.crlFile, data)
+}
+
+// syncDir flushes a directory so a rename inside it survives a power loss.
+func syncDir(dir string) error {
+	d, err := os.Open(dir)
+	if err != nil {
+		return err
+	}
+	err = d.Sync()
+	if cerr := d.Close(); err == nil {
+		err = cerr
+	}
+	return err
+}
+
+// writeFileAtomic replaces path with data: a fresh 0600 temp file in the same
+// directory, flushed to disk, renamed over path, then the directory flushed. A crash
+// or a full disk mid-save leaves the previous list in place, never a truncated file —
+// which LoadCRLFile would refuse at the next boot (and main treats as fatal), and
+// which would also drop every revocation already recorded. Same pattern as the
+// tenant registry and the command queue.
+func writeFileAtomic(path string, data []byte) (err error) {
+	tmp := path + ".tmp"
+	_ = os.Remove(tmp) // leftover of a crash mid-save; start from a fresh 0600 file
+	f, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err != nil {
+			_ = os.Remove(tmp)
+		}
+	}()
+	if _, err = f.Write(data); err != nil {
+		_ = f.Close()
+		return err
+	}
+	if err = f.Sync(); err != nil {
+		_ = f.Close()
+		return err
+	}
+	if err = f.Close(); err != nil {
+		return err
+	}
+	if err = os.Rename(tmp, path); err != nil {
+		return err
+	}
+	// Best effort, deliberately not an error: the new list is already in place, so
+	// failing now would report a revocation as lost when it is on disk. A directory
+	// that cannot be flushed (Windows, some network filesystems) only loses the
+	// guarantee that the rename itself survives a power failure.
+	_ = syncDir(filepath.Dir(path))
+	return nil
 }
 
 // Fingerprint returns the SHA-256 fingerprint of the CA certificate in
