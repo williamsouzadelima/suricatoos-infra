@@ -133,10 +133,16 @@ def default_gateway(route_text):
 
 
 def inside_subnet(ip_text, subnet):
-    """ip_text esta em subnet? Lixo nao e' IP (False, sem excecao); ::ffff:a.b.c.d (httpd em
-    dual-stack) vale como o a.b.c.d."""
+    """ip_text esta em subnet? Normaliza o REMOTE_ADDR observado antes de conferir: tira os
+    colchetes (so' se balanceados) e trata o IPv4 mapeado em IPv6 (::ffff:a.b.c.d ou a forma
+    hexa) como o a.b.c.d -- o httpd do busybox escuta em dual-stack e no CI real reportou
+    `[::ffff:172.20.0.1]`. Lixo, colchete desbalanceado e IPv6 de verdade nao estao numa
+    sub-rede IPv4 (False, sem excecao)."""
+    text = (ip_text or "").strip()
+    if text.startswith("[") and text.endswith("]"):
+        text = text[1:-1]
     try:
-        ip = ipaddress.ip_address(ip_text)
+        ip = ipaddress.ip_address(text)
     except ValueError:
         return False
     if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped:

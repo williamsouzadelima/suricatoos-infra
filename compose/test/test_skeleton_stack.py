@@ -177,6 +177,48 @@ class BuildSkeleton(unittest.TestCase):
         self.assertEqual(cfg, before)
 
 
+class InsideSubnet(unittest.TestCase):
+    """Normalizacao do REMOTE_ADDR observado antes da conferencia de sub-rede. A entrada
+    `[::ffff:172.20.0.1]` e' EXATAMENTE o que o busybox httpd reportou no CI real (run
+    38167041377): dual-stack, IPv4 mapeado em IPv6, entre colchetes."""
+
+    SUBNET = "172.20.0.0/16"
+
+    def test_plain_ipv4(self):
+        self.assertTrue(sk.inside_subnet("172.20.0.1", self.SUBNET))
+        self.assertFalse(sk.inside_subnet("172.21.0.1", self.SUBNET))
+
+    def test_ipv4_mapped_ipv6(self):
+        self.assertTrue(sk.inside_subnet("::ffff:172.20.0.1", self.SUBNET))
+
+    def test_bracketed_ipv4_mapped_ipv6_exactly_as_the_busybox_httpd_reported_it_in_ci(self):
+        self.assertTrue(sk.inside_subnet("[::ffff:172.20.0.1]", self.SUBNET))
+
+    def test_hex_form_of_the_mapped_address(self):
+        self.assertTrue(sk.inside_subnet("[::ffff:ac14:1]", self.SUBNET))      # 172.20.0.1
+        self.assertTrue(sk.inside_subnet("::ffff:ac14:1", self.SUBNET))
+
+    def test_bracketed_plain_ipv4(self):
+        self.assertTrue(sk.inside_subnet("[172.20.0.1]", self.SUBNET))
+
+    def test_surrounding_whitespace_is_ignored(self):
+        self.assertTrue(sk.inside_subnet("  [::ffff:172.20.0.1]\n", self.SUBNET))
+
+    def test_an_address_outside_the_subnet_still_fails_whatever_its_form(self):
+        for text in ("192.0.2.77", "::ffff:192.0.2.77", "[::ffff:192.0.2.77]", "[::ffff:172.21.0.1]",
+                     "[::ffff:c000:24d]", "127.0.0.1", "[::ffff:127.0.0.1]"):
+            self.assertFalse(sk.inside_subnet(text, self.SUBNET), text)
+
+    def test_a_real_ipv6_address_is_not_in_an_ipv4_subnet(self):
+        self.assertFalse(sk.inside_subnet("[2001:db8::1]", self.SUBNET))
+        self.assertFalse(sk.inside_subnet("::1", self.SUBNET))
+
+    def test_garbage_and_unbalanced_brackets_fail_without_crashing(self):
+        for text in ("", "[]", "[nao-e-ip]", "[::ffff:172.20.0.1", "::ffff:172.20.0.1]",
+                     "[[::ffff:172.20.0.1]]", "isto-nao-e-um-ip", None):
+            self.assertFalse(sk.inside_subnet(text, self.SUBNET), repr(text))
+
+
 class Plan(unittest.TestCase):
     def pairs(self, plan):
         return {(s, d) for s, d in plan}
@@ -288,6 +330,22 @@ class RunChecks(unittest.TestCase):
         eng.host_remote_addr = lambda: "::ffff:" + eng.net("default")[1]
         results = sk.run_checks(eng, retry_seconds=0)
         self.assertEqual(failed(results, "origem"), [])
+
+    def test_bracketed_ipv4_mapped_remote_addr_exactly_as_seen_in_ci(self):
+        # run 38167041377: obtido=[::ffff:172.20.0.1] com 172.20.0.1 = gateway da skel_default
+        eng = FakeEngine(skeleton())
+        eng.host_remote_addr = lambda: "[::ffff:%s]" % eng.net("default")[1]
+        results = sk.run_checks(eng, retry_seconds=0)
+        self.assertEqual(failed(results), [], [sk.render(r) for r in failed(results)])
+        (origem,) = [r for r in results if r.kind == "origem"]
+        self.assertIn("[::ffff:", origem.got)                      # a linha mostra o que o servidor disse
+
+    def test_bracketed_remote_addr_outside_the_default_subnet_still_fails(self):
+        eng = FakeEngine(skeleton())
+        eng.host_remote_addr = lambda: "[::ffff:192.0.2.77]"
+        results = sk.run_checks(eng, retry_seconds=0)
+        self.assertEqual([r.kind for r in failed(results)], ["origem"])
+        self.assertIn("[::ffff:192.0.2.77]", failed(results)[0].got)
 
     def test_garbage_remote_addr_is_a_failure_not_a_crash(self):
         eng = FakeEngine(skeleton())
@@ -522,6 +580,16 @@ class EngineCommands(unittest.TestCase):
     def test_host_remote_addr_parses_the_cgi_echo(self):
         eng, _ = self.make(lambda a: (0, ""))
         self.assertEqual(eng.host_remote_addr(), "10.1.0.1")
+
+    def test_host_remote_addr_keeps_what_the_server_reported_brackets_included(self):
+        # o Engine devolve o texto observado (e' o que aparece em `obtido=`); quem normaliza
+        # e' inside_subnet, so' para a conferencia
+        calls = []
+        eng = sk.Engine(os.path.join("tmp", "skel"), run=lambda a, **kw: (0, ""),
+                        http_get=lambda url: calls.append(url) or "REMOTE_ADDR=[::ffff:172.20.0.1]\n",
+                        host_port=8443)
+        self.assertEqual(eng.host_remote_addr(), "[::ffff:172.20.0.1]")
+        self.assertEqual(calls, ["http://127.0.0.1:8443/cgi-bin/ra"])
 
     def test_down_removes_volumes_and_orphans(self):
         eng, calls = self.make(lambda a: (0, ""))
