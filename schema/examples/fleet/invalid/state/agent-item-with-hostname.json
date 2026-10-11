@@ -1,0 +1,24 @@
+{
+  "schema_version": "1.0.0",
+  "node_id": "node-lab-0001",
+  "kind": "agents",
+  "collected_at": "2026-10-11T12:00:00Z",
+  "content_sha256": "05dd409c48146d3ed8cdf18cabbccbea4f7150ba32bafd8d41f7d7cd2ea5cd51",
+  "data": {
+    "items": [
+      {
+        "agent_id": "win-exemplo-01",
+        "tenant": "acme",
+        "policy": "agent-endpoint",
+        "os": "windows",
+        "arch": "amd64",
+        "agent_version": "1.4.0",
+        "last_seen": "2026-10-11T11:55:00Z",
+        "online": true,
+        "hostname": "notebook-fulano"
+      }
+    ],
+    "truncated": false,
+    "unattributed_count": 0
+  }
+}

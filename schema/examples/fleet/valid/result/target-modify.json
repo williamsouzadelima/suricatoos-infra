@@ -1,0 +1,25 @@
+{
+  "schema_version": "1.0.0",
+  "command_id": "6f1c2a9e-3b7d-4c8a-9e21-5d4f0a7b3c18",
+  "node_id": "node-lab-0001",
+  "type": "target.modify",
+  "status": "succeeded",
+  "started_at": "2026-10-11T12:00:01Z",
+  "finished_at": "2026-10-11T12:00:03Z",
+  "contains_secret": false,
+  "output": {
+    "target_id": "9a7e3c21-5b0d-4f8e-a1c6-2e4d7b9f0a35",
+    "changed": [
+      "hosts",
+      "alive_test"
+    ],
+    "before": {
+      "hosts": [
+        "192.0.2.0/24"
+      ],
+      "hosts_non_literal_entries": 0,
+      "alive_test": "Consider Alive"
+    },
+    "alive_test_effective": "ICMP, TCP-ACK Service & ARP Ping"
+  }
+}

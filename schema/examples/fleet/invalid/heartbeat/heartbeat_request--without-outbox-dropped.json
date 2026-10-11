@@ -1,0 +1,12 @@
+{
+  "schema_version": "1.0.0",
+  "node_id": "node-lab-0001",
+  "sent_at": "2026-10-11T12:00:00Z",
+  "connector_version": "1.0.0",
+  "state_hashes": {
+    "node": "202e584626515573d531f5508c9094f8d6b705e0fc0fe6fbf29c76969fef313f",
+    "tasks": "a9a4d1759628b5708691988ce1512e3cbfa6881f90dfc0000d3fea08edcb7d74"
+  },
+  "outbox_events": 0,
+  "pending_results": 0
+}

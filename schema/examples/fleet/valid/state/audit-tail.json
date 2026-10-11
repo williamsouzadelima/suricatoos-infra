@@ -1,0 +1,18 @@
+{
+  "schema_version": "1.0.0",
+  "node_id": "node-lab-0001",
+  "kind": "audit_tail",
+  "collected_at": "2026-10-11T12:00:00Z",
+  "content_sha256": "ce516a324a68eac1d4629cac192327385d6007072b5a4e03373a3bca2563581a",
+  "data": {
+    "lines": [
+      "{\"seq\":1,\"at\":\"2026-10-11T12:00:01Z\",\"event\":\"connector_started\",\"prev_sha256\":\"0000000000000000000000000000000000000000000000000000000000000000\"}",
+      "{\"seq\":2,\"at\":\"2026-10-11T12:00:02Z\",\"event\":\"received\",\"command_id\":\"6f1c2a9e-3b7d-4c8a-9e21-5d4f0a7b3c18\",\"type\":\"task.start\",\"tenant\":\"acme\",\"issued_by\":\"op-7f3a\",\"payload_sha256\":\"202e584626515573d531f5508c9094f8d6b705e0fc0fe6fbf29c76969fef313f\",\"prev_sha256\":\"7c6d5daab17bd3e2c56962393b7e2fbad46d8436d703a1484fb26ead9d3dfb1e\"}",
+      "{\"seq\":3,\"at\":\"2026-10-11T12:00:03Z\",\"event\":\"executed\",\"command_id\":\"6f1c2a9e-3b7d-4c8a-9e21-5d4f0a7b3c18\",\"type\":\"task.start\",\"tenant\":\"acme\",\"prev_sha256\":\"4eb85e57839afa5b3ab535a10811a79eae88f784400b53f84a759f0cd4513a93\"}",
+      "{\"seq\":4,\"at\":\"2026-10-11T12:00:04Z\",\"event\":\"result\",\"command_id\":\"6f1c2a9e-3b7d-4c8a-9e21-5d4f0a7b3c18\",\"type\":\"task.start\",\"tenant\":\"acme\",\"status\":\"succeeded\",\"prev_sha256\":\"d9291cd8e51985b198a440b61bde08d0b0b1268145d44aac1671af9eda154952\"}"
+    ],
+    "first_seq": 1,
+    "last_seq": 4,
+    "head_sha256": "b1e5c9e7d26a4c0099f1d8cc9f359d32be97c93ffc298d2277faa3d4446174e6"
+  }
+}

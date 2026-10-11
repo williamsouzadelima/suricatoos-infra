@@ -1,0 +1,8 @@
+{
+  "schema_version": "1.0.0",
+  "token": "st_AbCdEfGhIjKl.Zm9vYmFyZm9vYmFyZm9vYmFyZm9vYmFyZm9vYmFyZm9vYmE",
+  "node_id": "node-lab-0001",
+  "node_kind": "standalone",
+  "csr": "-----BEGIN CERTIFICATE REQUEST-----\nMIGXMEsCAQAwGDEWMBQGA1UEAwwNbm9kZS1sYWItMDAwMTAqMAUGAytlcAMhAKxj\nwrvKdiNjl7WymmRTE4LxR+oNZF+Kt8MlVTqcT3vcoAAwBQYDK2VwA0EAmw/e1HMa\nqmabQPLO4usua+e3/XJbovG5uNJKBILHZbrgdAZbFrWrqPhoR2thvpMr5IrLUcyg\n4NOPrhI9RUizDw==\n-----END CERTIFICATE REQUEST-----\n",
+  "connector_version": "1.0.0"
+}

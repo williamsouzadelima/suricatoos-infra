@@ -1,0 +1,18 @@
+{
+  "schema_version": "1.0.0",
+  "node_id": "node-lab-0001",
+  "events": [
+    {
+      "type": "command.rejected_by_policy",
+      "tenant": "acme",
+      "data": {
+        "command_id": "6f1c2a9e-3b7d-4c8a-9e21-5d4f0a7b3c18",
+        "type": "report.export",
+        "reason": "unsupported_report_variant",
+        "detail": "suricatoos-pdf/pt_BR/executive"
+      },
+      "event_id": "6f1c2a9e-3b7d-4c8a-9e21-5d4f0a7b3c18",
+      "occurred_at": "2026-10-11T12:00:00Z"
+    }
+  ]
+}

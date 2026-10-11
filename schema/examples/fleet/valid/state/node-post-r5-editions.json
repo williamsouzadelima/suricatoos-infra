@@ -1,0 +1,110 @@
+{
+  "schema_version": "1.0.0",
+  "node_id": "node-lab-0001",
+  "kind": "node",
+  "collected_at": "2026-10-11T12:00:00Z",
+  "content_sha256": "c590763ab61863a782d5777fe5b458d3a987523439d837a925879c622930bf20",
+  "data": {
+    "node_kind": "central",
+    "connector_version": "1.0.0",
+    "versions": {
+      "gvmd": "26.31.1",
+      "gmp_protocol": "22.7",
+      "python_gvm": "27.10.0"
+    },
+    "feeds": [
+      {
+        "feed": "nvt",
+        "version": "202610110542",
+        "age_hours": 6.5,
+        "syncing": false
+      }
+    ],
+    "health": {
+      "status": "ok",
+      "gvmd_up": true,
+      "scanner_up": true,
+      "disk_free_pct": 41.5,
+      "active_tasks": 1,
+      "clock_offset_s": 0
+    },
+    "capabilities": {
+      "supported_types": [
+        "state.resync",
+        "task.start",
+        "task.stop",
+        "task.resume",
+        "task.create",
+        "task.modify",
+        "task.clone",
+        "task.delete",
+        "target.create",
+        "target.modify",
+        "target.delete",
+        "schedule.create",
+        "schedule.modify",
+        "schedule.delete",
+        "report.export",
+        "report.summary",
+        "agent.scan_now",
+        "agent.revoke",
+        "enroll_token.create",
+        "enroll_token.revoke",
+        "sensor_job.enqueue",
+        "feed.sync_now"
+      ],
+      "state_kinds": [
+        "node",
+        "tasks",
+        "targets",
+        "schedules",
+        "reports",
+        "agents",
+        "tokens",
+        "sensors",
+        "scan_requests",
+        "remediation",
+        "scope",
+        "audit_tail"
+      ],
+      "report_formats": [
+        {
+          "format": "suricatoos-pdf",
+          "lang": "pt_BR",
+          "variants": [
+            "technical"
+          ]
+        },
+        {
+          "format": "gvm-xml",
+          "lang": "en",
+          "variants": [
+            "technical"
+          ]
+        },
+        {
+          "format": "suricatoos-pdf",
+          "lang": "en",
+          "variants": [
+            "technical",
+            "client",
+            "executive"
+          ]
+        }
+      ]
+    },
+    "policy": {
+      "allowed_types": [
+        "state.resync",
+        "task.start",
+        "task.stop",
+        "task.resume",
+        "report.export",
+        "report.summary",
+        "agent.scan_now"
+      ],
+      "sensitive_per_hour": 30
+    },
+    "policy_sha256": "202e584626515573d531f5508c9094f8d6b705e0fc0fe6fbf29c76969fef313f"
+  }
+}

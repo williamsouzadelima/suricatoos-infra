@@ -1,0 +1,29 @@
+{
+  "schema_version": "1.0.0",
+  "command_id": "6f1c2a9e-3b7d-4c8a-9e21-5d4f0a7b3c18",
+  "node_id": "node-lab-0001",
+  "type": "report.export",
+  "status": "succeeded",
+  "started_at": "2026-10-11T12:00:01Z",
+  "finished_at": "2026-10-11T12:00:03Z",
+  "contains_secret": false,
+  "output": {
+    "report_id": "4b8d0f2a-6c1e-4a3b-8d5f-7e9a1c3b5d04",
+    "report_format_id": "e43a4f20-d845-4916-83f0-851ac6dc5e57",
+    "format": "suricatoos-pdf",
+    "lang": "pt_BR",
+    "variant": "technical",
+    "artifact_name": "report.pdf.gz"
+  },
+  "artifacts": [
+    {
+      "name": "report.pdf.gz",
+      "content_encoding": "gzip",
+      "size": 67108865,
+      "sha256": "202e584626515573d531f5508c9094f8d6b705e0fc0fe6fbf29c76969fef313f",
+      "original_content_type": "application/pdf",
+      "original_size": 1048576,
+      "original_sha256": "750113b701a52bd32b0fdca1342ddd2d74add6f219ddacef4cede043dfadca02"
+    }
+  ]
+}

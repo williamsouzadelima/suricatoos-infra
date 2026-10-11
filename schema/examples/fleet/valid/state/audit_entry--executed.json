@@ -1,0 +1,9 @@
+{
+  "seq": 3,
+  "at": "2026-10-11T12:00:03Z",
+  "event": "executed",
+  "command_id": "6f1c2a9e-3b7d-4c8a-9e21-5d4f0a7b3c18",
+  "type": "task.start",
+  "tenant": "acme",
+  "prev_sha256": "4eb85e57839afa5b3ab535a10811a79eae88f784400b53f84a759f0cd4513a93"
+}

@@ -1,0 +1,23 @@
+{
+  "schema_version": "1.0.0",
+  "node_id": "node-lab-0001",
+  "kind": "agents",
+  "collected_at": "2026-10-11T12:00:00Z",
+  "content_sha256": "3d8227ebaa4919469ed673ffb13d0b91acbac5f2414b4d68eb76fa74a18db673",
+  "data": {
+    "items": [
+      {
+        "agent_id": "win-exemplo-01",
+        "tenant": "acme",
+        "policy": "agent-endpoint",
+        "os": "windows",
+        "arch": "amd64",
+        "agent_version": "1.4.0",
+        "last_seen": "2026-10-11T11:55:00Z",
+        "online": true
+      }
+    ],
+    "truncated": false,
+    "unattributed_count": 0
+  }
+}

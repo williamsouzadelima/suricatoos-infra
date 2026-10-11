@@ -1,0 +1,22 @@
+{
+  "schema_version": "1.0.0",
+  "node_id": "node-lab-0001",
+  "kind": "sensors",
+  "collected_at": "2026-10-11T12:00:00Z",
+  "content_sha256": "5a1cf64745fc06f51792f20d2a744dfd153a99f00bd430c1c72a8d7e2956a564",
+  "data": {
+    "items": [
+      {
+        "sensor_id": "sensor-acme-01",
+        "tenant": "acme",
+        "last_seen": "2026-10-11T11:59:00Z",
+        "online": true,
+        "feed_version": "202610100000",
+        "gvmd_up": true,
+        "active_jobs": 0
+      }
+    ],
+    "truncated": false,
+    "unattributed_count": 0
+  }
+}
