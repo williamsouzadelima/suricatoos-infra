@@ -11,12 +11,17 @@ fora de "headers"; valores repetidos aparecem juntos, separados por ", ".
 gsad, GET /gmp?cmd=get_capabilities&token=T: 200 só se T == good-token e o
 Cookie tiver GSAD_SID=good-sid; senão 401 (é o que o auth_request consulta).
 Qualquer outra requisição: 200 com a própria linha JSON como corpo.
+
+Header X-Stub-Delay: N (segundos, até ATRASO_MAX): o stub grava a linha e só
+responde depois de N segundos — prova o tempo de leitura de uma location (um
+upstream lento além do proxy_read_timeout vira 504 no nginx).
 """
 import argparse
 import json
 import signal
 import sys
 import threading
+import time
 from http.cookies import CookieError, SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlsplit
@@ -32,6 +37,16 @@ CONFERIDOS = (
 )
 TOKEN_BOM = "good-token"
 SID_BOM = "good-sid"
+ATRASO_MAX = 120
+
+
+def atraso(headers):
+    """Segundos de X-Stub-Delay (0 se ausente ou inválido; no máximo ATRASO_MAX)."""
+    try:
+        n = int(headers.get("X-Stub-Delay", "0"))
+    except ValueError:
+        return 0
+    return max(0, min(n, ATRASO_MAX))
 
 
 class Registro:
@@ -86,13 +101,19 @@ class Handler(BaseHTTPRequestHandler):
             },
         }
         corpo = (self.server.registro.grava(entrada) + "\n").encode("utf-8")
-        self.send_response(status)
-        self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", str(len(corpo)))
-        self.send_header("Connection", "close")
-        self.end_headers()
-        if self.command != "HEAD":
-            self.wfile.write(corpo)
+        espera = atraso(self.headers)
+        if espera:
+            time.sleep(espera)  # depois de gravar: a matriz vê que o pedido chegou
+        try:
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(corpo)))
+            self.send_header("Connection", "close")
+            self.end_headers()
+            if self.command != "HEAD":
+                self.wfile.write(corpo)
+        except (BrokenPipeError, ConnectionResetError):
+            pass  # o nginx já desistiu (é o que um caso de tempo de leitura prova)
         self.close_connection = True
 
     do_GET = do_POST = do_PUT = do_PATCH = do_DELETE = do_HEAD = do_OPTIONS = responde
