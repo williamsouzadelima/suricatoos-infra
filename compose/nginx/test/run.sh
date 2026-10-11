@@ -590,13 +590,15 @@ cases_mtls() {
 # verify e SERIAL do certificado — os que o cliente mandar são substituídos, então
 # um agente não consegue se passar por outro nem esconder um cert revogado atrás de
 # um serial alheio; sem cert, nem com os headers forjados algo chega ao upstream.
+# A marca de portão forjada vai junto para que a checagem de que ela NÃO chega ao CP
+# possa de fato reprovar (no ingest ela não significa nada).
 FORGED_CERT=(-H 'X-Client-Cert-DN: CN=forjado' -H 'X-Client-Cert-Verify: FORJADO'
-             -H 'X-Client-Cert-Serial: 0A')
+             -H 'X-Client-Cert-Serial: 0A' -H 'X-Suricatoos-Gate: gsad-session')
 
 cases_agent_identity() {
   local cert=(--cert "$PKI/client.crt" --key "$PKI/client.key")
 
-  begin_case "mTLS /agent/v1/commands: com certificado → CP recebe DN, verify e serial do certificado, não os forjados pelo cliente"
+  begin_case "mTLS /agent/v1/commands: com certificado → CP recebe DN, verify e serial do certificado, não os forjados pelo cliente nem a marca de portão"
   send GET /agent/v1/commands "${cert[@]}" "${FORGED_CERT[@]}"
   expect_status 200
   expect_upstream control-plane GET /v1/commands
@@ -607,13 +609,14 @@ cases_agent_identity() {
   expect_no_header X-Suricatoos-Gate
   end_case
 
-  begin_case "mTLS /agent/v1/commands/ack: com certificado → CP /v1/commands/ack com o serial do certificado, não o forjado"
+  begin_case "mTLS /agent/v1/commands/ack: com certificado → CP /v1/commands/ack com o serial do certificado, não o forjado nem a marca de portão"
   send POST /agent/v1/commands/ack "${cert[@]}" "${FORGED_CERT[@]}"
   expect_status 200
   expect_upstream control-plane POST /v1/commands/ack
   expect_header_contains X-Client-Cert-DN CN=test-agent
   expect_header X-Client-Cert-Verify SUCCESS
   expect_header_serial X-Client-Cert-Serial "$CLIENT_SERIAL"
+  expect_no_header X-Suricatoos-Gate
   end_case
 
   begin_case "mTLS /ingest/v1/inventory: com certificado → ingest recebe DN, verify e serial do certificado, não os forjados nem X-Suricatoos-UI"
