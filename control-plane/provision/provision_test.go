@@ -7,18 +7,33 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/williamsouzadelima/suricatoos-infra/control-plane/sessiongate"
 	"github.com/williamsouzadelima/suricatoos-infra/control-plane/tokens"
 )
 
 func newService() *Service {
+	svc, _ := newServiceTM()
+	return svc
+}
+
+// newServiceTM also returns the token manager, to assert on minting side effects.
+func newServiceTM() (*Service, *tokens.Manager) {
 	tm := tokens.NewManager(tokens.NewMemStore())
-	return New(tm, "sha256:deadbeef", "https://scanner.suricatoos.com/agent/v1")
+	return New(tm, "sha256:deadbeef", "https://scanner.suricatoos.com/agent/v1"), tm
+}
+
+// gatedGet builds a GET the way nginx delivers it from a session-gated location:
+// carrying the sessiongate marker header.
+func gatedGet(target string) *http.Request {
+	r := httptest.NewRequest(http.MethodGet, target, nil)
+	r.Header.Set(sessiongate.Header, sessiongate.Value)
+	return r
 }
 
 func TestProvisionMintsLinuxCommand(t *testing.T) {
 	svc := newService()
 	rec := httptest.NewRecorder()
-	svc.Handler()(rec, httptest.NewRequest(http.MethodGet, "/provision/install?os=linux", nil))
+	svc.Handler()(rec, gatedGet("/provision/install?os=linux"))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
 	}
@@ -41,7 +56,7 @@ func TestProvisionMintsLinuxCommand(t *testing.T) {
 func TestProvisionWindowsUsesPowershell(t *testing.T) {
 	svc := newService()
 	rec := httptest.NewRecorder()
-	svc.Handler()(rec, httptest.NewRequest(http.MethodGet, "/provision/install?os=windows", nil))
+	svc.Handler()(rec, gatedGet("/provision/install?os=windows"))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status=%d", rec.Code)
 	}
@@ -55,7 +70,7 @@ func TestProvisionWindowsUsesPowershell(t *testing.T) {
 func TestProvisionRejectsBadOS(t *testing.T) {
 	svc := newService()
 	rec := httptest.NewRecorder()
-	svc.Handler()(rec, httptest.NewRequest(http.MethodGet, "/provision/install?os=plan9", nil))
+	svc.Handler()(rec, gatedGet("/provision/install?os=plan9"))
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400 for unknown os, got %d", rec.Code)
 	}
@@ -65,7 +80,7 @@ func TestTokensAreSingleUseAndDistinct(t *testing.T) {
 	svc := newService()
 	get := func() response {
 		rec := httptest.NewRecorder()
-		svc.Handler()(rec, httptest.NewRequest(http.MethodGet, "/provision/install?os=linux", nil))
+		svc.Handler()(rec, gatedGet("/provision/install?os=linux"))
 		var r response
 		json.Unmarshal(rec.Body.Bytes(), &r)
 		return r
@@ -73,5 +88,40 @@ func TestTokensAreSingleUseAndDistinct(t *testing.T) {
 	a, b := get(), get()
 	if a.TokenID == b.TokenID {
 		t.Fatal("each provision call must mint a distinct token")
+	}
+}
+
+// Without the marker nginx sets only on session-gated locations the handler refuses
+// BEFORE minting anything (defense in depth: a location that lacks the gate must not
+// be able to obtain enrollment tokens).
+func TestProvisionRequiresGateMarker(t *testing.T) {
+	svc, tm := newServiceTM()
+
+	for _, gate := range []string{"", "1", "GSAD-SESSION"} {
+		r := httptest.NewRequest(http.MethodGet, "/provision/install?os=linux", nil)
+		if gate != "" {
+			r.Header.Set(sessiongate.Header, gate)
+		}
+		rec := httptest.NewRecorder()
+		svc.Handler()(rec, r)
+		if rec.Code != http.StatusForbidden {
+			t.Fatalf("marker %q: status=%d, want 403", gate, rec.Code)
+		}
+		if strings.Contains(rec.Body.String(), "--token") {
+			t.Fatalf("marker %q: a refused request leaked an install command: %s", gate, rec.Body.String())
+		}
+	}
+	if recs, _ := tm.List(); len(recs) != 0 {
+		t.Fatalf("refused requests minted %d token(s)", len(recs))
+	}
+
+	// Positive control: the marker is the only difference.
+	rec := httptest.NewRecorder()
+	svc.Handler()(rec, gatedGet("/provision/install?os=linux"))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("with marker: status=%d, want 200", rec.Code)
+	}
+	if recs, _ := tm.List(); len(recs) != 1 {
+		t.Fatalf("with marker: want exactly 1 minted token, got %d", len(recs))
 	}
 }

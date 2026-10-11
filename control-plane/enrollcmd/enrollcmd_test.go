@@ -7,8 +7,16 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/williamsouzadelima/suricatoos-infra/control-plane/sessiongate"
 	"github.com/williamsouzadelima/suricatoos-infra/control-plane/tokens"
 )
+
+// gated marks the request the way nginx delivers it from a session-gated location:
+// carrying the sessiongate marker header.
+func gated(req *http.Request) *http.Request {
+	req.Header.Set(sessiongate.Header, sessiongate.Value)
+	return req
+}
 
 func newSvc(known TenantKnown) (*Service, *tokens.Manager) {
 	tm := tokens.NewManager(tokens.NewMemStore())
@@ -109,7 +117,7 @@ func TestSessionHandlerMintsForQueryTenant(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /provision/enroll-command", s.SessionHandler())
 	// No bearer (nginx does the session gate); tenant via ?tenant=.
-	req := httptest.NewRequest("GET", "/provision/enroll-command?tenant=acme&target=docker", nil)
+	req := gated(httptest.NewRequest("GET", "/provision/enroll-command?tenant=acme&target=docker", nil))
 	w := httptest.NewRecorder()
 	mux.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
@@ -125,7 +133,7 @@ func TestSessionHandlerMintsForQueryTenant(t *testing.T) {
 		t.Fatalf("token deveria ser do tenant acme, got %s", recs[0].Scope.Tenant)
 	}
 	// Unknown tenant still refused even session-gated.
-	req2 := httptest.NewRequest("GET", "/provision/enroll-command?tenant=evilcorp", nil)
+	req2 := gated(httptest.NewRequest("GET", "/provision/enroll-command?tenant=evilcorp", nil))
 	w2 := httptest.NewRecorder()
 	mux.ServeHTTP(w2, req2)
 	if w2.Code != http.StatusNotFound {
@@ -137,7 +145,7 @@ func TestSessionTenantsHandler(t *testing.T) {
 	s, _ := newSvc(knownAcme)
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /provision/tenants", s.SessionTenantsHandler())
-	req := httptest.NewRequest("GET", "/provision/tenants", nil)
+	req := gated(httptest.NewRequest("GET", "/provision/tenants", nil))
 	w := httptest.NewRecorder()
 	mux.ServeHTTP(w, req)
 	var r struct {
@@ -146,6 +154,39 @@ func TestSessionTenantsHandler(t *testing.T) {
 	json.Unmarshal(w.Body.Bytes(), &r)
 	if len(r.Tenants) != 2 || r.Tenants[0] != "acme" {
 		t.Fatalf("lista de tenants errada: %+v", r.Tenants)
+	}
+}
+
+// Without the marker nginx sets only on session-gated locations, the session handlers
+// refuse (defense in depth): no token is minted, even for a valid tenant, and the
+// tenant list does not leak.
+func TestSessionHandlersRequireGateMarker(t *testing.T) {
+	s, tm := newSvc(knownAcme)
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /provision/enroll-command", s.SessionHandler())
+	mux.HandleFunc("GET /provision/tenants", s.SessionTenantsHandler())
+
+	for _, path := range []string{
+		"/provision/enroll-command?tenant=acme&target=docker",
+		"/provision/tenants",
+	} {
+		for _, gate := range []string{"", "1", "GSAD-SESSION"} {
+			req := httptest.NewRequest("GET", path, nil)
+			if gate != "" {
+				req.Header.Set(sessiongate.Header, gate)
+			}
+			w := httptest.NewRecorder()
+			mux.ServeHTTP(w, req)
+			if w.Code != http.StatusForbidden {
+				t.Errorf("%s com marca %q deveria 403, got %d", path, gate, w.Code)
+			}
+			if strings.Contains(w.Body.String(), "acme") {
+				t.Errorf("%s com marca %q vazou dado de tenant: %s", path, gate, w.Body.String())
+			}
+		}
+	}
+	if recs, _ := tm.List(); len(recs) != 0 {
+		t.Fatalf("pedido sem marca mintou token: %+v", recs)
 	}
 }
 
