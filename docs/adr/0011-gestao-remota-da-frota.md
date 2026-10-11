@@ -1044,3 +1044,8 @@ sensibilidade por dado: [docs/data-inventory.md — Canal de gestão da frota (A
 8. **Pseudonimização do `agent_id` (v2).** HMAC com chave do nó no canal da frota, com o nó traduzindo de volta
    nos comandos `agent.*`, para que o hostname não saia nem como identificador.
 9. **Token do `enroll_token.create` cifrado (v2)** para uma chave do operador, em vez de em claro no resultado.
+10. **Rebaixamento de nó com várias versões.** Quando o nó suportar mais de uma versão MAJOR.MINOR e o hub
+    rebaixar, quais corpos já serializados na versão mais alta o nó reenvia rebaixados e quais descarta, e como
+    isso aparece na auditoria.
+11. **Cabeçalho `Upgrade` no `426`.** Se o hub deve acompanhar o `426` com o cabeçalho `Upgrade` (RFC 9110)
+    além do corpo `version_unsupported`, e se o nó deve usá-lo.
