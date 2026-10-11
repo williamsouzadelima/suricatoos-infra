@@ -480,9 +480,9 @@ func literalLineTerminators(b []byte) []byte {
 }
 
 // appendJSONString appends s as a JSON string: '"', '\' and the C0 control characters escaped, everything
-// else literal (no HTML escaping). escapeLineTerminators also escapes U+2028/U+2029 (used only for the golden
+// else literal (no HTML escaping). escapeInvisible also escapes U+2028, U+2029 and U+FEFF (only for the golden
 // file, where an invisible character would hide in review); the wire form keeps them literal.
-func appendJSONString(dst []byte, s string, escapeLineTerminators bool) []byte {
+func appendJSONString(dst []byte, s string, escapeInvisible bool) []byte {
 	const hexDigits = "0123456789abcdef"
 	dst = append(dst, '"')
 	for i := 0; i < len(s); {
@@ -498,8 +498,12 @@ func appendJSONString(dst []byte, s string, escapeLineTerminators bool) []byte {
 			dst = append(dst, '\\', 't')
 		case c < 0x20:
 			dst = append(dst, '\\', 'u', '0', '0', hexDigits[c>>4], hexDigits[c&0xf])
-		case escapeLineTerminators && c == 0xe2 && i+2 < len(s) && s[i+1] == 0x80 && (s[i+2] == 0xa8 || s[i+2] == 0xa9):
+		case escapeInvisible && c == 0xe2 && i+2 < len(s) && s[i+1] == 0x80 && (s[i+2] == 0xa8 || s[i+2] == 0xa9):
 			dst = append(dst, '\\', 'u', '2', '0', '2', '8'+(s[i+2]-0xa8))
+			i += 3
+			continue
+		case escapeInvisible && c == 0xef && i+2 < len(s) && s[i+1] == 0xbb && s[i+2] == 0xbf:
+			dst = append(dst, '\\', 'u', 'f', 'e', 'f', 'f')
 			i += 3
 			continue
 		default:
