@@ -24,6 +24,8 @@
 %   pg-08      \consolidatedcard, \advisoryrow, \advisorytrunc
 %   pg-09      \findingcard, \fieldcols, \cvssvector, \affectedchips,
 %              termbox env, \solbox, \reflist, \refurl
+%   secao 6    scopefacts env, \scopefact, \scopena, authtable env, \authrow,
+%              errortable env, \errorrow, \scopetrunc
 %   strings    \suriLbl... (every fixed word the blocks print, overridable)
 %
 % Copyright (C) 2026 Suricatoos.  SPDX-License-Identifier: GPL-2.0-or-later
@@ -1013,6 +1015,148 @@
 % \baselineskip that spaces two paragraphs is the one outside \refurl's group.
 \newcommand{\reflist}[1]{\par{\parindent=0pt\parskip=0pt
   \suriFS{9}{14}\raggedright#1\par}}
+
+% ===========================================================================
+% Escopo, metodologia e limitacoes (secao 6).
+%
+%   \begin{scopefacts}
+%     \scopefact{Tarefa}{Revis\~ao trimestral}
+%     \scopefact{Alvo}{\scopena}
+%   \end{scopefacts}
+%   \begin{authtable}
+%     \authrow{192.0.2.10}{SSH}{ok}
+%     \authrow{192.0.2.11}{SMB}{falha}
+%   \end{authtable}
+%   \begin{errortable}
+%     \errorrow{192.0.2.12}{general/tcp}{NVT timed out after 320 seconds.}{Services}
+%   \end{errortable}
+%   \scopetrunc{\suriEllip\ + 5 erro(s) a mais, n\~ao listados neste relat\'orio.}
+%
+% scopefacts e' uma lista de FATOS: o rotulo em Mono caixa-alta `muted' numa
+% coluna de 30%, o valor em Sans `ink' na outra, com as reguas das tabelas --
+% 2px `ink' em cima e fechando (a de baixo puxada um fio para cima, para
+% engolir o ultimo fio, como no suritoc), `hairlinetwo' entre as linhas. Cada
+% linha e' um par de minipages [t] lado a lado, como o \advisoryrow: as duas
+% abrem com o mesmo strut, entao as primeiras linhas de base coincidem, e um
+% valor longo quebra dentro da propria coluna. Uma linha nao parte entre
+% paginas; a lista parte entre linhas, e os \nopagebreak seguram as reguas de
+% abertura e de fechamento junto de uma linha.
+%
+% \scopena e' o VALOR de um dado que o relatorio nao traz: a frase de
+% \suriLblNotStated em italico `muted' (Sans regular italico, face do subset;
+% o valor nunca esta' em negrito -- FONTS.md: nao existe sb/it), para nao se
+% confundir com um dado.
+%
+% authtable e errortable sao longtables no molde da porttable: cabecalho Mono
+% repetido a cada pagina sobre a regra de 2px `ink', fio entre as linhas, 2px
+% fechando. Diferente da porttable, aqui as celulas quebram em mais de uma linha
+% (descricao, hostname longo), entao ha um vao de 1% da medida ENTRE as
+% colunas, para o texto de uma nao encostar no da outra; larguras + vaos somam
+% exatamente a medida.
+% \authrow{host}{protocolo}{ok|falha}: o resultado e' CHAVE, como a severidade
+% nas outras tabelas -- a palavra vem de \suriLblAuthOk / \suriLblAuthFail e a
+% cor (`warnfg', o ambar dos avisos, na falha) e' decisao daqui.
+% \errorrow{host}{porta}{descricao}{nvt}.
+%
+% \scopetrunc{texto}: a linha que fecha uma tabela cortada, com o desenho do
+% \findingtrunc. E' OUTRO nome de proposito: o portao de links do CI
+% (gates.sh) soma os cortes "\findingtrunc{\suriEllip\ + N" do sumario de
+% achados contra os alvos de card, e um corte desta secao nao tem card nenhum.
+% ===========================================================================
+\newcommand{\suriLblNotStated}{n\~ao informado no relat\'orio}
+\newcommand{\suriLblHost}{Host}
+\newcommand{\suriLblProtocol}{Protocolo}
+\newcommand{\suriLblResult}{Resultado}
+\newcommand{\suriLblAuthOk}{Sucesso}
+\newcommand{\suriLblAuthFail}{Falha}
+\newcommand{\suriLblDescription}{Descri\c{c}\~ao}
+\newcommand{\suriLblNvt}{NVT}
+
+\newcommand{\scopena}{{\suriSans\mdseries\itshape\color{muted}\suriLblNotStated}}
+
+\newlength{\suri@sfw}   % largura da coluna de rotulos de uma scopefacts
+\newenvironment{scopefacts}{%
+  \par\addvspace{\suripx{9}}%
+  \suri@hrule{ink}{\suri@thick}\nopagebreak
+}{%
+  \nopagebreak\vskip-\suri@hair
+  \suri@hrule{ink}{\suri@thick}%
+  \addvspace{\suripx{10}}}
+% \scopefact{rotulo}{valor} — uma linha de scopefacts.  O \suriFS antes do
+% \suri@lblx e' o do \kpibox: um rotulo que quebra em duas linhas usa o
+% \baselineskip de FORA do grupo do \suri@lblx.  Nas duas minipages o strut vem
+% ANTES de qualquer \color: ele abre o paragrafo, entao a 1a coisa da minipage
+% [t] e' a linha (e nao um whatsit de cor, que zeraria a altura do \vtop e
+% descolaria a linha de base do valor da do rotulo).
+\newcommand{\scopefact}[2]{%
+  \par\nointerlineskip\vskip\suripx{7}%
+  {\parindent=0pt\noindent
+   \setlength{\suri@sfw}{0.30\linewidth}%
+   \begin{minipage}[t]{\suri@sfw}%
+     \raggedright\suriFS{8.5}{11}\suri@strut{12}{4}%
+     \suri@lblx{\suri@trkhead}{muted}{8.5}{#1}%
+   \end{minipage}%
+   \begin{minipage}[t]{\dimexpr\linewidth-\suri@sfw\relax}%
+     \raggedright\suriFS{11}{15}\suri@strut{12}{4}\color{ink}#2%
+   \end{minipage}\par}%
+  \nopagebreak\vskip\suripx{6}%
+  \suri@hrule{hairlinetwo}{\suri@hair}}
+
+\newlength{\suri@sct}   % medida da authtable / errortable em composicao
+\newcommand{\suri@athead}{%
+  \suri@hlbl{\suriLblHost}&\suri@hlbl{\suriLblProtocol}&
+  \suri@hlbl{\suriLblResult}\suri@rowfill{27}\\
+  \suri@rowthick}
+\newenvironment{authtable}{%
+  \setlength{\suri@sct}{\linewidth}%
+  \suri@rowbase{16}%
+  \setlength{\tabcolsep}{0pt}%
+  \setlength{\LTpre}{0pt}\setlength{\LTpost}{0pt}%
+  \setlength{\LTleft}{0pt}\setlength{\LTright}{0pt}%
+  \longtable{@{}%
+    >{\raggedright\arraybackslash}p{0.39\suri@sct}@{\hspace{0.01\suri@sct}}%
+    >{\raggedright\arraybackslash}p{0.29\suri@sct}@{\hspace{0.01\suri@sct}}%
+    >{\raggedright\arraybackslash}p{0.30\suri@sct}@{}}
+  \suri@athead\endfirsthead
+  \suri@athead\endhead
+  \suri@rowclose\endlastfoot
+}{\endlongtable}
+% \authrow{host}{protocolo}{ok|falha} — uma linha da authtable.
+\newcommand{\authrow}[3]{%
+  {\dat{\suriFS{9.5}{12}\color{ink}#1}}&
+  {\dat{\suriFS{9.5}{12}\color{ink}#2}}&
+  {\suriFS{10.5}{12}\ifstrequal{#3}{ok}{\color{ink}\suriLblAuthOk}{\color{warnfg}\suriLblAuthFail}}\suri@rowfill{26}\\
+  \suri@rowhair}
+
+\newcommand{\suri@ethead}{%
+  \suri@hlbl{\suriLblHost}&\suri@hlbl{\suriLblPort}&
+  \suri@hlbl{\suriLblDescription}&\suri@hlbl{\suriLblNvt}\suri@rowfill{27}\\
+  \suri@rowthick}
+\newenvironment{errortable}{%
+  \setlength{\suri@sct}{\linewidth}%
+  \suri@rowbase{16}%
+  \setlength{\tabcolsep}{0pt}%
+  \setlength{\LTpre}{0pt}\setlength{\LTpost}{0pt}%
+  \setlength{\LTleft}{0pt}\setlength{\LTright}{0pt}%
+  \longtable{@{}%
+    >{\raggedright\arraybackslash}p{0.16\suri@sct}@{\hspace{0.01\suri@sct}}%
+    >{\raggedright\arraybackslash}p{0.12\suri@sct}@{\hspace{0.01\suri@sct}}%
+    >{\raggedright\arraybackslash}p{0.41\suri@sct}@{\hspace{0.01\suri@sct}}%
+    >{\raggedright\arraybackslash}p{0.28\suri@sct}@{}}
+  \suri@ethead\endfirsthead
+  \suri@ethead\endhead
+  \suri@rowclose\endlastfoot
+}{\endlongtable}
+% \errorrow{host}{porta}{descricao}{nvt} — uma linha da errortable.
+\newcommand{\errorrow}[4]{%
+  {\dat{\suriFS{9.5}{12}\color{ink}#1}}&
+  {\dat{\suriFS{9.5}{12}\color{muted}#2}}&
+  {\suriFS{10}{13}\color{ink}#3}&
+  {\suriFS{10}{13}\color{body}#4}\suri@rowfill{26}\\
+  \suri@rowhair}
+
+% \scopetrunc{texto} — a linha que fecha uma tabela cortada da secao 6.
+\newcommand{\scopetrunc}[1]{\findingtrunc{#1}}
 
 \makeatother
 \endinput

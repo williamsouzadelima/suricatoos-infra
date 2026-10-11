@@ -7,7 +7,7 @@ prova que o documento compila. Isto prova que o leitor CONSEGUE ANDAR pelo
 documento -- e que cada atalho leva aonde diz:
 
   sumario        a pagina "Sumario/Contents/Indice" existe, entre o resumo
-                 executivo e a secao 2, com as seis secoes em ordem; cada linha
+                 executivo e a secao 2, com as sete secoes em ordem; cada linha
                  e' \\hyperlink{sec-N} com o MESMO titulo do \\suriSection{N}, e
                  cada \\hypertarget{sec-N}{} abre a sua secao (vem colado antes
                  do \\suriSection{N});
@@ -23,7 +23,7 @@ documento -- e que cada atalho leva aonde diz:
 
 e, com --pdf (o PDF que o generate entregou), sobre o documento compilado:
 
-  pdf-arvore     o PDF TEM arvore de marcadores: seis itens de nivel 0
+  pdf-arvore     o PDF TEM arvore de marcadores: sete itens de nivel 0
                  "N  Titulo", os filhos de cada um sao os marcadores do .tex
                  daquela secao, na ordem, com o mesmo texto; nada abaixo do
                  nivel 1; secao com filhos fechada (Count < 0);
@@ -88,12 +88,14 @@ V = load_veracity()
 macros, group_at, skip_blank, plain = V.macros, V.group_at, V.skip_blank, V.plain
 norm_space, TexError, StylesheetError = V.norm_space, V.TexError, V.StylesheetError
 
-# As seis secoes do documento e a chave de i18n do titulo de cada uma: e' o
+# As sete secoes do documento e a chave de i18n do titulo de cada uma: e' o
 # CONTRATO do relatorio (real-report no latex.xsl), escrito aqui de proposito em
 # vez de lido da tabela $sections -- uma tabela errada la' nao pode aprovar a
-# si mesma.
+# si mesma. A 6 (escopo, metodologia e limitacoes) entrou antes do apendice,
+# que passou a ser a 7.
 SECTIONS = [(1, "sec_exec"), (2, "sec_hexmap"), (3, "sec_hosts_ports"),
-            (4, "sec_findings_summary"), (5, "sec_detailed"), (6, "sec_hexmap_host")]
+            (4, "sec_findings_summary"), (5, "sec_detailed"), (6, "sec_scope"),
+            (7, "sec_hexmap_host")]
 BOXES = ("hostcard", "findingcard", "consolidatedcard", "suriSummaryHead")
 
 
@@ -173,7 +175,7 @@ def check_sumario(m, tex, nav, sheet, lang):
     s = tex.s
     nums = [a[0].strip() for _, a in nav.secs]
     if nums != [str(n) for n, _ in SECTIONS]:
-        return ["\\suriSection na ordem %s, esperado 1..6" % " ".join(nums)]
+        return ["\\suriSection na ordem %s, esperado 1..%d" % (" ".join(nums), len(SECTIONS))]
     want_title = {n: sheet.t(k, lang) for n, k in SECTIONS}
     for p, a in nav.secs:
         n = int(a[0])
