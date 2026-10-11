@@ -1,13 +1,17 @@
 package ca
 
 import (
+	"bytes"
 	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/json"
 	"encoding/pem"
 	"os"
+	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 )
@@ -218,6 +222,269 @@ func TestCRLFile_PersistsAndLoads(t *testing.T) {
 	crl, _ := x509.ParseRevocationList(crlDER)
 	if len(crl.RevokedCertificateEntries) != 1 {
 		t.Fatalf("revocations must survive CRL file reload, got %d entries", len(crl.RevokedCertificateEntries))
+	}
+}
+
+// The CRL file is replaced (temp file in the same directory + rename), never rewritten
+// in place: a crash or a full disk in the middle of a save must leave the previous
+// list. LoadCRLFile refuses a truncated file, and main treats that as fatal at boot.
+func TestCRLFileIsReplacedAtomically(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "crl.json")
+	now := time.Unix(1700000000, 0).UTC()
+	c, _ := NewEphemeral(now)
+	if err := c.LoadCRLFile(path); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.RevokeCertSerial("0a1b", now); err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("CRL file not written: %v", err)
+	}
+	// On Windows os.Stat records only the path and SameFile resolves the file id
+	// lazily; resolve it now, while the path still names the first file.
+	_ = os.SameFile(before, before)
+
+	if err := c.RevokeCertSerial("0c1d", now.Add(time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	after, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if os.SameFile(before, after) {
+		t.Fatal("the CRL file was rewritten in place; want a complete new file renamed over it")
+	}
+
+	// The final file is complete: a fresh CA (a restart) loads both revocations.
+	c2, _ := NewEphemeral(now)
+	if err := c2.LoadCRLFile(path); err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+	if !c2.IsRevoked("0a1b") || !c2.IsRevoked("0c1d") {
+		t.Fatal("a revocation was lost across the reload")
+	}
+	// Nothing is left next to it, and it is private.
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 || entries[0].Name() != "crl.json" {
+		var names []string
+		for _, e := range entries {
+			names = append(names, e.Name())
+		}
+		t.Fatalf("directory holds %v, want only crl.json (no temp file left behind)", names)
+	}
+	if runtime.GOOS != "windows" {
+		if perm := after.Mode().Perm(); perm != 0o600 {
+			t.Fatalf("CRL file mode = %o, want 600", perm)
+		}
+	}
+}
+
+// A save that fails is reported, and the file already on disk is left untouched.
+// The new serial stays revoked in memory: the CA keeps blocking it (IsRevoked, the
+// served CRL) until a restart; the caller decides how to report the lost persistence.
+func TestCRLFileSaveFailureKeepsThePreviousFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "crl.json")
+	now := time.Unix(1700000000, 0).UTC()
+	c, _ := NewEphemeral(now)
+	if err := c.LoadCRLFile(path); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.RevokeCertSerial("0a1b", now); err != nil {
+		t.Fatal(err)
+	}
+	good, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The temp name is taken by a non-empty directory: the save cannot even start.
+	if err := os.MkdirAll(filepath.Join(path+".tmp", "busy"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.RevokeCertSerial("0c1d", now); err == nil {
+		t.Fatal("RevokeCertSerial must report a save that failed")
+	}
+	if got, _ := os.ReadFile(path); !bytes.Equal(got, good) {
+		t.Fatalf("a failed save changed the file on disk:\nbefore %s\nafter  %s", good, got)
+	}
+	if !c.IsRevoked("0c1d") {
+		t.Fatal("the serial must stay revoked in memory after a failed save")
+	}
+}
+
+// readCRLFile parses the persisted revocation list.
+func readCRLFile(t *testing.T, path string) []crlEntry {
+	t.Helper()
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read %s: %v", path, err)
+	}
+	var entries []crlEntry
+	if err := json.Unmarshal(b, &entries); err != nil {
+		t.Fatalf("%s is not a revocation list: %v\n%s", path, err, b)
+	}
+	return entries
+}
+
+// servedEntries returns the entries of the CRL the CA signs and serves.
+func servedEntries(t *testing.T, c *CA, now time.Time) []x509.RevocationListEntry {
+	t.Helper()
+	der, err := c.IssueCRL(now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	crl, err := x509.ParseRevocationList(der)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return crl.RevokedCertificateEntries
+}
+
+// Revoking a serial that is already revoked adds nothing (a retried DELETE must not
+// duplicate entries in crl.json or in the served CRL) but saves again: after a save
+// that failed, the retry is what puts the list on disk.
+func TestRevokeCertSerialIsIdempotentAndSavesAgain(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "state")
+	if err := os.Mkdir(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "crl.json")
+	now := time.Unix(1700000000, 0).UTC()
+	c, _ := NewEphemeral(now)
+	if err := c.LoadCRLFile(path); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.RevokeCertSerial("0a1b", now); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.RevokeCertSerial("0A1B", now.Add(time.Hour)); err != nil {
+		t.Fatalf("revoking it again: %v", err)
+	}
+	if got := servedEntries(t, c, now); len(got) != 1 || !got[0].RevocationTime.Equal(now) {
+		t.Fatalf("served CRL = %+v, want one entry keeping the first revocation time", got)
+	}
+	if got := readCRLFile(t, path); len(got) != 1 {
+		t.Fatalf("crl.json = %+v, want one entry", got)
+	}
+
+	// The disk goes away: the new serial is blocked in memory, and a retry while the
+	// disk is still gone keeps failing (honestly) without piling up entries.
+	if err := os.RemoveAll(dir); err != nil {
+		t.Fatal(err)
+	}
+	for i := range 2 {
+		if err := c.RevokeCertSerial("0c1d", now); err == nil {
+			t.Fatalf("attempt %d with the disk gone: want an error", i+1)
+		}
+	}
+	if got := servedEntries(t, c, now); len(got) != 2 {
+		t.Fatalf("served CRL has %d entries after the failed retries, want 2", len(got))
+	}
+	// The disk is back: the retry saves the whole list.
+	if err := os.Mkdir(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.RevokeCertSerial("0c1d", now); err != nil {
+		t.Fatalf("retry with the disk back: %v", err)
+	}
+	if got := readCRLFile(t, path); len(got) != 2 {
+		t.Fatalf("crl.json = %+v, want both serials", got)
+	}
+	fresh, _ := NewEphemeral(now)
+	if err := fresh.LoadCRLFile(path); err != nil {
+		t.Fatal(err)
+	}
+	if !fresh.IsRevoked("0a1b") || !fresh.IsRevoked("0c1d") {
+		t.Fatal("a restarted CA must see both revocations")
+	}
+}
+
+// countSaves makes every save of the revocation list go through a counter for the
+// rest of the test.
+func countSaves(t *testing.T) *int {
+	t.Helper()
+	n := new(int)
+	orig := saveCRLFile
+	saveCRLFile = func(path string, data []byte) error {
+		*n++
+		return orig(path, data)
+	}
+	t.Cleanup(func() { saveCRLFile = orig })
+	return n
+}
+
+// A token with N certificates is revoked in one batch and ONE save of the list (one
+// save per serial rewrote the whole file N times: O(N²) bytes). Idempotent per
+// serial, also inside the batch; serials that are not hex are returned, not revoked.
+func TestRevokeCertSerialsSavesTheListOnce(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "crl.json")
+	now := time.Unix(1700000000, 0).UTC()
+	c, _ := NewEphemeral(now)
+	if err := c.LoadCRLFile(path); err != nil {
+		t.Fatal(err)
+	}
+	saves := countSaves(t)
+
+	added, invalid, err := c.RevokeCertSerials([]string{"0a", "0b", "zz-not-hex", "0A", "0c"}, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if *saves != 1 {
+		t.Fatalf("a batch of 5 saved the list %d times, want 1", *saves)
+	}
+	if added != 3 || len(invalid) != 1 || invalid[0] != "zz-not-hex" {
+		t.Fatalf("added=%d invalid=%v, want 3 and [zz-not-hex]", added, invalid)
+	}
+	if got := servedEntries(t, c, now); len(got) != 3 {
+		t.Fatalf("served CRL has %d entries, want 3 (0a twice in the batch counts once)", len(got))
+	}
+	if got := readCRLFile(t, path); len(got) != 3 {
+		t.Fatalf("crl.json has %d entries, want 3", len(got))
+	}
+
+	// Again: nothing new, still one save (a retry is what puts a failed save on disk).
+	added, invalid, err = c.RevokeCertSerials([]string{"0a", "0b"}, now.Add(time.Hour))
+	if err != nil || added != 0 || len(invalid) != 0 || *saves != 2 {
+		t.Fatalf("repeat: added=%d invalid=%v err=%v saves=%d, want 0, none, nil, 2", added, invalid, err, *saves)
+	}
+	if got := servedEntries(t, c, now); len(got) != 3 || !got[0].RevocationTime.Equal(now) {
+		t.Fatalf("served CRL = %+v, want the same 3 entries with their first revocation time", got)
+	}
+
+	// The single-serial call is the same thing with one serial.
+	if err := c.RevokeCertSerial("0d", now); err != nil || *saves != 3 {
+		t.Fatalf("RevokeCertSerial: err=%v saves=%d, want nil and 3", err, *saves)
+	}
+	if err := c.RevokeCertSerial("nope", now); err == nil {
+		t.Fatal("RevokeCertSerial of a non-hex serial must fail")
+	}
+}
+
+// Without a CRL file nothing is saved and PersistsRevocations says so.
+func TestRevokeCertSerialsInMemoryOnly(t *testing.T) {
+	now := time.Unix(1700000000, 0).UTC()
+	c, _ := NewEphemeral(now)
+	saves := countSaves(t)
+	if c.PersistsRevocations() {
+		t.Fatal("a CA without LoadCRLFile must not claim to persist revocations")
+	}
+	if added, _, err := c.RevokeCertSerials([]string{"0a", "0b"}, now); err != nil || added != 2 || *saves != 0 {
+		t.Fatalf("added=%d err=%v saves=%d, want 2, nil, 0", added, err, *saves)
+	}
+	if !c.IsRevoked("0a") || !c.IsRevoked("0b") {
+		t.Fatal("the serials must be revoked in memory")
+	}
+	if err := c.LoadCRLFile(filepath.Join(t.TempDir(), "crl.json")); err != nil {
+		t.Fatal(err)
+	}
+	if !c.PersistsRevocations() {
+		t.Fatal("after LoadCRLFile the CA persists revocations")
 	}
 }
 

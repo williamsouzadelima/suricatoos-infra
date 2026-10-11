@@ -687,6 +687,174 @@ func TestEnqueueRejectsBadIDsAndCapsAgents(t *testing.T) {
 	})
 }
 
+// --- revocation on the agent channel ---
+
+// agentReq builds a poll/ack request the way nginx forwards it: the certificate DN
+// and, when non-empty, the certificate serial (X-Client-Cert-Serial).
+func agentReq(method, target, cn, serial, body string) *http.Request {
+	r := httptest.NewRequest(method, target, strings.NewReader(body))
+	r.Header.Set("X-Client-Cert-DN", "CN="+cn+",O=suricatoos")
+	if serial != "" {
+		r.Header.Set("X-Client-Cert-Serial", serial)
+	}
+	return r
+}
+
+// revocationSvc returns a service whose CA has revoked exactly the given serials
+// (compared verbatim, as the fake CA sees them), plus the lines it logs.
+func revocationSvc(q *Queue, revoked ...string) (*Service, *[]string, *[]string) {
+	set := map[string]bool{}
+	for _, s := range revoked {
+		set[s] = true
+	}
+	var asked, logs []string
+	svc := NewService(q, nil).WithRevocationCheck(func(serial string) bool {
+		asked = append(asked, serial)
+		return set[serial]
+	})
+	svc.logf = func(format string, args ...any) { logs = append(logs, fmt.Sprintf(format, args...)) }
+	return svc, &asked, &logs
+}
+
+// A revoked certificate neither receives its agent's command nor acks it: 403, and
+// the command stays PENDING (it then expires; it is never handed to the revoked cert).
+func TestPollAndAckRefuseARevokedCertificate(t *testing.T) {
+	q := openQ(t, "", 0, newClock())
+	svc, _, logs := revocationSvc(q, "0A1B2C")
+	c := mustEnqueue(t, q, "agent-1")
+
+	w := httptest.NewRecorder()
+	svc.PollHandler()(w, agentReq("GET", "/commands", "agent-1", "0A1B2C", ""))
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("poll with a revoked cert = %d, want 403", w.Code)
+	}
+	if strings.Contains(w.Body.String(), c.ID) {
+		t.Fatalf("the 403 handed the command out: %s", w.Body)
+	}
+	if st := only(t, q, "agent-1").State; st != StatePending {
+		t.Fatalf("after a refused poll state = %s, want PENDING (not delivered)", st)
+	}
+
+	w = httptest.NewRecorder()
+	svc.AckHandler()(w, agentReq("POST", "/commands/ack", "agent-1", "0A1B2C", `{"id":"`+c.ID+`"}`))
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("ack with a revoked cert = %d, want 403", w.Code)
+	}
+	if st := only(t, q, "agent-1").State; st != StatePending {
+		t.Fatalf("after a refused ack state = %s, want PENDING (not acked)", st)
+	}
+
+	// A revoked agent keeps polling every minute: the refusals are logged once per
+	// certificate per revokedLogEvery, not once each (see the next test).
+	if len(*logs) != 1 || !strings.Contains((*logs)[0], "agent-1") || !strings.Contains((*logs)[0], "0A1B2C") {
+		t.Fatalf("want one log line naming the agent and the serial for both refusals, got %q", *logs)
+	}
+}
+
+// The refusals of a revoked certificate are logged at most once per revokedLogEvery
+// for each cn|serial — a revoked agent that is still running polls every minute — and
+// every one of them is still a 403.
+func TestRevokedRefusalsAreLoggedOncePerWindowPerCertificate(t *testing.T) {
+	q := openQ(t, "", 0, newClock())
+	svc, _, logs := revocationSvc(q, "0A1B2C", "0D0E0F")
+	clk := newClock()
+	svc.now = clk.Now
+	poll := func(cn, serial string) {
+		t.Helper()
+		w := httptest.NewRecorder()
+		svc.PollHandler()(w, agentReq("GET", "/commands", cn, serial, ""))
+		if w.Code != http.StatusForbidden {
+			t.Fatalf("poll of %s/%s = %d, want 403", cn, serial, w.Code)
+		}
+	}
+
+	for range 30 { // half an hour of polls
+		poll("agent-1", "0A1B2C")
+		clk.Advance(time.Minute)
+	}
+	if len(*logs) != 1 {
+		t.Fatalf("30 refused polls in 30 minutes logged %d lines, want 1: %q", len(*logs), *logs)
+	}
+	// Another revoked certificate (of the same agent, or of another) has its own line.
+	poll("agent-1", "0D0E0F")
+	poll("agent-2", "0A1B2C")
+	if len(*logs) != 3 {
+		t.Fatalf("want a line for each new cn|serial, got %q", *logs)
+	}
+	// Once the window has passed, the still-refused certificate is logged again.
+	clk.Advance(revokedLogEvery)
+	poll("agent-1", "0A1B2C")
+	if len(*logs) != 4 || !strings.Contains((*logs)[3], "agent-1") || !strings.Contains((*logs)[3], "0A1B2C") {
+		t.Fatalf("after revokedLogEvery the refusal must be logged again, got %q", *logs)
+	}
+}
+
+// A certificate that was not revoked works exactly as before, and the CA is asked
+// about the serial nginx forwarded.
+func TestPollAndAckOfANonRevokedCertificateAreUnchanged(t *testing.T) {
+	q := openQ(t, "", 0, newClock())
+	svc, asked, logs := revocationSvc(q, "DEAD")
+	c := mustEnqueue(t, q, "agent-1")
+
+	w := httptest.NewRecorder()
+	svc.PollHandler()(w, agentReq("GET", "/commands", "agent-1", "0A1B2C", ""))
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), c.ID) {
+		t.Fatalf("poll = %d %s, want 200 with the command", w.Code, w.Body)
+	}
+	w = httptest.NewRecorder()
+	svc.AckHandler()(w, agentReq("POST", "/commands/ack", "agent-1", "0A1B2C", `{"id":"`+c.ID+`"}`))
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("ack = %d, want 204", w.Code)
+	}
+	if st := only(t, q, "agent-1").State; st != StateAcked {
+		t.Fatalf("state = %s, want ACKED", st)
+	}
+	w = httptest.NewRecorder()
+	svc.PollHandler()(w, agentReq("GET", "/commands", "agent-1", "0A1B2C", ""))
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("empty poll = %d, want 204", w.Code)
+	}
+	if strings.Join(*asked, ",") != "0A1B2C,0A1B2C,0A1B2C" {
+		t.Fatalf("the CA was asked about %q, want the forwarded serial once per request", *asked)
+	}
+	if len(*logs) != 0 {
+		t.Fatalf("a healthy agent produced log lines: %q", *logs)
+	}
+}
+
+// An nginx that does not forward the serial yet (deploy transition): accepted, and
+// logged once per agent — not once per poll, agents poll every minute.
+func TestPollAndAckWithoutTheSerialAreAcceptedAndLoggedOncePerAgent(t *testing.T) {
+	q := openQ(t, "", 0, newClock())
+	svc, asked, logs := revocationSvc(q, "0A1B2C")
+	c := mustEnqueue(t, q, "agent-1")
+
+	for i := range 3 {
+		w := httptest.NewRecorder()
+		svc.PollHandler()(w, agentReq("GET", "/commands", "agent-1", "", ""))
+		if w.Code != http.StatusOK {
+			t.Fatalf("poll #%d without a serial = %d, want 200", i+1, w.Code)
+		}
+	}
+	w := httptest.NewRecorder()
+	svc.AckHandler()(w, agentReq("POST", "/commands/ack", "agent-1", "", `{"id":"`+c.ID+`"}`))
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("ack without a serial = %d, want 204", w.Code)
+	}
+	w = httptest.NewRecorder()
+	svc.PollHandler()(w, agentReq("GET", "/commands", "agent-2", "", ""))
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("other agent's poll without a serial = %d, want 204", w.Code)
+	}
+
+	if len(*asked) != 0 {
+		t.Fatalf("the CA was asked about %q with no serial forwarded", *asked)
+	}
+	if len(*logs) != 2 || !strings.Contains((*logs)[0], "agent-1") || !strings.Contains((*logs)[1], "agent-2") {
+		t.Fatalf("want exactly one line per agent (agent-1, agent-2), got %q", *logs)
+	}
+}
+
 // The queue defers to the enrollment rule for what an agent id may look like, so it
 // can only ever hold ids a real agent could have; the one addition is UTF-8 validity,
 // because the ids here come from URLs (not from JSON, which sanitizes them) and an

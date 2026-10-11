@@ -8,8 +8,11 @@
 package api
 
 import (
+	"crypto/subtle"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -25,6 +28,7 @@ type Handler struct {
 	serverURL   string
 	ingestURL   string
 	adminSecret string
+	logf        func(format string, args ...any) // log.Printf; tests capture it
 }
 
 // New returns an admin Handler. serverURL is the public URL of the control-plane
@@ -34,7 +38,7 @@ type Handler struct {
 // agent also learns it from the enrollment response). adminSecret is the shared
 // secret expected in "Authorization: Bearer <secret>" admin requests.
 func New(tm *tokens.Manager, authority *ca.CA, serverURL, ingestURL, adminSecret string) *Handler {
-	return &Handler{tm: tm, authority: authority, serverURL: serverURL, ingestURL: ingestURL, adminSecret: adminSecret}
+	return &Handler{tm: tm, authority: authority, serverURL: serverURL, ingestURL: ingestURL, adminSecret: adminSecret, logf: log.Printf}
 }
 
 // Handler returns an http.Handler serving all /api/v1/ routes.
@@ -49,13 +53,22 @@ func (h *Handler) Handler() http.Handler {
 // withAuth wraps a handler with admin secret authentication.
 func (h *Handler) withAuth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		auth := r.Header.Get("Authorization")
-		if !strings.HasPrefix(auth, "Bearer ") || strings.TrimPrefix(auth, "Bearer ") != h.adminSecret {
+		if !bearerOK(r, h.adminSecret) {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
 		next(w, r)
 	}
+}
+
+// bearerOK reports whether r carries exactly "Authorization: Bearer <secret>". The
+// compare is constant-time (no timing side channel on the secret) and an empty
+// secret never matches: "Bearer " with an empty token would otherwise open the API.
+func bearerOK(r *http.Request, secret string) bool {
+	if secret == "" {
+		return false
+	}
+	return subtle.ConstantTimeCompare([]byte(r.Header.Get("Authorization")), []byte("Bearer "+secret)) == 1
 }
 
 // mintRequest is the JSON body for POST /api/v1/tokens.
@@ -157,8 +170,56 @@ func (h *Handler) listTokens(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(out)
 }
 
+// revokeResult is the body of a revocation that fully happened (200 "revoked"), or of
+// a repeated one that found everything revoked already (409 "already revoked").
+// Persisted says whether the revocation list is on disk: always false without
+// CRL_FILE, where it lives in memory only (the control-plane warns about it at boot).
+type revokeResult struct {
+	Status    string `json:"status"`
+	ID        string `json:"id"` // the token
+	Persisted bool   `json:"persisted"`
+}
+
+// revokeFailure is the 500 body of a revocation that did not fully happen: the token
+// store could not record it (status "failed", token_revoked false), or the token was
+// revoked but revoking — or saving the revocation of — some of its certificates
+// failed (status "partial").
+type revokeFailure struct {
+	Status        string   `json:"status"`         // "failed" or "partial"
+	ID            string   `json:"id"`             // the token
+	TokenRevoked  bool     `json:"token_revoked"`  // the token store recorded the revocation
+	CertsRevoked  int      `json:"certs_revoked"`  // certificates revoked AND persisted
+	FailedSerials []string `json:"failed_serials"` // the first maxFailedInBody that failed
+	FailedCount   int      `json:"failed_count"`   // all that failed or were not persisted
+	Persisted     bool     `json:"persisted"`      // the revocation list was saved to disk
+	Error         string   `json:"error"`
+}
+
+const (
+	maxFailedInBody = 100 // failed_serials lists these many; failed_count counts them all
+	maxFailedInLog  = 20  // serials named in the one summary log line
+)
+
 // revokeToken revokes a token by ID and invalidates all mTLS certificates that
 // were issued under it by adding their serials to the CA's revocation list.
+//
+// The token is revoked first. A certificate whose revocation fails, or is kept only in
+// memory because CRL_FILE could not be written, turns the answer into a 500 that says
+// exactly that: the token IS revoked, which serials failed (the first maxFailedInBody,
+// and how many), and to repeat the DELETE; one summary line goes to the log. Until the
+// list is saved such a certificate is blocked in memory, and after a restart the boot
+// reconciliation (ReconcileRevocations) blocks it again from the token store — with
+// TOKEN_DB_PATH set; with neither that nor CRL_FILE, a restart loses it. It used to be
+// a 200 that silently lost the revocation.
+//
+// Repeating the DELETE of a token that is already revoked redoes the certificate
+// revocation (RevokeCertSerials is idempotent and saves the list again): the same 500
+// while something still fails, and 409 "already revoked" only when every serial is
+// revoked AND, with CRL_FILE set, on disk. That also covers a request that crashed
+// between the token store and the CRL.
+//
+// Every answer but the 404/400 is JSON and says "persisted": whether the revocation
+// list is on disk — always false without CRL_FILE.
 func (h *Handler) revokeToken(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {
@@ -166,30 +227,143 @@ func (h *Handler) revokeToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rec, err := h.tm.RevokeRecord(id, "admin-api")
-	if err != nil {
-		switch err {
-		case tokens.ErrNotFound:
-			http.Error(w, "token not found", http.StatusNotFound)
-		case tokens.ErrRevoked:
-			http.Error(w, "already revoked", http.StatusConflict)
-		default:
-			http.Error(w, "revoke failed: "+err.Error(), http.StatusInternalServerError)
-		}
+	already := errors.Is(err, tokens.ErrRevoked)
+	switch {
+	case already:
+		// Fall through to (re)do the certificates; rec carries the enrollments.
+	case errors.Is(err, tokens.ErrNotFound):
+		http.Error(w, "token not found", http.StatusNotFound)
+		return
+	case err != nil:
+		h.logf("api: revogar o token %s: o token store não gravou a revogação: %v", id, err)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(revokeFailure{
+			Status:        "failed",
+			ID:            id,
+			FailedSerials: []string{},
+			Error: "o token NÃO foi revogado: o token store não gravou a revogação — detalhes no log do " +
+				"control-plane; corrija a causa e repita o DELETE.",
+		})
 		return
 	}
-	// Revoke all mTLS certs that were issued via this token's enrollments.
-	now := time.Now().UTC()
-	for _, enr := range rec.Enrollments {
-		if enr.CertSerial == "" {
-			continue
+	revoked, failed, persisted := h.revokeCerts(id, rec.Enrollments)
+	w.Header().Set("Content-Type", "application/json")
+	if len(failed) > 0 {
+		shown := failed
+		if len(shown) > maxFailedInBody {
+			shown = shown[:maxFailedInBody]
 		}
-		if err := h.authority.RevokeCertSerial(enr.CertSerial, now); err != nil {
-			// Log but don't fail — token is already revoked.
-			_ = err
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(revokeFailure{
+			Status:        "partial",
+			ID:            id,
+			TokenRevoked:  true,
+			CertsRevoked:  revoked,
+			FailedSerials: shown,
+			FailedCount:   len(failed),
+			Persisted:     persisted,
+			Error: fmt.Sprintf("o token foi revogado, mas a revogação de %d de %d certificado(s) falhou ou não foi gravada "+
+				"em disco — detalhes no log do control-plane; repita o DELETE: ele refaz e grava a revogação (responde 409 "+
+				"quando todos estiverem revogados e gravados). Até lá eles seguem bloqueados em memória, e num restart a "+
+				"reconciliação de boot os bloqueia de novo a partir do token store (com TOKEN_DB_PATH).",
+				len(failed), len(failed)+revoked),
+		})
+		return
+	}
+	if already {
+		w.WriteHeader(http.StatusConflict)
+		json.NewEncoder(w).Encode(revokeResult{Status: "already revoked", ID: id, Persisted: persisted})
+		return
+	}
+	json.NewEncoder(w).Encode(revokeResult{Status: "revoked", ID: id, Persisted: persisted})
+}
+
+// revokeCerts revokes every certificate serial recorded in enrollments in ONE batch
+// (one save of the list — not one per certificate) and returns how many are revoked
+// and saved, which failed, and whether the list is on disk. Each kind of failure is
+// ONE summary log line (count and the first maxFailedInLog serials), also when the
+// token has no certificates and only the save of the list failed. A serial the save
+// could not persist counts as failed although the CA blocks it in memory (and, after a
+// restart, the boot reconciliation blocks it again from the token store).
+func (h *Handler) revokeCerts(tokenID string, enrollments []tokens.Enrollment) (revoked int, failed []string, persisted bool) {
+	var serials []string
+	for _, enr := range enrollments {
+		if enr.CertSerial != "" {
+			serials = append(serials, enr.CertSerial)
 		}
 	}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"status": "revoked", "id": id})
+	_, invalid, err := h.authority.RevokeCertSerials(serials, time.Now().UTC())
+	notHex := make(map[string]bool, len(invalid))
+	for _, s := range invalid {
+		notHex[s] = true
+	}
+	failed = []string{}
+	var unsaved []string
+	for _, s := range serials {
+		switch {
+		case notHex[s]:
+			failed = append(failed, s)
+		case err != nil:
+			failed = append(failed, s)
+			unsaved = append(unsaved, s)
+		default:
+			revoked++
+		}
+	}
+	if len(invalid) > 0 {
+		h.logf("api: token %s revogado, mas %d certificado(s) não foram revogados — serial inválido: %s",
+			tokenID, len(invalid), firstSerials(invalid))
+	}
+	switch {
+	case err != nil && len(unsaved) > 0:
+		h.logf("api: token %s revogado, mas a lista de revogação não foi gravada: %v — %d certificado(s) bloqueado(s) só em memória: %s; "+
+			"repita o DELETE para gravar (num restart a reconciliação de boot os bloqueia de novo a partir do token store, com TOKEN_DB_PATH)",
+			tokenID, err, len(unsaved), firstSerials(unsaved))
+	case err != nil:
+		h.logf("api: token %s revogado (sem certificados), mas a lista de revogação não foi gravada: %v — ela pode guardar revogações "+
+			"anteriores ainda não gravadas; repita o DELETE para gravá-la", tokenID, err)
+	}
+	return revoked, failed, err == nil && h.authority.PersistsRevocations()
+}
+
+// firstSerials lists the first maxFailedInLog serials, and how many more there are.
+func firstSerials(serials []string) string {
+	if len(serials) <= maxFailedInLog {
+		return strings.Join(serials, ", ")
+	}
+	return fmt.Sprintf("%s e mais %d", strings.Join(serials[:maxFailedInLog], ", "), len(serials)-maxFailedInLog)
+}
+
+// ReconcileRevocations puts the certificate serials of every revoked token back on
+// the CA's revocation list, in one batch (one save). Run it at boot, after the CA has
+// loaded its CRL file and with the token store open: it closes, with nobody acting,
+// the window in which a token is revoked but its certificates are not — a crash
+// between the two writes, or a restart before the operator repeated a DELETE whose
+// save failed. Without CRL_FILE it rebuilds the in-memory list from the token store.
+//
+// It is idempotent: a serial already listed is left as is; one that was missing gets
+// now as its revocation time (the original instant was lost with it; what blocks the
+// certificate is being listed). It returns how many serials were added, the ones that
+// are not valid hex, and the error of listing the tokens or of saving the list — after
+// which the serials are still revoked in memory, so the caller logs it and goes on.
+func ReconcileRevocations(tm *tokens.Manager, authority *ca.CA, now time.Time) (added int, invalid []string, err error) {
+	recs, err := tm.List()
+	if err != nil {
+		return 0, nil, fmt.Errorf("listar os tokens: %w", err)
+	}
+	var serials []string
+	for _, rec := range recs {
+		if !rec.Revoked {
+			continue
+		}
+		for _, enr := range rec.Enrollments {
+			if enr.CertSerial != "" {
+				serials = append(serials, enr.CertSerial)
+			}
+		}
+	}
+	return authority.RevokeCertSerials(serials, now)
 }
 
 // buildBundle returns the YAML content for an enrollment bundle.

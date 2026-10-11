@@ -22,6 +22,11 @@ import (
 // in lockstep with schema/inventory.schema.json and the agent).
 const SchemaVersion = "1.1.0"
 
+// maxAgentIDBytes is the longest agent_id an inventory may carry: the enrollment
+// limit (control-plane enroll.ValidateAgentID, 1..128 bytes) — no enrolled agent's
+// id is longer, and the CN check would refuse it anyway.
+const maxAgentIDBytes = 128
+
 // schemaCompatible reports whether a received inventory's schema_version is
 // accepted. It matches on MAJOR only: minor/patch bumps add optional fields and
 // stay backward-compatible, so a 1.0.0 fleet and a 1.1.0 agent coexist during a
@@ -159,6 +164,18 @@ type Server struct {
 	// sensorReport, when set, mounts the sensor-report import route (ADR-0007).
 	// nil = feature not wired.
 	sensorReport *sensorreport.Service
+
+	// identity / crl: the agent identity check on POST /v1/inventory (see
+	// identity.go). identity defaults to IdentityLog; crl nil = revocation not
+	// checked. noted and crlWarnAt keep the transition logs to one line per agent and
+	// one "CRL unavailable" line per crlWarnEvery.
+	identity  IdentityMode
+	crl       RevocationList
+	noted     onceSet
+	crlWarnMu sync.Mutex
+	crlWarnAt time.Time
+
+	logf func(format string, args ...any) // log.Printf; tests capture it
 }
 
 // AttachScanLaunch wires the reNgine→OpenVAS launch service so its routes are
@@ -188,6 +205,8 @@ func NewServer(s Sink) *Server {
 		now:          time.Now,
 		queryAgents:  execAgentsQuery,
 		lastSeenPath: os.Getenv("AGENT_LASTSEEN_FILE"),
+		identity:     IdentityLog,
+		logf:         log.Printf,
 	}
 	srv.loadLastSeen()
 	return srv
@@ -290,6 +309,16 @@ func (s *Server) Handler() http.Handler {
 		}
 		if inv.Agent.AgentID == "" || inv.OS.Family == "" {
 			http.Error(w, "inventário incompleto", http.StatusBadRequest)
+			return
+		}
+		// No enrolled agent has a longer id (enrollment: 1..128 bytes), in any mode —
+		// refuse it before it reaches lastSeen, its file and the logs.
+		if len(inv.Agent.AgentID) > maxAgentIDBytes {
+			http.Error(w, "agent_id excede 128 bytes", http.StatusBadRequest)
+			return
+		}
+		// agent_id vs the client certificate, and revocation (INGEST_AGENT_IDENTITY).
+		if !s.agentIdentityOK(w, r, inv.Agent.AgentID) {
 			return
 		}
 		s.markSeen(inv.Agent.AgentID) // last check-in for online/offline, even if deduped downstream

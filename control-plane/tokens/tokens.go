@@ -294,6 +294,10 @@ func (m *Manager) Revoke(id, by string) error {
 
 // RevokeRecord marks a token revoked and returns the final Record (with the
 // full Enrollments audit trail), enabling callers to revoke associated certs.
+//
+// A token that is already revoked is left untouched and returned WITH ErrRevoked, so
+// a caller can redo the certificate revocation that an earlier request failed to
+// finish (a CRL that could not be written, a crash in between).
 func (m *Manager) RevokeRecord(id, by string) (Record, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -302,7 +306,7 @@ func (m *Manager) RevokeRecord(id, by string) (Record, error) {
 		return Record{}, ErrNotFound
 	}
 	if rec.Revoked {
-		return Record{}, ErrRevoked
+		return rec, ErrRevoked
 	}
 	rec.Revoked = true
 	rec.RevokedBy = by

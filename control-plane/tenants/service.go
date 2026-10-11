@@ -1,6 +1,7 @@
 package tenants
 
 import (
+	"crypto/subtle"
 	"encoding/json"
 	"net/http"
 )
@@ -11,13 +12,19 @@ type Service struct {
 	adminSecret string
 }
 
-// NewService builds a Service. An empty adminSecret disables the routes (403).
+// NewService builds a Service. An empty adminSecret disables the routes (401).
 func NewService(reg *Registry, adminSecret string) *Service {
 	return &Service{reg: reg, adminSecret: adminSecret}
 }
 
+// authed reports whether r carries exactly "Authorization: Bearer <adminSecret>". The
+// compare is constant-time (no timing side channel on the secret) and an empty secret
+// never matches (fail closed).
 func (s *Service) authed(r *http.Request) bool {
-	return s.adminSecret != "" && r.Header.Get("Authorization") == "Bearer "+s.adminSecret
+	if s.adminSecret == "" {
+		return false
+	}
+	return subtle.ConstantTimeCompare([]byte(r.Header.Get("Authorization")), []byte("Bearer "+s.adminSecret)) == 1
 }
 
 // PutHandler serves PUT /api/v1/tenants/{t}: create/update a tenant's scope +

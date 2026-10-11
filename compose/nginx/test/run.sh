@@ -56,6 +56,7 @@ MODE=normal                     # normal | mutante
 MUT_TOTAL=0 MUT_FAILED=0
 MUT_NOT_FAILED=()
 PROFILE="" NGINX_CTR="" PORT="" USE_PROXY_PROTOCOL=0
+CLIENT_SERIAL=""                # serial do cert de cliente de teste (gen_pki)
 CURL_BASE=()
 CASE_ID="" CASE_DESC="" CASE_ERRS=()
 REQ_DESC="" STATUS="" CURL_RC=0 LOG_LINES_BEFORE=0 UP_ENTRY=""
@@ -152,6 +153,9 @@ EOF
     cat "$PKI/openssl.log" >&2
     die "falha ao gerar o material de teste (openssl)"
   }
+  # O serial que o nginx tem de repassar ($ssl_client_serial) nas rotas mTLS.
+  CLIENT_SERIAL=$(openssl x509 -in "$PKI/client.crt" -noout -serial 2>/dev/null | cut -d= -f2)
+  [ -n "$CLIENT_SERIAL" ] || die "não consegui ler o serial do cert de cliente"
 }
 
 # Tudo o que os dois configs referenciam (conferido nos próprios arquivos):
@@ -385,6 +389,24 @@ expect_header_lacks() {  # expect_header_lacks NOME TRECHO
   case "$got" in *"$2"*) fail_case "header $1 no upstream contém '$2': '$got'" ;; esac
 }
 
+# Serial em hex comparável: maiúsculo, sem ':' e sem zeros à esquerda — o mesmo
+# número que o ingest e a CA comparam, seja qual for a grafia.
+norm_serial() {
+  local s
+  s=$(printf '%s' "$1" | tr -d ':' | tr 'a-f' 'A-F')
+  s="${s#"${s%%[!0]*}"}"
+  printf '%s' "${s:-0}"
+}
+
+expect_header_serial() {  # expect_header_serial NOME SERIAL
+  [ -n "$UP_ENTRY" ] || return 0
+  local got
+  got=$(header_of "$1")
+  if [ "$got" = "<ausente>" ] || [ "$(norm_serial "$got")" != "$(norm_serial "$2")" ]; then
+    fail_case "header $1 no upstream: '$got', esperado o serial do certificado '$2'"
+  fi
+}
+
 diagnostics() {
   local p='           ' entries
   printf '%srequisição: %s  (caso %s, perfil %s)\n' "$p" "$REQ_DESC" "$CASE_ID" "$PROFILE"
@@ -564,6 +586,65 @@ cases_mtls() {
   end_case
 }
 
+# (h) identidade e revogação no canal do agente: com cert, o upstream recebe DN,
+# verify e SERIAL do certificado — os que o cliente mandar são substituídos, então
+# um agente não consegue se passar por outro nem esconder um cert revogado atrás de
+# um serial alheio; sem cert, nem com os headers forjados algo chega ao upstream.
+# A marca de portão forjada vai junto para que a checagem de que ela NÃO chega ao CP
+# possa de fato reprovar (no ingest ela não significa nada).
+FORGED_CERT=(-H 'X-Client-Cert-DN: CN=forjado' -H 'X-Client-Cert-Verify: FORJADO'
+             -H 'X-Client-Cert-Serial: 0A' -H 'X-Suricatoos-Gate: gsad-session')
+
+cases_agent_identity() {
+  local cert=(--cert "$PKI/client.crt" --key "$PKI/client.key")
+
+  begin_case "mTLS /agent/v1/commands: com certificado → CP recebe DN, verify e serial do certificado, não os forjados pelo cliente nem a marca de portão"
+  send GET /agent/v1/commands "${cert[@]}" "${FORGED_CERT[@]}"
+  expect_status 200
+  expect_upstream control-plane GET /v1/commands
+  expect_header_contains X-Client-Cert-DN CN=test-agent
+  expect_header_lacks X-Client-Cert-DN forjado
+  expect_header X-Client-Cert-Verify SUCCESS
+  expect_header_serial X-Client-Cert-Serial "$CLIENT_SERIAL"
+  expect_no_header X-Suricatoos-Gate
+  end_case
+
+  begin_case "mTLS /agent/v1/commands/ack: com certificado → CP /v1/commands/ack com o serial do certificado, não o forjado nem a marca de portão"
+  send POST /agent/v1/commands/ack "${cert[@]}" "${FORGED_CERT[@]}"
+  expect_status 200
+  expect_upstream control-plane POST /v1/commands/ack
+  expect_header_contains X-Client-Cert-DN CN=test-agent
+  expect_header X-Client-Cert-Verify SUCCESS
+  expect_header_serial X-Client-Cert-Serial "$CLIENT_SERIAL"
+  expect_no_header X-Suricatoos-Gate
+  end_case
+
+  begin_case "mTLS /ingest/v1/inventory: com certificado → ingest recebe DN, verify e serial do certificado, não os forjados nem X-Suricatoos-UI"
+  send POST /ingest/v1/inventory "${cert[@]}" "${FORGED_CERT[@]}" -H 'X-Suricatoos-UI: 1'
+  expect_status 200
+  expect_upstream ingest POST /v1/inventory
+  expect_header_contains X-Client-Cert-DN CN=test-agent
+  expect_header_lacks X-Client-Cert-DN forjado
+  expect_header X-Client-Cert-Verify SUCCESS
+  expect_header_serial X-Client-Cert-Serial "$CLIENT_SERIAL"
+  expect_no_header X-Suricatoos-UI
+  end_case
+
+  begin_case "mTLS /ingest/v1/inventory: sem certificado e com X-Client-Cert-* forjados → 403, nada chega ao ingest"
+  send POST /ingest/v1/inventory -H 'X-Client-Cert-DN: CN=test-agent,O=lab' \
+    -H 'X-Client-Cert-Verify: SUCCESS' -H "X-Client-Cert-Serial: $CLIENT_SERIAL"
+  expect_status 403
+  expect_no_upstream
+  end_case
+
+  begin_case "mTLS /agent/v1/commands: sem certificado e com X-Client-Cert-* forjados → 403, nada chega ao CP"
+  send GET /agent/v1/commands -H 'X-Client-Cert-DN: CN=test-agent,O=lab' \
+    -H 'X-Client-Cert-Verify: SUCCESS' -H "X-Client-Cert-Serial: $CLIENT_SERIAL"
+  expect_status 403
+  expect_no_upstream
+  end_case
+}
+
 cases_default() {
   cases_closed
   cases_public
@@ -571,6 +652,7 @@ cases_default() {
   cases_session_gate
   cases_cookie_gate
   cases_mtls
+  cases_agent_identity
 }
 
 # Standalone: sem PROXY protocol e sem mTLS — nada de mTLS é afirmado aqui.

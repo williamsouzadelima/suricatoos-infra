@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"math/big"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -40,8 +41,48 @@ type CA struct {
 
 	mu      sync.RWMutex
 	revoked []x509.RevocationListEntry // revoked cert entries
-	crlURL  string                     // embedded in issued certs; empty = omit
-	crlFile string                     // when set, revocations are persisted here
+	// index holds the serialKey of every entry in revoked (same mutex), so IsRevoked
+	// and the dedupe of a revocation cost O(1) per serial: the lock they take is the one
+	// every agent poll/ack/renew/enroll takes, and the list reaches 100k+ entries.
+	index   map[string]struct{}
+	crlURL  string // embedded in issued certs; empty = omit
+	crlFile string // when set, revocations are persisted here
+}
+
+// serialCleaner removes the separators a serial is written with (nginx: upper-case hex;
+// some tools: ':' between bytes, a 0x prefix, spaces).
+var serialCleaner = strings.NewReplacer(":", "", " ", "", "0x", "", "0X", "")
+
+// serialKey returns the canonical form of a certificate serial written in hex — the
+// number in lower-case hex, without leading zeros — together with the number. Every
+// spelling of one serial (hex case, leading zeros, a 0x prefix, ':' or space
+// separators) gives the same key and different numbers never do: comparing keys is
+// comparing the numbers. ok is false when s is not a hex number.
+func serialKey(s string) (key string, serial *big.Int, ok bool) {
+	clean := serialCleaner.Replace(strings.TrimSpace(s))
+	if clean == "" {
+		return "", nil, false
+	}
+	serial = new(big.Int)
+	if _, ok := serial.SetString(clean, 16); !ok {
+		return "", nil, false
+	}
+	return serial.Text(16), serial, true
+}
+
+// addRevokedLocked puts serial (whose serialKey is key) on the list and in the index
+// unless it is there already, and reports whether it was added. Must be called with
+// c.mu held for writing.
+func (c *CA) addRevokedLocked(key string, serial *big.Int, revokedAt time.Time) bool {
+	if _, ok := c.index[key]; ok {
+		return false
+	}
+	if c.index == nil {
+		c.index = make(map[string]struct{})
+	}
+	c.index[key] = struct{}{}
+	c.revoked = append(c.revoked, x509.RevocationListEntry{SerialNumber: serial, RevocationTime: revokedAt})
+	return true
 }
 
 // crlEntry is the on-disk JSON representation of one revoked certificate.
@@ -169,9 +210,12 @@ func (c *CA) SetCRLURL(url string) {
 
 // LoadCRLFile reads revoked serial entries from path (JSON array of crlEntry)
 // and remembers the path for future saves. Calling this is optional; without it
-// revocations are in-memory only and lost on restart.
+// the CA keeps revocations in memory only (the control-plane's boot reconciliation
+// rebuilds them from the revoked tokens of a persistent token store).
 //
-// A missing file is treated as an empty list (first-run case).
+// A missing file is treated as an empty list (first-run case). A serial listed more
+// than once (in any spelling) loads once, with its first revocation time; the index
+// that IsRevoked and the revocation dedupe use is built here.
 func (c *CA) LoadCRLFile(path string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -187,52 +231,91 @@ func (c *CA) LoadCRLFile(path string) error {
 	if err := json.Unmarshal(data, &entries); err != nil {
 		return fmt.Errorf("decodificar crl file: %w", err)
 	}
+	if c.index == nil {
+		c.index = make(map[string]struct{}, len(entries))
+	}
 	for _, e := range entries {
-		serial := new(big.Int)
-		if _, ok := serial.SetString(e.SerialHex, 16); !ok {
+		key, serial, ok := serialKey(e.SerialHex)
+		if !ok {
 			return fmt.Errorf("serial inválido na crl: %q", e.SerialHex)
 		}
-		c.revoked = append(c.revoked, x509.RevocationListEntry{SerialNumber: serial, RevocationTime: e.RevokedAt})
+		// A serial listed twice (any spelling) loads once, keeping its first time.
+		c.addRevokedLocked(key, serial, e.RevokedAt)
 	}
 	return nil
 }
 
-// RevokeCertSerial adds a certificate serial (hex string) to the revocation list.
-// When LoadCRLFile was called, persists the updated list to disk.
-func (c *CA) RevokeCertSerial(serialHex string, revokedAt time.Time) error {
-	serial := new(big.Int)
-	if _, ok := serial.SetString(serialHex, 16); !ok {
-		return fmt.Errorf("serial inválido: %q", serialHex)
+// RevokeCertSerials adds certificate serials (hex strings) to the revocation list and,
+// when LoadCRLFile was called, saves the list ONCE, atomically: a token with N
+// certificates costs one write of the file, not N.
+//
+// It is idempotent per serial, so a caller can simply retry: a serial already on the
+// list (or repeated in the batch) is not added again and keeps its first revocation
+// time, but the list is saved again anyway — after a save that failed, the retry is
+// what puts it on disk. A persistence error is returned, yet the serials STAY revoked
+// in memory — IsRevoked and the served CRL keep blocking them while the process runs
+// (after a restart the control-plane's boot reconciliation blocks them again from the
+// token store), and the next save that succeeds writes them too: dropping them would
+// unblock certificates an operator just revoked. The caller must report the lost
+// persistence, never swallow it.
+//
+// Serials are compared as numbers (serialKey: any hex case, leading zeros, 0x, ':' or
+// space separators), through the index, so a batch costs O(1) per serial under the
+// lock. It returns how many serials were newly added and the ones that are not hex
+// numbers (never revoked).
+func (c *CA) RevokeCertSerials(serials []string, revokedAt time.Time) (added int, invalid []string, err error) {
+	type parsedSerial struct {
+		key    string
+		serial *big.Int
+	}
+	parsed := make([]parsedSerial, 0, len(serials))
+	for _, s := range serials { // parse outside the lock
+		key, serial, ok := serialKey(s)
+		if !ok {
+			invalid = append(invalid, s)
+			continue
+		}
+		parsed = append(parsed, parsedSerial{key, serial})
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.revoked = append(c.revoked, x509.RevocationListEntry{SerialNumber: serial, RevocationTime: revokedAt})
-	if c.crlFile != "" {
-		if err := c.saveCRLLocked(); err != nil {
-			return fmt.Errorf("persistir crl: %w", err)
+	for _, p := range parsed {
+		if c.addRevokedLocked(p.key, p.serial, revokedAt) {
+			added++
 		}
 	}
-	return nil
+	if c.crlFile != "" {
+		if err := c.saveCRLLocked(); err != nil {
+			return added, invalid, fmt.Errorf("persistir crl: %w", err)
+		}
+	}
+	return added, invalid, nil
+}
+
+// RevokeCertSerial is RevokeCertSerials with one serial; a serial that is not hex is
+// an error.
+func (c *CA) RevokeCertSerial(serialHex string, revokedAt time.Time) error {
+	_, invalid, err := c.RevokeCertSerials([]string{serialHex}, revokedAt)
+	if len(invalid) > 0 {
+		return fmt.Errorf("serial inválido: %q", serialHex)
+	}
+	return err
 }
 
 // IsRevoked reports whether serialHex (a client-cert serial in hex; colons,
 // spaces and a 0x prefix are tolerated) is on the revocation list. The sensor
 // mTLS routes call this to enforce revocation fail-closed at request time (the
-// CA's revoked set is authoritative and in-memory, so there is no staleness).
+// CA's revoked set is authoritative and in-memory, so there is no staleness). One
+// index lookup: it never waits on a scan of the list.
 func (c *CA) IsRevoked(serialHex string) bool {
-	clean := strings.NewReplacer(":", "", " ", "", "0x", "", "0X", "").Replace(strings.TrimSpace(serialHex))
-	want := new(big.Int)
-	if _, ok := want.SetString(clean, 16); !ok || len(clean) == 0 {
+	key, _, ok := serialKey(serialHex)
+	if !ok {
 		return false
 	}
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	for _, e := range c.revoked {
-		if e.SerialNumber != nil && e.SerialNumber.Cmp(want) == 0 {
-			return true
-		}
-	}
-	return false
+	_, revoked := c.index[key]
+	return revoked
 }
 
 // IssueCRL signs and returns a DER-encoded CRL valid for 24 hours from now.
@@ -251,7 +334,8 @@ func (c *CA) IssueCRL(now time.Time) ([]byte, error) {
 	return x509.CreateRevocationList(rand.Reader, tmpl, c.cert, c.key)
 }
 
-// saveCRLLocked persists c.revoked to c.crlFile. Must be called with c.mu held.
+// saveCRLLocked persists c.revoked to c.crlFile, atomically. Must be called with
+// c.mu held.
 func (c *CA) saveCRLLocked() error {
 	entries := make([]crlEntry, len(c.revoked))
 	for i, r := range c.revoked {
@@ -261,7 +345,71 @@ func (c *CA) saveCRLLocked() error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(c.crlFile, data, 0o600)
+	return saveCRLFile(c.crlFile, data)
+}
+
+// saveCRLFile writes the revocation list file. A variable so tests can count saves.
+var saveCRLFile = writeFileAtomic
+
+// PersistsRevocations reports whether revocations are saved to disk (LoadCRLFile was
+// called). Without it the revocation list lives in memory only.
+func (c *CA) PersistsRevocations() bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.crlFile != ""
+}
+
+// syncDir flushes a directory so a rename inside it survives a power loss.
+func syncDir(dir string) error {
+	d, err := os.Open(dir)
+	if err != nil {
+		return err
+	}
+	err = d.Sync()
+	if cerr := d.Close(); err == nil {
+		err = cerr
+	}
+	return err
+}
+
+// writeFileAtomic replaces path with data: a fresh 0600 temp file in the same
+// directory, flushed to disk, renamed over path, then the directory flushed. A crash
+// or a full disk mid-save leaves the previous list in place, never a truncated file —
+// which LoadCRLFile would refuse at the next boot (and main treats as fatal), and
+// which would also drop every revocation already recorded. Same pattern as the
+// tenant registry and the command queue.
+func writeFileAtomic(path string, data []byte) (err error) {
+	tmp := path + ".tmp"
+	_ = os.Remove(tmp) // leftover of a crash mid-save; start from a fresh 0600 file
+	f, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err != nil {
+			_ = os.Remove(tmp)
+		}
+	}()
+	if _, err = f.Write(data); err != nil {
+		_ = f.Close()
+		return err
+	}
+	if err = f.Sync(); err != nil {
+		_ = f.Close()
+		return err
+	}
+	if err = f.Close(); err != nil {
+		return err
+	}
+	if err = os.Rename(tmp, path); err != nil {
+		return err
+	}
+	// Best effort, deliberately not an error: the new list is already in place, so
+	// failing now would report a revocation as lost when it is on disk. A directory
+	// that cannot be flushed (Windows, some network filesystems) only loses the
+	// guarantee that the rename itself survives a power failure.
+	_ = syncDir(filepath.Dir(path))
+	return nil
 }
 
 // Fingerprint returns the SHA-256 fingerprint of the CA certificate in

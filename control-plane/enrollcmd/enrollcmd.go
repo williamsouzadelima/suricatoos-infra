@@ -12,6 +12,7 @@
 package enrollcmd
 
 import (
+	"crypto/subtle"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -72,12 +73,22 @@ type response struct {
 // ttl_hours. For automation/CLI.
 func (s *Service) Handler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if s.cfg.AdminSecret == "" || r.Header.Get("Authorization") != "Bearer "+s.cfg.AdminSecret {
+		if !s.bearerOK(r) {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
 		s.serve(w, r, r.PathValue("t"))
 	}
+}
+
+// bearerOK reports whether r carries exactly "Authorization: Bearer <AdminSecret>".
+// The compare is constant-time (no timing side channel on the secret) and an empty
+// secret never matches (fail closed).
+func (s *Service) bearerOK(r *http.Request) bool {
+	if s.cfg.AdminSecret == "" {
+		return false
+	}
+	return subtle.ConstantTimeCompare([]byte(r.Header.Get("Authorization")), []byte("Bearer "+s.cfg.AdminSecret)) == 1
 }
 
 // SessionHandler serves GET /provision/enroll-command?tenant=<t> for the GSA UI.
