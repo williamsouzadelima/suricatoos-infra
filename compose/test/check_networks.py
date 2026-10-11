@@ -609,11 +609,17 @@ def compare_hashes(base, head, protected=HASH_PROTECTED):
     kinds = dict(changed)
     violations = []
     for svc in protected:
-        kind = kinds.get(svc)
-        if kind in ("alterado", "removido"):
+        if svc not in head:
+            # removido do HEAD, ou ausente nas duas pontas (renomeado): nao ha o que provar
+            # sobre ele, e portao que nao consegue provar nao aprova
             violations.append(Violation(
-                "HASH", "%s: hash de recriacao %s em relacao a base -- o deploy recriaria o "
-                "servico (ospd-openvas/gvmd: mata scan em curso)" % (svc, kind)))
+                "HASH", "%s: ausente do config do HEAD (%s) -- o hash de recriacao nao pode ser "
+                "conferido e o deploy o removeria/recriaria"
+                % (svc, "removido" if svc in base else "nem a base o tem")))
+        elif kinds.get(svc) == "alterado":
+            violations.append(Violation(
+                "HASH", "%s: hash de recriacao alterado em relacao a base -- o deploy recriaria o "
+                "servico (ospd-openvas/gvmd: mata scan em curso)" % svc))
     return violations, changed
 
 
@@ -697,6 +703,12 @@ def hash_gate(repo_root, base_ref=DEFAULT_BASE_REF, runner=run_docker_compose, o
                     hashes[side][label] = parse_hashes(stdout)
         except InputError as e:
             print("  ENTRADA INVALIDA: %s" % e, file=out)
+            return 2
+
+        if not any(hashes["base"][label] is not None and hashes["head"][label] is not None
+                   for label, _ in COMBOS):
+            print("  ENTRADA INVALIDA: nenhuma combinacao comparavel (a base ou o HEAD nao tem os "
+                  "arquivos de nenhuma combinacao): nada foi provado", file=out)
             return 2
 
         worst = 0

@@ -610,6 +610,20 @@ class HashParsing(unittest.TestCase):
         self.assertEqual(violations, [])
         self.assertEqual(changed, [("control-plane", "novo"), ("nginx", "alterado")])
 
+    def test_compare_flags_a_protected_service_missing_from_the_head_even_if_the_base_lacks_it_too(self):
+        # renomeado nas duas pontas: nada a provar sobre ele, e portao que nao prova nao aprova
+        base = {"gvmd": "1", "ospd-openvas": "2", "pg-gvm": "3"}
+        head = dict(base)
+        violations, _ = cn.compare_hashes(base, head)
+        self.assertEqual([v.message.split(":")[0] for v in violations], ["redis-server"])
+
+    def test_compare_does_not_flag_a_protected_service_that_is_new_in_the_head(self):
+        base = {"gvmd": "1", "ospd-openvas": "2", "pg-gvm": "3"}
+        head = dict(base, **{"redis-server": "4"})
+        violations, changed = cn.compare_hashes(base, head)
+        self.assertEqual(violations, [])
+        self.assertEqual(changed, [("redis-server", "novo")])
+
     def test_compare_flags_changed_and_removed_protected_services(self):
         base = {"gvmd": "1", "ospd-openvas": "2", "pg-gvm": "3", "redis-server": "4"}
         head = {"gvmd": "X", "ospd-openvas": "2", "pg-gvm": "3"}
@@ -806,6 +820,19 @@ class HashGate(WithTmp):
         self.assertEqual(rc, 0, out)
         self.assertIn("standalone", out)
         self.assertIn("sem base", out)
+
+    def test_no_comparable_combination_is_an_input_error_not_a_vacuous_ok(self):
+        # a base nao tem NENHUM dos arquivos das combinacoes: nada foi comparado
+        self.git("rm", "-q", "compose/docker-compose.override.yml")
+        self.commit_all("base sem override")
+        self.branch_off()
+        self.edit_override()                                         # o HEAD cria o override
+        self.commit_all("cria o override")
+        fake = FakeHashCompose()
+        rc, out = self.run_gate(fake)
+        self.assertEqual(rc, 2, out)
+        self.assertIn("nenhuma combinacao comparavel", out)
+        self.assertNotIn("OK:", out)
 
     def test_compose_failure_is_an_input_error(self):
         self.branch_off()
