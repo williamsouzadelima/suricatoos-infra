@@ -388,24 +388,34 @@ def _task(name, task_id, status, progress=0, report_id=""):
 class GvmdComEstado:
     """gvmd falso com estado, para os subcomandos inteiros do bridge.
 
-    Tasks/targets ficam por NOME (como o bridge os acha) e reports por id. get_tasks e
-    get_targets devolvem tudo: o bridge re-checa o nome EXATO, como faz contra o gvmd
-    real. send_command interpreta os comandos GMP que o bridge envia e registra cada um
-    em `sent`. Como no gvmd, <last_report> só existe depois de um relatório terminado."""
+    Tasks numa LISTA (o gvmd aceita nomes repetidos, ex.: task clonada na GSA),
+    targets por nome e reports por id. get_tasks e get_targets devolvem tudo: o bridge
+    re-checa o nome EXATO, como faz contra o gvmd real; get_task(id) responde 404 como
+    o gvmd quando o id não existe. send_command interpreta os comandos GMP que o
+    bridge envia e registra cada um em `sent`. Como no gvmd, <last_report> só existe
+    depois de um relatório terminado."""
 
     def __init__(self, tasks=(), targets=None, reports=None):
-        self.tasks = {t["name"]: dict(t) for t in tasks}
+        self.tasks = [dict(t) for t in tasks]
         self.targets = dict(targets or {})  # nome -> id
         self.reports = dict(reports or {})  # report_id -> XML do get_reports
         self.sent = []
 
+    @staticmethod
+    def _task_xml(t):
+        last = f'<last_report><report id="{t["report_id"]}"/></last_report>' if t.get("report_id") else ""
+        return (f'<task id="{t["id"]}"><name>{t["name"]}</name><status>{t["status"]}</status>'
+                f'<progress>{t.get("progress", 0)}</progress>{last}</task>')
+
     def get_tasks(self, filter_string=""):
-        body = ""
-        for t in self.tasks.values():
-            last = f'<last_report><report id="{t["report_id"]}"/></last_report>' if t.get("report_id") else ""
-            body += (f'<task id="{t["id"]}"><name>{t["name"]}</name><status>{t["status"]}</status>'
-                     f'<progress>{t.get("progress", 0)}</progress>{last}</task>')
+        body = "".join(self._task_xml(t) for t in self.tasks)
         return f'<get_tasks_response status="200" status_text="OK">{body}</get_tasks_response>'
+
+    def get_task(self, task_id):
+        for t in self.tasks:
+            if t["id"] == task_id:
+                return f'<get_tasks_response status="200" status_text="OK">{self._task_xml(t)}</get_tasks_response>'
+        return f'<get_tasks_response status="404" status_text="Failed to find task \'{task_id}\'"/>'
 
     def get_targets(self, filter_string=""):
         body = "".join(f'<target id="{tid}"><name>{name}</name></target>' for name, tid in self.targets.items())
@@ -420,8 +430,7 @@ class GvmdComEstado:
             return f'<create_target_response status="201" status_text="OK, resource created" id="{tid}"/>'
         if el.tag == "create_task":
             tid = f"task-criada-{len(self.tasks) + 1}"
-            name = el.findtext("name")
-            self.tasks[name] = _task(name, tid, "New")
+            self.tasks.append(_task(el.findtext("name"), tid, "New"))
             return f'<create_task_response status="201" status_text="OK, resource created" id="{tid}"/>'
         if el.tag == "start_task":
             return ('<start_task_response status="202" status_text="OK, request submitted">'
@@ -565,6 +574,58 @@ class TestFallbackParaONomeLegado(unittest.TestCase):
                 self.assertIs(cmd_fetch(gmp, req, LOOP_ARGS)["report_missing"], True)
                 cmd_stop(gmp, req, LOOP_ARGS)
                 self.assertEqual(gmp.sent, [])  # nem get_reports nem stop_task na task alheia
+
+    def test_fallback_vai_pela_task_pinada_mesmo_com_homonima(self):
+        # Duas tasks com o nome legado (ex.: uma clonada na GSA): procurar pelo nome e
+        # comparar o id pegaria a primeira; o fallback busca a task do gvm_task_id.
+        gmp = GvmdComEstado(tasks=[_task(NOME_LEGADO, "task-clone", "Done", 100, "rep-clone"),
+                                   _task(NOME_LEGADO, "task-velha", "Running", 40)])
+        out = cmd_status(gmp, _req_loop(gvm_task_id="task-velha"), LOOP_ARGS)
+        self.assertEqual(out, {"status": "Running", "progress": 40, "report_id": ""})
+
+    def test_task_pinada_com_outro_nome_nao_e_adotada(self):
+        # O id do job só vale no fallback se a task ainda tiver o nome legado DELE.
+        gmp = GvmdComEstado(tasks=[_task("suricatoos-rengine-999", "task-velha", "Running", 40)])
+        self.assertEqual(cmd_status(gmp, _req_loop(gvm_task_id="task-velha"), LOOP_ARGS)["status"], "Interrupted")
+
+
+# Mesmo literal do teste Go do taskName (tentativa 1 do pedido RID).
+NOME_TENTATIVA_1 = NOME_POR_PEDIDO + "-a1"
+
+
+class TestTentativaComTaskNova(unittest.TestCase):
+    """O ingest reabre um job que falhou por não medir nada ("0 hosts"/"sem relatório")
+    com `attempt` + 1: cada tentativa ganha target/task novos — senão o relançamento
+    reencontraria a task Done da tentativa anterior e re-leria o mesmo relatório inútil."""
+
+    def test_nome_inclui_a_tentativa(self):
+        self.assertEqual(_task_name(_req_loop(attempt=1), "suricatoos-rengine"), NOME_TENTATIVA_1)
+        self.assertEqual(_task_name(_req_loop(attempt=0), "suricatoos-rengine"), NOME_POR_PEDIDO)
+
+    def test_so_inteiro_positivo_entra_no_nome(self):
+        for lixo in ("1; DROP", "", None, -3, "abc"):
+            with self.subTest(attempt=lixo):
+                self.assertEqual(_task_name(_req_loop(attempt=lixo), "suricatoos-rengine"), NOME_POR_PEDIDO)
+
+    def test_launch_da_tentativa_1_cria_target_e_task_novos(self):
+        gmp = GvmdComEstado(tasks=[_task(NOME_POR_PEDIDO, "task-1", "Done", 100, "rep-0")],
+                            targets={NOME_POR_PEDIDO: "target-1"})
+        out = cmd_launch(gmp, _req_loop(attempt=1), LOOP_ARGS)
+        self.assertEqual([c.findtext("name") for c in gmp.comandos("create_target")], [NOME_TENTATIVA_1])
+        self.assertEqual([c.findtext("name") for c in gmp.comandos("create_task")], [NOME_TENTATIVA_1])
+        self.assertNotEqual(out["task_id"], "task-1")
+        self.assertEqual([c.get("task_id") for c in gmp.comandos("start_task")], [out["task_id"]])
+        self.assertEqual(out["status"], "Requested")
+
+    def test_status_fetch_stop_da_tentativa_1_usam_a_task_dela(self):
+        gmp = GvmdComEstado(tasks=[_task(NOME_POR_PEDIDO, "task-1", "Done", 100, "rep-0"),
+                                   _task(NOME_TENTATIVA_1, "task-a1", "Done", 100, "rep-a1")],
+                            reports={"rep-0": REPORT_0_HOSTS, "rep-a1": REPORT_2_HOSTS})
+        req = _req_loop(attempt=1, gvm_task_id="task-a1")
+        self.assertEqual(cmd_status(gmp, req, LOOP_ARGS)["report_id"], "rep-a1")
+        self.assertEqual(cmd_fetch(gmp, req, LOOP_ARGS)["hosts_scanned"], 2)
+        cmd_stop(gmp, req, LOOP_ARGS)
+        self.assertEqual([c.get("task_id") for c in gmp.comandos("stop_task")], ["task-a1"])
 
 
 class TestHelpers(unittest.TestCase):

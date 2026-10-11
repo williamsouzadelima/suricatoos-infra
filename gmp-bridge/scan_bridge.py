@@ -26,8 +26,9 @@ ingest marks both FAILED). Both fields are additive: a caller that ignores them
 (the sensor) keeps working.
 
 gvmd task/target name: `<prefix>-<scan_id>-<first 12 alphanumerics of request_id>`
-when the request carries a `request_id` (the ingest Job), else the legacy
-`<prefix>-<scan_id>` (the sensor sends no request_id). See _task_name.
+(plus `-a<attempt>` when the ingest's `attempt` > 0) when the request carries a
+`request_id` (the ingest Job), else the legacy `<prefix>-<scan_id>` (the sensor
+sends neither). See _task_name.
 
 Environment:
   GVM_PASSWORD  GMP password (or --password).
@@ -158,11 +159,22 @@ def report_hosts_scanned(xml_str: str) -> int:
 
 def _hosts_scanned(root) -> int:
     """Hosts present in the report: the report's own <host> elements (preferred — one
-    per host gvmd measured, each with an <ip>), falling back to <hosts><count> when
-    there are none. Only DIRECT children of a <report> count: results/result,
-    ports/port and errors/error also carry a <host> with a different role. The
-    distinct hosts of the results are a floor — a finding proves its host was
-    measured, so a report with findings never reads as "0 hosts"."""
+    per host, each with an <ip>), falling back to <hosts><count> when there are none.
+    Only DIRECT children of a <report> count: results/result, ports/port and
+    errors/error also carry a <host> with a different role. The distinct hosts of the
+    results are a floor — a finding proves its host was measured, so a report with
+    findings never reads as "0 hosts".
+
+    ASSUMPTION (not verified against a live gvmd 26): FETCH_FILTER leaves gvmd's
+    `result_hosts_only` at its default, most likely 1 — then <host> (and probably
+    <hosts><count>) list only the hosts WITH results that survive the filter, not
+    every host the scan reached. So a reached host counts as 0 only if it produced no
+    result at all in the kept classes (levels=chmlg includes Log, min_qod=0), which
+    Full and fast rarely does for a reachable host. That residual error is the
+    conservative one: the job turns FAILED "não mediu nenhum host vivo" — explicit and
+    checkable in the GSA — never a silent "clean" COMPLETED. `result_hosts_only=0` is
+    deliberately NOT added to the filter: how gvmd 26 parses that term is unverified,
+    and a mis-parsed filter term could silently drop results, a worse failure."""
     n = len(root.findall(".//report/host"))
     if n == 0:
         for c in root.findall(".//report/hosts/count"):
@@ -237,17 +249,30 @@ def _task_info(gmp: Gmp, name: str):
     (None, '', 0, '') if it does not exist."""
     resp = gmp.get_tasks(filter_string=f'name="{_esc_filter(name)}" rows=50 first=1')
     for task in ET.fromstring(resp).findall(".//task[@id]"):
-        if (task.findtext("name") or "") != name:
-            continue
-        status = task.findtext("status") or ""
-        try:
-            progress = max(0, int(float(task.findtext("progress") or 0)))
-        except ValueError:
-            progress = 0
-        lr = task.find("last_report/report")
-        report_id = lr.get("id") if lr is not None else ""
-        return task.get("id"), status, progress, report_id
+        if (task.findtext("name") or "") == name:
+            return _task_tuple(task)
     return None, "", 0, ""
+
+
+def _task_info_by_id(gmp: Gmp, task_id: str, name: str):
+    """_task_info of the task with this id — only if it is still named `name`
+    (gvmd answers an unknown id with a non-2xx response that holds no <task>)."""
+    resp = gmp.get_task(task_id)
+    for task in ET.fromstring(resp).findall(".//task[@id]"):
+        if task.get("id") == task_id and (task.findtext("name") or "") == name:
+            return _task_tuple(task)
+    return None, "", 0, ""
+
+
+def _task_tuple(task):
+    status = task.findtext("status") or ""
+    try:
+        progress = max(0, int(float(task.findtext("progress") or 0)))
+    except ValueError:
+        progress = 0
+    lr = task.find("last_report/report")
+    report_id = lr.get("id") if lr is not None else ""
+    return task.get("id"), status, progress, report_id
 
 
 def _alive_test(value: str):
@@ -281,14 +306,33 @@ def _request_suffix(req: dict) -> str:
     return re.sub(r"[^0-9A-Za-z]", "", str(req.get("request_id") or ""))[:12]
 
 
+def _attempt(req: dict) -> int:
+    """The request's attempt number (ingest Job `attempt`; 0 when absent). Only a
+    positive int counts — it lands in a gvmd name."""
+    try:
+        n = int(req.get("attempt") or 0)
+    except (TypeError, ValueError):
+        return 0
+    return n if n > 0 else 0
+
+
 def _task_name(req: dict, prefix: str) -> str:
     """Deterministic gvmd task/target name for this request. With a request_id it is
     unique PER REQUEST, so a scan_id re-sent after its job was reaped (48 h) gets a
     fresh target/task instead of re-finding the old Done one (and its stale
-    findings); a retried launch of the SAME request still finds its own task."""
+    findings); a retried launch of the SAME request still finds its own task.
+    `-a<attempt>` is appended when attempt > 0: the ingest bumps it only when a job
+    that measured nothing ("0 hosts" / "no report") is re-sent, so that retry
+    rescans on a fresh target/task (current alive test) instead of re-reading the
+    previous attempt's Done report."""
+    name = _legacy_task_name(req, prefix)
     suffix = _request_suffix(req)
-    legacy = _legacy_task_name(req, prefix)
-    return f"{legacy}-{suffix}" if suffix else legacy
+    if suffix:
+        name += f"-{suffix}"
+    attempt = _attempt(req)
+    if attempt:
+        name += f"-a{attempt}"
+    return name
 
 
 def _find_job_task(gmp: Gmp, req: dict, prefix: str):
@@ -296,10 +340,12 @@ def _find_job_task(gmp: Gmp, req: dict, prefix: str):
 
     Looks up the per-request name first. If it does not exist, falls back to the
     legacy `<prefix>-<scan_id>` name — jobs launched before the per-request name
-    are still in flight with it across the deploy — but only accepts that task if it
-    is the one the job recorded at launch (`gvm_task_id`): unpinned, a new job whose
-    own task vanished (e.g. deleted in the GSA) would adopt the old Done task of an
-    earlier request for the same scan_id and serve its stale findings."""
+    are still in flight with it across the deploy — but only through the task the
+    job recorded at launch (`gvm_task_id`), looked up by id and accepted only if it
+    still bears the legacy name. Unpinned, a new job whose own task vanished (e.g.
+    deleted in the GSA) would adopt the old Done task of an earlier request for the
+    same scan_id and serve its stale findings; by name, a homonym (a task cloned in
+    the GSA) could shadow the pinned one."""
     name = _task_name(req, prefix)
     found = _task_info(gmp, name)
     if found[0]:
@@ -307,9 +353,7 @@ def _find_job_task(gmp: Gmp, req: dict, prefix: str):
     legacy = _legacy_task_name(req, prefix)
     pinned = str(req.get("gvm_task_id") or "")
     if legacy != name and pinned:
-        old = _task_info(gmp, legacy)
-        if old[0] == pinned:
-            return old
+        return _task_info_by_id(gmp, pinned, legacy)
     return None, "", 0, ""
 
 
