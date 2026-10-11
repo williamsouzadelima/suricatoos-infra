@@ -6,44 +6,187 @@ $defs entry, it targets, OFFLINE: the six schemas are loaded from disk into a
 `referencing` registry keyed by their $id; any other reference raises instead of
 being fetched over the network.
 
-  valid/<schema>/<case>.json    must validate
-  invalid/<schema>/<case>.json  must fail with an error whose JSON Schema keyword and
-                                instance path (JSON pointer) match the case's
-                                "expect" in fleet/index.json
+  valid/<schema>/<case>.json    must parse (no duplicate key), validate and, for a
+                                signed command envelope, carry the right payload
+                                hash and a real Ed25519 signature
+  invalid/<schema>/<case>.json  must fail exactly as its "expect" in fleet/index.json
+                                says: {keyword, path} for a schema error (keyword +
+                                instance JSON pointer), or {check, path} for
+                                duplicate_key | payload_sha256 | signature
 
 A case named '<def>--<rest>.json' targets fleet-<schema>.schema.json#/$defs/<def>;
 any other case targets the schema root.
+
+Signed envelopes are checked with an independent Python implementation of the
+ADR-0011 canonical form and the PUBLIC golden test key (seed = SHA-256 of
+'suricatoos-fleet-command-v1/golden-test-key'). The ADR's worked example is the
+cross-language anchor: its envelope, canonical bytes, sha256, payload byte count,
+test pubkey and pin are re-derived here byte for byte, and
+valid/command/task-start.json must be that envelope verbatim.
 
 It also fails when a file and index.json disagree, a target breaks the naming rule,
 a schema has zero valid examples, or a catalog value (command type, state kind,
 event type, result type, enroll/heartbeat message) has no valid example.
 
 Usage:    python3 schema/examples/validate_fleet_examples.py   (exit 0 = contract holds)
-Requires: jsonschema >= 4.18 (it ships `referencing`).
+Requires: jsonschema >= 4.18 (ships `referencing`) and cryptography (Ed25519).
 """
+import base64
+import hashlib
 import json
 import re
 import sys
 from importlib.metadata import version
 from pathlib import Path
 
+from cryptography.exceptions import InvalidSignature
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from jsonschema import Draft202012Validator
 from referencing import Registry, Resource
 from referencing.exceptions import NoSuchResource, Unresolvable
 
 HERE = Path(__file__).resolve().parent
 SCHEMA_DIR = HERE.parent
+ADR = SCHEMA_DIR.parent / "docs" / "adr" / "0011-gestao-remota-da-frota.md"
 EXAMPLES = HERE / "fleet"
 BASE = "https://suricatoos.dev/schema/"
 SCHEMAS = ("command", "enroll", "heartbeat", "state", "event", "result")
 CASE_RE = re.compile(r"^(valid|invalid)/(%s)/(?:[a-z][a-z_]*--)?[a-z0-9]+(?:-[a-z0-9]+)*\.json$" % "|".join(SCHEMAS))
 
+# --- ADR-0011 signing contract ------------------------------------------------
+DOMAIN = "suricatoos-fleet-command-v1"
+SIGNED_FIELDS = ("schema_version", "command_id", "node_id", "tenant", "type", "issued_by",
+                 "issued_at", "not_after", "nonce", "payload_sha256")
+TEST_PUB = Ed25519PrivateKey.from_private_bytes(
+    hashlib.sha256(b"suricatoos-fleet-command-v1/golden-test-key").digest()).public_key()
+TEST_SPKI = TEST_PUB.public_bytes(serialization.Encoding.DER, serialization.PublicFormat.SubjectPublicKeyInfo)
 
-def offline(uri):
-    raise NoSuchResource(ref=uri)  # only the six local schemas may resolve
+
+def canonical(env):
+    """Domain line, then 'key=<len in bytes>:<value>\\n' per signed field, in order."""
+    lines = [DOMAIN] + [f"{k}={len(env[k].encode('utf-8'))}:{env[k]}" for k in SIGNED_FIELDS]
+    return ("\n".join(lines) + "\n").encode("utf-8")
 
 
-def load(path):
+class DuplicateKey(ValueError):
+    pass
+
+
+def _no_duplicates(pairs):
+    obj = {}
+    for k, v in pairs:
+        if k in obj:
+            raise DuplicateKey(k)
+        obj[k] = v
+    return obj
+
+
+def parse(text):
+    return json.loads(text, object_pairs_hook=_no_duplicates)
+
+
+# --- raw value spans (payload_sha256 covers the EXACT transmitted bytes) -----
+_DEC = json.JSONDecoder()
+_WS = re.compile(r"[ \t\n\r]*")
+
+
+def _ws(s, i):
+    return _WS.match(s, i).end()
+
+
+def members(s, i):
+    """{key: (start, end)} for the members of the JSON object at s[i] == '{'."""
+    out, i = {}, _ws(s, i + 1)
+    if s[i] == "}":
+        return out
+    while True:
+        key, i = json.decoder.scanstring(s, i + 1)
+        i = _ws(s, _ws(s, i) + 1)  # skip ':'
+        _, end = _DEC.raw_decode(s, i)
+        out[key] = (i, end)
+        i = _ws(s, end)
+        if s[i] == "}":
+            return out
+        i = _ws(s, i + 1)
+
+
+def elements(s, i):
+    """[(start, end)] for the elements of the JSON array at s[i] == '['."""
+    out, i = [], _ws(s, i + 1)
+    if s[i] == "]":
+        return out
+    while True:
+        _, end = _DEC.raw_decode(s, i)
+        out.append((i, end))
+        i = _ws(s, end)
+        if s[i] == "]":
+            return out
+        i = _ws(s, i + 1)
+
+
+def envelope_problem(text, start):
+    """None if the envelope at text[start] verifies, else 'payload_sha256' | 'signature'."""
+    env, _ = _DEC.raw_decode(text, start)
+    a, b = members(text, start)["payload"]
+    if hashlib.sha256(text[a:b].encode("utf-8")).hexdigest() != env["payload_sha256"]:
+        return "payload_sha256"
+    try:
+        TEST_PUB.verify(base64.b64decode(env["signature"], validate=True), canonical(env))
+    except (InvalidSignature, ValueError):
+        return "signature"
+    return None
+
+
+def envelopes(target, text):
+    """(JSON pointer, start) of every signed command envelope inside an example."""
+    start = _ws(text, 0)
+    if target == "fleet-command.schema.json" or target.endswith("#/$defs/envelope"):
+        return [("", start)]
+    if target.endswith("#/$defs/poll_response"):
+        a, _ = members(text, start)["commands"]
+        return [(f"/commands/{n}", s) for n, (s, _) in enumerate(elements(text, a))]
+    return []
+
+
+def adr_anchor(task_start_text):
+    """Re-derive the ADR-0011 worked example byte for byte; return a list of drifts."""
+    try:
+        adr = ADR.read_text(encoding="utf-8")
+    except OSError as exc:
+        return [f"ADR-0011 not readable ({exc})"]
+    found = {
+        "envelope": re.search(r'^(\{"schema_version":"1\.0\.0","command_id":[^\n]*\})$', adr, re.M),
+        "canonical": re.search(r"^```\n(" + re.escape(DOMAIN) + r"\n(?:[a-z_0-9]+=[0-9]+:[^\n]*\n)+)```", adr, re.M),
+        "sha256": re.search(r"Bytes assinados \(`sha256` = `([0-9a-f]{64})`\)", adr),
+        "bytes": re.search(r"sha256 dos ([0-9]+) bytes", adr),
+        "pubkey": re.search(r"pubkey `([A-Za-z0-9+/=]+)`", adr),
+        "pin": re.search(r"pin `(sha256:[0-9a-f]{64})`", adr),
+    }
+    missing = [k for k, m in found.items() if not m]
+    if missing:
+        return [f"ADR-0011 worked example: could not find {', '.join(missing)}"]
+    env_text = found["envelope"].group(1)
+    env, drifts = parse(env_text), []
+    a, b = members(env_text, 0)["payload"]
+    if canonical(env) != found["canonical"].group(1).encode("utf-8"):
+        drifts.append("canonical form differs from the ADR's 'Bytes assinados' block")
+    if hashlib.sha256(canonical(env)).hexdigest() != found["sha256"].group(1):
+        drifts.append("canonical sha256 differs from the ADR")
+    if len(env_text[a:b].encode("utf-8")) != int(found["bytes"].group(1)):
+        drifts.append(f"payload is {len(env_text[a:b].encode('utf-8'))} bytes, the ADR says {found['bytes'].group(1)}")
+    if envelope_problem(env_text, 0):
+        drifts.append(f"ADR envelope fails: {envelope_problem(env_text, 0)}")
+    if base64.b64encode(TEST_SPKI).decode() != found["pubkey"].group(1):
+        drifts.append("golden test pubkey (SPKI base64) differs from the ADR")
+    if "sha256:" + hashlib.sha256(TEST_SPKI).hexdigest() != found["pin"].group(1):
+        drifts.append("golden test key pin differs from the ADR")
+    if task_start_text is None or task_start_text.strip() != env_text:
+        drifts.append("valid/command/task-start.json is not the ADR envelope verbatim")
+    return [f"ADR-0011 worked example: {d}" for d in drifts]
+
+
+def load_json(path):
     with open(path, encoding="utf-8") as f:
         return json.load(f)
 
@@ -61,11 +204,15 @@ def flat_errors(errors):
         yield from flat_errors(e.context or ())
 
 
+def offline(uri):
+    raise NoSuchResource(ref=uri)  # only the six local schemas may resolve
+
+
 def main():
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(errors="replace")
     surprises = []
-    schemas = {n: load(SCHEMA_DIR / f"fleet-{n}.schema.json") for n in SCHEMAS}
+    schemas = {n: load_json(SCHEMA_DIR / f"fleet-{n}.schema.json") for n in SCHEMAS}
     for s in schemas.values():
         Draft202012Validator.check_schema(s)
     registry = Registry(retrieve=offline).with_resources(
@@ -86,7 +233,7 @@ def main():
         return not any(True for _ in validator(target).iter_errors(inst))
 
     # index.json <-> files on disk
-    index = load(EXAMPLES / "index.json")
+    index = load_json(EXAMPLES / "index.json")
     cases = {c["file"]: c for c in index["cases"]}
     on_disk = set()
     for p in sorted(EXAMPLES.rglob("*")):
@@ -100,10 +247,11 @@ def main():
     for rel in sorted(set(cases) - on_disk):
         surprises.append(f"{rel}: listed in index.json but missing")
 
-    # roots whose oneOf alternatives must each be exercised by a valid example
     alternatives = {n: [r["$ref"].rsplit("/", 1)[-1] for r in schemas[n].get("oneOf", [])] for n in SCHEMAS}
     seen = {n: set() for n in SCHEMAS}
     tally = {n: {"valid": [0, 0], "invalid": [0, 0]} for n in SCHEMAS}
+    signed_ok = 0
+    task_start_text = None
 
     for rel in sorted(set(cases) & on_disk):
         if not CASE_RE.match(rel):
@@ -113,46 +261,74 @@ def main():
         if case.get("target") != target:
             surprises.append(f"{rel}: index target {case.get('target')!r} != {target!r} (naming rule)")
             continue
-        try:
-            inst = load(EXAMPLES / rel)
-        except (OSError, ValueError) as exc:
-            surprises.append(f"{rel}: unreadable JSON ({exc})")
-            continue
         tally[schema][kind][1] += 1
         try:
-            errors = list(validator(target).iter_errors(inst))
-        except Unresolvable as exc:
-            surprises.append(f"{rel}: unresolvable $ref with the offline registry (nothing fetched): {exc}")
+            text = (EXAMPLES / rel).read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as exc:
+            surprises.append(f"{rel}: unreadable ({exc})")
             continue
-        if kind == "valid":
-            if errors:
-                surprises.append(f"{rel}: expected VALID, got: {errors[0].message[:160]}")
+        if rel == "valid/command/task-start.json":
+            task_start_text = text
+        failure = None  # first failure, as an expectation-shaped dict
+        try:
+            inst = parse(text)
+        except DuplicateKey as exc:
+            failure = {"check": "duplicate_key", "path": "", "detail": f"duplicate key {exc}"}
+        except ValueError as exc:
+            surprises.append(f"{rel}: not one well-formed JSON value ({exc})")
+            continue
+        errors = []
+        if failure is None:
+            try:
+                errors = list(validator(target).iter_errors(inst))
+            except Unresolvable as exc:
+                surprises.append(f"{rel}: unresolvable $ref with the offline registry (nothing fetched): {exc}")
                 continue
-            tally[schema]["valid"][0] += 1
-            root = "#" not in target
-            if schema == "command" and root:
-                seen[schema].add(inst["type"])
-            elif schema == "state" and root:
-                seen[schema].add(inst["kind"])
-            elif schema == "event" and root:
-                seen[schema].update(e["type"] for e in inst["events"])
-            elif schema == "result" and root and inst["status"] == "succeeded":
-                seen[schema].add(inst["type"])
-            elif alternatives[schema]:
-                if root:
-                    seen[schema].update(a for a in alternatives[schema]
-                                        if valid_against(f"fleet-{schema}.schema.json#/$defs/{a}", inst))
-                else:
-                    seen[schema].add(target.rsplit("/", 1)[-1])
-        else:
-            expect = case.get("expect") or {}
-            if not errors:
-                surprises.append(f"{rel}: expected INVALID, but it validates")
-            elif (expect.get("keyword"), expect.get("path")) not in set(flat_errors(errors)):
-                got = sorted(set(flat_errors(errors)))[:5]
-                surprises.append(f"{rel}: fails, but not with {expect or 'an expect entry'}; got {got}")
+        if failure is None and not errors:
+            for ptr, start in envelopes(target, text):
+                problem = envelope_problem(text, start)
+                if problem:
+                    failure = {"check": problem, "path": ptr, "detail": f"{problem} mismatch at '{ptr}'"}
+                    break
+        if kind == "valid":
+            if failure:
+                surprises.append(f"{rel}: expected VALID, got {failure['detail']}")
+            elif errors:
+                surprises.append(f"{rel}: expected VALID, got: {errors[0].message[:160]}")
             else:
+                tally[schema]["valid"][0] += 1
+                signed_ok += len(envelopes(target, text))
+                root = "#" not in target
+                if schema == "command" and root:
+                    seen[schema].add(inst["type"])
+                elif schema == "state" and root:
+                    seen[schema].add(inst["kind"])
+                elif schema == "event" and root:
+                    seen[schema].update(e["type"] for e in inst["events"])
+                elif schema == "result" and root and inst["status"] == "succeeded":
+                    seen[schema].add(inst["type"])
+                elif alternatives[schema]:
+                    if root:
+                        seen[schema].update(a for a in alternatives[schema]
+                                            if valid_against(f"fleet-{schema}.schema.json#/$defs/{a}", inst))
+                    else:
+                        seen[schema].add(target.rsplit("/", 1)[-1])
+            continue
+        expect = case.get("expect") or {}
+        if failure:
+            if (expect.get("check"), expect.get("path")) == (failure["check"], failure["path"]):
                 tally[schema]["invalid"][0] += 1
+            else:
+                surprises.append(f"{rel}: fails with {failure['detail']}, but expect is {expect}")
+        elif not errors:
+            surprises.append(f"{rel}: expected INVALID, but it validates (schema, payload hash and signature)")
+        elif (expect.get("keyword"), expect.get("path")) in set(flat_errors(errors)):
+            tally[schema]["invalid"][0] += 1
+        else:
+            got = sorted(set(flat_errors(errors)))[:5]
+            surprises.append(f"{rel}: fails, but not with {expect or 'an expect entry'}; got {got}")
+
+    surprises.extend(adr_anchor(task_start_text))
 
     required = {
         "command": schemas["command"]["$defs"]["command_type"]["enum"],
@@ -181,13 +357,16 @@ def main():
         print(f"{n:<10} {v[0]:>4}/{v[1]:<4} {i[0]:>4}/{i[1]:<4}")
     print(f"{'TOTAL':<10} {totals[0]:>4}/{totals[1]:<4} {totals[2]:>4}/{totals[3]:<4}")
     print("coverage: " + "; ".join(coverage))
-    print(f"jsonschema {version('jsonschema')}, referencing {version('referencing')}, offline registry")
+    print(f"signed envelopes verified (payload sha256 + Ed25519, golden test key): {signed_ok}")
+    print(f"jsonschema {version('jsonschema')}, referencing {version('referencing')}, "
+          f"cryptography {version('cryptography')}, offline registry")
     if surprises:
         print(f"\nFAIL: {len(surprises)} surprise(s)")
         for s in surprises:
             print("  - " + s)
         return 1
-    print("OK: every valid example validates and every invalid one fails for the expected reason")
+    print("OK: valid examples validate (signed envelopes verify), invalid ones fail for the expected reason,"
+          " and the ADR-0011 worked example is reproduced byte for byte")
     return 0
 
 

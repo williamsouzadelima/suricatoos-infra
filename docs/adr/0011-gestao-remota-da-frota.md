@@ -340,7 +340,7 @@ nonce=64:750113b701a52bd32b0fdca1342ddd2d74add6f219ddacef4cede043dfadca02
 payload_sha256=64:202e584626515573d531f5508c9094f8d6b705e0fc0fe6fbf29c76969fef313f
 ```
 
-(cada linha termina em `\n`, inclusive a última). `payload_sha256` é o sha256 dos 49 bytes
+(cada linha termina em `\n`, inclusive a última). `payload_sha256` é o sha256 dos 50 bytes
 `{"task_id":"2d5b8f0e-1c4a-4e6b-9a3d-7f0c5e1b2a49"}`.
 
 ### Verificação no nó (ordem fixa, fail-closed)

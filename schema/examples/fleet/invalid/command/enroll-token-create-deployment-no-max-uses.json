@@ -1,18 +1,1 @@
-{
-  "schema_version": "1.0.0",
-  "command_id": "6f1c2a9e-3b7d-4c8a-9e21-5d4f0a7b3c18",
-  "node_id": "node-lab-0001",
-  "tenant": "acme",
-  "type": "enroll_token.create",
-  "issued_by": "op-7f3a",
-  "issued_at": "2026-10-11T12:00:00Z",
-  "not_after": "2026-10-11T13:00:00Z",
-  "nonce": "750113b701a52bd32b0fdca1342ddd2d74add6f219ddacef4cede043dfadca02",
-  "payload_sha256": "202e584626515573d531f5508c9094f8d6b705e0fc0fe6fbf29c76969fef313f",
-  "payload": {
-    "token_type": "deployment",
-    "policy": "agent-endpoint",
-    "ttl_hours": 24
-  },
-  "signature": "6XVZpdCuyN9EZ86zy0kVdNqmfLDrI4QVrPmDs6vv5wdW4HLdEBz2xRI5qSvwmNvmY/eRQ4E3xUdocjIDOyWGCw=="
-}
+{"schema_version":"1.0.0","command_id":"78dfb3e4-c1c9-40cb-99b6-843a4a722fb7","node_id":"node-lab-0001","tenant":"acme","type":"enroll_token.create","issued_by":"op-7f3a","issued_at":"2026-10-11T12:00:00Z","not_after":"2026-10-11T13:00:00Z","nonce":"519f395e4594b69d98175dc5f06e53bad07f9b99911fb40b260d56e008a0468e","payload_sha256":"693a99a365ada409ea6ec28a986e6e26f25eb7828b4c42743994b5c4cc4ede5f","payload":{"token_type":"deployment","policy":"agent-endpoint","ttl_hours":24},"signature":"ooXpey59SF0t6xt/oYfFE5p1K9gp/TozT10D0sYIGM5eoSRgZ1EM8YN8N9OFQ6nfkYU66oYln4RUPtSPSY2CCA=="}

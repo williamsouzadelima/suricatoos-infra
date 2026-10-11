@@ -1,14 +1,1 @@
-{
-  "schema_version": "1.0.0",
-  "command_id": "6f1c2a9e-3b7d-4c8a-9e21-5d4f0a7b3c18",
-  "node_id": "node-lab-0001",
-  "tenant": "acme",
-  "type": "feed.sync_now",
-  "issued_by": "op-7f3a",
-  "issued_at": "2026-10-11T12:00:00Z",
-  "not_after": "2026-10-11T13:00:00Z",
-  "nonce": "750113b701a52bd32b0fdca1342ddd2d74add6f219ddacef4cede043dfadca02",
-  "payload_sha256": "202e584626515573d531f5508c9094f8d6b705e0fc0fe6fbf29c76969fef313f",
-  "payload": {},
-  "signature": "6XVZpdCuyN9EZ86zy0kVdNqmfLDrI4QVrPmDs6vv5wdW4HLdEBz2xRI5qSvwmNvmY/eRQ4E3xUdocjIDOyWGCw=="
-}
+{"schema_version":"1.0.0","command_id":"a21e6a5a-c04c-42c2-b2aa-e77cf20aa9d0","node_id":"node-lab-0001","tenant":"acme","type":"feed.sync_now","issued_by":"op-7f3a","issued_at":"2026-10-11T12:00:00Z","not_after":"2026-10-11T13:00:00Z","nonce":"d5cc58d5527ab45b262f9ae0418f4bc8dbe9792f7d09b29b5406b7b3a809ac65","payload_sha256":"44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a","payload":{},"signature":"VhJuDGE9BAzHIGSYTzvxFbM3VDCb3vhmcZ1m4UuRXGS6cx6qiZyE/ZYEvYGYeyMSPO6ko9GjO3Zp3KOqeskoCQ=="}

@@ -1,16 +1,1 @@
-{
-  "schema_version": "1.0.0",
-  "command_id": "6f1c2a9e-3b7d-4c8a-9e21-5d4f0a7b3c18",
-  "node_id": "node-lab-0001",
-  "tenant": "acme",
-  "type": "target.delete",
-  "issued_by": "op-7f3a",
-  "issued_at": "2026-10-11T12:00:00Z",
-  "not_after": "2026-10-11T13:00:00Z",
-  "nonce": "750113b701a52bd32b0fdca1342ddd2d74add6f219ddacef4cede043dfadca02",
-  "payload_sha256": "202e584626515573d531f5508c9094f8d6b705e0fc0fe6fbf29c76969fef313f",
-  "payload": {
-    "target_id": "9a7e3c21-5b0d-4f8e-a1c6-2e4d7b9f0a35"
-  },
-  "signature": "6XVZpdCuyN9EZ86zy0kVdNqmfLDrI4QVrPmDs6vv5wdW4HLdEBz2xRI5qSvwmNvmY/eRQ4E3xUdocjIDOyWGCw=="
-}
+{"schema_version":"1.0.0","command_id":"d14a7307-d904-4302-8078-948540f62ef2","node_id":"node-lab-0001","tenant":"acme","type":"target.delete","issued_by":"op-7f3a","issued_at":"2026-10-11T12:00:00Z","not_after":"2026-10-11T13:00:00Z","nonce":"836e20320be8d9db7593ce9c63a235f04c9876fe2bb67feb1de657b2155af7f9","payload_sha256":"05438b87dbba3509a2825ef78f13a34bae61b607094ffac5d3e2f3f22a125c58","payload":{"target_id":"9a7e3c21-5b0d-4f8e-a1c6-2e4d7b9f0a35"},"signature":"JRiS2DMmDcVYK13nTXTJpdH8saQLLW1x/guMSFQgghj6j4sxL12untY1+EF9/WEq8nbZAMj1fmHoYx30ag9SBw=="}

@@ -1,9 +1,27 @@
 {
   "format": "suricatoos-fleet-examples/1",
   "contract": "docs/adr/0011-gestao-remota-da-frota.md",
-  "naming": "valid|invalid/<schema>/<case>.json holds ONE instance of schema/fleet-<schema>.schema.json (schema = command|enroll|heartbeat|state|event|result). A case named '<def>--<rest>' targets that schema's #/$defs/<def>; any other case targets the schema root. 'target' below repeats that $ref. An invalid case must fail with at least one error whose JSON Schema keyword and instance path (JSON pointer, '' = root) equal 'expect'.",
-  "values": "All values are fictitious: tenant 'acme', node 'node-lab-0001', RFC 5737 documentation IPs, exemplo.com.br, made-up ids and hashes. command_pubkey and the task.start signature use the PUBLIC golden test key of ADR-0011 (never a production key).",
+  "naming": "valid|invalid/<schema>/<case>.json holds ONE JSON value for schema/fleet-<schema>.schema.json (schema = command|enroll|heartbeat|state|event|result). A case named '<def>--<rest>' targets that schema's #/$defs/<def>; any other case targets the schema root; 'target' repeats that $ref. An invalid case must fail exactly as 'expect' says: {keyword, path} = a JSON Schema error with that keyword at that instance path (JSON pointer, '' = root); {check, path} = duplicate_key (any level), or payload_sha256 / signature of the signed envelope at that path.",
+  "values": "All values are fictitious: tenant 'acme', node 'node-lab-0001', RFC 5737 documentation IPs, exemplo.com.br, made-up ids. Command envelopes are COMPACT (the exact bytes a conforming hub sends) and REALLY signed with the PUBLIC golden test key of ADR-0011 (seed = SHA-256 of 'suricatoos-fleet-command-v1/golden-test-key'), each with its own command_id and nonce; valid/command/task-start.json is the ADR worked example verbatim. Never a production key.",
   "cases": [
+    {
+      "file": "invalid/command/duplicate-key-in-payload.json",
+      "target": "fleet-command.schema.json",
+      "description": "duplicate member name inside payload (hash and signature are fine, the JSON is ambiguous)",
+      "expect": {
+        "check": "duplicate_key",
+        "path": ""
+      }
+    },
+    {
+      "file": "invalid/command/duplicate-key.json",
+      "target": "fleet-command.schema.json",
+      "description": "duplicate member name in the envelope",
+      "expect": {
+        "check": "duplicate_key",
+        "path": ""
+      }
+    },
     {
       "file": "invalid/command/enroll-token-create-deployment-no-max-uses.json",
       "target": "fleet-command.schema.json",
@@ -86,12 +104,30 @@
       }
     },
     {
+      "file": "invalid/command/payload-sha256-mismatch.json",
+      "target": "fleet-command.schema.json",
+      "description": "payload swapped after hashing and signing",
+      "expect": {
+        "check": "payload_sha256",
+        "path": ""
+      }
+    },
+    {
       "file": "invalid/command/poll_response--empty.json",
       "target": "fleet-command.schema.json#/$defs/poll_response",
       "description": "an empty poll is 204 with no body, never an empty list",
       "expect": {
         "keyword": "minItems",
         "path": "/commands"
+      }
+    },
+    {
+      "file": "invalid/command/poll_response--second-command-tampered.json",
+      "target": "fleet-command.schema.json#/$defs/poll_response",
+      "description": "the second command's payload was swapped after signing",
+      "expect": {
+        "check": "payload_sha256",
+        "path": "/commands/1"
       }
     },
     {
@@ -164,6 +200,24 @@
       "expect": {
         "keyword": "enum",
         "path": "/payload/variant"
+      }
+    },
+    {
+      "file": "invalid/command/signature-field-altered.json",
+      "target": "fleet-command.schema.json",
+      "description": "tenant changed after signing (payload hash still matches)",
+      "expect": {
+        "check": "signature",
+        "path": ""
+      }
+    },
+    {
+      "file": "invalid/command/signature-other-key.json",
+      "target": "fleet-command.schema.json",
+      "description": "signed with a key that is not the pinned command key",
+      "expect": {
+        "check": "signature",
+        "path": ""
       }
     },
     {
@@ -617,7 +671,7 @@
     {
       "file": "valid/command/poll_response--two-commands.json",
       "target": "fleet-command.schema.json#/$defs/poll_response",
-      "description": "200 body of GET /fleet/v1/commands with two commands"
+      "description": "200 body of GET /fleet/v1/commands: two commands, each with its own command_id, nonce and signature"
     },
     {
       "file": "valid/command/report-export-client-delta.json",
@@ -697,7 +751,7 @@
     {
       "file": "valid/command/task-clone.json",
       "target": "fleet-command.schema.json",
-      "description": "task.clone with a new name"
+      "description": "task.clone with a new name (UTF-8 payload: the hash covers the raw UTF-8 bytes)"
     },
     {
       "file": "valid/command/task-create.json",
@@ -722,7 +776,7 @@
     {
       "file": "valid/command/task-start.json",
       "target": "fleet-command.schema.json",
-      "description": "the ADR-0011 worked example, signed with the public golden TEST key"
+      "description": "the ADR-0011 worked example, verbatim (signed with the public golden TEST key)"
     },
     {
       "file": "valid/command/task-stop.json",
