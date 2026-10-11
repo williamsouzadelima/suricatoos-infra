@@ -220,7 +220,7 @@
 % row's geometry with it.  So the gap after the square is a \kern (not a
 % breakpoint) and the spaces inside the text are non-breaking.
 %
-% \sevbadge{sev}{cvss} — square + "ALTO · CVSS 8.6" in tracked Mono, in the
+% \sevbadge{sev}{cvss} — square + "ALTO · CVSS 8.1" in tracked Mono, in the
 % severity colour.  An empty second argument prints the word alone, which is how
 % Log findings read: \sevbadge{logsev}{} -> "LOG".
 \newcommand{\sevbadge}[2]{{%
@@ -229,7 +229,7 @@
     \suri@ifempty{#2}{}{~\textperiodcentered~\suriLblCvssText~#2}}}}
 
 % \sevbadges{sev}{cvss} — the short form used where the column header already
-% says CVSS: "ALTO · 8.6" (host cards, advisory lists).
+% says CVSS: "ALTO · 8.1" (host cards, advisory lists).
 \newcommand{\sevbadges}[2]{{%
   \sevsquare{\sevcolor{#1}}\kern\suripx{5}%
   \suri@lblx{\suri@trksev}{\sevcolor{#1}}{8.5}{\sevword{#1}%
@@ -260,7 +260,7 @@
 % line measures exactly the same 24px, so the box is fixed and the rare tall
 % glyph rides into the 7px of padding, where nobody can see it.
 % Weight: EVERY chip is bold, outline ones included — measured on the model, the
-% CVE and "22 ADVISORIES" chips carry 1.3x the ink of the same string set
+% CVE and "15 ADVISORIES" chips carry 1.3x the ink of the same string set
 % regular at the same size, which is the bold/regular ratio of plex-mono here.
 \newcommand{\suri@chipbody}[1]{\raisebox{\z@}[\suripx{6.5}][\suripx{2.5}]{%
   \suriFS{9.5}{9.5}\suriMono\bfseries\suri@chippad#1\suri@chippad}}
@@ -283,7 +283,7 @@
   \fcolorbox{\sevcolor{#1}}{\sevcolor{#1}}{\color{white}\suri@chipbody{#2}}\suri@chipsep}}
 
 % \chipsev{sev}{cvss} — the filled chip a finding card leads with:
-% white square + "ALTO · CVSS 8.6" on the severity colour.
+% white square + "ALTO · CVSS 8.1" on the severity colour.
 \newcommand{\chipsev}[2]{\chipfill{#1}{%
   \sevsquare{white}\kern\suripx{5}\bfseries
   \textls[\suri@trksev]{\MakeUppercase{\sevword{#1}%
@@ -458,7 +458,7 @@
 % ===========================================================================
 % Severity bars (pg-02).
 %
-% \sevbars{\sevbar{critico}{4}\sevbar{alto}{58}...} — horizontal bars scaled to
+% \sevbars{\sevbar{critico}{2}\sevbar{alto}{15}...} — horizontal bars scaled to
 % the largest count in the list.  The argument is read twice: once to find the
 % maximum, once to draw.  That keeps the caller from having to pass the maximum,
 % which the XSLT would otherwise have to compute.
@@ -516,7 +516,7 @@
     \end{minipage}}}
 % \timelinestrip{r1}{v1}{r2}{v2}{r3}{v3} — three columns under a 2px ink rule,
 % separated by full-height hairlines.  A value may carry a \\ to break its second
-% line ("ter, 30 jun 2026\\00:00 UTC").
+% line ("qua, 14 jan 2026\\13:00 UTC").
 \newcommand{\timelinestrip}[6]{%
   \par\suri@hrule{ink}{\suri@thick}%
   \setlength{\suri@tlcol}{\dimexpr\linewidth/3\relax}%
@@ -530,7 +530,7 @@
 % Port table (pg-04).
 %
 %   \begin{porttable}
-%     \portrow{21}{\ddag}{tcp}{ftp\,\dag}{medio}{7.5}{1}{162.241.63.40}
+%     \portrow{21}{\ddag}{tcp}{ftp\,\dag}{baixo}{5.5}{1}{198.51.100.25}
 %     ...
 %   \end{porttable}
 %   \portnotes{\portnote{\dag}{...}\portnote{\ddag}{...}}
@@ -597,8 +597,8 @@
 % ===========================================================================
 % Host card (pg-05).
 %
-%   \hostcard{162.241.63.40}{webmail.loga.com.br}{Linux/Unix}{19}{%
-%     \hostcols{\hostrow{21/tcp}{55}{alto}{7.5} ...}{\hostrow{2078/tcp}{67}{alto}{7.5} ...}}
+%   \hostcard{198.51.100.25}{app.exemplo.com.br}{Linux/Unix}{19}{%
+%     \hostcols{\hostrow{21/tcp}{4}{medio}{5.5} ...}{\hostrow{3000/tcp}{6}{medio}{6.1} ...}}
 %
 % Navy title band (Mono IP, grey hostname, OS badge in a `navychip' box, port
 % count on the right) over a white body of two mini-tables.
@@ -709,14 +709,14 @@
 % Finding summaries (pg-06 / pg-07).
 %
 %   \begin{findingsummary}{confirmados}   % or {indicadores}
-%     \findingrow{1}{ISC BIND --- Atualiza\c{c}\~ao pendente}{22}{alto}{8.6}
-%     \findingrow{10}{SSL/TLS: ...}{60}{logsev}{}
+%     \findingrow{1}{Apache Tomcat --- Atualiza\c{c}\~ao pendente}{15}{alto}{8.1}
+%     \findingrow{10}{SSL/TLS: ...}{16}{logsev}{}
 %   \end{findingsummary}
 %
 %   \begin{findingsummary}[trunc]{confirmados}   % list cut short below
 %     ...
 %   \end{findingsummary}
-%   \findingtrunc{\ldots\ + 35 achados informativos (Log)}
+%   \findingtrunc{\ldots\ + 24 achados informativos (Log)}
 %
 % `modo' selects the last column header and whether a critical row is highlighted:
 % in the "indicadores" table (QoD < 70%) the severity is a ceiling, and the
@@ -821,7 +821,7 @@
 \newsavebox{\suri@cchdr} % title + chips + paragraph, boxed so the spine can
                          % measure itself against exactly that block
 
-% \advisoryrow{nome}{sev}{cvss} — one advisory: name left in ink, "ALTO · 8.6"
+% \advisoryrow{nome}{sev}{cvss} — one advisory: name left in ink, "ALTO · 8.1"
 % right in the severity colour, hairline underneath.
 % Both halves open with the same strut so their first lines have identical
 % height — without it the badge and the advisory name sit on different baselines,
@@ -841,7 +841,7 @@
   \par\nointerlineskip\vskip\suripx{5}%
   \suri@hrule{hairlinetwo}{\suri@hair}}
 
-% \advisorytrunc{texto} — "+ 12 advisories a mais…" under the list.
+% \advisorytrunc{texto} — "+ 5 advisories a mais…" under the list.
 \newcommand{\advisorytrunc}[1]{\par\vskip\suripx{8}%
   {\parindent=0pt\raggedright\suriMono\suriFS{9}{13}\color{logsev}#1\par}}
 
@@ -973,8 +973,8 @@
 % line per source line.  Breakable, because scanner output is often long.
 %
 %   \begin{termbox}
-%   Installed version: 9.9
-%   Fixed version:     10.1
+%   Installed version: 1.18.0
+%   Fixed version:     1.25.4
 %   \end{termbox}
 \newenvironment{termbox}{%
   \tcolorbox[breakable,enhanced,sharp corners,arc=0pt,outer arc=0pt,

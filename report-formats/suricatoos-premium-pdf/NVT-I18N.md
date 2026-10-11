@@ -91,8 +91,8 @@ ferramenta. É a maior parte do inglês que sobra no PDF, e sobra de propósito.
 ## Espanhol
 
 Catálogo próprio (`nvt-i18n-es.xml`), 666/666 OIDs, glossário em `NVT-I18N-ES.md`.
-Resultado medido: **36% → 15%** de linhas em inglês. Mesmos gates: zero
-divergência de identificador, tortura de 666 entradas limpa (123 páginas).
+Mesmos gates: zero divergência de identificador, tortura de 666 entradas
+limpa.
 
 ## Dívida conhecida
 
@@ -123,8 +123,8 @@ versão. Um CVE trocado num relatório de cliente é pior que o inglês.
 
 ## Teste de tortura (obrigatório ao estender o catálogo)
 
-Um relatório real toca ~100 dos ~670 NVTs. Compilar um relatório de verdade prova
-pouco: um caractere não escapado nas outras entradas só apareceria quando um
+Um relatório real toca só uma fração do catálogo. Compilar um relatório de verdade
+prova pouco: um caractere não escapado nas outras entradas só apareceria quando um
 cliente batesse nela.
 
 `tools/build-torture-fixture.py <lang>` monta um relatório sintético com **um
