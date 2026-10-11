@@ -168,11 +168,13 @@ func main() {
 	// restart before the operator repeated a DELETE whose save failed. A failed save is
 	// logged loudly but does not stop the boot: the list is complete in memory, and the
 	// next revocation that saves persists all of it.
+	reconcileStart := time.Now()
 	reAdded, badSerials, err := cpapi.ReconcileRevocations(tm, authority, time.Now().UTC())
+	reconcileTook := time.Since(reconcileStart).Round(time.Millisecond)
 	if err != nil {
-		log.Printf("CRL: ERRO na reconciliação de boot: %v — %d serial(is) de tokens revogados (re)adicionado(s) só em memória; corrija a causa (a próxima revogação gravada persiste a lista inteira)", err, reAdded)
+		log.Printf("CRL: ERRO na reconciliação de boot (%v): %v — %d serial(is) de tokens revogados (re)adicionado(s) só em memória; corrija a causa (a próxima revogação gravada persiste a lista inteira)", reconcileTook, err, reAdded)
 	} else {
-		log.Printf("CRL: reconciliação de boot — %d serial(is) de tokens revogados (re)adicionado(s) à lista de revogação", reAdded)
+		log.Printf("CRL: reconciliação de boot — %d serial(is) de tokens revogados (re)adicionado(s) à lista de revogação em %v", reAdded, reconcileTook)
 	}
 	if len(badSerials) > 0 {
 		log.Printf("CRL: reconciliação de boot — %d serial(is) inválido(s) no token store, ignorado(s): %q", len(badSerials), badSerials)
