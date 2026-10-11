@@ -7,6 +7,8 @@ uma entrada na allowlist so para os testes passarem. Literais de faixas isentas
 
 Rodar: python -m pytest ci/hygiene -q
 """
+import ipaddress
+import re
 import shutil
 import subprocess
 import sys
@@ -25,6 +27,7 @@ def _ip(a, b, c, d):
 
 PUBLIC = _ip(8, 8, 8, 8)
 OTHER_PUBLIC = _ip(1, 1, 1, 1)
+WHY = "justificativa de teste com tamanho suficiente"      # >= h.MIN_JUSTIFICATION
 
 
 # --- o que reprova / o que passa ------------------------------------------------
@@ -89,10 +92,18 @@ def test_not_an_ip_is_not_reported(text):
     "{ip}:8080", "{ip}/24", "http://{ip}/x", "x={ip}", "user@{ip}",
     "::ffff:{ip}", "scan_{ip}.xml", "{ip}_x", "{ip}-x", "{ip}.example.test",
     "a\\n{ip}", "a\\r\\n{ip}", "a\\t{ip}", "{ip}\\n",
+    # escape percentual (URL) terminado em letra logo antes: %0A, %2F, %3A...
+    "a%0A{ip}", "http://x/%2F{ip}", "x%3A{ip}", "{ip}%0A",
 ])
 def test_public_ip_is_found_in_context(template):
     text = template.format(ip=PUBLIC)
     assert [ip for _, ip in h.find_public_ips(text)] == [PUBLIC]
+
+
+def test_percent_escape_ending_in_a_digit_still_flags_an_address():
+    # "%20" seguido de um IP que comeca por 8 le-se tambem como "%" + um IP que comeca
+    # por 208: outro literal, mas ainda um IP publico, entao o vazamento nao passa.
+    assert h.find_public_ips("a%20" + PUBLIC) != []
 
 
 def test_ip_followed_by_a_fifth_component_is_not_reported():
@@ -118,6 +129,44 @@ def test_leading_zeros_are_normalized():
     assert h.find_public_ips("010.000.000.001") == []             # 10/8 com zeros
 
 
+# --- limites conhecidos: executaveis, para a documentacao nao apodrecer ----------------
+
+def _blind_spot_forms():
+    octets = PUBLIC.split(".")
+    return {
+        "defanged": "[.]".join(octets),
+        "dashed": "-".join(octets),
+        "integer": str(int(ipaddress.IPv4Address(PUBLIC))),
+        "hex": hex(int(ipaddress.IPv4Address(PUBLIC))),
+        "percent-escaped dots": "%2E".join(octets),
+        "regex-escaped dots": "\\.".join(octets),
+        "ipv6": "2606:4700:4700::1111",
+    }
+
+
+@pytest.mark.xfail(strict=True, reason="limite conhecido, listado em LIMITE CONHECIDO no topo do checador")
+@pytest.mark.parametrize("form", sorted(_blind_spot_forms()))
+def test_known_blind_spots_are_not_detected_yet(form):
+    # Se alguem passar a detectar uma destas formas, este teste vira XPASS (estrito) e
+    # reprova: e' o aviso para tirar a forma de LIMITE CONHECIDO e virar teste normal.
+    text = _blind_spot_forms()[form]
+    assert h.find_public_ips("host " + text) != []
+
+
+def test_every_blind_spot_form_is_named_in_the_docstring():
+    doc = h.__doc__.lower()
+    for word in ("defang", "tracej", "inteiro", "hex", "percent", "regex", "ipv6", "base64"):
+        assert word in doc, word
+
+
+def test_docstring_names_the_workflow_that_keeps_the_feed_in_sync():
+    refs = set(re.findall(r"\.github/workflows/[\w.-]+\.yml", h.__doc__))
+    assert ".github/workflows/report-formats-ci.yml" in refs
+    assert "feed-sync" in h.__doc__
+    for ref in refs:                                  # nome citado => arquivo existe
+        assert (h.ROOT / ref).is_file(), ref
+
+
 # --- allowlist ------------------------------------------------------------------
 
 def test_allowlist_suppresses_only_the_listed_ip():
@@ -126,29 +175,64 @@ def test_allowlist_suppresses_only_the_listed_ip():
     assert h.find_public_ips(text, frozenset({PUBLIC, OTHER_PUBLIC})) == []
 
 
+def test_find_public_ips_records_which_allowlisted_ips_were_seen():
+    used = set()
+    text = f"{PUBLIC}\n{_ip('008', '008', '008', '008')}\nlimpa\n"
+    assert h.find_public_ips(text, {PUBLIC: 3, OTHER_PUBLIC: 4}, used) == []
+    assert used == {PUBLIC}                           # so' o que apareceu, na forma canonica
+
+
 def test_load_allowlist_reads_entries_and_ignores_comments(tmp_path):
     f = tmp_path / "allow.txt"
-    f.write_text(
+    f.write_bytes((                        # bytes: o CRLF da linha 3 e' de verdade em qualquer SO
         "# cabecalho\n\n"
         f"{PUBLIC}   # resolver publico citado em docs\r\n"
-        f"  {OTHER_PUBLIC}\t# outro, com recuo\n"
-        "   # comentario recuado\n",
-        encoding="utf-8")
-    assert h.load_allowlist(f) == frozenset({PUBLIC, OTHER_PUBLIC})
+        f"  {OTHER_PUBLIC}\t# outro, com recuo e justificativa\n"
+        "   # comentario recuado\n").encode("utf-8"))
+    assert dict(h.load_allowlist(f)) == {PUBLIC: 3, OTHER_PUBLIC: 4}      # IP -> linha
 
 
 def test_load_allowlist_normalizes_leading_zeros(tmp_path):
     f = tmp_path / "allow.txt"
-    f.write_text(f"{_ip('008', '008', '008', '008')} # com zeros\n", encoding="utf-8")
-    assert h.load_allowlist(f) == frozenset({PUBLIC})
+    f.write_text(f"{_ip('008', '008', '008', '008')} # {WHY}\n", encoding="utf-8")
+    assert dict(h.load_allowlist(f)) == {PUBLIC: 1}
 
 
 @pytest.mark.parametrize("line", ["{ip}", "{ip}  #", "{ip} #    ", "{ip}#"])
 def test_load_allowlist_requires_a_justification(tmp_path, line):
     f = tmp_path / "allow.txt"
     f.write_text("# ok\n" + line.format(ip=PUBLIC) + "\n", encoding="utf-8")
-    with pytest.raises(ValueError, match=r"allow\.txt:2: .*justificativa"):
+    with pytest.raises(ValueError, match=r"allow\.txt:2: falta a justificativa"):
         h.load_allowlist(f)
+
+
+def test_load_allowlist_rejects_a_too_short_justification(tmp_path):
+    f = tmp_path / "allow.txt"
+    f.write_text("# ok\n" + f"{PUBLIC} # curto demais\n", encoding="utf-8")     # 12 caracteres
+    with pytest.raises(ValueError, match=r"allow\.txt:2: justificativa curta demais"):
+        h.load_allowlist(f)
+
+
+def test_justification_needs_the_minimum_length(tmp_path):
+    f = tmp_path / "allow.txt"
+    f.write_text(f"{PUBLIC} # " + "x" * (h.MIN_JUSTIFICATION - 1) + "\n", encoding="utf-8")
+    with pytest.raises(ValueError, match=str(h.MIN_JUSTIFICATION)):
+        h.load_allowlist(f)
+    f.write_text(f"{PUBLIC} # " + "x" * h.MIN_JUSTIFICATION + "\n", encoding="utf-8")
+    assert dict(h.load_allowlist(f)) == {PUBLIC: 1}
+
+
+def test_load_allowlist_rejects_a_repeated_entry(tmp_path):
+    f = tmp_path / "allow.txt"
+    f.write_text(f"{PUBLIC} # {WHY}\n{_ip('008', '008', '008', '008')} # {WHY}\n", encoding="utf-8")
+    with pytest.raises(ValueError, match=r"allow\.txt:2: entrada repetida .*linha 1"):
+        h.load_allowlist(f)
+
+
+def test_load_allowlist_counts_lines_by_newline_only(tmp_path):
+    f = tmp_path / "allow.txt"
+    f.write_bytes(b"# um CR solto\r no meio do comentario\n" + f"{PUBLIC} # {WHY}\n".encode())
+    assert dict(h.load_allowlist(f)) == {PUBLIC: 2}
 
 
 @pytest.mark.parametrize("entry", [
@@ -157,7 +241,7 @@ def test_load_allowlist_requires_a_justification(tmp_path, line):
 ])
 def test_load_allowlist_rejects_malformed_entries(tmp_path, entry):
     f = tmp_path / "allow.txt"
-    f.write_text(f"{entry} # motivo\n", encoding="utf-8")
+    f.write_text(f"{entry} # {WHY}\n", encoding="utf-8")
     with pytest.raises(ValueError, match=r"allow\.txt:1: .*IPv4"):
         h.load_allowlist(f)
 
@@ -165,8 +249,6 @@ def test_load_allowlist_rejects_malformed_entries(tmp_path, entry):
 # --- exclusoes e decodificacao ----------------------------------------------------
 
 @pytest.mark.parametrize("rel", [
-    "patches/gsa-v27.4.1.patch",
-    "patches/sub/dir/x.patch",
     "report-formats/suricatoos-premium-pdf/nvt-i18n-pt_BR.xml",
     "report-formats/suricatoos-premium-pdf/nvt-i18n-es.xml",
 ])
@@ -175,10 +257,13 @@ def test_excluded_paths(rel):
 
 
 @pytest.mark.parametrize("rel", [
+    # patches/ NAO e' exclusao: o patch do GSA cria arquivos proprios (tema, telas, locales)
+    "patches/gsa-v27.4.1.patch", "patches/sub/dir/x.patch",
     "docs/x.md", "patches", "patches-extra/x.patch", "Patches/x.patch",
     "report-formats/suricatoos-premium-pdf/main.tex",
     "report-formats/sample/sample-report.xml",
     "outro/nvt-i18n-pt_BR.xml",
+    "Report-Formats/suricatoos-premium-pdf/nvt-i18n-pt_BR.xml",     # o git distingue maiusculas
 ])
 def test_paths_that_must_still_be_scanned(rel):
     assert not h.is_excluded(rel)
@@ -198,6 +283,16 @@ def test_utf16_with_bom_is_scanned_like_text():
     line = "host " + PUBLIC
     assert h.decode_text(line.encode("utf-16")) == line                      # BOM nativo
     assert h.decode_text(b"\xfe\xff" + line.encode("utf-16-be")) == line      # BOM big-endian
+
+
+@pytest.mark.parametrize("rel", ["logo.svg", "assets/LOGO.SVG", "patches/gsa-v27.4.1.patch", "a/b.PATCH"])
+def test_geometry_blanking_applies_to_svg_and_patch_files(rel):
+    assert h.has_geometry_data(rel)
+
+
+@pytest.mark.parametrize("rel", ["docs/x.md", "x.svg.txt", "svg", "patches/readme.txt", "x.svgz"])
+def test_geometry_blanking_does_not_apply_to_other_files(rel):
+    assert not h.has_geometry_data(rel)
 
 
 def test_svg_geometry_is_blanked_but_text_is_still_scanned():
@@ -245,11 +340,21 @@ def _allow(tmp_path, body="# vazia\n"):
     return f
 
 
+SUMMARY = re.compile(
+    r"hygiene: varridos=(\d+) binarios=(\d+) excluidos=(\d+) ignorados=(\d+) allowlist=(\d+)/(\d+)\n")
+
+
+def _summary(err):
+    m = SUMMARY.search(err)
+    assert m, err
+    return tuple(int(g) for g in m.groups())
+
+
 def test_main_reports_file_line_ip_and_exits_1(repo, tmp_path, capsys):
     _track(repo, {
         "docs/a.md": f"ok 192.0.2.7\nhost {PUBLIC}\n",
         "src/b.txt": f"{OTHER_PUBLIC}",
-        "patches/x.patch": f"+ {PUBLIC}\n",                       # excluido
+        "report-formats/suricatoos-premium-pdf/nvt-i18n-pt_BR.xml": f"<n>{PUBLIC}</n>",   # excluido
         "bin/blob.dat": b"\x00\x01" + PUBLIC.encode(),             # binario
         "logo.svg": f'<path d="M0,0c-{_ip(13, 52, 48, 61)}z"/>\n',  # so geometria
     })
@@ -259,27 +364,89 @@ def test_main_reports_file_line_ip_and_exits_1(repo, tmp_path, capsys):
     assert rc == 1
     assert out.out.splitlines() == [f"docs/a.md:2: {PUBLIC}", f"src/b.txt:1: {OTHER_PUBLIC}"]
     assert "allowed_ips.txt" in out.err                              # orienta a saida do problema
+    assert _summary(out.err) == (3, 1, 1, 0, 0, 0)                   # varridos, binarios, excluidos, ignorados, allowlist
 
 
-def test_main_exits_0_and_prints_nothing_when_clean(repo, tmp_path, capsys):
+def test_main_scans_patch_files_and_ignores_svg_geometry_inside_them(repo, tmp_path, capsys):
+    noise = _ip(13, 52, 48, 61)
+    patch = (
+        "diff --git a/ui/Panel.tsx b/ui/Panel.tsx\n"
+        "+++ b/ui/Panel.tsx\n"
+        "@@ -1,2 +1,4 @@\n"
+        f'+const SCAN_HOST = "{PUBLIC}";\n'
+        f'+<path d="M0,0c-{noise}z"/>\n'
+        f'-  <path class="x" d="M1 1 -{noise}"/>\n'
+        f'+<polygon points="1,2 -{noise}"/>\n')
+    _track(repo, {"patches/ui.patch": patch})
+    rc = h.main(["--root", str(repo), "--allowlist", str(_allow(tmp_path))])
+    out = capsys.readouterr()
+    assert rc == 1
+    assert out.out.splitlines() == [f"patches/ui.patch:4: {PUBLIC}"]   # a linha de TSX, so ela
+
+
+def test_main_exits_0_and_only_summarises_when_clean(repo, tmp_path, capsys):
     _track(repo, {"docs/a.md": "10.0.0.1 e 203.0.113.9 e 1.2.3 e 10.0.22631.4317\n"})
     rc = h.main(["--root", str(repo), "--allowlist", str(_allow(tmp_path))])
     out = capsys.readouterr()
-    assert (rc, out.out, out.err) == (0, "", "")
+    assert (rc, out.out) == (0, "")
+    assert _summary(out.err) == (1, 0, 0, 0, 0, 0)
+    assert out.err.count("\n") == 1                                  # uma linha so', no stderr
 
 
 def test_main_honours_the_allowlist(repo, tmp_path, capsys):
     _track(repo, {"docs/a.md": f"{PUBLIC} {OTHER_PUBLIC}\n"})
-    allow = _allow(tmp_path, f"{PUBLIC} # resolver publico citado em docs\n")
+    allow = _allow(tmp_path, f"{PUBLIC} # {WHY}\n")
     rc = h.main(["--root", str(repo), "--allowlist", str(allow)])
     assert rc == 1
-    assert capsys.readouterr().out.splitlines() == [f"docs/a.md:1: {OTHER_PUBLIC}"]
+    out = capsys.readouterr()
+    assert out.out.splitlines() == [f"docs/a.md:1: {OTHER_PUBLIC}"]
+    assert _summary(out.err)[4:] == (1, 1)                           # a entrada foi usada
 
 
-def test_main_skips_tracked_files_missing_from_disk(repo, tmp_path):
-    _track(repo, {"gone.txt": PUBLIC})
+def test_main_counts_tracked_files_missing_from_disk(repo, tmp_path, capsys):
+    _track(repo, {"gone.txt": PUBLIC, "ok.txt": "nada\n"})
     (repo / "gone.txt").unlink()
     assert h.main(["--root", str(repo), "--allowlist", str(_allow(tmp_path))]) == 0
+    assert _summary(capsys.readouterr().err) == (1, 0, 0, 1, 0, 0)
+
+
+def test_main_exits_2_when_nothing_was_scanned(repo, tmp_path, capsys):
+    # repositorio vazio, ou so' binarios: "limpo" por nao ter olhado nada nao vale
+    rc = h.main(["--root", str(repo), "--allowlist", str(_allow(tmp_path))])
+    out = capsys.readouterr()
+    assert (rc, out.out) == (2, "")
+    assert "nenhum arquivo" in out.err and _summary(out.err)[0] == 0
+    _track(repo, {"bin/blob.dat": b"\x00\x01\x02"})
+    assert h.main(["--root", str(repo), "--allowlist", str(_allow(tmp_path))]) == 2
+
+
+def test_main_exits_2_on_an_allowlist_entry_that_matches_nothing(repo, tmp_path, capsys):
+    _track(repo, {"docs/a.md": "nada\n"})
+    allow = _allow(tmp_path, f"# cabecalho\n{PUBLIC} # {WHY}\n")
+    rc = h.main(["--root", str(repo), "--allowlist", str(allow)])
+    out = capsys.readouterr()
+    assert (rc, out.out) == (2, "")
+    assert f"allow.txt:2: {PUBLIC}" in out.err and "sem uso" in out.err
+
+
+def test_an_entry_seen_only_in_the_allowlist_file_itself_is_stale(repo, capsys):
+    # a allowlist rastreada cita o proprio IP: isso nao pode contar como "uso"
+    _track(repo, {"ci/hygiene/allowed_ips.txt": f"{PUBLIC} # {WHY}\n", "docs/a.md": "nada\n"})
+    allow = repo / "ci" / "hygiene" / "allowed_ips.txt"
+    assert h.main(["--root", str(repo), "--allowlist", str(allow)]) == 2
+    assert "sem uso" in capsys.readouterr().err
+    _track(repo, {"docs/a.md": f"host {PUBLIC}\n"})                  # agora ha' uso de verdade
+    assert h.main(["--root", str(repo), "--allowlist", str(allow)]) == 0
+
+
+def test_hits_and_a_stale_entry_are_both_reported_and_the_exit_is_2(repo, tmp_path, capsys):
+    _track(repo, {"docs/a.md": f"host {PUBLIC}\n"})
+    allow = _allow(tmp_path, f"{OTHER_PUBLIC} # {WHY}\n")
+    rc = h.main(["--root", str(repo), "--allowlist", str(allow)])
+    out = capsys.readouterr()
+    assert rc == 2
+    assert out.out.splitlines() == [f"docs/a.md:1: {PUBLIC}"]
+    assert "sem uso" in out.err and "allowed_ips.txt" in out.err
 
 
 def test_main_exits_2_on_a_malformed_allowlist(repo, tmp_path, capsys):
@@ -296,9 +463,14 @@ def test_main_exits_2_when_the_allowlist_is_missing(repo, tmp_path, capsys):
     assert capsys.readouterr().err.startswith("erro:")
 
 
-def test_main_exits_2_outside_a_git_repository(tmp_path, capsys):
+def test_main_exits_2_outside_a_git_repository(tmp_path, capsys, monkeypatch):
     if shutil.which("git") is None:
         pytest.skip("git indisponivel")
+    # tmp_path pode estar DENTRO de uma arvore git (TMPDIR no home de alguem, por exemplo):
+    # o teto impede o git de subir ate' ela e de achar um repositorio que nao e' o do teste.
+    monkeypatch.setenv("GIT_CEILING_DIRECTORIES", str(tmp_path.parent))
+    for var in ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE"):
+        monkeypatch.delenv(var, raising=False)
     plain = tmp_path / "plain"
     plain.mkdir()
     rc = h.main(["--root", str(plain), "--allowlist", str(_allow(tmp_path))])
@@ -313,3 +485,4 @@ def test_cli_entry_point(repo, tmp_path):
         capture_output=True, text=True)
     assert proc.returncode == 1
     assert proc.stdout.splitlines() == [f"docs/a.md:1: {PUBLIC}"]
+    assert _summary(proc.stderr)[0] == 1

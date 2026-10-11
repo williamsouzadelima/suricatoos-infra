@@ -2,8 +2,11 @@
 # (lidos por ci/hygiene/check_public_hygiene.py).
 #
 # Formato: um IPv4 por linha, seguido de `# justificativa`. A justificativa é
-# obrigatória: linha sem ela derruba o checador. Linhas em branco e as que começam
-# com `#` são ignoradas.
+# obrigatória e tem no mínimo 15 caracteres: sem ela, curta demais ou com o IP
+# repetido, o checador cai. Linhas em branco e as que começam com `#` são ignoradas.
+#
+# A lista não acumula resíduo: entrada que nenhum outro arquivo rastreado cita cai
+# como "sem uso". Quando o último uso de um IP sumir, apague a linha daqui.
 #
 # SÓ entra aqui IP legítimo: de terceiros, de documentação, número que parece IP
 # ou infraestrutura PRÓPRIA da plataforma que o código usa como valor default.
@@ -11,7 +14,8 @@
 # no arquivo, por um endereço de documentação (RFC 5737: 192.0.2.0/24,
 # 198.51.100.0/24, 203.0.113.0/24).
 #
-# O próprio checador varre este arquivo; as entradas abaixo valem por construção.
+# O próprio checador varre este arquivo: IP público que não esteja nas entradas
+# abaixo reprova aqui também, e o que este arquivo cita não conta como "uso".
 
 # --- fixtures de teste que precisam de "um IP público qualquer" ----------------------
 1.1.1.1         # resolver público (Cloudflare) como host de exemplo em gmp-bridge/test_scan_bridge.py
