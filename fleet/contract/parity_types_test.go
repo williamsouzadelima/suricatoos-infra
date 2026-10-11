@@ -169,6 +169,13 @@ func (p *typeParity) object(file string, node *ordObj, t reflect.Type, loc strin
 			p.t.Errorf("%s: objeto com properties sem additionalProperties:false — o decode estrito do Go seria mais estrito que o schema", loc)
 		}
 	}
+	// every exported field must carry a json tag: an untagged one would be (de)serialized under its Go name,
+	// matched case-insensitively by encoding/json — a member the schema does not have
+	for i := 0; i < t.NumField(); i++ {
+		if f := t.Field(i); f.IsExported() && f.Tag.Get("json") == "" {
+			p.t.Errorf("%s: campo exportado %s.%s sem tag json", loc, t.Name(), f.Name)
+		}
+	}
 	fields := jsonFields(t)
 	var names []string
 	for _, f := range fields {

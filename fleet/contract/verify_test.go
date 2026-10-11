@@ -88,7 +88,7 @@ func TestVerifyLines0to2(t *testing.T) {
 		{"command_id maiúsculo", field(func(c *Command) { c.CommandID = strings.ToUpper(c.CommandID) }), ReasonBadEnvelope, "pattern", "/command_id"},
 		{"node_id com newline", field(func(c *Command) { c.NodeID += "\n" }), ReasonBadEnvelope, "not", "/node_id"},
 		{"tenant inválido", field(func(c *Command) { c.Tenant = "-acme" }), ReasonBadEnvelope, "pattern", "/tenant"},
-		{"issued_by com e-mail", field(func(c *Command) { c.IssuedBy = "op@exemplo.com.br" }), ReasonBadEnvelope, "pattern", "/issued_by"},
+		{"issued_by com e-mail", field(func(c *Command) { c.IssuedBy = "op@example.com" }), ReasonBadEnvelope, "pattern", "/issued_by"},
 		{"type malformado", field(func(c *Command) { c.Type = "TASK.START" }), ReasonBadEnvelope, "pattern", "/type"},
 		{"type com newline final", field(func(c *Command) { c.Type = "task.start\n" }), ReasonBadEnvelope, "not", "/type"},
 		{"assinatura curta", sig(adrSignature[:84] + "=="), ReasonBadEnvelope, "pattern", "/signature"},

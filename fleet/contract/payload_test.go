@@ -15,6 +15,14 @@ const (
 	uuidC = "daba56c8-73ec-11df-a475-002264764cea"
 )
 
+// documentationIP is the i-th address of the RFC 5737 documentation ranges (192.0.2.0/24, then 198.51.100.0/24).
+func documentationIP(i int) string {
+	if i < 256 {
+		return "192.0.2." + strconv.Itoa(i)
+	}
+	return "198.51.100." + strconv.Itoa(i-256)
+}
+
 // export builds a valid report.export payload with the given filter (JSON-escaped).
 func export(filter string) string {
 	f, _ := json.Marshal(filter)
@@ -72,10 +80,10 @@ func TestValidatePayload(t *testing.T) {
 		{"target.create", TypeTargetCreate, `{"name":"LAB","hosts":["192.0.2.0/24","2001:db8::1"],"exclude_hosts":["192.0.2.1"],"port_range":"T:1-1024,8080","alive_test":"ICMP Ping"}`, "", ""},
 		{"target.create sem forma de porta", TypeTargetCreate, `{"name":"LAB","hosts":["192.0.2.0/24"]}`, "oneOf", ""},
 		{"target.create duas formas de porta", TypeTargetCreate, `{"name":"LAB","hosts":["192.0.2.0/24"],"port_list_id":"` + uuidC + `","port_range":"T:1-10"}`, "oneOf", ""},
-		{"target.create hostname", TypeTargetCreate, `{"name":"LAB","hosts":["scanner.exemplo.com.br"],"port_range":"T:1-10"}`, "pattern", "/hosts/0"},
+		{"target.create hostname", TypeTargetCreate, `{"name":"LAB","hosts":["scanner.example.com"],"port_range":"T:1-10"}`, "pattern", "/hosts/0"},
 		{"target.create sem hosts", TypeTargetCreate, `{"name":"LAB","hosts":[],"port_range":"T:1-10"}`, "minItems", "/hosts"},
 		{"target.create host repetido", TypeTargetCreate, `{"name":"LAB","hosts":["192.0.2.1","192.0.2.1"],"port_range":"T:1-10"}`, "uniqueItems", "/hosts"},
-		{"target.create 257 hosts", TypeTargetCreate, `{"name":"LAB","hosts":` + jsonList(257, func(i int) string { return "10.0." + strconv.Itoa(i/256) + "." + strconv.Itoa(i%256) }) + `,"port_range":"T:1-10"}`, "maxItems", "/hosts"},
+		{"target.create 257 hosts", TypeTargetCreate, `{"name":"LAB","hosts":` + jsonList(257, documentationIP) + `,"port_range":"T:1-10"}`, "maxItems", "/hosts"},
 		{"target.create CIDR de 44 caracteres", TypeTargetCreate, `{"name":"LAB","hosts":["2001:0db8:0000:0000:0000:0000:0000:00001/128"],"port_range":"T:1-10"}`, "maxLength", "/hosts/0"},
 		{"target.create alive test desconhecido", TypeTargetCreate, `{"name":"LAB","hosts":["192.0.2.1"],"port_range":"T:1-10","alive_test":"Ping"}`, "enum", "/alive_test"},
 		{"target.create port_range inválido", TypeTargetCreate, `{"name":"LAB","hosts":["192.0.2.1"],"port_range":"T:1-10;"}`, "pattern", "/port_range"},
