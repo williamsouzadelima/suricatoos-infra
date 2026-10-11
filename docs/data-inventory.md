@@ -70,7 +70,7 @@ Coletamos apenas o mínimo necessário para **correlação de vulnerabilidade ba
 |---|---|---|---|---|
 | Identidade do nó (`node_id`, `node_kind`, CSR, `schema_versions`; certificado `CN=<node_id> O=<org> OU=fleet-node`, CA da frota, chave pública de comando) | `fleet-enroll.schema.json` | nó→hub (enroll/renew); hub→nó (certificado e chaves públicas) | autenticar o nó (mTLS) e fixar a chave que assina comandos | baixa (identificador técnico) |
 | Token de enroll da frota (`ft_…`) | `fleet-enroll.schema.json#/$defs/enroll_request` (`token`) | nó→hub, uma vez | autorizar a entrada do nó | alta enquanto válido (segredo de uso único; descartado após o enroll, nunca logado) |
-| Heartbeat (versão do conector, versões do contrato anunciadas, piso de replay, hashes de estado, contadores de fila; o corpo do `426` traz só as versões do hub) | `fleet-heartbeat.schema.json` | nó→hub (resposta hub→nó) | vivacidade, sincronização e negociação de versão | baixa |
+| Heartbeat (versão do conector, versões do contrato anunciadas, piso de replay, hashes de estado, contadores de fila, de não autenticados e de reentregas; o corpo do `426` traz só as versões do hub) | `fleet-heartbeat.schema.json` | nó→hub (resposta hub→nó) | vivacidade, sincronização e negociação de versão | baixa |
 | Estado `node` (versões, feeds e idade, saúde, capacidades, política local, piso de replay) | `fleet-state.schema.json#/$defs/data_node` | nó→hub | operar a frota | baixa |
 | Estado `tasks`, `schedules`, `reports` (ids, nomes, status, agendas, contagens por severidade) | `fleet-state.schema.json#/$defs/data_tasks`, `data_schedules`, `data_reports` | nó→hub | gerenciar varreduras | baixa (metadado operacional; **sem achados**) |
 | Estado `targets` e `scope` (entradas IP/CIDR literais dos alvos, CIDRs autorizados por tenant) | `fleet-state.schema.json#/$defs/data_targets`, `data_scope` | nó→hub | gerenciar alvos dentro do escopo | média (topologia da rede do cliente) |
@@ -113,17 +113,21 @@ Coletamos apenas o mínimo necessário para **correlação de vulnerabilidade ba
 > **Texto livre (normativo):** os campos de texto livre que saem do nó são só **nomes** de objeto GVM (tarefa,
 > target, agenda), escritos por um operador — o local, na GSA, ou o do hub, num comando de criação — e as
 > mensagens curtas que o próprio conector gera (`detail`, `error.message`). O nó **nunca** insere dado de achado
-> (OID, nome de NVT, CVE, porta, evidência) em texto livre; `comment` de objeto não sai.
+> (OID, nome de NVT, CVE, porta, evidência) em texto livre; `comment` de objeto não sai. Os demais textos são
+> valores de sistema ou de comando, também sem achado: `os`/`arch` do agente, `alive_test`, `policy` do token,
+> versões e os filtros GMP ecoados (`report.filter` na auditoria, `filter_applied` no sumário).
 >
 > **`issued_by`:** é **obrigatoriamente** um identificador pseudônimo do operador do hub — o schema recusa `@` e
 > espaço; o hub guarda o mapeamento para a pessoa. Um e-mail aqui seria dado pessoal replicado na auditoria de
 > cada nó.
 >
-> **Auditoria local:** dois fluxos append-only encadeados por hash (`FLEET_STATE_DIR/audit-exec.jsonl` com o
-> que foi aceito e executado; `audit-reject.jsonl` com rejeições, adiamentos e contagens de envelopes não
-> autenticados), cada um com `seq` e rotação próprios (32 MiB × 8 e × 4). As linhas guardam o "quê" de forma
-> limitada (ids de objeto, até 64 hosts, parâmetros do export, sha256 e tamanho do artefato) e **nunca segredo**.
-> Visíveis ao operador local; as caudas (≤ 200 linhas de cada fluxo) vão ao hub como testemunha.
+> **Auditoria local:** dois fluxos append-only encadeados por hash, cada um com `seq` e rotação próprios
+> (32 MiB × 8 e × 4): `FLEET_STATE_DIR/audit-exec.jsonl`, com o que foi aceito e executado, e
+> `audit-reject.jsonl`, com rejeições, adiamentos, contagens periódicas (envelopes não autenticados; reentregas
+> da linha 2a, que não ganham linha própria) e as linhas `version_mismatch`, com as versões anunciadas pelos dois
+> lados (`versions`). As linhas guardam o "quê" de forma limitada (ids de objeto, até 64 hosts, parâmetros do
+> export, sha256 e tamanho do artefato) e **nunca segredo**. Visíveis ao operador local; as caudas (≤ 200 linhas
+> de cada fluxo) vão ao hub como testemunha.
 >
 > **Transporte:** HTTPS de saída + mTLS; no canário, hub alcançado só por rede privada (tailnet), fora da
 > internet. Os papéis LGPD (controlador/operador) entre o cliente e quem opera o hub seguem a base legal abaixo,

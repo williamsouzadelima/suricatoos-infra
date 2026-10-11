@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://suricatoos.dev/schema/fleet-state.schema.json",
   "title": "Suricatoos — Fleet State Snapshot",
-  "description": "Body of PUT /fleet/v1/state/{kind} (ADR-0011): the node's full snapshot of ONE kind. Sent only when content_sha256 changed since the last snapshot of that kind the hub accepted, or when the hub asks for a resync (heartbeat response 'resync' or a signed state.resync command). content_sha256 is the lowercase hex SHA-256 of the EXACT bytes of the 'data' value as transmitted (compact JSON); collected_at sits outside 'data' so an unchanged snapshot keeps its hash. 'kind' must equal the {kind} path segment and node_id must equal the CN of the client certificate. Minimization (ADR-0011 D4): operational metadata and counts only — never detailed findings, secrets, gvmd object comments or non-literal (hostname) target entries; free text is only object names and short connector-generated messages. Note that agent_id is by default the agent's HOSTNAME and may be personal data (see data_agents). Every list kind carries items + truncated + unattributed_count: an object whose gvmd owner (or cert O) maps to no known tenant is only counted, never listed.",
+  "description": "Body of PUT /fleet/v1/state/{kind} (ADR-0011): the node's full snapshot of ONE kind. Sent only when content_sha256 changed since the last snapshot of that kind the hub accepted, or when the hub asks for a resync (heartbeat response 'resync' or a signed state.resync command). content_sha256 is the lowercase hex SHA-256 of the EXACT bytes of the 'data' value as transmitted (compact JSON); collected_at sits outside 'data' so an unchanged snapshot keeps its hash. 'kind' must equal the {kind} path segment and node_id must equal the CN of the client certificate. Minimization (ADR-0011 D4): operational metadata and counts only — never detailed findings, secrets, gvmd object comments or non-literal (hostname) target entries; free text is only object names and short connector-generated messages (other strings are system or command values: agent os/arch, alive_test, token policy, versions, echoed GMP filters). Note that agent_id is by default the agent's HOSTNAME and may be personal data (see data_agents). Every list kind carries items + truncated + unattributed_count: an object whose gvmd owner (or cert O) maps to no known tenant is only counted, never listed.",
   "type": "object",
   "required": ["schema_version", "node_id", "kind", "collected_at", "content_sha256", "data"],
   "additionalProperties": false,
@@ -434,7 +434,7 @@
     },
 
     "data_audit_tail": {
-      "description": "The last lines of BOTH local audit streams (JSONL, append-only, each its own hash chain and seq), VERBATIM, so the hub can witness them: sha256(line_n bytes) must equal prev_sha256 inside line_n+1, and head_sha256 is the SHA-256 of the last line. exec = what was accepted and executed; reject = rejections, deferrals, unauthenticated counts and version mismatches. Each line parses as $defs/audit_entry. Gap rule (hub): first_seq > last seq seen + 1 => alert (flood or tampering — not proof).",
+      "description": "The last lines of BOTH local audit streams (JSONL, append-only, each its own hash chain and seq), VERBATIM, so the hub can witness them: sha256(line_n bytes) must equal prev_sha256 inside line_n+1, and head_sha256 is the SHA-256 of the last line. exec = what was accepted and executed; reject = rejections, deferrals, unauthenticated and redelivery counts and version mismatches. Each line parses as $defs/audit_entry. Gap rule (hub): first_seq > last seq seen + 1 => alert (flood or tampering — not proof).",
       "type": "object",
       "required": ["exec", "reject"],
       "additionalProperties": false,
@@ -459,7 +459,7 @@
     },
 
     "audit_entry": {
-      "description": "One line of a local audit stream: FLEET_STATE_DIR/audit-exec.jsonl (stream exec: connector/identity/policy events and the accepted commands' received -> executed -> result) or FLEET_STATE_DIR/audit-reject.jsonl (stream reject: rejected, deferred, periodic unauthenticated counts, and version_mismatch when the node enters blocked_version). Each stream has its own monotonic seq (+1 per line, across rotation), its own hash chain (prev_sha256 = SHA-256 of the previous line's exact bytes without the newline; 64 zeros for the first line ever) and its own rotation budget, so a flood of rejections can never rotate away the record of what was executed. Lines carry the bounded WHAT of a command (object ids, up to 64 hosts + their total count, the report parameters, the artifact hash and size) and never a secret: no token, password or key; the only secret of the contract (the token in the OUTPUT of enroll_token.create) is never written.",
+      "description": "One line of a local audit stream: FLEET_STATE_DIR/audit-exec.jsonl (stream exec: connector/identity/policy events and the accepted commands' received -> executed -> result) or FLEET_STATE_DIR/audit-reject.jsonl (stream reject: rejected, deferred, periodic unauthenticated and redelivered counts, and version_mismatch when the node enters blocked_version). A redelivery (verification line 2a) never gets a line of its own. Each stream has its own monotonic seq (+1 per line, across rotation), its own hash chain (prev_sha256 = SHA-256 of the previous line's exact bytes without the newline; 64 zeros for the first line ever) and its own rotation budget, so a flood of rejections can never rotate away the record of what was executed. Lines carry the bounded WHAT of a command (object ids, up to 64 hosts + their total count, the report parameters, the artifact hash and size) and never a secret: no token, password or key; the only secret of the contract (the token in the OUTPUT of enroll_token.create) is never written.",
       "type": "object",
       "required": ["stream", "seq", "at", "event", "prev_sha256"],
       "additionalProperties": false,
@@ -467,7 +467,7 @@
         "stream": { "enum": ["exec", "reject"] },
         "seq": { "type": "integer", "minimum": 1 },
         "at": { "$ref": "fleet-command.schema.json#/$defs/utc_time" },
-        "event": { "enum": ["connector_started", "identity_changed", "policy_changed", "received", "executed", "result", "rejected", "deferred", "unauthenticated", "version_mismatch"] },
+        "event": { "enum": ["connector_started", "identity_changed", "policy_changed", "received", "executed", "result", "rejected", "deferred", "unauthenticated", "redelivered", "version_mismatch"] },
         "command_id": { "$ref": "fleet-command.schema.json#/$defs/uuid" },
         "type": { "$ref": "fleet-command.schema.json#/$defs/command_type_any" },
         "tenant": { "$ref": "fleet-command.schema.json#/$defs/tenant" },
@@ -518,8 +518,18 @@
             "bad_signature": { "type": "integer", "minimum": 0 }
           }
         },
+        "redelivered": {
+          "description": "periodic count line (event redelivered, stream reject, at most one per minute): envelopes recognized at verification line 2a since 'since' — answered with the recorded decision, never executed again and never given a line of their own",
+          "type": "object",
+          "required": ["since", "count"],
+          "additionalProperties": false,
+          "properties": {
+            "since": { "$ref": "fleet-command.schema.json#/$defs/utc_time" },
+            "count": { "type": "integer", "minimum": 1 }
+          }
+        },
         "versions": {
-          "description": "version_mismatch line (stream reject, at most one per 10 min): the node found no version in common with the hub's 426 announcement and entered blocked_version",
+          "description": "version_mismatch line (stream reject, at most one per 10 min): the node entered blocked_version — no version in common with the hub's 426 announcement, or a second 426 after re-serializing in a common one. Before the enroll, one line per enroll retry (every 60 min)",
           "type": "object",
           "required": ["node", "hub"],
           "additionalProperties": false,
@@ -537,6 +547,7 @@
         { "if": { "properties": { "event": { "const": "deferred" } }, "required": ["event"] }, "then": { "required": ["reason"], "properties": { "reason": { "$ref": "fleet-result.schema.json#/$defs/deferred_reason" } } } },
         { "if": { "properties": { "event": { "enum": ["rejected", "deferred"] } }, "required": ["event"] }, "else": { "not": { "required": ["reason"] } } },
         { "if": { "properties": { "event": { "const": "unauthenticated" } }, "required": ["event"] }, "then": { "required": ["unauthenticated"] } },
+        { "if": { "properties": { "event": { "const": "redelivered" } }, "required": ["event"] }, "then": { "required": ["redelivered"] } },
         { "if": { "properties": { "event": { "const": "version_mismatch" } }, "required": ["event"] }, "then": { "required": ["versions"] } }
       ]
     }

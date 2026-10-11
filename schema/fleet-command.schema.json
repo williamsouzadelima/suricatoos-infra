@@ -203,7 +203,7 @@
       "oneOf": [ { "required": ["port_list_id"] }, { "required": ["port_range"] } ]
     },
     "payload_target_modify": {
-      "description": "Same scope gate as target.create for new hosts (exclude_hosts: literals only, never a rescue for a CIDR that contains a self/hub IP). At most one of port_list_id | port_range.",
+      "description": "The RESULTING hosts pass the same scope gate as target.create on every target.modify: the new ones, or the current ones read from gvmd when hosts is absent. So shrinking exclude_hosts only widens the target inside the checked scope (exclude_hosts: literals only, never a rescue for a CIDR that contains a self/hub IP). At most one of port_list_id | port_range.",
       "type": "object",
       "required": ["target_id"],
       "minProperties": 2,

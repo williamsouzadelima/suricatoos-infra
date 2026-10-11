@@ -14,5 +14,6 @@
   "outbox_events": 100.0,
   "outbox_dropped": 0,
   "pending_results": 0,
-  "unauthenticated_rejections": 3
+  "unauthenticated_rejections": 3,
+  "redeliveries": 2
 }

@@ -11,7 +11,7 @@
   "$defs": {
     "heartbeat_request": {
       "type": "object",
-      "required": ["schema_version", "node_id", "sent_at", "connector_version", "schema_versions", "replay_floor", "state_hashes", "outbox_events", "outbox_dropped", "pending_results", "unauthenticated_rejections"],
+      "required": ["schema_version", "node_id", "sent_at", "connector_version", "schema_versions", "replay_floor", "state_hashes", "outbox_events", "outbox_dropped", "pending_results", "unauthenticated_rejections", "redeliveries"],
       "additionalProperties": false,
       "properties": {
         "schema_version": { "type": "string", "const": "1.0.0" },
@@ -30,7 +30,8 @@
         "outbox_events": { "type": "integer", "minimum": 0, "description": "events waiting in the durable outbox" },
         "outbox_dropped": { "type": "integer", "minimum": 0, "description": "events dropped since start because the outbox cap was hit (oldest first)" },
         "pending_results": { "type": "integer", "minimum": 0, "description": "acks/results/artifacts not yet accepted by the hub" },
-        "unauthenticated_rejections": { "type": "integer", "minimum": 0, "description": "envelopes refused at verification lines 0-2 (bad_envelope, payload_mismatch, bad_signature) since the connector started: they get no ack and are audited only as periodic counts" }
+        "unauthenticated_rejections": { "type": "integer", "minimum": 0, "description": "envelopes refused at verification lines 0-2 (bad_envelope, payload_mismatch, bad_signature) since the connector started: they get no ack and are audited only as periodic counts" },
+        "redeliveries": { "type": "integer", "minimum": 0, "description": "envelopes recognized at verification line 2a (canonical form already recorded) since the connector started: answered with the recorded ack/result, never executed again, with no audit line of their own (only the periodic redelivered count) and outside the budgets; a poll that brings only redeliveries or rejections puts the node in backoff" }
       }
     },
     "heartbeat_response": {
@@ -42,12 +43,12 @@
         "server_time": { "$ref": "fleet-command.schema.json#/$defs/utc_time" },
         "resync": { "type": "array", "maxItems": 12, "uniqueItems": true, "items": { "$ref": "fleet-state.schema.json#/$defs/state_kind_any" }, "description": "kinds to re-send in full; empty = nothing to do. Items only match the kind PATTERN, not the enum: the node ignores (and alerts on) a kind it does not know instead of failing the whole response — the one exception to strict validation" },
         "heartbeat_interval_s": { "type": "integer", "minimum": 15, "maximum": 600 },
-        "poll_wait_s": { "type": "integer", "minimum": 5, "maximum": 30, "description": "long-poll wait; the node also never polls more often than once per 5 s and backs off when a poll brings only rejections" },
+        "poll_wait_s": { "type": "integer", "minimum": 5, "maximum": 30, "description": "long-poll wait; the node also never polls more often than once per 5 s and backs off when a poll brings only rejections or redeliveries" },
         "schema_versions": { "$ref": "fleet-command.schema.json#/$defs/schema_versions", "description": "versions the HUB supports" }
       }
     },
     "version_unsupported": {
-      "description": "JSON body of a 426 (Upgrade Required) on any route with a JSON body (enroll, renew, heartbeat, state, events, ack, result): the request's schema_version is not one the hub supports. It carries ONLY the hub's announcement and is VERSION-INVARIANT (this shape never changes, not even in a new MAJOR), so every node can read it; a 426 never consumes an enroll token. The node recomputes the highest common version: if there is one, it adopts it and re-sends the same item re-serialized (once per item); if there is none, or the re-send gets 426 again, it enters blocked_version: no poll, only a heartbeat every 10 min in its highest version with its announcement, audit line version_mismatch, until a heartbeat shows a common version.",
+      "description": "JSON body of a 426 (Upgrade Required) on any route with a JSON body (enroll, renew, heartbeat, state, events, ack, result): the request's schema_version is not one the hub supports. It carries ONLY the hub's announcement and is VERSION-INVARIANT (this shape never changes, not even in a new MAJOR), so every node can read it; a 426 never consumes an enroll token. The node recomputes the highest common version: if there is one, it adopts it and re-sends the same item re-serialized (once per item); if there is none, or the re-send gets 426 again, it enters blocked_version: no poll, only a heartbeat every 10 min in its highest version with its announcement, audit line version_mismatch, until a heartbeat shows a common version. Before the enroll there is no certificate and so no heartbeat: in blocked_version the node retries the ENROLL every 60 min (each attempt audited) while its token lasts; once the hub answers 403 (token expired), only a new token brings it back.",
       "type": "object",
       "required": ["schema_versions"],
       "additionalProperties": false,

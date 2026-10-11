@@ -599,6 +599,15 @@
       }
     },
     {
+      "file": "invalid/heartbeat/heartbeat_request--without-redeliveries.json",
+      "target": "fleet-heartbeat.schema.json#/$defs/heartbeat_request",
+      "description": "NB4: redeliveries (line 2a) are counted, never audited one by one",
+      "expect": {
+        "keyword": "required",
+        "path": ""
+      }
+    },
+    {
       "file": "invalid/heartbeat/heartbeat_request--without-replay-floor.json",
       "target": "fleet-heartbeat.schema.json#/$defs/heartbeat_request",
       "description": "NB2: the node publishes its replay floor; the hub never issues below replay_floor + 10 min",
@@ -947,6 +956,15 @@
       "expect": {
         "keyword": "maxItems",
         "path": "/hosts"
+      }
+    },
+    {
+      "file": "invalid/state/audit_entry--redelivered-without-counts.json",
+      "target": "fleet-state.schema.json#/$defs/audit_entry",
+      "description": "NB4: a redelivered line carries the count",
+      "expect": {
+        "keyword": "required",
+        "path": ""
       }
     },
     {
@@ -1616,6 +1634,11 @@
       "file": "valid/state/audit_entry--received-with-objects.json",
       "target": "fleet-state.schema.json#/$defs/audit_entry",
       "description": "exec stream: accepted task.start with the object it acts on"
+    },
+    {
+      "file": "valid/state/audit_entry--redelivered-counts.json",
+      "target": "fleet-state.schema.json#/$defs/audit_entry",
+      "description": "reject stream: NB4, periodic count of redeliveries recognized at line 2a (no received line per redelivery, outside the budgets)"
     },
     {
       "file": "valid/state/audit_entry--rejected-with-hosts.json",
