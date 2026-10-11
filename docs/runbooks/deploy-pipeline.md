@@ -159,6 +159,8 @@ docker compose stop ingest && docker compose rm -f ingest
   pior). No smoke test do passo 5, o `agent_id` do `inventario-de-teste.json` tem de
   ser o CN do `agent.crt` (`openssl x509 -noout -subject -in agent.crt`), senão
   aparece a linha `agent_id≠CN` (e 403 em `enforce`).
+- Em qualquer modo (`off` inclusive), um `agent_id` com mais de 128 bytes — o máximo do
+  enrollment — leva `400` antes de chegar ao status online/offline (`AGENT_LASTSEEN_FILE`).
 - **`enforce` exige o perfil do nginx com mTLS (`default.conf`)**: nele, um pedido sem
   `X-Client-Cert-DN`, sem `X-Client-Cert-Serial` (com CRL ligada) ou com
   `X-Client-Cert-Verify` ≠ `SUCCESS` também leva 403. **Não use `enforce` no perfil

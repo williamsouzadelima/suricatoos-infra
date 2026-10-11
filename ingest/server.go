@@ -22,6 +22,11 @@ import (
 // in lockstep with schema/inventory.schema.json and the agent).
 const SchemaVersion = "1.1.0"
 
+// maxAgentIDBytes is the longest agent_id an inventory may carry: the enrollment
+// limit (control-plane enroll.ValidateAgentID, 1..128 bytes) — no enrolled agent's
+// id is longer, and the CN check would refuse it anyway.
+const maxAgentIDBytes = 128
+
 // schemaCompatible reports whether a received inventory's schema_version is
 // accepted. It matches on MAJOR only: minor/patch bumps add optional fields and
 // stay backward-compatible, so a 1.0.0 fleet and a 1.1.0 agent coexist during a
@@ -304,6 +309,12 @@ func (s *Server) Handler() http.Handler {
 		}
 		if inv.Agent.AgentID == "" || inv.OS.Family == "" {
 			http.Error(w, "inventário incompleto", http.StatusBadRequest)
+			return
+		}
+		// No enrolled agent has a longer id (enrollment: 1..128 bytes), in any mode —
+		// refuse it before it reaches lastSeen, its file and the logs.
+		if len(inv.Agent.AgentID) > maxAgentIDBytes {
+			http.Error(w, "agent_id excede 128 bytes", http.StatusBadRequest)
 			return
 		}
 		// agent_id vs the client certificate, and revocation (INGEST_AGENT_IDENTITY).

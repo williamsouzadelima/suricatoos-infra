@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -161,34 +163,81 @@ func TestInventoryMissingIdentityIsLoggedOncePerAgent(t *testing.T) {
 	}
 }
 
-// agent_id comes from a body (up to 8 MB) that the agent writes: log lines and the
-// log-once keys carry at most its first 128 bytes — the enrollment maximum — cut on a
-// character boundary.
-func TestInventoryLogsBoundTheAgentID(t *testing.T) {
+// An agent_id longer than 128 bytes — more than enrollment allows, so no enrolled
+// agent's — is refused with 400 in every mode, before it reaches lastSeen or its file.
+// 128 bytes is still fine; the limit counts bytes, not characters.
+func TestInventoryRejectsAnAgentIDLongerThan128Bytes(t *testing.T) {
+	for _, mode := range []IdentityMode{IdentityOff, IdentityLog, IdentityEnforce} {
+		path := filepath.Join(t.TempDir(), "lastseen.json")
+		t.Setenv("AGENT_LASTSEEN_FILE", path)
+		s, sink, _ := identityServer(t, mode, crlOK)
+		h := s.Handler()
+		for _, id := range []string{strings.Repeat("a", 129), strings.Repeat("é", 65)} { // 129 and 130 bytes
+			if w := postAs(h, id, "CN="+id+",O=acme", serialOK); w.Code != http.StatusBadRequest {
+				t.Fatalf("%s: agent_id of %d bytes = %d, want 400", mode, len(id), w.Code)
+			}
+			if _, seen := s.seen(id); seen {
+				t.Fatalf("%s: a refused agent_id reached lastSeen", mode)
+			}
+		}
+		if sink.Count() != 0 {
+			t.Fatalf("%s: a refused inventory reached the pipeline (sink=%d)", mode, sink.Count())
+		}
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Fatalf("%s: the lastSeen file was written for refused agent_ids (stat err=%v)", mode, err)
+		}
+		for _, id := range []string{strings.Repeat("a", 128), strings.Repeat("é", 64)} { // the boundary: 128 bytes
+			if w := postAs(h, id, "CN="+id+",O=acme", serialOK); w.Code != http.StatusAccepted {
+				t.Fatalf("%s: agent_id of 128 bytes = %d, want 202", mode, w.Code)
+			}
+		}
+	}
+}
+
+// The agent_id is at most 128 bytes once it gets here (longer ones are a 400, above),
+// but the X-Client-Cert-* values are whatever reached the ingest — an nginx forwards
+// the certificate's, a standalone deploy whatever the client sent: log lines and the
+// log-once keys carry at most their first 128 bytes, cut on a character boundary.
+func TestInventoryLogsBoundTheHeaderValues(t *testing.T) {
 	long := strings.Repeat("x", 10000)
 	s, _, logs := identityServer(t, IdentityLog, crlOK)
 	h := s.Handler()
-	postAs(h, long, dnA1, serialOK)      // agent_id≠CN line
-	postAs(h, long, "", "")              // missing-identity line, keyed for log-once
-	postAs(h, long+"tail", "", "")       // same first 128 bytes: same key, not logged again
-	accented := strings.Repeat("é", 100) // 200 bytes, 2 per character
-	postAs(h, accented, dnA1, serialOK)
+	postAs(h, "a1", "CN="+long+",O=acme", serialOK)                     // agent_id≠CN line with a huge CN
+	postIdentity(h, "a1", dnA1, serialOK, long)                         // verify≠SUCCESS line, keyed for log-once
+	postIdentity(h, "a1", dnA1, serialOK, long+"tail")                  // same first 128 bytes: same key, not logged again
+	postAs(h, "a1", "CN="+strings.Repeat("é", 100)+",O=acme", serialOK) // 200 bytes, 2 per character
 	if len(*logs) != 3 {
 		t.Fatalf("want 3 log lines, got %d: %.300q", len(*logs), *logs)
 	}
 	for _, l := range (*logs)[:2] {
 		if len(l) > 600 || !strings.Contains(l, strings.Repeat("x", 128)) || strings.Contains(l, strings.Repeat("x", 129)) {
-			t.Errorf("log line does not carry exactly the first 128 bytes of agent_id (len %d): %.300q", len(l), l)
+			t.Errorf("log line does not carry exactly the first 128 bytes of the header value (len %d): %.300q", len(l), l)
 		}
 	}
 	if l := (*logs)[2]; !strings.Contains(l, strings.Repeat("é", 64)) || strings.Contains(l, strings.Repeat("é", 65)) || !utf8.ValidString(l) {
-		t.Errorf("accented agent_id must be cut at 64 characters (128 bytes) on a character boundary: %q", l)
+		t.Errorf("an accented CN must be cut at 64 characters (128 bytes) on a character boundary: %q", l)
 	}
 	s.noted.mu.Lock()
 	defer s.noted.mu.Unlock()
 	for k := range s.noted.seen {
-		if len(k) > 256 {
-			t.Errorf("log-once key of %d bytes: the agent_id in it is not bounded", len(k))
+		if len(k) > 512 {
+			t.Errorf("log-once key of %d bytes: the value in it is not bounded", len(k))
+		}
+	}
+}
+
+func TestClipLogValue(t *testing.T) {
+	for in, want := range map[string]string{
+		"":                            "",
+		"agent-1":                     "agent-1",
+		strings.Repeat("a", 128):      strings.Repeat("a", 128),
+		strings.Repeat("a", 129):      strings.Repeat("a", 128) + "…",
+		strings.Repeat("é", 64):       strings.Repeat("é", 64),
+		strings.Repeat("é", 65):       strings.Repeat("é", 64) + "…",
+		"a" + strings.Repeat("é", 64): "a" + strings.Repeat("é", 63) + "…", // 129 bytes: no half character
+	} {
+		if got := clipLogValue(in); got != want {
+			t.Errorf("clipLogValue(%d bytes) = %q (%d bytes), want %d bytes", len(in), got, len(got), len(want))
 		}
 	}
 }

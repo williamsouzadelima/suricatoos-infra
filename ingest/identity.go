@@ -193,10 +193,12 @@ func (s *Server) agentIdentityOK(w http.ResponseWriter, r *http.Request, agentID
 	return true
 }
 
-// maxLogValue bounds what a log line (or a log-once key) carries of a value the
-// client chose: the agent_id comes from a body of up to 8 MB. 128 bytes is the
-// enrollment maximum for an agent id, so a real one is never cut.
-const maxLogValue = 128
+// maxLogValue bounds what a log line (or a log-once key) carries of a value that came
+// with the request: the X-Client-Cert-* headers (an nginx forwards the certificate's,
+// a standalone deploy whatever the client sent) and, as a second line of defense, the
+// agent_id (already refused above maxAgentIDBytes). The same 128 bytes as an agent
+// id, so a real one is never cut.
+const maxLogValue = maxAgentIDBytes
 
 // clipLogValue returns v cut to at most maxLogValue bytes on a character boundary,
 // marked with "…" when cut.
