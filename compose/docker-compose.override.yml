@@ -192,6 +192,19 @@ services:
       AI_PLANNER_USD_PER_1K: "${AI_PLANNER_USD_PER_1K:-0.005}"
       # Provedor a usar (id); vazio = primeiro habilitado.
       AI_PLANNER_PROVIDER_ID: "${AI_PLANNER_PROVIDER_ID:-}"
+      # --- Fila de comandos dos agentes ("Escanear agora") — durável OPCIONAL ---
+      # Sem COMMANDS_FILE a fila vive só em memória: um restart/deploy do control-plane
+      # perde os pedidos ainda não entregues. Para persistir (0600, escrita atômica,
+      # relida no boot), descomente as duas linhas abaixo ou defina COMMANDS_FILE no
+      # control-plane.env. Arquivo corrompido ou sem permissão de escrita = o
+      # control-plane não sobe (de propósito: nada de fila vazia silenciosa). Trocar
+      # o nome do arquivo num deploy que já opera = perder os pedidos pendentes.
+      # COMMANDS_TTL: comando PENDING/DELIVERED mais velho que isso vira EXPIRED e
+      # deixa de ser entregue (duração Go; padrão 24h). O estado de cada comando
+      # (PENDING/DELIVERED/ACKED/SUPERSEDED/EXPIRED) sai em
+      # GET /agent/api/v1/agents/<agent-id>/commands (Bearer ADMIN_SECRET).
+      # COMMANDS_FILE: "${COMMANDS_FILE:-/data/commands.json}"
+      # COMMANDS_TTL: "${COMMANDS_TTL:-24h}"
       # TTL curto p/ certs renovados (limita latência de revogação de cert vazado).
       RENEW_CERT_TTL: 720h
     volumes:

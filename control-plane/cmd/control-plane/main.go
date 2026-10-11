@@ -47,6 +47,12 @@
 //	AI_PLANNER_BUDGET_USD monthly spend ceiling (estimate); <=0/unset → no ceiling.
 //	AI_PLANNER_USD_PER_1K cost estimate per 1k tokens, for the budget gate.
 //	AI_PLANNER_PROVIDER_ID provider id to use; unset → the first enabled provider.
+//	COMMANDS_FILE         path to the JSON file persisting the agents' command queue
+//	                      ("Escanear agora"): 0600, atomic, reloaded at boot. A corrupt
+//	                      or unwritable file aborts startup. Absent → in-memory (a
+//	                      restart drops the pending commands).
+//	COMMANDS_TTL          how long a pending/delivered command stays deliverable before
+//	                      it expires (Go duration; default 24h).
 //
 // When CA_CERT_FILE/CA_KEY_FILE are set the CA survives restarts (agents keep
 // their mTLS certificates). Without them a new ephemeral CA is generated on
@@ -207,7 +213,29 @@ func main() {
 
 	// Command channel: operators enqueue "scan_now" for an agent (admin Bearer);
 	// the agent polls + acks over its mTLS channel and re-collects immediately.
-	cmdSvc := cpcommands.NewService(cpcommands.NewQueue())
+	// COMMANDS_FILE makes the queue durable, so a redeploy no longer drops pending
+	// requests; what became of each command is readable at
+	// GET /api/v1/agents/{id}/commands. A corrupt or unwritable file is fatal here
+	// rather than silently replaced by an empty queue.
+	cmdTTL := cpcommands.DefaultTTL
+	if v := os.Getenv("COMMANDS_TTL"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil && d > 0 {
+			cmdTTL = d
+		} else {
+			log.Printf("commands: COMMANDS_TTL inválido (%q) — usando o padrão %s", v, cmdTTL)
+		}
+	}
+	commandsFile := os.Getenv("COMMANDS_FILE")
+	cmdQueue, err := cpcommands.Open(cpcommands.Config{Path: commandsFile, TTL: cmdTTL})
+	if err != nil {
+		log.Fatalf("commands: %v", err)
+	}
+	if commandsFile != "" {
+		log.Printf("commands: fila de comandos DURÁVEL (%s, ttl=%s)", commandsFile, cmdTTL)
+	} else {
+		log.Printf("commands: fila de comandos EM MEMÓRIA — defina COMMANDS_FILE para os pedidos sobreviverem a um restart (ttl=%s)", cmdTTL)
+	}
+	cmdSvc := cpcommands.NewService(cmdQueue)
 
 	// Sensor dispatch + tenant registry (ADR-0007). The tenant admin API is always
 	// available (bearer-gated); the sensor-facing scan-job routes are mounted only
@@ -299,6 +327,8 @@ func main() {
 	mux.HandleFunc("POST /v1/commands/ack", cmdSvc.AckHandler())
 	// Operator/CLI trigger (admin Bearer) to enqueue an on-demand scan.
 	mux.HandleFunc("POST /api/v1/agents/{id}/commands", cmdSvc.EnqueueHandler(adminSecret))
+	// Operator/CLI view (admin Bearer) of what became of an agent's recent commands.
+	mux.HandleFunc("GET /api/v1/agents/{id}/commands", cmdSvc.HistoryHandler(adminSecret))
 	// Agents UI "Escanear agora" trigger — session-gated by nginx (GSAD_SID),
 	// no bearer; shares the same command queue.
 	mux.HandleFunc("POST /agents/scan", cmdSvc.SessionEnqueueHandler())
