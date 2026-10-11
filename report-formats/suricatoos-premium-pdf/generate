@@ -28,33 +28,102 @@
 # stylesheet and are resolved relative to this directory, which is the working
 # directory while the generator runs.
 # The intermediate files are stored under a temporary directory.
+#
+# Contract with gvmd: called as `sh ./generate <report.xml>` by the NON-root
+# gvmd user, with this bundle directory as the working directory. stdout
+# carries the PDF bytes and NOTHING else; every diagnostic goes to stderr.
+# Plain POSIX sh (dash in the gvmd image): no bashisms.
+#
+# FAIL LOUD. pdflatex in batchmode still writes a PDF after TeX errors, so "a
+# PDF exists" proves nothing: the previous version cat'ed whatever came out and
+# delivered mutilated documents (text dropped or reordered, Latin Modern instead
+# of Plex) with exit 0. Every step is checked now; on any failure the evidence
+# goes to stderr, NOTHING goes to stdout, and the exit status is non-zero, so
+# gvmd reports the failure instead of serving a broken document.
 
-TMP=`mktemp -d` || exit 1
+set -eu
+
+die () {
+  echo "generate: ERROR: $*" >&2
+  exit 1
+}
+
+warn () {
+  echo "generate: warning: $*" >&2
+}
+
+# First lines of a file on stderr, indented so they read as an excerpt.
+excerpt () {
+  sed -n "1,${2}p" "$1" | sed 's/^/  | /' >&2
+}
+
+if [ "$#" -lt 1 ] || [ -z "$1" ]; then
+  die "usage: sh ./generate <report.xml>"
+fi
+REPORT_XML=$1
+[ -r "${REPORT_XML}" ] || die "report XML not readable: ${REPORT_XML}"
+
+# Bundle members the report cannot be built without. A missing one is FATAL,
+# and checked before any work starts: latex.xsl IS the report; the .sty modules
+# are the design system; plex-min.tar.gz is the typeface (without it pdflatex
+# falls back to Latin Modern without a word); the logo PDFs go on the cover and
+# on every page header. The .sty list is a floor, not the inventory: the
+# `cp ./*.sty' below still ships every module present, and one added later
+# without being listed here is still caught by the TeX-log check further down.
+for f in latex.xsl \
+         suricatoos-tokens.sty suricatoos-page.sty suricatoos-hex.sty \
+         suricatoos-blocks.sty suricatoos-report.sty \
+         plex-min.tar.gz \
+         suricatoos-wordmark-navy.pdf suricatoos-wordmark-white.pdf \
+         suricatoos-mark-navy.pdf suricatoos-mark-white.pdf; do
+  [ -s "./${f}" ] || die "bundle file missing or empty: ${f} (in $(pwd))"
+done
+
+TMP=$(mktemp -d) || die "mktemp -d failed"
+
+# The per-run temp dir goes away on ANY exit: success, die, or a signal (each
+# signal trap turns into a plain exit, which runs the EXIT trap as well). The
+# previous `cat ... && rm -rf' leaked the directory whenever cat failed.
+cleanup () {
+  rm -rf "${TMP}" || warn "could not remove ${TMP}"
+}
+trap cleanup EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 # Make every bundled asset available next to the intermediate .tex file. pdflatex
 # runs with -output-directory ${TMP} and also SEARCHES that directory for inputs,
 # so the logos (\includegraphics) and the suricatoos-*.sty design modules
 # (\usepackage) are found there. TEXINPUTS states the same thing explicitly; the
 # trailing ':' keeps the compiled-in default path.
-cp ./suricatoos-*.pdf "${TMP}/" 2>/dev/null
-cp ./*.sty "${TMP}/" 2>/dev/null
+# A failed copy is fatal: without a logo or a module pdflatex either stops or
+# typesets a half-styled document.
+cp ./suricatoos-*.pdf "${TMP}/" || die "could not copy the logo PDFs into ${TMP}"
+cp ./*.sty "${TMP}/" || die "could not copy the .sty modules into ${TMP}"
 # Catalogo de traducao dos NVTs, um por idioma. O latex.xsl o carrega com
 # document(), e o caminho resolve relativo ao proprio .xsl -- que roda a partir
 # deste diretorio, nao do ${TMP}. Copiar mesmo assim mantem o bundle coeso se o
 # xsltproc for invocado de outro lugar.
-cp ./nvt-i18n-*.xml "${TMP}/" 2>/dev/null
+# Sem catalogo o relatorio nao quebra (o texto do NVT cai no do fornecedor), por
+# isso a falta e' so' um aviso -- mas um aviso VISIVEL, nao mais silenciado.
+cp ./nvt-i18n-*.xml "${TMP}/" ||
+  warn "no NVT translation catalog (nvt-i18n-*.xml) in the bundle: NVT text renders in the vendor's language"
 TEXINPUTS="${TMP}:"; export TEXINPUTS
 
 # IBM Plex ships with the bundle as a TDS subtree, not with the container: the
 # gvmd image has no Plex, and pdflatex silently falls back to Latin Modern when
 # it cannot find the faces. Unpack it and point TEXMFHOME at it.
+# A failed unpack is FATAL for exactly that reason: its errors used to go to
+# /dev/null, and the report then came out in Latin Modern with exit 0.
 #
 # HOME and TEXMFVAR matter as much as TEXMFHOME here: the gvmd user runs with
 # HOME=/nonexistent, so kpathsea has nowhere to put its font cache and mktexpk
 # (used whenever a glyph falls back to a Computer Modern bitmap) dies, taking the
 # whole run with it. Both must point inside the per-run temp dir.
 mkdir -p "${TMP}/texmf" "${TMP}/tv"
-tar xzf ./plex-min.tar.gz -C "${TMP}/texmf" 2>/dev/null
+tar xzf ./plex-min.tar.gz -C "${TMP}/texmf" ||
+  die "could not unpack plex-min.tar.gz (IBM Plex); refusing to fall back to Latin Modern"
 TEXMFHOME="${TMP}/texmf"; export TEXMFHOME
 TEXMFVAR="${TMP}/tv";     export TEXMFVAR
 HOME="${TMP}";            export HOME
@@ -67,9 +136,27 @@ HOME="${TMP}";            export HOME
 # The `--stringparam lang <code>` selects the report language (en | pt_BR | es).
 # build-feed-xml.py rewrites this exact token per language to produce the three
 # per-language report_format objects, so keep it on one line, verbatim.
-xsltproc --stringparam lang en ./latex.xsl $1 > ${TMP}/report.tex 2>${TMP}/err.out
+rc=0
+xsltproc --stringparam lang en ./latex.xsl "${REPORT_XML}" > "${TMP}/report.tex" 2>"${TMP}/err.out" || rc=$?
+if [ "${rc}" -ne 0 ]; then
+  echo "generate: ERROR: xsltproc exited ${rc}; first lines of its stderr:" >&2
+  excerpt "${TMP}/err.out" 20
+  exit 1
+fi
+if [ -s "${TMP}/err.out" ]; then
+  warn "xsltproc succeeded but wrote to stderr; first lines:"
+  excerpt "${TMP}/err.out" 20
+fi
+# xsltproc can also exit 0 with NO output: latex.xsl treats a root
+# <report extension="xml"> as a wrapper and looks for an inner <report>, and
+# without one it emits nothing. An empty .tex is a failure, not a blank report.
+[ -s "${TMP}/report.tex" ] ||
+  die "xsltproc exited 0 but produced an empty .tex (a wrapper <report> without an inner one?)"
 
-pdflatex -interaction batchmode -output-directory ${TMP} ${TMP}/report.tex > /dev/null 2>&1
+# First pass. Its exit status is recorded, not acted upon: the verdict below is
+# taken on the second pass, which is the one whose PDF gets delivered.
+rc1=0
+pdflatex -interaction batchmode -output-directory "${TMP}" "${TMP}/report.tex" > /dev/null 2>&1 || rc1=$?
 
 # Run a second time to resolve references, the table of contents and the
 # "page X of Y" page numbering assembled during the first run.
@@ -77,6 +164,37 @@ pdflatex -interaction batchmode -output-directory ${TMP} ${TMP}/report.tex > /de
 # "&" + wait, but under gvmd's non-interactive system() shell that wait does not
 # reliably block, so the following cat races the second pdflatex still truncating
 # report.pdf and the report downloads as 0 bytes. Sequential foreground is robust.
-pdflatex -interaction batchmode -output-directory ${TMP} ${TMP}/report.tex > /dev/null 2>&1
+# The first pass's PDF is removed beforehand, so a PDF found afterwards was
+# written by THIS pass and is not a leftover of the previous one.
+rm -f "${TMP}/report.pdf"
+rc2=0
+pdflatex -interaction batchmode -output-directory "${TMP}" "${TMP}/report.tex" > /dev/null 2>&1 || rc2=$?
 
-cat ${TMP}/report.pdf && rm -rf ${TMP}
+# Verdict. pdflatex exits non-zero after any TeX error, yet in batchmode it
+# STILL writes the PDF, so three things are checked: the exit status, the log
+# (TeX starts every error line with '!'), and the PDF itself.
+LOG="${TMP}/report.log"
+PDF="${TMP}/report.pdf"
+problems=
+[ "${rc2}" -eq 0 ] || problems="${problems}, pdflatex exited ${rc2}"
+if [ ! -f "${LOG}" ]; then
+  problems="${problems}, no report.log"
+elif grep -q '^!' "${LOG}"; then
+  problems="${problems}, TeX errors in report.log"
+fi
+[ -s "${PDF}" ] || problems="${problems}, report.pdf missing or empty"
+if [ -n "${problems}" ]; then
+  echo "generate: ERROR: ${problems#, } (pdflatex exit: first pass ${rc1}, second pass ${rc2}); no PDF emitted." >&2
+  if [ -f "${LOG}" ] && grep -q '^!' "${LOG}"; then
+    echo "generate: first TeX errors in report.log:" >&2
+    awk '/^!/ { n = 3 } n > 0 { print "  | " $0; n-- }' "${LOG}" | sed -n '1,30p' >&2
+  elif [ -f "${LOG}" ]; then
+    echo "generate: last lines of report.log:" >&2
+    tail -n 15 "${LOG}" | sed 's/^/  | /' >&2
+  fi
+  exit 1
+fi
+
+# Only now, and only the PDF, goes to stdout.
+cat "${PDF}" || die "could not write the PDF to stdout"
+exit 0
