@@ -638,7 +638,7 @@ Formato do arquivo (`golden-v1.json`, UTF-8, um objeto JSON):
 | `vectors[].own_node_id` | `node_id` do nó que verifica |
 | `vectors[].verify_at` | o "agora" da verificação (`utc_time`) |
 | `vectors[].command_json` | os bytes **exatos** do envelope como o hub os envia (string) |
-| `vectors[].canonical` | a forma canônica exata (string, com os `\n`) |
+| `vectors[].canonical` | a forma canônica exata (string, com os `\n`) sobre a qual a assinatura do `command_json` foi feita: nos `bad_signature/<campo>`, a de **antes** da alteração do campo (no `bad_signature/remediation-domain`, com o domínio da remediação na 1ª linha); nos demais, a forma dos valores transmitidos (nos `bad_envelope` que tiram um campo do envelope, a dos valores que o hub assinou) |
 | `vectors[].canonical_sha256` | sha256 hex de `canonical` |
 | `vectors[].payload_sha256` | sha256 hex dos bytes crus de `payload` |
 | `vectors[].seen` | opcional: sha256 das formas canônicas já **gravadas** no store (decisão final) sob o mesmo nonce/`command_id` (vetores das linhas 2a e 5) |
