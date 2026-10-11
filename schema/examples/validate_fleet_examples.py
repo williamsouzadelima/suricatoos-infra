@@ -6,15 +6,18 @@ $defs entry, it targets, OFFLINE: the six schemas are loaded from disk into a
 `referencing` registry keyed by their $id; any other reference raises instead of
 being fetched over the network.
 
-  valid/<schema>/<case>.json    must parse (no duplicate key), validate and carry
-                                the right raw-byte hashes: a signed command envelope
-                                its payload_sha256 and a real Ed25519 signature, a
-                                state snapshot its content_sha256
+  valid/<schema>/<case>.json    must parse (no duplicate key), validate (with every
+                                integer written as one: no fraction, no exponent) and
+                                carry the right raw-byte hashes: a signed command
+                                envelope its payload_sha256 and a real Ed25519
+                                signature, a state snapshot its content_sha256
   invalid/<schema>/<case>.json  must fail exactly as its "expect" in fleet/index.json
                                 says: {keyword, path} for a schema error (keyword +
                                 instance JSON pointer), or {check, path} for
                                 json_syntax (not exactly one JSON value, e.g. data
-                                after it) | duplicate_key | payload_sha256 |
+                                after it) | duplicate_key | integer_lexical (an
+                                integer written with a fraction or exponent, which
+                                JSON Schema alone accepts) | payload_sha256 |
                                 signature | content_sha256
 
 A case named '<def>--<rest>.json' targets fleet-<schema>.schema.json#/$defs/<def>;
@@ -50,9 +53,10 @@ from pathlib import Path
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-from jsonschema import Draft202012Validator
+from jsonschema import Draft202012Validator, validators
 from referencing import Registry, Resource
 from referencing.exceptions import NoSuchResource, Unresolvable
+from referencing.jsonschema import DRAFT202012
 
 HERE = Path(__file__).resolve().parent
 SCHEMA_DIR = HERE.parent
@@ -69,6 +73,11 @@ SIGNED_FIELDS = ("schema_version", "command_id", "node_id", "tenant", "type", "i
 TEST_PUB = Ed25519PrivateKey.from_private_bytes(
     hashlib.sha256(b"suricatoos-fleet-command-v1/golden-test-key").digest()).public_key()
 TEST_SPKI = TEST_PUB.public_bytes(serialization.Encoding.DER, serialization.PublicFormat.SubjectPublicKeyInfo)
+
+# ADR-0011 "Codificação JSON": an integer has no fraction and no exponent. JSON Schema accepts 100.0 as an
+# integer, so the refusal is LEXICAL: json parses 100.0 / 1e2 to float, and this validator accepts only int.
+LexicalInt = validators.extend(Draft202012Validator, type_checker=Draft202012Validator.TYPE_CHECKER.redefine(
+    "integer", lambda _checker, x: isinstance(x, int) and not isinstance(x, bool)))
 
 
 def canonical(env):
@@ -266,16 +275,22 @@ def main():
     registry = Registry(retrieve=offline).with_resources(
         [(s["$id"], Resource.from_contents(s)) for s in schemas.values()]
     )
-    validators = {}
+    # The same six schemas without "$schema": following a $ref into a document that declares "$schema" would
+    # switch LexicalInt back to the stock 2020-12 validator (jsonschema picks the class from "$schema").
+    lexical_registry = Registry(retrieve=offline).with_resources(
+        [(s["$id"], DRAFT202012.create_resource({k: v for k, v in s.items() if k != "$schema"}))
+         for s in schemas.values()]
+    )
+    cache = {}
 
-    def validator(target):
-        if target not in validators:
-            validators[target] = Draft202012Validator(
+    def validator(target, cls=Draft202012Validator):
+        if (target, cls) not in cache:
+            cache[(target, cls)] = cls(
                 {"$schema": "https://json-schema.org/draft/2020-12/schema", "$ref": BASE + target},
-                registry=registry,
+                registry=lexical_registry if cls is LexicalInt else registry,
                 format_checker=Draft202012Validator.FORMAT_CHECKER,
             )
-        return validators[target]
+        return cache[(target, cls)]
 
     def valid_against(target, inst):
         return not any(True for _ in validator(target).iter_errors(inst))
@@ -331,6 +346,11 @@ def main():
             except Unresolvable as exc:
                 surprises.append(f"{rel}: unresolvable $ref with the offline registry (nothing fetched): {exc}")
                 continue
+        if failure is None and not errors:
+            lexical = [p for v, p in flat_errors(validator(target, LexicalInt).iter_errors(inst)) if v == "type"]
+            if lexical:
+                failure = {"check": "integer_lexical", "path": lexical[-1],
+                           "detail": f"integer written with a fraction or exponent at '{lexical[-1]}'"}
         if failure is None and not errors:
             for ptr, checker, start in hashed(target, text):
                 problem = checker(text, start)

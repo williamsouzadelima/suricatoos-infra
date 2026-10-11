@@ -76,7 +76,7 @@
       }
     },
     "data_report_completed": {
-      "description": "summary = counts only; the detailed findings need an explicit report.summary or report.export command",
+      "description": "summary = counts only; detailed findings leave the node ONLY through an explicit report.export command (report.summary returns counts too)",
       "type": "object",
       "required": ["report_id", "task_id", "scan_start", "scan_end", "counts", "hosts_count"],
       "additionalProperties": false,
@@ -142,7 +142,7 @@
         "command_id": { "$ref": "fleet-command.schema.json#/$defs/uuid" },
         "type": { "$ref": "fleet-command.schema.json#/$defs/command_type_any" },
         "reason": { "enum": ["tenant_unknown", "unsupported", "type_not_allowed", "rate_limited", "bad_payload", "unsupported_report_variant", "scope_denied"] },
-        "detail": { "type": "string", "maxLength": 512, "allOf": [ { "$ref": "fleet-command.schema.json#/$defs/no_control" } ] }
+        "detail": { "type": "string", "maxLength": 512, "allOf": [ { "$ref": "fleet-command.schema.json#/$defs/no_control" } ], "description": "short, connector-generated; never finding data" }
       }
     }
   }

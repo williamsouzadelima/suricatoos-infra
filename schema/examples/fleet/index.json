@@ -1,7 +1,7 @@
 {
   "format": "suricatoos-fleet-examples/1",
   "contract": "docs/adr/0011-gestao-remota-da-frota.md",
-  "naming": "valid|invalid/<schema>/<case>.json holds ONE JSON value for schema/fleet-<schema>.schema.json (schema = command|enroll|heartbeat|state|event|result). A case named '<def>--<rest>' targets that schema's #/$defs/<def>; any other case targets the schema root; 'target' repeats that $ref. An invalid case must fail exactly as 'expect' says, and only for that reason: {keyword, path} = a JSON Schema error with that keyword at that instance path (JSON pointer, '' = root); {check, path} = json_syntax (not exactly one JSON value, e.g. data after it), duplicate_key (any level), payload_sha256 / signature of the signed envelope at that path, or content_sha256 of the state snapshot.",
+  "naming": "valid|invalid/<schema>/<case>.json holds ONE JSON value for schema/fleet-<schema>.schema.json (schema = command|enroll|heartbeat|state|event|result). A case named '<def>--<rest>' targets that schema's #/$defs/<def>; any other case targets the schema root; 'target' repeats that $ref. An invalid case must fail exactly as 'expect' says, and only for that reason: {keyword, path} = a JSON Schema error with that keyword at that instance path (JSON pointer, '' = root); {check, path} = json_syntax (not exactly one JSON value, e.g. data after it), duplicate_key (any level), integer_lexical (an integer written with a fraction or exponent, e.g. 70.0 or 7e1: JSON Schema alone accepts it, the ADR refuses it lexically), payload_sha256 / signature of the signed envelope at that path, or content_sha256 of the state snapshot.",
   "values": "All values are fictitious: tenant 'acme', node 'node-lab-0001', RFC 5737 documentation IPs, exemplo.com.br, made-up ids. Command envelopes are COMPACT (the exact bytes a conforming hub sends) and REALLY signed with the PUBLIC golden test key of ADR-0011 (seed = SHA-256 of 'suricatoos-fleet-command-v1/golden-test-key'), each with its own command_id and nonce; valid/command/task-start.json is the ADR worked example verbatim. Never a production key. State documents are COMPACT too: content_sha256 is the SHA-256 of the raw 'data' span exactly as it is in the file (what a verifier hashes), and each valid/state/audit_entry--*.json is a line of the audit_tail chains, byte for byte.",
   "cases": [
     {
@@ -284,6 +284,24 @@
       }
     },
     {
+      "file": "invalid/command/report-summary-min-qod-exponent.json",
+      "target": "fleet-command.schema.json",
+      "description": "obs. 6: an integer with an exponent (7e1) is refused lexically too",
+      "expect": {
+        "check": "integer_lexical",
+        "path": "/payload/min_qod"
+      }
+    },
+    {
+      "file": "invalid/command/report-summary-min-qod-fraction.json",
+      "target": "fleet-command.schema.json",
+      "description": "obs. 6: an integer with a fraction is refused LEXICALLY (JSON Schema alone accepts 70.0 as an integer); hash and signature are fine",
+      "expect": {
+        "check": "integer_lexical",
+        "path": "/payload/min_qod"
+      }
+    },
+    {
       "file": "invalid/command/report-summary-min-qod-over-100.json",
       "target": "fleet-command.schema.json",
       "description": "min_qod is 0-100",
@@ -542,6 +560,15 @@
       "expect": {
         "keyword": "required",
         "path": "/events/0"
+      }
+    },
+    {
+      "file": "invalid/heartbeat/heartbeat_request--count-with-fraction.json",
+      "target": "fleet-heartbeat.schema.json#/$defs/heartbeat_request",
+      "description": "obs. 6: node->hub bodies too: the hub refuses 100.0 for an integer lexically (400)",
+      "expect": {
+        "check": "integer_lexical",
+        "path": "/outbox_events"
       }
     },
     {

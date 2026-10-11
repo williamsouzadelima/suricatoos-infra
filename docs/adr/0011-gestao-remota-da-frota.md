@@ -193,7 +193,7 @@ artefatos, rotas `/fleet/v1/*`.
 | `FLEET_ENABLED` | `false` | chave mestra; `false` → o conector não abre conexão nenhuma |
 | `FLEET_HUB_URL` | — | URL base `https://` do hub (D5) |
 | `FLEET_HUB_CA_FILE` | vazio | PEM da CA que emitiu o certificado de **servidor** do hub (hub privado); vazio = trust store do sistema. Hostname sempre verificado |
-| `FLEET_HUB_PIN` | — | `sha256:<hex>` do SPKI do certificado de servidor do hub **ou** de uma CA da cadeia dele — **obrigatório**; conferido em **todo** handshake, enroll inclusive, além da validação da cadeia (redes de cliente com CA de interceptação) |
+| `FLEET_HUB_PIN` | — | `sha256:<hex>` do SPKI do certificado de servidor do hub **ou** de uma CA da cadeia dele — **obrigatório**; aceita **lista** separada por vírgula (rotação do certificado do hub: atual + próximo), e basta casar um; conferido em **todo** handshake, enroll inclusive, além da validação da cadeia (redes de cliente com CA de interceptação) |
 | `FLEET_ENROLL_TOKEN` | — | token `ft_<id>.<secret>` de uso único; só até o enroll, depois ignorado |
 | `FLEET_CA_PIN` | — | `sha256:<hex>` do DER da CA da frota — **obrigatório** para o enroll |
 | `FLEET_COMMAND_KEY_PIN` | — | `sha256:<hex>` do SPKI DER da chave de comando — **obrigatório** para o enroll |
@@ -310,7 +310,10 @@ exemplo trabalhado deste ADR byte a byte.
   que só difere na caixa (`"Node_ID"`) é chave desconhecida, nunca um apelido de `node_id`. Atenção: o
   `encoding/json` do Go casa chave sem diferenciar caixa e aceita duplicata — o lado Go faz uma passada por
   tokens antes do decode.
-- **Inteiros sem fração nem expoente** (`100`, nunca `100.0` nem `1e2`).
+- **Inteiros sem fração nem expoente** (`100`, nunca `100.0` nem `1e2`). A recusa é **léxica**, no JSON cru: o
+  JSON Schema aceita `100.0` como `integer`, então validar o schema não basta. É obrigação do parser (F2.1) nos
+  dois sentidos: o nó no envelope (`bad_envelope`) e o hub nos corpos nó→hub (`400`). O
+  `validate_fleet_examples.py` confere isso nos exemplos (checagem `integer_lexical`).
 - **Bytes verbatim:** `payload_sha256` (comando) e `content_sha256` (estado) são sobre os bytes do valor **como
   transmitidos**. Quem verifica hasheia o trecho cru (num hub JS/TS, com parser que preserve o trecho —
   `JSON.stringify` de novo não serve). O emissor serializa compacto e **sem escape de HTML**: `<`, `>`, `&` e
@@ -331,10 +334,11 @@ exemplo trabalhado deste ADR byte a byte.
 - **Três pins out-of-band, todos obrigatórios.** O bundle do hub traz `FLEET_HUB_PIN`, `FLEET_CA_PIN` e
   `FLEET_COMMAND_KEY_PIN`. `FLEET_HUB_PIN` (SPKI do certificado de servidor do hub ou de uma CA da cadeia) é
   conferido em **todo** handshake, enroll inclusive, além da validação normal — redes de cliente costumam ter
-  CA de interceptação no trust store. No enroll, o nó **recusa** a resposta
-  (`fleet-enroll.schema.json#/$defs/enroll_response`) se `sha256(DER da CA)` ou `sha256(SPKI da chave de
-  comando)` não bater. Assim um MITM no enroll não planta a sua chave de comando. O conector também recusa
-  pinar a chave de **teste** dos golden vectors (abaixo).
+  CA de interceptação no trust store. Ele aceita uma lista separada por vírgula (basta casar um), para o hub
+  trocar de certificado sem quebrar a frota: o env leva o pin atual e o próximo, e o antigo sai depois da
+  troca. No enroll, o nó **recusa** a resposta (`fleet-enroll.schema.json#/$defs/enroll_response`) se
+  `sha256(DER da CA)` ou `sha256(SPKI da chave de comando)` não bater. Assim um MITM no enroll não planta a
+  sua chave de comando. O conector também recusa pinar a chave de **teste** dos golden vectors (abaixo).
 - **Renew** (`POST /fleet/v1/renew`, `fleet-enroll.schema.json#/$defs/renew_request`): autenticado pelo
   certificado **atual** (mTLS); o CSR mantém `CN = node_id`; o hub recusa certificado revogado (fail-closed,
   como `enroll.Renew`). TTL recomendado de 30 dias, renovação 7 dias antes do fim; o cliente recarrega o
@@ -390,8 +394,8 @@ Regras (copiadas da disciplina de `control-plane/remediation/canonical.go`):
   ⇒ `bad_envelope`. Diferente da remediação, os dois são **obrigatórios** (vazio ⇒ `bad_envelope`).
 - `schema_version` = `MAJOR.MINOR.0` de uma versão que o nó suporta (`1.0.0` no v1; o PATCH nunca vai ao fio);
   `command_id` = UUID minúsculo; `nonce` = 32 bytes de CSPRNG em hex minúsculo
-  (64 caracteres); `issued_by` = identificador do operador do hub (recomendado **pseudônimo**, ex.
-  `op-7f3a`; ver LGPD).
+  (64 caracteres); `issued_by` = identificador **pseudônimo** do operador do hub, obrigatório (ex. `op-7f3a`;
+  o schema recusa `@` e espaço; ver LGPD).
 - `payload_sha256` = sha256 hex minúsculo dos **bytes exatos do valor `payload` como transmitidos**. O hub DEVE
   serializar o payload **compacto** (sem espaço insignificante) e hashear exatamente esses bytes; o nó hasheia
   os bytes crus recebidos (`json.RawMessage`), **nunca** uma re-serialização.
@@ -508,9 +512,10 @@ Na linha 0, `type` só precisa casar `^[a-z][a-z_]*\.[a-z][a-z_]*$` (`command_ty
   aceita resultados de comando entregue por **≥ 7 dias** após `not_after` (a ação aconteceu dentro da janela).
 - **Segredo (`enroll_token.create`).** O token fica **só em memória** até o hub aceitar o resultado (`2xx`);
   nunca vai a disco, log ou auditoria. Na reentrega desse comando o nó reenvia **só o ack** (o journal não tem
-  o segredo). Reinício antes do `2xx` do resultado ⇒ no boot o nó **revoga** o token pela API admin local e
-  reporta `failed` com `secret_lost`; o hub trata um `secret_lost` como **revogação autoritativa**, mesmo que
-  já tenha recebido o segredo (corrida "entregue sem confirmação + reinício").
+  o segredo). Reinício antes do `2xx` do resultado ⇒ no boot o nó **revoga só o token**, pela rota da F2.2
+  que não toca certificados (a mesma do `enroll_token.revoke`), e reporta `failed` com `secret_lost`. O hub
+  trata um `secret_lost` como **revogação autoritativa**, mesmo que já tenha recebido o segredo (corrida
+  "entregue sem confirmação + reinício").
 
 ### Golden vectors (gerados na F2.1)
 
@@ -551,19 +556,26 @@ O vetor `accept/task.start` é o exemplo acima: `command_json` = o envelope, `ca
 `canonical_sha256` = `a9a4d1759628b5708691988ce1512e3cbfa6881f90dfc0000d3fea08edcb7d74`,
 `own_node_id` = `node-lab-0001`, `verify_at` = `2026-10-11T12:30:00Z`.
 
-Vetores obrigatórios: `accept` (um por formato de payload);
-`payload_mismatch` (payload trocado); `bad_signature` (cada um dos 10 campos alterado após assinar; outra
-chave; mensagem assinada com o domínio da remediação); `not_yet_valid`/`expired` **nas bordas** (`issued_at −
-skew` e `not_after + skew` aceitos; ±1 s rejeitado); `bad_window` (`not_after ≤ issued_at`; janela > 24 h);
-`wrong_node`; `replay` (mesmo `command_id` — ou mesmo nonce — com outra forma canônica: o hub re-assinou; o
-vetor traz em `seen` as formas canônicas já gravadas); `redelivery` (a própria forma em `seen`, com `verify_at`
-depois de `not_after` + skew: nunca `expired`); `bad_envelope` (fração de segundo, offset, nonce maiúsculo, campo faltando, campo
-desconhecido, `schema_version` que o nó não suporta — `1.1.0` num nó só `1.0` — ou com PATCH, `1.0.1`); payload com UTF-8 (acentos) hasheado sobre os bytes crus. Vetores
-**só-canonical** com valores contendo `\n`, `=` e `:` (que o envelope v1 recusa por formato) provam que o
-framing é injetivo mesmo assim — e que um *join* ingênuo colidiria. Da "Codificação JSON": payload com `<`, `>`, `&`
-e U+2028 literais (`accept`) e o mesmo payload re-escapado em HTML depois do hash (`payload_mismatch`); chave
-duplicada no envelope e no payload, chave com caixa diferente (`"Node_ID"`), dado depois do valor e inteiro com
-fração (`bad_envelope`).
+Vetores obrigatórios:
+
+- `accept`: um por formato de payload, e um payload com UTF-8 (acentos) hasheado sobre os bytes crus.
+- `payload_mismatch`: payload trocado.
+- `bad_signature`: cada um dos 10 campos alterado após assinar; outra chave; mensagem assinada com o domínio
+  da remediação.
+- `not_yet_valid`/`expired` **nas bordas**: `issued_at − skew` e `not_after + skew` aceitos; ±1 s rejeitado.
+- `bad_window`: `not_after ≤ issued_at`; janela > 24 h.
+- `wrong_node`.
+- `replay`: mesmo `command_id` — ou mesmo nonce — com outra forma canônica (o hub re-assinou); o vetor traz em
+  `seen` as formas canônicas já gravadas.
+- `redelivery`: a própria forma em `seen`, com `verify_at` depois de `not_after` + skew — nunca `expired`.
+- `bad_envelope`: fração de segundo, offset, nonce maiúsculo, campo faltando, campo desconhecido,
+  `schema_version` que o nó não suporta (`1.1.0` num nó só `1.0`) ou com PATCH, `1.0.1`.
+- Vetores **só-canonical** com valores contendo `\n`, `=` e `:` (que o envelope v1 recusa por formato) provam
+  que o framing é injetivo mesmo assim — e que um *join* ingênuo colidiria.
+- Da "Codificação JSON": payload com `<`, `>`, `&` e U+2028 literais (`accept`) e o mesmo payload re-escapado
+  em HTML depois do hash (`payload_mismatch`); chave duplicada no envelope e no payload, chave com caixa
+  diferente (`"Node_ID"`), dado depois do valor e inteiro com fração ou expoente, `70.0` e `7e1`
+  (`bad_envelope`, recusa léxica).
 
 ### Rotas do hub
 
@@ -833,7 +845,7 @@ Eventos de escopo **nó** não levam `tenant`; os de escopo **tenant** levam sem
 | Ameaça | Mitigações | Residual (honesto) |
 |---|---|---|
 | **Hub comprometido** (fila + chave de comando) | catálogo fechado (sem escopo, tenant, usuários/RBAC, credenciais de alvo, aprovação de remediação, passthrough GMP); escrita **opt-in por nó** (padrão = só operação e leitura); escopo local e inalterável remotamente (D2), re-checado também ao iniciar ou agendar tarefa; comando de objeto único; delete só para a lixeira; `report.summary` só com contagens; orçamentos locais de 120 aceitos/h e 30 sensíveis/h; auditoria local encadeada; kill switch local (`FLEET_ENABLED=false` ou parar o profile) | dentro da política local, o hub age: inicia/para tarefas existentes, lê contagens e exporta relatórios (permitidos por padrão; quem não quiser remove `task.*`/`report.*` de `allow`). Se o operador liberar os comandos de token: **(a)** `enroll_token.create` minta tokens `agent-endpoint` (≤ 1000 usos, ≤ 168 h) para qualquer tenant conhecido do nó, e um agente falso injeta inventário falso naquele tenant; **(b)** `enroll_token.revoke` revoga tokens e trava enrolls novos (DoS de onboarding) — certificados já emitidos não caem. **(c)** Com comandos permitidos, o hub faz crescer o fluxo `exec` da auditoria (3 linhas por aceito) para empurrar a rotação. O orçamento global limita isso a 120 × 24 × 3 = 8 640 linhas/dia: ~3,7 MB/dia com linhas típicas (~0,4 KiB), e os 256 MiB do `exec` guardam ~2,5 meses. No pior caso que os campos limitados permitem (`issued_by` de 128 caracteres e os 30 sensíveis/h como `target.create` opt-in com 64 hosts IPv6 na linha), ~10 MB/dia, ~4 semanas. Sem o orçamento global (~2 aceitos/s no piso de poll), seriam ~200 MB/dia, pouco mais de 1 dia. A regra de lacuna do hub não ajuda aqui, porque a testemunha é o próprio atacante |
-| **MITM** nó↔hub | TLS ≥ 1.3 + mTLS; servidor verificado (`FLEET_HUB_CA_FILE` ou trust store; hostname sempre) **e pinado** (`FLEET_HUB_PIN`, obrigatório — uma CA de interceptação na rede do cliente não basta); comando assinado com chave **separada** da CA e do TLS (um terminador TLS não forja comando); pins da CA da frota e da chave de comando entregues out-of-band no enroll; envelope não autenticado não gera ack nem linha individual de auditoria (só contagem), então o MITM não finaliza comando legítimo nem enche a auditoria | com TLS quebrado, o atacante lê estado/resultados e atrasa ou derruba comandos (DoS); não executa nada |
+| **MITM** nó↔hub | TLS ≥ 1.3 + mTLS; servidor verificado (`FLEET_HUB_CA_FILE` ou trust store; hostname sempre) **e pinado** (`FLEET_HUB_PIN`, obrigatório, lista para rotação — uma CA de interceptação na rede do cliente não basta); comando assinado com chave **separada** da CA e do TLS (um terminador TLS não forja comando); pins da CA da frota e da chave de comando entregues out-of-band no enroll; envelope não autenticado não gera ack nem linha individual de auditoria (só contagem), então o MITM não finaliza comando legítimo nem enche a auditoria | com TLS quebrado, o atacante lê estado/resultados e atrasa ou derruba comandos (DoS); não executa nada |
 | **Replay** | nonce **e** `command_id` indexados no store persistido, decisão final gravada antes do ack; o hub nunca re-assina um `command_id`; janela ≤ 24 h; relógio de verificação monotônico (marca d'água persistida); `node_id` e `tenant` dentro da assinatura; store ilegível ou ausente, ou (re)enroll ⇒ piso de replay, e no (re)enroll o hub descarta os comandos pendentes do `node_id` | — |
 | **Nó comprometido** | o certificado identifica só aquele nó (CN=`node_id`, `OU=fleet-node`, CA da frota separada da CA de enroll); o hub autoriza tudo pelo CN (`403`/`404`); o nó não tem chave de assinatura; o hub trata **todo** dado de nó como não-confiável — nunca deriva autorização dele, nunca o cruza para outro nó ou tenant, e escapa ao renderizar (nomes são texto livre: XSS armazenado) | o nó mente sobre o próprio estado e resultados; revogar no hub corta o canal, não o nó |
 | **Exfiltração** | D4: estado e eventos só com metadado e contagens; `report.summary` (orçado) só devolve contagens — por severidade, por faixa de QoD, nº de hosts e por IP —, com filtro montado pelo nó, sem estreitar por host, porta ou NVT; achado detalhado (NVT, CVE, porta, evidência) só via `report.export` explícito, orçado e removível da política; nada de `comment`, inventário ou segredo; artefato com sha256 e teto; hub fora da internet (tailnet) no canário | com a política padrão, um hub comprometido vê, por relatório, **quais IPs têm quantas vulnerabilidades por severidade** (`report.summary`) e baixa relatórios completos (`report.export`), tudo no ritmo do orçamento (30/h somados) e registrado na auditoria local |
@@ -876,7 +888,10 @@ status, entradas IP/CIDR literais de alvos e escopos, contagens por severidade (
 sob comando e orçado). **Não saem:** achados
 detalhados (fora de `report.export` explícito), entradas não-literais (hostnames) de alvos,
 `comment` de objetos, inventário de agentes, payload/resultado técnico de remediação, senhas, chaves e segredos
-(exceto o segredo de `enroll_token.create`, uma vez, marcado). **`agent_id` pode ser dado pessoal:** por padrão o
+(exceto o segredo de `enroll_token.create`, uma vez, marcado). **Texto livre (normativo):** o que sai em texto
+livre são nomes de objeto GVM (tarefa, target, agenda), escritos por um operador, e as mensagens curtas que o
+próprio conector gera (`detail`, `error.message`); o nó **nunca** insere dado de achado (OID, nome de NVT, CVE,
+porta, evidência) em texto livre. **`agent_id` pode ser dado pessoal:** por padrão o
 agente usa o hostname como `agent_id` (ex.: nome de pessoa no nome da máquina), e ele sai no estado `agents` e
 `remediation`, nos eventos `agent.*`/`remediation.pending_approval` e nos comandos `agent.*`. Base legal: execução
 do serviço de segurança contratado; recomenda-se id não pessoal no enroll do agente (pseudonimização por HMAC é
@@ -892,7 +907,8 @@ sensibilidade por dado: [docs/data-inventory.md — Canal de gestão da frota (A
   módulo.
 - **F2.2 — API admin local.** No control-plane: bearer **dedicado** da frota (`FLEET_CP_TOKEN`) aceito **só**
   nas rotas que o conector usa; rotas novas `POST /api/v1/agents/{id}/revoke`, uma rota (ou variante) que
-  revoga **só o token** — o `DELETE /api/v1/tokens/{id}` de hoje revoga também os certificados — e listagens sem segredo
+  revoga **só o token** (usada pelo `enroll_token.revoke` e pelo `secret_lost`) — o `DELETE /api/v1/tokens/{id}`
+  de hoje revoga também os certificados — e listagens sem segredo
   (`GET /api/v1/agents`, `GET /api/v1/sensors` com heartbeats persistidos, `GET /api/v1/scan-jobs`,
   `GET /api/v1/remediation/jobs`); superfície do operador local (status, política, auditoria) atrás do gate de
   sessão gsad do nginx — sem porta nova. DARK.
@@ -921,7 +937,8 @@ sensibilidade por dado: [docs/data-inventory.md — Canal de gestão da frota (A
   2. **`report.export`** de um report de LAB (`variant: technical`, a única anunciada antes da R5; um pedido
      `client`/`executive` tem de voltar `unsupported_report_variant`): sha256 do artefato confere; auditoria e
      orçamento registram;
-  3. **`task.start`/`task.stop` em tarefa de LAB**: estados e eventos coerentes; reentrega idempotente;
+  3. **`task.start`/`task.stop` em tarefa de LAB**, cujo target fica **dentro** do escopo do tenant de teste e
+     não contém o IP do nó nem do hub (senão `scope_denied`): estados e eventos coerentes; reentrega idempotente;
      comando endereçado a outro nó rejeitado (`wrong_node`) — como o hub responde `404` ao ack de comando de
      outro nó, esse critério se observa pelo `audit_tail` (fluxo `reject`);
   4. **`target.create` em tenant de TESTE** (opt-in só desse tipo): alvo dentro do escopo aceito; fora dele

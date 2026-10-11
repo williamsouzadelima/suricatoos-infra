@@ -75,14 +75,14 @@ Coletamos apenas o mínimo necessário para **correlação de vulnerabilidade ba
 | Estado `tasks`, `schedules`, `reports` (ids, nomes, status, agendas, contagens por severidade) | `fleet-state.schema.json#/$defs/data_tasks`, `data_schedules`, `data_reports` | nó→hub | gerenciar varreduras | baixa (metadado operacional; **sem achados**) |
 | Estado `targets` e `scope` (entradas IP/CIDR literais dos alvos, CIDRs autorizados por tenant) | `fleet-state.schema.json#/$defs/data_targets`, `data_scope` | nó→hub | gerenciar alvos dentro do escopo | média (topologia da rede do cliente) |
 | Estado `agents` (agent_id, tenant, SO/arch/versão do agente, último contato, online) | `fleet-state.schema.json#/$defs/data_agents` | nó→hub | operar agentes | **média/alta: o `agent_id` é, por padrão, o hostname** e pode conter nome de pessoa; também sai em `remediation`, em `agent.*` e em `remediation.pending_approval`. Base legal: execução do serviço de segurança contratado; recomenda-se id não pessoal no enroll do agente |
-| Estado `tokens`, `sensors`, `scan_requests`, `remediation` (ids, tenant, estados, contagens) | `fleet-state.schema.json#/$defs/data_tokens`, `data_sensors`, `data_scan_requests`, `data_remediation` | nó→hub | operar enroll, sensores e fila de varredura; acompanhar remediação (só leitura) | baixa (sem segredo, sem alvos, sem payload de remediação) |
+| Estado `tokens`, `sensors`, `scan_requests`, `remediation` (ids, tenant, estados, contagens) | `fleet-state.schema.json#/$defs/data_tokens`, `data_sensors`, `data_scan_requests`, `data_remediation` | nó→hub | operar enroll, sensores e fila de varredura; acompanhar remediação (só leitura) | média: o `remediation` leva o `agent_id`, que por padrão é o hostname (ver a linha `agents`); sem segredo, sem alvos, sem payload de remediação |
 | Estado `audit_tail` (caudas verbatim dos dois fluxos da auditoria local: `exec` e `reject`) | `fleet-state.schema.json#/$defs/data_audit_tail` | nó→hub | testemunha das cadeias de auditoria | média (contém `issued_by`, ids de objeto, hosts IP/CIDR dos alvos e os parâmetros dos exports — nunca segredo) |
-| Eventos (status de tarefa, report concluído com contagens, agente online/offline, feed, remediação pendente, rejeição por política) | `fleet-event.schema.json` | nó→hub | atividade da frota | baixa |
+| Eventos (status de tarefa, report concluído com contagens, agente online/offline, feed, remediação pendente, rejeição por política) | `fleet-event.schema.json` | nó→hub | atividade da frota | média: `agent.*` e `remediation.pending_approval` levam o `agent_id`, por padrão o hostname |
 | Comando assinado (tipo, tenant, payload, `issued_by`, janela, nonce, assinatura) | `fleet-command.schema.json` | hub→nó | executar UMA ação do catálogo | baixa/média (`issued_by` identifica o operador do hub) |
 | Ack e resultado (decisão e motivo, status, ids, valores anteriores dos campos alterados, contagens) | `fleet-result.schema.json` | nó→hub | estado do comando e rollback manual | média (`before.hosts` traz IPs de clientes) |
 | Resumo de report (`report.summary`: só contagens — por severidade, por faixa de QoD, nº de hosts e por IP; sem NVT, OID, nome, CVE ou porta; filtro montado pelo nó) | `fleet-result.schema.json#/$defs/output_report_summary` | nó→hub, **sob comando**, orçado | priorização | média (revela quais IPs têm quantas vulnerabilidades por severidade) |
 | Relatório (`report.export`: edição `technical`, `client` ou `executive`; completo, ou delta quando há `delta_report_id`) | artefato gzip + `fleet-result.schema.json#/$defs/artifact` | nó→hub, **só sob comando explícito** | entregar o relatório | **alta** (vulnerabilidades detalhadas por host do cliente; a edição `executive` é sumário, mas segue sob a mesma regra) |
-| Segredo de token do scanner (`enroll_token.create`, só `agent-endpoint`) | `fleet-result.schema.json#/$defs/output_enroll_token_create` (`token`) | nó→hub, uma vez, `contains_secret: true` | instalar um agente/sensor | **alta** (segredo) |
+| Segredo de token do scanner (`enroll_token.create`, só `agent-endpoint`) | `fleet-result.schema.json#/$defs/output_enroll_token_create` (`token`) | nó→hub, uma vez, `contains_secret: true` | instalar um agente de endpoint | **alta** (segredo) |
 
 **O que NÃO sai do nó por este canal:**
 
@@ -98,8 +98,8 @@ Coletamos apenas o mínimo necessário para **correlação de vulnerabilidade ba
 
 > **`report.export` é o ÚNICO caminho de achado detalhado:** exige comando assinado, permitido pela política
 > **local** (o operador do nó pode removê-lo), conta no orçamento local de comandos sensíveis (30/h, somado
-> com `report.summary` e os opt-in) e no global de aceitos (120/h), e fica na auditoria local. O `report.summary` não carrega achado: só
-> contagens, com filtro que o hub não escolhe.
+> com `report.summary` e os opt-in) e no global de aceitos (120/h), e fica na auditoria local. O
+> `report.summary` não carrega achado: só contagens, com filtro que o hub não escolhe.
 >
 > **Artefatos:** gzip, ≤ 64 MiB comprimido e ≤ 1 GiB descomprimido (o hub descomprime em streaming com teto
 > próprio), com sha256 do gzip e do original. O nó grava o export num arquivo temporário
@@ -107,7 +107,13 @@ Coletamos apenas o mínimo necessário para **correlação de vulnerabilidade ba
 > retenção no hub é política do controlador (questão aberta do ADR-0011).
 >
 > **Segredo de `enroll_token.create`:** só em memória no nó — nunca em disco, log ou auditoria. O hub não o
-> loga, cifra em repouso e o mostra uma vez. Reinício antes da entrega ⇒ o nó revoga o token localmente.
+> loga, cifra em repouso e o mostra uma vez. Reinício antes da entrega ⇒ o nó revoga localmente só o token (os
+> certificados já emitidos com ele não caem) e reporta `secret_lost`.
+>
+> **Texto livre (normativo):** os campos de texto livre que saem do nó são só **nomes** de objeto GVM (tarefa,
+> target, agenda), escritos por um operador — o local, na GSA, ou o do hub, num comando de criação — e as
+> mensagens curtas que o próprio conector gera (`detail`, `error.message`). O nó **nunca** insere dado de achado
+> (OID, nome de NVT, CVE, porta, evidência) em texto livre; `comment` de objeto não sai.
 >
 > **`issued_by`:** é **obrigatoriamente** um identificador pseudônimo do operador do hub — o schema recusa `@` e
 > espaço; o hub guarda o mapeamento para a pessoa. Um e-mail aqui seria dado pessoal replicado na auditoria de
