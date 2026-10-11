@@ -218,14 +218,22 @@ func (r *Registry) Poll(o string) (*ScanJob, bool) {
 
 	if len(eligible) == 0 {
 		if changed {
-			_ = r.saveLocked()
+			if err := r.saveLocked(); err != nil {
+				log.Printf("sensorjobs: saveLocked após sweep de expiração: %v", err)
+			}
 		}
 		return nil, false
 	}
 	next := eligible[0]
 	next.State = StateDelivered
 	next.DeliveredAt = now
-	_ = r.saveLocked()
+	// Se a gravação falhou, o job segue entregue (se o control-plane reiniciar antes
+	// de uma gravação que dê certo, ele volta ao estado gravado e é reentregue;
+	// repetir um scan é seguro), mas a falha não é silenciosa. O log leva só o id do
+	// job e o erro — nunca os alvos.
+	if err := r.saveLocked(); err != nil {
+		log.Printf("sensorjobs: saveLocked após poll job=%s: %v", next.JobID, err)
+	}
 	return next.clone(), true
 }
 

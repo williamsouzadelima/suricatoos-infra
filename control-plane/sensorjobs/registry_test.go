@@ -1,8 +1,12 @@
 package sensorjobs
 
 import (
+	"bytes"
 	"encoding/json"
+	"log"
 	"os"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -465,5 +469,122 @@ func TestJobStateValid(t *testing.T) {
 		if s.valid() {
 			t.Errorf("%q não deveria ser válido", s)
 		}
+	}
+}
+
+// lockedBuf é um destino de log seguro entre goroutines.
+type lockedBuf struct {
+	mu sync.Mutex
+	b  bytes.Buffer
+}
+
+func (l *lockedBuf) Write(p []byte) (int, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.b.Write(p)
+}
+
+func (l *lockedBuf) String() string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.b.String()
+}
+
+// captureLog desvia o logger padrão para um buffer durante o teste.
+func captureLog(t *testing.T) *lockedBuf {
+	t.Helper()
+	buf := &lockedBuf{}
+	prev := log.Writer()
+	log.SetOutput(buf)
+	t.Cleanup(func() { log.SetOutput(prev) })
+	return buf
+}
+
+// failSaves faz toda gravação futura de r falhar sem tocar no arquivo em disco: o
+// temporário que o registry grava antes do rename vira um diretório.
+func failSaves(t *testing.T, r *Registry) {
+	t.Helper()
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.path == "" {
+		t.Fatal("registry sem arquivo nunca falha ao gravar")
+	}
+	if err := os.Mkdir(r.path+".tmp", 0o700); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// saveLines devolve as linhas do log capturado que reportam falha de gravação.
+func saveLines(buf *lockedBuf) []string {
+	var out []string
+	for _, l := range strings.Split(buf.String(), "\n") {
+		if strings.Contains(l, "saveLocked") {
+			out = append(out, l)
+		}
+	}
+	return out
+}
+
+// O Poll entrega o job e grava a entrega; se a gravação falha, o job continua sendo
+// entregue (a janela de redelivery e o scan repetível cobrem o restart), mas a falha
+// não pode ser silenciosa: sai no log com o id do job e o erro — e nada dos alvos.
+// Uma gravação que dá certo não loga nada.
+func TestPollLogsWhenPersistingTheDeliveryFails(t *testing.T) {
+	logs := captureLog(t)
+	path := t.TempDir() + "/jobs.json"
+	r, err := NewRegistry(Config{Path: path, ScopeOf: scopes(map[string]string{"acme": "10.20.0.0/16"})})
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, _, _ := r.Enqueue(EnqueueRequest{Tenant: "acme", Targets: []string{"10.20.1.1"}})
+	if got, ok := r.Poll("acme"); !ok || got.JobID != first.JobID {
+		t.Fatalf("o primeiro poll deveria entregar o job, got %+v ok=%v", got, ok)
+	}
+	if lines := saveLines(logs); len(lines) != 0 {
+		t.Fatalf("uma gravação que deu certo não deve logar: %q", lines)
+	}
+
+	second, _, _ := r.Enqueue(EnqueueRequest{Tenant: "acme", Targets: []string{"10.20.2.2"}})
+	failSaves(t, r)
+	got, ok := r.Poll("acme")
+	if !ok || got.JobID != second.JobID {
+		t.Fatalf("o segundo job deveria ser entregue mesmo sem conseguir gravar, got %+v ok=%v", got, ok)
+	}
+	lines := saveLines(logs)
+	if len(lines) != 1 {
+		t.Fatalf("a falha de gravação da entrega deveria sair no log (1 linha), got %d: %q", len(lines), lines)
+	}
+	for _, want := range []string{second.JobID, "jobs.json.tmp"} { // o id do job e o erro do SO
+		if !strings.Contains(lines[0], want) {
+			t.Errorf("a linha de log deveria conter %q: %s", want, lines[0])
+		}
+	}
+	if strings.Contains(logs.String(), "10.20.2.2") {
+		t.Errorf("o log não deve trazer os alvos do job: %s", logs.String())
+	}
+}
+
+// Quando o Poll só varre jobs vencidos (nada elegível), a gravação da varredura
+// também não pode falhar em silêncio.
+func TestPollLogsWhenPersistingTheExpirySweepFails(t *testing.T) {
+	logs := captureLog(t)
+	path := t.TempDir() + "/jobs.json"
+	r, err := NewRegistry(Config{Path: path, ScopeOf: scopes(map[string]string{"acme": "10.20.0.0/16"})})
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.now = at(t0)
+	j, _, _ := r.Enqueue(EnqueueRequest{Tenant: "acme", Targets: []string{"10.20.1.1"}, TTL: time.Hour})
+	failSaves(t, r)
+	r.now = at(t0.Add(2 * time.Hour))
+	if got, ok := r.Poll("acme"); ok {
+		t.Fatalf("um job vencido não deveria ser entregue, got %+v", got)
+	}
+	if g, _ := r.Get(j.JobID, "acme"); g.State != StateExpired {
+		t.Fatalf("o job vencido deveria estar EXPIRED na memória, got %s", g.State)
+	}
+	lines := saveLines(logs)
+	if len(lines) != 1 || !strings.Contains(lines[0], "jobs.json.tmp") {
+		t.Fatalf("a falha de gravação da varredura deveria sair no log (1 linha com o erro do SO), got %q", lines)
 	}
 }
