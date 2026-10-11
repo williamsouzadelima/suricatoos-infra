@@ -16,17 +16,29 @@
     "payload": { "description": "opaque to the queue; the executor interprets it (compacted JSON)" },
     "payload_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
     "nonce": { "type": "string", "description": "per-job entropy folded into the signature; replay defense (agent-side dedup by job_id + expiry via VerifyAt) is enforced by the agent executor" },
-    "state": { "enum": ["PENDING_APPROVAL", "APPROVED", "DELIVERED", "ACKED", "APPLIED", "FAILED", "VERIFIED", "EXPIRED", "REJECTED"] },
+    "state": { "enum": ["PENDING_APPROVAL", "APPROVED", "DELIVERED", "ACKED", "APPLIED", "FAILED", "VERIFIED", "EXPIRED", "REJECTED", "CLOSED"], "description": "REJECTED = an operator dropped the job BEFORE delivery (PENDING_APPROVAL/APPROVED); CLOSED = an operator took a job the agent already received (DELIVERED/ACKED/APPLIED/FAILED) out of the queue, keeping its approver and result. The final states are VERIFIED, FAILED, EXPIRED, REJECTED and CLOSED." },
     "issued_at": { "type": "string", "format": "date-time" },
     "not_before": { "type": "string", "format": "date-time" },
     "not_after": { "type": "string", "format": "date-time" },
     "expires_at": { "type": "string", "format": "date-time" },
-    "approved_by": { "type": "string" },
+    "approved_by": { "type": "string", "description": "who approved; covered by the signature, and never overwritten by a reject or a close" },
     "approved_at": { "type": "string", "format": "date-time" },
+    "rejected_by": { "type": "string", "description": "operator who rejected the job (state REJECTED); present only on a rejected job" },
+    "rejected_at": { "type": "string", "format": "date-time" },
+    "closed_by": { "type": "string", "description": "operator who took a delivered job out of the queue (state CLOSED); present only on a closed job" },
+    "closed_at": { "type": "string", "format": "date-time" },
+    "closed_reason": { "type": "string", "description": "why the operator closed it; optional" },
     "signature": { "type": "string", "description": "base64 Ed25519 over the canonical; present once APPROVED" },
     "created_at": { "type": "string", "format": "date-time" },
     "delivered_at": { "type": "string", "format": "date-time" },
     "acked_at": { "type": "string", "format": "date-time" },
-    "result": { "$ref": "remediation-result.schema.json" }
+    "result": { "$ref": "remediation-result.schema.json" },
+    "late_reports": {
+      "type": "array",
+      "maxItems": 3,
+      "description": "Reports the control-plane REFUSED (409) because the job was already final, or APPLIED with a different result — e.g. the agent applied a job after an operator closed it. Kept whole, rollback_token included, so an operator can revert by hand: the last 3, oldest dropped; reported_at is when the server received it. Operator-only data: set only after the job left the agent's hands, so the agent never receives it.",
+      "items": { "$ref": "remediation-result.schema.json" }
+    },
+    "late_reports_total": { "type": "integer", "minimum": 1, "description": "how many reports were ever refused for this job; the newest one kept is number late_reports_total (the control-plane audit line says \"late_report #n\")" }
   }
 }
