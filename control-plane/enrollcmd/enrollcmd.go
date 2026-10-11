@@ -15,11 +15,13 @@ import (
 	"crypto/subtle"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/williamsouzadelima/suricatoos-infra/control-plane/installcmd"
 	"github.com/williamsouzadelima/suricatoos-infra/control-plane/sessiongate"
 	"github.com/williamsouzadelima/suricatoos-infra/control-plane/tokens"
 )
@@ -39,14 +41,22 @@ type Config struct {
 }
 
 // Service renders per-tenant enrollment commands backed by fresh tokens.
-type Service struct{ cfg Config }
+type Service struct {
+	cfg Config
+	// render builds the command once a token exists. It is a field only so a test can
+	// simulate a failure at that late point, which real tokens never cause (the
+	// configuration was validated before minting); New sets it to command.
+	render func(target, token string) (string, error)
+}
 
 // New builds a Service.
 func New(cfg Config) *Service {
 	if cfg.Image == "" {
 		cfg.Image = "ghcr.io/williamsouzadelima/suricatoos-agent:stable"
 	}
-	return &Service{cfg: cfg}
+	s := &Service{cfg: cfg}
+	s.render = s.command
+	return s
 }
 
 // defaults for a deployment token: one command activates a fleet within a window.
@@ -58,7 +68,7 @@ const (
 
 type response struct {
 	Tenant    string    `json:"tenant"`
-	Target    string    `json:"target"` // docker | linux | windows
+	Target    string    `json:"target"` // docker | linux | darwin | windows
 	Command   string    `json:"command"`
 	Server    string    `json:"server"`
 	CAPin     string    `json:"ca_pin"`
@@ -69,8 +79,8 @@ type response struct {
 }
 
 // Handler serves GET /api/v1/tenants/{t}/enroll-command (ADMIN-BEARER). The tenant
-// comes from the {t} path. Query params: target (docker|linux|windows), max_uses,
-// ttl_hours. For automation/CLI.
+// comes from the {t} path. Query params: target (docker|linux|darwin|windows),
+// max_uses, ttl_hours. For automation/CLI.
 func (s *Service) Handler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if !s.bearerOK(r) {
@@ -124,7 +134,10 @@ func (s *Service) SessionTenantsHandler() http.HandlerFunc {
 }
 
 // serve is the shared core: validate tenant, mint a scoped token, render the command.
-// Query params (both handlers): target=docker|linux|windows, max_uses, ttl_hours.
+// Query params (both handlers): target=docker|linux|darwin|windows, max_uses, ttl_hours.
+// A configuration that cannot render the command (see installcmd) is refused with 500
+// BEFORE minting; if rendering still fails once the token exists (not expected) the
+// token is revoked.
 func (s *Service) serve(w http.ResponseWriter, r *http.Request, tenant string) {
 	if tenant == "" {
 		http.Error(w, "tenant obrigatório", http.StatusBadRequest)
@@ -141,9 +154,17 @@ func (s *Service) serve(w http.ResponseWriter, r *http.Request, tenant string) {
 		target = "docker"
 	}
 	switch target {
-	case "docker", "linux", "windows":
+	case "docker", "linux", "darwin", "windows":
 	default:
-		http.Error(w, "target deve ser docker, linux ou windows", http.StatusBadRequest)
+		http.Error(w, "target deve ser docker, linux, darwin ou windows", http.StatusBadRequest)
+		return
+	}
+
+	// A configuration that cannot render a command must not cost a token (minted and
+	// revoked) on every request.
+	if err := s.check(target); err != nil {
+		log.Printf("enrollcmd: tenant %q, target %s: comando indisponível: %v", tenant, target, err)
+		http.Error(w, "falha ao montar o comando de instalação", http.StatusInternalServerError)
 		return
 	}
 
@@ -166,10 +187,18 @@ func (s *Service) serve(w http.ResponseWriter, r *http.Request, tenant string) {
 		return
 	}
 
+	cmd, err := s.render(target, minted.Token)
+	if err != nil {
+		s.discard(minted.ID, tenant)
+		log.Printf("enrollcmd: tenant %q, target %s: comando recusado: %v", tenant, target, err)
+		http.Error(w, "falha ao montar o comando de instalação", http.StatusInternalServerError)
+		return
+	}
+
 	resp := response{
 		Tenant:    tenant,
 		Target:    target,
-		Command:   s.command(target, minted.Token),
+		Command:   cmd,
 		Server:    s.cfg.ServerURL,
 		CAPin:     s.cfg.CAPin,
 		TokenID:   minted.ID,
@@ -184,8 +213,32 @@ func (s *Service) serve(w http.ResponseWriter, r *http.Request, tenant string) {
 	_ = json.NewEncoder(w).Encode(resp)
 }
 
-// command renders the paste-ready command with the token embedded.
-func (s *Service) command(target, token string) string {
+// discard revokes a token that was minted but never handed out, so no live token is left
+// behind. A revoke that fails is logged, with the id and never the secret: the token then
+// stays valid until it expires and someone should know.
+func (s *Service) discard(id, tenant string) {
+	if err := s.cfg.TM.Revoke(id, "enroll-command ("+tenant+") comando recusado"); err != nil {
+		log.Printf("enrollcmd: tenant %q: não consegui revogar o token %s do comando recusado (segue válido até expirar): %v", tenant, id, err)
+	}
+}
+
+// check reports, before any token exists, whether this configuration can render the
+// command for target. Docker only quotes values, so it always can.
+func (s *Service) check(target string) error {
+	switch target {
+	case "docker":
+		return nil
+	case "windows":
+		return installcmd.CheckWindows(s.cfg.ServerURL, s.cfg.CAPin)
+	default: // linux, darwin
+		return installcmd.CheckUnix(s.cfg.ServerURL)
+	}
+}
+
+// command renders the paste-ready command with the token embedded. The linux, darwin
+// and windows commands come from installcmd, shared with provision, so both endpoints
+// hand out the same one-liners (see its package comment for the Windows design).
+func (s *Service) command(target, token string) (string, error) {
 	switch target {
 	case "docker":
 		// One container that auto-enrolls into the tenant and inventories the HOST.
@@ -194,52 +247,13 @@ func (s *Service) command(target, token string) string {
 				`--hostname "$(hostname)" `+
 				`-e ENROLL_TOKEN=%s -e CLOUD_BASE_URL=%s -e CA_PIN=%s -e AGENT_ID="$(hostname)" `+
 				`-v /:/host:ro -v suricatoos-agent:/var/lib/suricatoos-agent %s`,
-			shq(token), shq(s.cfg.ServerURL), shq(s.cfg.CAPin), s.cfg.Image)
+			installcmd.ShellQuote(token), installcmd.ShellQuote(s.cfg.ServerURL),
+			installcmd.ShellQuote(s.cfg.CAPin), installcmd.ShellQuote(s.cfg.Image)), nil
 	case "windows":
-		base := publicBase(s.cfg.ServerURL)
-		// NO '$' variables: a '$f'/'$env:TEMP' inside the double-quoted -Command
-		// gets expanded by the OUTER shell when the user pastes this at a
-		// PowerShell prompt (not nested), producing "=Join-Path ..." / empty
-		// -OutFile. A fixed, admin-writable temp path keeps the one-liner robust
-		// whether pasted in cmd.exe or PowerShell. The script requires admin.
-		return fmt.Sprintf(
-			`powershell -ExecutionPolicy Bypass -Command "iwr -useb %s/install.ps1 -OutFile C:\Windows\Temp\suricatoos-install.ps1; & C:\Windows\Temp\suricatoos-install.ps1 -Server '%s' -Token '%s' -CaPin '%s'"`,
-			base, s.cfg.ServerURL, token, s.cfg.CAPin)
-	default: // linux (binary installer)
-		base := publicBase(s.cfg.ServerURL)
-		return fmt.Sprintf(
-			`curl -fsSL %s/install.sh | sudo sh -s -- --server %s --token %s --ca-pin %s`,
-			base, s.cfg.ServerURL, shq(token), shq(s.cfg.CAPin))
+		return installcmd.Windows(s.cfg.ServerURL, token, s.cfg.CAPin)
+	default: // linux, darwin (binary installer; install.sh picks the OS by `uname -s`)
+		return installcmd.Unix(s.cfg.ServerURL, token, s.cfg.CAPin)
 	}
-}
-
-// publicBase strips the path from serverURL → scheme://host (for install scripts).
-func publicBase(serverURL string) string {
-	if i := strings.Index(serverURL, "://"); i >= 0 {
-		rest := serverURL[i+3:]
-		if j := strings.IndexByte(rest, '/'); j >= 0 {
-			return serverURL[:i+3] + rest[:j]
-		}
-		return serverURL
-	}
-	return serverURL
-}
-
-// shq single-quotes a value for POSIX sh only when it contains anything outside the
-// safe set (tokens are base64url + "st_." — safe; be defensive anyway).
-func shq(v string) string {
-	safe := true
-	for _, c := range v {
-		if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' ||
-			c == ':' || c == '.' || c == '_' || c == '-' || c == '/') {
-			safe = false
-			break
-		}
-	}
-	if safe && v != "" {
-		return v
-	}
-	return "'" + strings.ReplaceAll(v, "'", `'\''`) + "'"
 }
 
 func clampInt(s string, def, lo, hi int) int {

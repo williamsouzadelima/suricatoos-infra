@@ -1,12 +1,17 @@
 package provision
 
 import (
+	"bytes"
 	"encoding/json"
+	"errors"
+	"log"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 
+	"github.com/williamsouzadelima/suricatoos-infra/control-plane/installcmd"
 	"github.com/williamsouzadelima/suricatoos-infra/control-plane/sessiongate"
 	"github.com/williamsouzadelima/suricatoos-infra/control-plane/tokens"
 )
@@ -64,6 +69,214 @@ func TestProvisionWindowsUsesPowershell(t *testing.T) {
 	json.Unmarshal(rec.Body.Bytes(), &r)
 	if !strings.Contains(r.Command, "install.ps1") || !strings.Contains(r.Command, "powershell") {
 		t.Errorf("windows command should use install.ps1 via powershell:\n%s", r.Command)
+	}
+}
+
+// REGRESSAO: o one-liner do Windows nao pode depender do shell de FORA nem gravar o
+// instalador onde outros usuarios escrevem.
+//   - Colado num prompt do PowerShell (ja aberto, sem aninhar), um '$f' / '$env:TEMP'
+//     dentro do -Command entre aspas duplas e expandido pelo shell externo ANTES de o
+//     powershell interno rodar: sobra "=Join-Path ..." e "-OutFile" vazio.
+//   - Um caminho fixo em C:\Windows\Temp aceita arquivos de qualquer usuario local, que
+//     poderia pre-criar ou trocar o arquivo entre o download e a execucao elevada. O
+//     instalador vai para o TEMP do usuario que roda o comando, e a guarda recusa o TEMP
+//     do sistema (SYSTEM) antes de baixar.
+//   - O download e a condicao de um 'if': download que falha nao executa arquivo velho.
+//
+// A forma exata e as demais invariantes estao travadas no installcmd.
+func TestProvisionWindowsCommandIsRobust(t *testing.T) {
+	svc := newService()
+	rec := httptest.NewRecorder()
+	svc.Handler()(rec, gatedGet("/provision/install?os=windows"))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var r response
+	if err := json.Unmarshal(rec.Body.Bytes(), &r); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if r.OS != "windows" {
+		t.Fatalf("os = %q", r.OS)
+	}
+	for _, want := range []string{
+		"powershell -NoProfile",
+		"if (iwr -useb https://scanner.suricatoos.com/install.ps1 -PassThru -OutFile ",
+		"-Server 'https://scanner.suricatoos.com/agent/v1'",
+		"-Token 'st_",
+		"-CaPin 'sha256:deadbeef'",
+		"(Get-Item env:TEMP).Value", // TEMP de quem roda o comando, nao um caminho fixo
+		"throw '",                   // guarda contra o TEMP do sistema
+	} {
+		if !strings.Contains(r.Command, want) {
+			t.Errorf("comando windows nao contem %q:\n%s", want, r.Command)
+		}
+	}
+	if strings.ContainsAny(r.Command, "$`%") {
+		t.Errorf("comando windows nao pode conter '$', crase ou '%%' (o shell de fora expande ao colar):\n%s", r.Command)
+	}
+	if strings.Contains(r.Command, `:\`) {
+		t.Errorf("comando windows nao pode ter caminho fixo (C:\\Windows\\Temp: qualquer usuario local escreve la):\n%s", r.Command)
+	}
+}
+
+// provision nao monta comando proprio: devolve o do installcmd, o MESMO que o enrollcmd
+// devolve (a forma exata esta travada la). Linux e macOS saem iguais: o install.sh
+// escolhe o binario por 'uname -s'.
+func TestProvisionCommandComesFromInstallcmd(t *testing.T) {
+	svc := newService()
+	const server, token, pin = "https://scanner.suricatoos.com/agent/v1", "st_TESTE", "sha256:deadbeef"
+	unix, err := installcmd.Unix(server, token, pin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	windows, err := installcmd.Windows(server, token, pin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for goos, want := range map[string]string{"linux": unix, "darwin": unix, "windows": windows} {
+		got, err := svc.command(goos, token)
+		if err != nil {
+			t.Fatalf("%s: %v", goos, err)
+		}
+		if got != want {
+			t.Errorf("%s: o comando nao e o do installcmd:\n got: %s\nwant: %s", goos, got, want)
+		}
+	}
+}
+
+// Config que nao cabe com seguranca no comando do Windows (aqui, uma URL com '$('): sem
+// comando e SEM token mintado (a config e validada antes de mintar, entao um erro de
+// configuracao nao minta e revoga um token a cada pedido); o erro nao vaza nada. Linux e
+// macOS citam o valor para o shell e seguem funcionando.
+func TestProvisionWindowsRefusedWhenServerURLIsUnsafe(t *testing.T) {
+	tm := tokens.NewManager(tokens.NewMemStore())
+	svc := New(tm, "sha256:deadbeef", "https://scanner.suricatoos.com/agent/v1$(evil)")
+
+	rec := httptest.NewRecorder()
+	svc.Handler()(rec, gatedGet("/provision/install?os=windows"))
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("windows com URL insegura deveria 500, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if body := rec.Body.String(); strings.Contains(body, "st_") || strings.Contains(body, "evil") {
+		t.Errorf("a resposta de erro vazou dado: %s", body)
+	}
+	if recs, _ := tm.List(); len(recs) != 0 {
+		t.Fatalf("a config recusada nao deveria mintar token: %+v", recs)
+	}
+
+	rec = httptest.NewRecorder()
+	svc.Handler()(rec, gatedGet("/provision/install?os=linux"))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("linux deveria seguir funcionando, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var r response
+	if err := json.Unmarshal(rec.Body.Bytes(), &r); err != nil {
+		t.Fatal(err)
+	}
+	if want := "--server 'https://scanner.suricatoos.com/agent/v1$(evil)'"; !strings.Contains(r.Command, want) {
+		t.Errorf("o valor deveria sair citado para o shell (%s):\n%s", want, r.Command)
+	}
+}
+
+// URL do servidor sem http(s)://host: nao ha de onde baixar o instalador. Nenhum SO tem
+// comando e nenhum token e mintado (antes saia "curl -fsSL /install.sh", que nao funciona
+// e nao diz por que).
+func TestProvisionUnusableServerURLRefusesEverythingBeforeMinting(t *testing.T) {
+	tm := tokens.NewManager(tokens.NewMemStore())
+	svc := New(tm, "sha256:deadbeef", "scanner.suricatoos.com/agent/v1")
+	for _, goos := range []string{"linux", "darwin", "windows"} {
+		rec := httptest.NewRecorder()
+		svc.Handler()(rec, gatedGet("/provision/install?os="+goos))
+		if rec.Code != http.StatusInternalServerError {
+			t.Errorf("%s com URL sem esquema deveria 500, got %d: %s", goos, rec.Code, rec.Body.String())
+		}
+	}
+	if recs, _ := tm.List(); len(recs) != 0 {
+		t.Fatalf("a config recusada nao deveria mintar token: %+v", recs)
+	}
+}
+
+// failingUpdateStore falha em Update (disco cheio, banco travado): o Revoke falha junto.
+type failingUpdateStore struct{ tokens.Store }
+
+func (failingUpdateStore) Update(tokens.Record) error { return errors.New("disco cheio") }
+
+// captureLog redireciona o log padrao para um buffer ate o fim do teste.
+func captureLog(t *testing.T) *bytes.Buffer {
+	t.Helper()
+	var buf bytes.Buffer
+	log.SetOutput(&buf)
+	t.Cleanup(func() { log.SetOutput(os.Stderr) })
+	return &buf
+}
+
+// idAndSecret separa um token "st_<id>.<segredo>".
+func idAndSecret(t *testing.T, token string) (id, secret string) {
+	t.Helper()
+	body := strings.TrimPrefix(token, "st_")
+	i := strings.Index(body, ".")
+	if i < 0 {
+		t.Fatalf("token fora do formato st_<id>.<segredo>: %q", token)
+	}
+	return body[:i], body[i+1:]
+}
+
+// Falha tardia: o token ja existe e o comando nao sai (nao acontece com tokens reais, que
+// sempre cabem; o teste a simula por render). O pedido da 500, o token e revogado e nada do
+// segredo vai para a resposta nem para o log.
+func TestProvisionLateRenderFailureRevokesTheToken(t *testing.T) {
+	logs := captureLog(t)
+	tm := tokens.NewManager(tokens.NewMemStore())
+	svc := New(tm, "sha256:deadbeef", "https://scanner.suricatoos.com/agent/v1")
+	var seen string
+	svc.render = func(goos, token string) (string, error) {
+		seen = token
+		return "", errors.New("falha simulada")
+	}
+
+	rec := httptest.NewRecorder()
+	svc.Handler()(rec, gatedGet("/provision/install?os=linux"))
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("falha tardia deveria 500, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if recs, _ := tm.List(); len(recs) != 1 || !recs[0].Revoked {
+		t.Fatalf("o token do comando que nao saiu deveria estar revogado: %+v", recs)
+	}
+	_, secret := idAndSecret(t, seen)
+	for name, text := range map[string]string{"resposta": rec.Body.String(), "log": logs.String()} {
+		if strings.Contains(text, secret) || strings.Contains(text, seen) {
+			t.Errorf("%s vazou o segredo do token: %s", name, text)
+		}
+	}
+}
+
+// A revogacao que falha nao some em silencio: o log traz o id do token e o motivo (nunca o
+// segredo), porque o token segue valido ate expirar.
+func TestProvisionRevokeFailureIsLogged(t *testing.T) {
+	logs := captureLog(t)
+	tm := tokens.NewManager(failingUpdateStore{tokens.NewMemStore()})
+	svc := New(tm, "sha256:deadbeef", "https://scanner.suricatoos.com/agent/v1")
+	var seen string
+	svc.render = func(goos, token string) (string, error) {
+		seen = token
+		return "", errors.New("falha simulada")
+	}
+
+	rec := httptest.NewRecorder()
+	svc.Handler()(rec, gatedGet("/provision/install?os=linux"))
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("falha tardia deveria 500, got %d: %s", rec.Code, rec.Body.String())
+	}
+	id, secret := idAndSecret(t, seen)
+	out := logs.String()
+	if !strings.Contains(out, id) {
+		t.Errorf("o log deveria citar o id %s do token que ficou sem revogar:\n%s", id, out)
+	}
+	if !strings.Contains(out, "disco cheio") {
+		t.Errorf("o log deveria trazer o motivo da falha ao revogar:\n%s", out)
+	}
+	if strings.Contains(out, secret) || strings.Contains(out, seen) {
+		t.Errorf("o log vazou o segredo do token:\n%s", out)
 	}
 }
 

@@ -12,12 +12,11 @@ package provision
 
 import (
 	"encoding/json"
-	"fmt"
+	"log"
 	"net/http"
-	"net/url"
-	"strings"
 	"time"
 
+	"github.com/williamsouzadelima/suricatoos-infra/control-plane/installcmd"
 	"github.com/williamsouzadelima/suricatoos-infra/control-plane/sessiongate"
 	"github.com/williamsouzadelima/suricatoos-infra/control-plane/tokens"
 )
@@ -28,24 +27,22 @@ const tokenTTL = 1 * time.Hour
 
 // Service builds install commands backed by freshly-minted tokens.
 type Service struct {
-	tm         *tokens.Manager
-	caPin      string // CA fingerprint (--ca-pin), from authority.Fingerprint()
-	serverURL  string // CONTROL_PLANE_URL handed to the agent (ends in /v1)
-	publicBase string // scheme+host for the install scripts (derived from serverURL)
+	tm        *tokens.Manager
+	caPin     string // CA fingerprint (--ca-pin), from authority.Fingerprint()
+	serverURL string // CONTROL_PLANE_URL handed to the agent (ends in /v1)
+	// render builds the command once a token exists. It is a field only so a test can
+	// simulate a failure at that late point, which real tokens never cause (the
+	// configuration was validated before minting); New sets it to command.
+	render func(goos, token string) (string, error)
 }
 
 // New returns a provision Service. serverURL is CONTROL_PLANE_URL (e.g.
-// https://scanner.suricatoos.com/agent/v1); the install-script base is derived
-// from its scheme+host.
+// https://scanner.suricatoos.com/agent/v1); the install scripts are fetched from its
+// scheme+host (see installcmd.PublicBase).
 func New(tm *tokens.Manager, caPin, serverURL string) *Service {
-	return &Service{tm: tm, caPin: caPin, serverURL: serverURL, publicBase: publicBase(serverURL)}
-}
-
-func publicBase(serverURL string) string {
-	if u, err := url.Parse(serverURL); err == nil && u.Host != "" {
-		return u.Scheme + "://" + u.Host
-	}
-	return ""
+	s := &Service{tm: tm, caPin: caPin, serverURL: serverURL}
+	s.render = s.command
+	return s
 }
 
 type response struct {
@@ -59,7 +56,9 @@ type response struct {
 
 // Handler serves GET /provision/install?os=<linux|darwin|windows>. It is wrapped in
 // sessiongate.Require: a request without the marker nginx sets only on session-gated
-// locations is refused (403) before any token is minted.
+// locations is refused (403) before any token is minted. A configuration that cannot
+// render the command (see installcmd) is refused with 500 BEFORE minting too; if
+// rendering still fails once the token exists (not expected) the token is revoked.
 func (s *Service) Handler() http.HandlerFunc {
 	return sessiongate.Require(func(w http.ResponseWriter, r *http.Request) {
 		goos := r.URL.Query().Get("os")
@@ -67,6 +66,14 @@ func (s *Service) Handler() http.HandlerFunc {
 		case "linux", "darwin", "windows":
 		default:
 			http.Error(w, "os deve ser linux, darwin ou windows", http.StatusBadRequest)
+			return
+		}
+
+		// A configuration that cannot render a command must not cost a token (minted and
+		// revoked) on every request.
+		if err := s.check(goos); err != nil {
+			log.Printf("provision: comando %s indisponível: %v", goos, err)
+			http.Error(w, "falha ao montar o comando de instalação", http.StatusInternalServerError)
 			return
 		}
 
@@ -82,9 +89,17 @@ func (s *Service) Handler() http.HandlerFunc {
 			return
 		}
 
+		cmd, err := s.render(goos, minted.Token)
+		if err != nil {
+			s.discard(minted.ID)
+			log.Printf("provision: comando %s recusado: %v", goos, err)
+			http.Error(w, "falha ao montar o comando de instalação", http.StatusInternalServerError)
+			return
+		}
+
 		resp := response{
 			OS:        goos,
-			Command:   s.command(goos, minted.Token),
+			Command:   cmd,
 			Server:    s.serverURL,
 			CAPin:     s.caPin,
 			TokenID:   minted.ID,
@@ -96,31 +111,34 @@ func (s *Service) Handler() http.HandlerFunc {
 	})
 }
 
-// command renders the one-liner the operator pastes. Linux/macOS pipe install.sh
-// into sh; Windows downloads install.ps1 to a temp file and runs it with params.
-func (s *Service) command(goos, token string) string {
-	switch goos {
-	case "windows":
-		return fmt.Sprintf(
-			`powershell -ExecutionPolicy Bypass -Command "$f=Join-Path $env:TEMP 'suricatoos-install.ps1'; iwr -useb %s/install.ps1 -OutFile $f; & $f -Server '%s' -Token '%s' -CaPin '%s'"`,
-			s.publicBase, s.serverURL, token, s.caPin)
-	default: // linux, darwin
-		return fmt.Sprintf(
-			`curl -fsSL %s/install.sh | sudo sh -s -- --server %s --token %s --ca-pin %s`,
-			s.publicBase, s.serverURL, token, escapeShell(s.caPin))
+// discard revokes a token that was minted but never handed out, so no live token is left
+// behind. A revoke that fails is logged, with the id and never the secret: the token then
+// stays valid until it expires and someone should know.
+func (s *Service) discard(id string) {
+	if err := s.tm.Revoke(id, "provision (comando recusado)"); err != nil {
+		log.Printf("provision: não consegui revogar o token %s do comando recusado (segue válido até expirar): %v", id, err)
 	}
 }
 
-// escapeShell guards against odd characters in the pin (it is hex+colons, but be
-// safe): wrap in single quotes if it contains anything outside the safe set.
-func escapeShell(v string) string {
-	if v == "" {
-		return "''"
+// check reports, before any token exists, whether this configuration can render the
+// command for goos.
+func (s *Service) check(goos string) error {
+	if goos == "windows" {
+		return installcmd.CheckWindows(s.serverURL, s.caPin)
 	}
-	for _, c := range v {
-		if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == ':' || c == '.' || c == '_' || c == '-') {
-			return "'" + strings.ReplaceAll(v, "'", `'\''`) + "'"
-		}
+	return installcmd.CheckUnix(s.serverURL)
+}
+
+// command renders the one-liner the operator pastes. The builders live in installcmd,
+// shared with enrollcmd, so both endpoints hand out the same command: Linux/macOS pipe
+// install.sh into sh (it picks the binary by `uname -s`); Windows downloads install.ps1
+// to the invoking user's own temp directory and runs it with params. See the
+// installcmd package comment for why the Windows command looks the way it does.
+func (s *Service) command(goos, token string) (string, error) {
+	switch goos {
+	case "windows":
+		return installcmd.Windows(s.serverURL, token, s.caPin)
+	default: // linux, darwin
+		return installcmd.Unix(s.serverURL, token, s.caPin)
 	}
-	return v
 }

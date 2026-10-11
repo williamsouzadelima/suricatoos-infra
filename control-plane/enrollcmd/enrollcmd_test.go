@@ -1,12 +1,17 @@
 package enrollcmd
 
 import (
+	"bytes"
 	"encoding/json"
+	"errors"
+	"log"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 
+	"github.com/williamsouzadelima/suricatoos-infra/control-plane/installcmd"
 	"github.com/williamsouzadelima/suricatoos-infra/control-plane/sessiongate"
 	"github.com/williamsouzadelima/suricatoos-infra/control-plane/tokens"
 )
@@ -151,9 +156,92 @@ func TestMaxUsesOneIsSingleHost(t *testing.T) {
 }
 
 func TestBadTarget400(t *testing.T) {
+	s, tm := newSvc(knownAcme)
+	// "macos" e "Darwin" tambem sao invalidos: o valor aceito e exatamente "darwin".
+	for _, target := range []string{"bogus", "macos", "Darwin"} {
+		w := do(s, "GET", "/api/v1/tenants/acme/enroll-command?target="+target, "sekret")
+		if w.Code != http.StatusBadRequest {
+			t.Fatalf("target %q inválido deveria 400, got %d", target, w.Code)
+		}
+		// A mensagem lista os alvos validos, incluindo darwin (macOS).
+		if want := "target deve ser docker, linux, darwin ou windows"; !strings.Contains(w.Body.String(), want) {
+			t.Errorf("target %q: mensagem do 400 deveria conter %q, got %q", target, want, w.Body.String())
+		}
+	}
+	// Recusa ANTES de mintar: alvo invalido nao gasta token.
+	if recs, _ := tm.List(); len(recs) != 0 {
+		t.Fatalf("alvo inválido mintou token: %+v", recs)
+	}
+}
+
+// macOS: o install.sh ja detecta o SO ('uname -s' → darwin, instala em /usr/local/bin),
+// entao o one-liner e o mesmo do linux. Antes, target=darwin (botao macOS da pagina
+// "Ativar Agente") sempre dava 400.
+func TestDarwinTargetUsesInstallScript(t *testing.T) {
+	s, tm := newSvc(knownAcme)
+	w := do(s, "GET", "/api/v1/tenants/acme/enroll-command?target=darwin", "sekret")
+	if w.Code != http.StatusOK {
+		t.Fatalf("target=darwin deveria 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var r response
+	if err := json.Unmarshal(w.Body.Bytes(), &r); err != nil {
+		t.Fatal(err)
+	}
+	if r.Tenant != "acme" || r.Target != "darwin" {
+		t.Fatalf("tenant/target errados: %+v", r)
+	}
+	for _, want := range []string{
+		"curl -fsSL https://scanner.suricatoos.com/install.sh | sudo sh -s --",
+		"--server https://scanner.suricatoos.com/agent/v1",
+		"--token st_",
+		"--ca-pin sha256:abc123",
+	} {
+		if !strings.Contains(r.Command, want) {
+			t.Errorf("comando darwin nao contem %q:\n%s", want, r.Command)
+		}
+	}
+	for _, bad := range []string{"docker", "powershell"} {
+		if strings.Contains(r.Command, bad) {
+			t.Errorf("comando darwin nao deveria conter %q:\n%s", bad, r.Command)
+		}
+	}
+	if r.Image != "" {
+		t.Errorf("darwin nao usa imagem de container, got image=%q", r.Image)
+	}
+	// Mesmo one-liner do linux (so o token muda).
+	gotDarwin, errD := s.command("darwin", "st_x")
+	wantLinux, errL := s.command("linux", "st_x")
+	if errD != nil || errL != nil {
+		t.Fatalf("command: darwin=%v linux=%v", errD, errL)
+	}
+	if gotDarwin != wantLinux {
+		t.Errorf("darwin deveria ter o mesmo one-liner do linux:\n got: %s\nwant: %s", gotDarwin, wantLinux)
+	}
+	// O token e do tenant e com a mesma politica dos demais alvos.
+	recs, _ := tm.List()
+	if len(recs) != 1 || recs[0].Scope.Tenant != "acme" || recs[0].Scope.Policy != "agent-endpoint" {
+		t.Fatalf("token mintado com escopo errado: %+v", recs)
+	}
+}
+
+// O botao macOS da UI chama a rota de SESSAO (atras do portao do nginx), nao a de
+// bearer: target=darwin precisa dar 200 tambem ali.
+func TestSessionHandlerAcceptsDarwin(t *testing.T) {
 	s, _ := newSvc(knownAcme)
-	if w := do(s, "GET", "/api/v1/tenants/acme/enroll-command?target=bogus", "sekret"); w.Code != http.StatusBadRequest {
-		t.Fatalf("target inválido deveria 400, got %d", w.Code)
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /provision/enroll-command", s.SessionHandler())
+	req := gated(httptest.NewRequest("GET", "/provision/enroll-command?tenant=acme&target=darwin", nil))
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("sessao com target=darwin deveria 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var r response
+	if err := json.Unmarshal(w.Body.Bytes(), &r); err != nil {
+		t.Fatal(err)
+	}
+	if r.Target != "darwin" || !strings.Contains(r.Command, "https://scanner.suricatoos.com/install.sh") {
+		t.Fatalf("resposta errada: %+v", r)
 	}
 }
 
@@ -263,16 +351,245 @@ func TestWindowsCommandIsRobust(t *testing.T) {
 		"-Server 'https://scanner.suricatoos.com/agent/v1'",
 		"-Token 'st_",
 		"-CaPin 'sha256:abc123'",
-		`C:\Windows\Temp\suricatoos-install.ps1`,
+		"(Get-Item env:TEMP).Value", // TEMP de quem roda o comando, nao um caminho fixo
+		"if (iwr -useb ",            // o download e a condicao: falha nao executa arquivo velho
+		" -PassThru ",
+		"powershell -NoProfile",
+		"throw '", // guarda contra o TEMP do sistema (SYSTEM)
 	} {
 		if !strings.Contains(r.Command, want) {
 			t.Errorf("comando windows nao contem %q:\n%s", want, r.Command)
 		}
 	}
-	// REGRESSAO: nenhum '$' no comando. Um '$f'/'$env:TEMP' dentro do -Command e
+	// REGRESSAO 1: nenhum '$' no comando. Um '$f'/'$env:TEMP' dentro do -Command e
 	// expandido pelo shell de FORA ao colar num prompt do PowerShell, quebrando o
-	// one-liner (=Join-Path..., -OutFile vazio). O comando robusto nao usa '$'.
-	if strings.Contains(r.Command, "$") {
-		t.Errorf("comando windows nao pode conter '$' (quebra ao colar no PowerShell):\n%s", r.Command)
+	// one-liner (=Join-Path..., -OutFile vazio). O comando robusto nao usa '$' (nem
+	// crase, nem '%' do cmd.exe).
+	if strings.ContainsAny(r.Command, "$`%") {
+		t.Errorf("comando windows nao pode conter '$', crase ou '%%' (quebra ao colar no PowerShell/cmd):\n%s", r.Command)
+	}
+	// REGRESSAO 2: nada de caminho fixo em C:\Windows\Temp, onde qualquer usuario local
+	// cria arquivos (pre-criar ou trocar o instalador antes da execucao elevada).
+	if strings.Contains(r.Command, `:\`) {
+		t.Errorf("comando windows nao pode ter caminho fixo (C:\\Windows\\Temp):\n%s", r.Command)
+	}
+}
+
+// enrollcmd nao monta comando proprio para linux, macOS e Windows: devolve o do
+// installcmd, o MESMO que o provision devolve (a forma exata esta travada la).
+func TestCommandsComeFromInstallcmd(t *testing.T) {
+	s, _ := newSvc(knownAcme)
+	const server, token, pin = "https://scanner.suricatoos.com/agent/v1", "st_TESTE", "sha256:abc123"
+	unix, err := installcmd.Unix(server, token, pin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	windows, err := installcmd.Windows(server, token, pin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for target, want := range map[string]string{"linux": unix, "darwin": unix, "windows": windows} {
+		got, err := s.command(target, token)
+		if err != nil {
+			t.Fatalf("%s: %v", target, err)
+		}
+		if got != want {
+			t.Errorf("%s: o comando nao e o do installcmd:\n got: %s\nwant: %s", target, got, want)
+		}
+	}
+}
+
+// Config que nao cabe com seguranca no comando do Windows (aqui, uma URL com '$('): sem
+// comando e SEM token mintado (a config e validada antes de mintar, entao um erro de
+// configuracao nao minta e revoga um token a cada pedido); o erro nao vaza nada. Docker,
+// linux e macOS citam o valor para o shell e seguem funcionando.
+func TestWindowsRefusedWhenServerURLIsUnsafe(t *testing.T) {
+	tm := tokens.NewManager(tokens.NewMemStore())
+	s := New(Config{
+		TM:          tm,
+		Known:       knownAcme,
+		CAPin:       "sha256:abc123",
+		ServerURL:   "https://scanner.suricatoos.com/agent/v1$(evil)",
+		AdminSecret: "sekret",
+	})
+
+	w := do(s, "GET", "/api/v1/tenants/acme/enroll-command?target=windows", "sekret")
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("windows com URL insegura deveria 500, got %d: %s", w.Code, w.Body.String())
+	}
+	if body := w.Body.String(); strings.Contains(body, "st_") || strings.Contains(body, "evil") {
+		t.Errorf("a resposta de erro vazou dado: %s", body)
+	}
+	if recs, _ := tm.List(); len(recs) != 0 {
+		t.Fatalf("a config recusada nao deveria mintar token: %+v", recs)
+	}
+
+	for target, want := range map[string]string{
+		"linux":  "--server 'https://scanner.suricatoos.com/agent/v1$(evil)'",
+		"darwin": "--server 'https://scanner.suricatoos.com/agent/v1$(evil)'",
+		"docker": "CLOUD_BASE_URL='https://scanner.suricatoos.com/agent/v1$(evil)'",
+	} {
+		w := do(s, "GET", "/api/v1/tenants/acme/enroll-command?target="+target, "sekret")
+		if w.Code != http.StatusOK {
+			t.Fatalf("%s deveria seguir funcionando, got %d: %s", target, w.Code, w.Body.String())
+		}
+		var r response
+		if err := json.Unmarshal(w.Body.Bytes(), &r); err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(r.Command, want) {
+			t.Errorf("%s: o valor deveria sair citado para o shell (%s):\n%s", target, want, r.Command)
+		}
+	}
+}
+
+// A referencia da imagem era o unico valor que ainda entrava cru no docker run: passa pelo
+// ShellQuote como os demais. A imagem padrao sai igual a antes, sem aspas.
+func TestDockerImageIsShellQuoted(t *testing.T) {
+	cmdFor := func(image string) string {
+		t.Helper()
+		s := New(Config{
+			TM:          tokens.NewManager(tokens.NewMemStore()),
+			Known:       knownAcme,
+			CAPin:       "sha256:abc123",
+			ServerURL:   "https://scanner.suricatoos.com/agent/v1",
+			Image:       image,
+			AdminSecret: "sekret",
+		})
+		w := do(s, "GET", "/api/v1/tenants/acme/enroll-command?target=docker", "sekret")
+		if w.Code != http.StatusOK {
+			t.Fatalf("docker deveria 200, got %d: %s", w.Code, w.Body.String())
+		}
+		var r response
+		if err := json.Unmarshal(w.Body.Bytes(), &r); err != nil {
+			t.Fatal(err)
+		}
+		return r.Command
+	}
+
+	if got := cmdFor(""); !strings.HasSuffix(got, " ghcr.io/williamsouzadelima/suricatoos-agent:stable") {
+		t.Errorf("a imagem padrao deveria sair sem aspas, no fim do comando:\n%s", got)
+	}
+	const hostile = "reg.example/agent:1 --privileged; touch /tmp/x"
+	if got := cmdFor(hostile); !strings.HasSuffix(got, " '"+hostile+"'") {
+		t.Errorf("a imagem com espaco e ';' deveria sair como UMA palavra entre aspas:\n%s", got)
+	}
+}
+
+// failingUpdateStore falha em Update (disco cheio, banco travado): o Revoke falha junto.
+type failingUpdateStore struct{ tokens.Store }
+
+func (failingUpdateStore) Update(tokens.Record) error { return errors.New("disco cheio") }
+
+// captureLog redireciona o log padrao para um buffer ate o fim do teste.
+func captureLog(t *testing.T) *bytes.Buffer {
+	t.Helper()
+	var buf bytes.Buffer
+	log.SetOutput(&buf)
+	t.Cleanup(func() { log.SetOutput(os.Stderr) })
+	return &buf
+}
+
+// idAndSecret separa um token "st_<id>.<segredo>".
+func idAndSecret(t *testing.T, token string) (id, secret string) {
+	t.Helper()
+	body := strings.TrimPrefix(token, "st_")
+	i := strings.Index(body, ".")
+	if i < 0 {
+		t.Fatalf("token fora do formato st_<id>.<segredo>: %q", token)
+	}
+	return body[:i], body[i+1:]
+}
+
+// newSvcWithStore e o newSvc com o armazenamento de tokens escolhido pelo teste.
+func newSvcWithStore(store tokens.Store) (*Service, *tokens.Manager) {
+	tm := tokens.NewManager(store)
+	return New(Config{
+		TM:          tm,
+		Known:       knownAcme,
+		CAPin:       "sha256:abc123",
+		ServerURL:   "https://scanner.suricatoos.com/agent/v1",
+		AdminSecret: "sekret",
+	}), tm
+}
+
+// Falha tardia: o token ja existe e o comando nao sai (nao acontece com tokens reais, que
+// sempre cabem; o teste a simula por render). O pedido da 500, o token e revogado e nada do
+// segredo vai para a resposta nem para o log.
+func TestLateRenderFailureRevokesTheToken(t *testing.T) {
+	logs := captureLog(t)
+	s, tm := newSvcWithStore(tokens.NewMemStore())
+	var seen string
+	s.render = func(target, token string) (string, error) {
+		seen = token
+		return "", errors.New("falha simulada")
+	}
+
+	w := do(s, "GET", "/api/v1/tenants/acme/enroll-command?target=linux", "sekret")
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("falha tardia deveria 500, got %d: %s", w.Code, w.Body.String())
+	}
+	if recs, _ := tm.List(); len(recs) != 1 || !recs[0].Revoked {
+		t.Fatalf("o token do comando que nao saiu deveria estar revogado: %+v", recs)
+	}
+	_, secret := idAndSecret(t, seen)
+	for name, text := range map[string]string{"resposta": w.Body.String(), "log": logs.String()} {
+		if strings.Contains(text, secret) || strings.Contains(text, seen) {
+			t.Errorf("%s vazou o segredo do token: %s", name, text)
+		}
+	}
+}
+
+// A revogacao que falha nao some em silencio: o log traz o id do token e o motivo (nunca o
+// segredo), porque o token segue valido ate expirar.
+func TestRevokeFailureIsLogged(t *testing.T) {
+	logs := captureLog(t)
+	s, _ := newSvcWithStore(failingUpdateStore{tokens.NewMemStore()})
+	var seen string
+	s.render = func(target, token string) (string, error) {
+		seen = token
+		return "", errors.New("falha simulada")
+	}
+
+	w := do(s, "GET", "/api/v1/tenants/acme/enroll-command?target=linux", "sekret")
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("falha tardia deveria 500, got %d: %s", w.Code, w.Body.String())
+	}
+	id, secret := idAndSecret(t, seen)
+	out := logs.String()
+	if !strings.Contains(out, id) {
+		t.Errorf("o log deveria citar o id %s do token que ficou sem revogar:\n%s", id, out)
+	}
+	if !strings.Contains(out, "disco cheio") {
+		t.Errorf("o log deveria trazer o motivo da falha ao revogar:\n%s", out)
+	}
+	if strings.Contains(out, secret) || strings.Contains(out, seen) {
+		t.Errorf("o log vazou o segredo do token:\n%s", out)
+	}
+}
+
+// URL do servidor sem http(s)://host: nao ha de onde baixar o instalador, entao linux,
+// macOS e Windows recusam SEM mintar token (antes saia "curl -fsSL /install.sh"). O docker
+// nao baixa script nenhum e segue funcionando.
+func TestUnusableServerURLRefusesInstallTargetsBeforeMinting(t *testing.T) {
+	tm := tokens.NewManager(tokens.NewMemStore())
+	s := New(Config{
+		TM:          tm,
+		Known:       knownAcme,
+		CAPin:       "sha256:abc123",
+		ServerURL:   "scanner.suricatoos.com/agent/v1",
+		AdminSecret: "sekret",
+	})
+	for _, target := range []string{"linux", "darwin", "windows"} {
+		w := do(s, "GET", "/api/v1/tenants/acme/enroll-command?target="+target, "sekret")
+		if w.Code != http.StatusInternalServerError {
+			t.Errorf("%s com URL sem esquema deveria 500, got %d: %s", target, w.Code, w.Body.String())
+		}
+	}
+	if recs, _ := tm.List(); len(recs) != 0 {
+		t.Fatalf("a config recusada nao deveria mintar token: %+v", recs)
+	}
+	if w := do(s, "GET", "/api/v1/tenants/acme/enroll-command?target=docker", "sekret"); w.Code != http.StatusOK {
+		t.Errorf("docker nao depende do host dos scripts, deveria 200, got %d: %s", w.Code, w.Body.String())
 	}
 }
