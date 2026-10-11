@@ -867,8 +867,9 @@ Regras transversais:
   - `min_qod=` com um inteiro de 0 a 100, em decimal sem zero à esquerda;
   - `levels=` com um subconjunto de `chmlgf`, sem repetir letra e em qualquer ordem.
 
-  Os tokens são o filtro dividido por espaço (aspas não agrupam). Um token é de uma dessas chaves quando começa
-  pela chave seguida de uma relação (`=`, `<`, `>`, `~` ou `:`). Cada chave aparece exatamente uma vez, com `=` e
+  Os tokens são o filtro dividido por espaço (aspas não agrupam). Um token é de uma dessas chaves quando é a
+  chave sozinha ou começa pela chave seguida de uma relação (`=`, `<`, `>`, `~` ou `:`) — uma palavra solta igual à
+  chave seria termo de busca para o gvmd e estreitaria o export em silêncio. Cada chave aparece exatamente uma vez, com `=` e
   valor válido; senão, `bad_payload` (linha 8), e o `fleet_ops.py` também recusa. É regra semântica, não padrão do
   schema, porque o RE2 do Go não tem lookahead; o `validate_fleet_examples.py` a confere (checagem
   `export_filter`).
