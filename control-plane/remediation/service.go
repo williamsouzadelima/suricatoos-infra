@@ -58,7 +58,7 @@ func (s *Service) auth(w http.ResponseWriter, r *http.Request) (Identity, bool) 
 	}
 	serial := normalizeSerial(r.Header.Get("X-Client-Cert-Serial"))
 	if s.revoked == nil || s.revoked(serial) {
-		log.Printf("remediation: CRL negada (cn=%s serial=%s wired=%v)", id.CN, serial, s.revoked != nil)
+		log.Printf("remediation: CRL negada (cn=%q serial=%q wired=%v)", id.CN, serial, s.revoked != nil)
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return Identity{}, false
 	}
@@ -211,7 +211,11 @@ func (s *Service) EnqueueHandler() http.HandlerFunc {
 // ApproveHandler serves POST /api/v1/remediation/jobs/{id}/approve (admin bearer):
 // the human approval gate — it SIGNS the job and makes it deliverable. The
 // approver identity (X-Operator, set by nginx from the gsad session, or a body
-// field) is REQUIRED and recorded for audit. Nothing is signed without it.
+// field) is REQUIRED and recorded for audit. Nothing is signed without it. It answers
+// by the kind of failure, like reject and close: 400 without an approver, 404 for an
+// unknown job, 409 for a job that is not PENDING_APPROVAL, 500 for anything else (a
+// write that fails — the job goes back to PENDING_APPROVAL — or a signer that is not
+// configured).
 func (s *Service) ApproveHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if !s.adminOK(w, r) {
@@ -228,16 +232,18 @@ func (s *Service) ApproveHandler() http.HandlerFunc {
 			return
 		}
 		job, err := s.reg.Approve(jobID, approver)
-		if err != nil {
-			if err == ErrNotFound {
-				http.Error(w, "not found", http.StatusNotFound)
-				return
-			}
+		switch {
+		case err == nil:
+			log.Printf("remediation: job %s aprovado por %q (tenant=%q agent=%q)", job.JobID, approver, job.Tenant, job.AgentID)
+			writeJSON(w, http.StatusOK, map[string]any{"job": job})
+		case errors.Is(err, ErrNotFound):
+			http.Error(w, "not found", http.StatusNotFound)
+		case errors.Is(err, ErrInvalidState):
 			writeJSON(w, http.StatusConflict, map[string]any{"error": err.Error()})
-			return
+		default:
+			log.Printf("remediation: approve job=%s: %v", jobID, err)
+			http.Error(w, "erro interno", http.StatusInternalServerError)
 		}
-		log.Printf("remediation: job %s aprovado por %q (tenant=%q agent=%q)", job.JobID, approver, job.Tenant, job.AgentID)
-		writeJSON(w, http.StatusOK, map[string]any{"job": job})
 	}
 }
 

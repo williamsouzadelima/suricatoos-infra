@@ -1051,8 +1051,9 @@ func TestAckOnAJobThatIsNotDeliveredChangesNothing(t *testing.T) {
 }
 
 // Approving is only for a job still PENDING_APPROVAL. Anything else — a REJECTED job (an
-// approval must not resurrect it) or a CLOSED one included — is refused and left exactly
-// as it was: same state, same approver, same signature.
+// approval must not resurrect it) or a CLOSED one included — is refused as
+// ErrInvalidState (the route answers 409) and left exactly as it was: same state, same
+// approver, same signature.
 func TestApproveRefusesAJobThatIsNotPending(t *testing.T) {
 	for _, st := range lifecycle {
 		if st == StatePendingApproval {
@@ -1062,8 +1063,8 @@ func TestApproveRefusesAJobThatIsNotPending(t *testing.T) {
 			r, _ := testReg(t)
 			j := jobIn(t, r, st)
 			before, _ := r.Get(j.JobID, "win1", "acme")
-			if _, err := r.Approve(j.JobID, "mallory"); err == nil || errors.Is(err, ErrNotFound) {
-				t.Errorf("Approve from %s: err = %v, want a refusal", st, err)
+			if _, err := r.Approve(j.JobID, "mallory"); !errors.Is(err, ErrInvalidState) {
+				t.Errorf("Approve from %s: err = %v, want ErrInvalidState", st, err)
 			}
 			after, _ := r.Get(j.JobID, "win1", "acme")
 			if after.State != before.State || after.ApprovedBy != before.ApprovedBy || after.Signature != before.Signature {

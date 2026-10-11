@@ -206,7 +206,10 @@ func (r *Registry) Enqueue(req EnqueueRequest) (*RemediationJob, error) {
 // Approve records the operator's approval, sets issued_at, SIGNS the canonical
 // (binding agent/tenant/type/issued_at/expires_at/nonce/payload), and moves the
 // job to APPROVED — the first state in which it is deliverable. Only a job in
-// PENDING_APPROVAL can be approved.
+// PENDING_APPROVAL can be approved: an unknown id is ErrNotFound, any other state is
+// ErrInvalidState (and the job is left alone). Everything else — a missing signer, a
+// write that fails (which undoes the approval in memory) — is a plain error: the
+// server's problem, not a conflict with the job's state.
 func (r *Registry) Approve(jobID, approver string) (*RemediationJob, error) {
 	if blank(approver) {
 		return nil, fmt.Errorf("aprovador obrigatório")
@@ -218,7 +221,7 @@ func (r *Registry) Approve(jobID, approver string) (*RemediationJob, error) {
 		return nil, ErrNotFound
 	}
 	if j.State != StatePendingApproval {
-		return nil, fmt.Errorf("job %s não está em PENDING_APPROVAL (estado %s)", jobID, j.State)
+		return nil, fmt.Errorf("%w: job %s não está em PENDING_APPROVAL (estado %s)", ErrInvalidState, jobID, j.State)
 	}
 	if r.signer == nil {
 		return nil, fmt.Errorf("signer de remediação não configurado")

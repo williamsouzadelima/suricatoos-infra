@@ -82,6 +82,11 @@ curl -sS -X POST https://scanner.suricatoos.com/agent/api/v1/remediation/jobs/<j
   -d '{"approved_by":"<operador>"}'
 ```
 
+Respostas: `200` com o job assinado; `400` sem aprovador; `401` sem o bearer; `404` id inexistente; `409` se o job
+não está em `PENDING_APPROVAL`; `500` se algo do **servidor** falhou (a gravação da fila ou o signer — nesse
+caso o job **continua** `PENDING_APPROVAL`, nada foi assinado, e o log do control-plane diz o erro: corrija e
+repita a mesma chamada).
+
 **Rejeitar** (descarta — **só antes da entrega**): vale para `PENDING_APPROVAL` e `APPROVED`, quando o agente
 ainda não recebeu o job e nada aconteceu em nenhum host. Mesmo bearer e, pelo mesmo motivo (o nginx remove o
 `X-Operator`), o operador vai no **corpo**, no campo `rejected_by` (`approved_by` continua aceito por

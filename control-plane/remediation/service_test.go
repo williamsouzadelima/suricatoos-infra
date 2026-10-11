@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -90,6 +91,60 @@ func TestAgentRoutesRequireMTLS(t *testing.T) {
 		t.Errorf("wrong-OU poll = %d, want 403", r2.StatusCode)
 	}
 	r2.Body.Close()
+}
+
+// What the agent-route gate logs about a rejected request comes from outside — the cert
+// (cn) and its headers — and is quoted, so a hostile value cannot start a line of its own.
+func TestAuthLogLinesQuoteWhatComesFromOutside(t *testing.T) {
+	evil := "x\nremediation: linha forjada"
+	oneLine := func(t *testing.T, logs *lockedBuf) {
+		t.Helper()
+		if out := logs.String(); strings.Count(out, "\n") != 1 || !strings.Contains(out, "remediation:") {
+			t.Errorf("a requisição deveria deixar exatamente UMA linha de log, got: %q", out)
+		}
+	}
+	key, err := signkeys.LoadOrCreate("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	reg, err := NewRegistry(Config{Path: filepath.Join(t.TempDir(), "r.json"), Signer: key})
+	if err != nil {
+		t.Fatal(err)
+	}
+	poll := func(svc *Service, verify, dn, serial string) int {
+		t.Helper()
+		req := httptest.NewRequest("GET", "/v1/remediation-jobs", nil)
+		req.Header.Set("X-Client-Cert-Verify", verify)
+		req.Header.Set("X-Client-Cert-DN", dn)
+		req.Header.Set("X-Client-Cert-Serial", serial)
+		w := httptest.NewRecorder()
+		svc.PollHandler()(w, req)
+		return w.Code
+	}
+	revokedAll := NewService(reg, nil, func(string) bool { return true }, adminSecret)
+
+	t.Run("CRL negada: cn do cert", func(t *testing.T) {
+		logs := captureLog(t)
+		if code := poll(revokedAll, "SUCCESS", "CN="+evil+",OU=agent-endpoint,O=acme", "01"); code != http.StatusForbidden {
+			t.Fatalf("serial revogado = %d, want 403", code)
+		}
+		oneLine(t, logs)
+	})
+	t.Run("CRL negada: serial do header", func(t *testing.T) {
+		logs := captureLog(t)
+		if code := poll(revokedAll, "SUCCESS", "CN=win1,OU=agent-endpoint,O=acme", evil); code != http.StatusForbidden {
+			t.Fatalf("serial revogado = %d, want 403", code)
+		}
+		oneLine(t, logs)
+	})
+	t.Run("authz negada: header hostil", func(t *testing.T) {
+		logs := captureLog(t)
+		svc := NewService(reg, nil, func(string) bool { return false }, adminSecret)
+		if code := poll(svc, evil, "CN=win1,OU=agent-endpoint,O=acme", "01"); code != http.StatusForbidden {
+			t.Fatalf("verify hostil = %d, want 403", code)
+		}
+		oneLine(t, logs)
+	})
 }
 
 func TestRevokedSerialDenied(t *testing.T) {
@@ -245,6 +300,83 @@ func TestApproveNeedsApprover(t *testing.T) {
 		t.Errorf("approve w/o approver = %d, want 400", ap.StatusCode)
 	}
 	ap.Body.Close()
+}
+
+// Approve answers by the kind of failure, like reject and close: an unknown job is 404,
+// a job that is not PENDING_APPROVAL is 409, and anything else — a write that fails, a
+// signer that is not configured — is the server's problem, 500, with the job back to
+// what it was (a 409 would send the operator hunting for a state conflict that is not
+// there).
+func TestApproveRouteAnswersByTheKindOfFailure(t *testing.T) {
+	approve := func(t *testing.T, srv *httptest.Server, id string) int {
+		t.Helper()
+		resp := adminReq(t, "POST", srv.URL+"/api/v1/remediation/jobs/"+id+"/approve", `{"approved_by":"alice"}`, "")
+		resp.Body.Close()
+		return resp.StatusCode
+	}
+
+	t.Run("an unknown job is 404", func(t *testing.T) {
+		srv, _, _ := testService(t)
+		defer srv.Close()
+		if code := approve(t, srv, "nao-existe"); code != http.StatusNotFound {
+			t.Errorf("approve of an unknown job = %d, want 404", code)
+		}
+	})
+
+	t.Run("a job that is not pending is 409", func(t *testing.T) {
+		srv, reg, _ := testService(t)
+		defer srv.Close()
+		j := jobIn(t, reg, StateApproved)
+		if code := approve(t, srv, j.JobID); code != http.StatusConflict {
+			t.Errorf("approve of an APPROVED job = %d, want 409", code)
+		}
+	})
+
+	t.Run("a failed write is 500 and the job is untouched", func(t *testing.T) {
+		srv, reg, key := testService(t)
+		defer srv.Close()
+		logs := captureLog(t)
+		j := jobIn(t, reg, StatePendingApproval)
+		failSaves(t, reg)
+		if code := approve(t, srv, j.JobID); code != http.StatusInternalServerError {
+			t.Errorf("approve with a failing write = %d, want 500", code)
+		}
+		got, _ := reg.Get(j.JobID, "win1", "acme")
+		if got.State != StatePendingApproval || got.ApprovedBy != "" || got.Signature != "" || !got.IssuedAt.IsZero() {
+			t.Errorf("the failed approve left the job changed: state=%s approved_by=%q signature=%q", got.State, got.ApprovedBy, got.Signature)
+		}
+		if lines := linesWith(logs, "aprovado por"); len(lines) != 0 {
+			t.Errorf("an approval that did not happen was audited: %q", lines)
+		}
+		// The failure was the write's alone: once it is fixed the very same approval goes through, signed.
+		if err := os.Remove(reg.path + ".tmp"); err != nil {
+			t.Fatal(err)
+		}
+		if code := approve(t, srv, j.JobID); code != http.StatusOK {
+			t.Fatalf("approve after the write is fixed = %d, want 200", code)
+		}
+		if got, _ := reg.Get(j.JobID, "win1", "acme"); got.State != StateApproved || !Verify(got, key.Public()) {
+			t.Errorf("the retried approval should be APPROVED and verifiable: state=%s", got.State)
+		}
+	})
+
+	t.Run("a missing signer is 500", func(t *testing.T) {
+		reg, err := NewRegistry(Config{Path: filepath.Join(t.TempDir(), "rem.json")}) // no signer
+		if err != nil {
+			t.Fatal(err)
+		}
+		mux := http.NewServeMux()
+		NewService(reg, nil, func(string) bool { return false }, adminSecret).Register(mux)
+		srv := httptest.NewServer(mux)
+		defer srv.Close()
+		j := enq(t, reg, "win1", "acme")
+		if code := approve(t, srv, j.JobID); code != http.StatusInternalServerError {
+			t.Errorf("approve without a configured signer = %d, want 500", code)
+		}
+		if got := stateOf(t, reg, j.JobID); got != StatePendingApproval {
+			t.Errorf("the refused approve changed the job to %s", got)
+		}
+	})
 }
 
 func TestReportValidatesStatus(t *testing.T) {
