@@ -35,18 +35,41 @@
 //	REMEDIATION_JOBS_FILE path to the JSON file persisting the job queue (0600,
 //	                      atomic). Absent → in-memory (lost on restart).
 //	AI_CONFIG_ENABLED     "true" mounts the AI-provider admin routes (LLM router
-//	                      keys). DARK by default; admin-bearer gated.
+//	                      keys). DARK by default; admin-bearer gated. On boot it
+//	                      also ensures the openrouter-free / unorouter-free presets
+//	                      (created disabled and keyless only when absent).
 //	AI_CONFIG_KEK_FILE    path to the 32-byte key that encrypts provider API keys
 //	                      at rest (0600). Absent → ephemeral (keys lost on restart).
 //	AI_PROVIDERS_FILE     path to the JSON file persisting providers (0600, atomic;
 //	                      keys stored ENCRYPTED). Absent → in-memory.
+//	AI_FREE_MODELS_ONLY   DEFAULT true: only FREE models (id ending in ":free", or
+//	                      openrouter/free) of OpenRouter/UnoRouter may be configured,
+//	                      base_url is pinned to the router's official endpoint (a
+//	                      supplied one is ignored), enabling ALWAYS takes the
+//	                      data-policy acknowledgment, and the planner refuses any
+//	                      other model or endpoint. "false" restores the generic
+//	                      gateway, custom endpoints and paid models (still governed:
+//	                      UE + ZDR, or a free model on the official endpoint with
+//	                      the acknowledgment).
 //	AI_PLANNER_ENABLED    "true" mounts POST /api/v1/remediation/plan (operator-
 //	                      triggered AI draft). DARK by default; admin-bearer.
 //	AI_PLANNER_CONSENT    "true" grants per-purpose consent. DEFAULT off → no model
 //	                      call ever happens without it.
 //	AI_PLANNER_BUDGET_USD monthly spend ceiling (estimate); <=0/unset → no ceiling.
+//	                      Calls to free models cost 0 against it.
 //	AI_PLANNER_USD_PER_1K cost estimate per 1k tokens, for the budget gate.
-//	AI_PLANNER_PROVIDER_ID provider id to use; unset → the first enabled provider.
+//	AI_PLANNER_TIMEOUT    overall time budget of ONE draft — every provider and
+//	                      response-format attempt together (Go duration, default
+//	                      5m). The plan route gets its own write deadline from it;
+//	                      the server-wide WriteTimeout is unchanged. Behind nginx,
+//	                      the location = /agent/api/v1/remediation/plan reads for
+//	                      360s: raising this above 330s needs that raised too.
+//	AI_PLANNER_PROVIDER_ID comma-separated provider ids in priority order (the
+//	                      next one is tried on any non-2xx answer, timeout or
+//	                      network error); unset → with AI_FREE_MODELS_ONLY=true
+//	                      ONLY the presets, openrouter-free then unorouter-free;
+//	                      with it false, every enabled provider, the presets first,
+//	                      then the rest by name.
 //
 // When CA_CERT_FILE/CA_KEY_FILE are set the CA survives restarts (agents keep
 // their mTLS certificates). Without them a new ephemeral CA is generated on
@@ -63,6 +86,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	cpaiproviders "github.com/williamsouzadelima/suricatoos-infra/control-plane/aiproviders"
@@ -250,22 +274,32 @@ func main() {
 	// AI provider config (LLM router keys). Mounted ONLY when AI_CONFIG_ENABLED
 	// (dark by default). API keys are WRITE-ONLY over the admin API and encrypted at
 	// rest with a host KEK; a provider is enabled only if it meets the governance
-	// bar (EU + ZDR). The plaintext key is read server-side only (by the planner).
+	// bar (aiproviders.GovernanceRefusal, re-checked by the planner at use time):
+	// with AI_FREE_MODELS_ONLY, a free model on its router's official endpoint WITH
+	// the data-policy acknowledgment, always; without it, EU + ZDR or such a free
+	// model acknowledged. The plaintext key is read server-side only (planner +
+	// free-models listing).
+	// AI_FREE_MODELS_ONLY (default true) restricts registry AND planner to the free
+	// models of OpenRouter/UnoRouter (zero cost).
+	aiFreeOnly := envBool("AI_FREE_MODELS_ONLY", true)
 	aiKEK, err := cpaiproviders.LoadOrCreateKEK(os.Getenv("AI_CONFIG_KEK_FILE"))
 	if err != nil {
 		log.Fatalf("ai-providers KEK: %v", err)
 	}
-	aiReg, err := cpaiproviders.NewRegistry(os.Getenv("AI_PROVIDERS_FILE"), aiKEK)
+	aiReg, err := cpaiproviders.NewRegistry(os.Getenv("AI_PROVIDERS_FILE"), aiKEK, cpaiproviders.WithFreeModelsOnly(aiFreeOnly))
 	if err != nil {
 		log.Fatalf("ai-providers: %v", err)
 	}
 	aiSvc := cpaiproviders.NewService(aiReg, adminSecret)
 	aiConfigEnabled := os.Getenv("AI_CONFIG_ENABLED") == "true"
+	log.Printf("ai-providers: só modelos gratuitos (AI_FREE_MODELS_ONLY) = %v", aiFreeOnly)
 
 	// Remediation planner (Fase 4) — operator-triggered AI draft. Consent is OFF by
 	// default and the budget caps spend, so a drafting call only happens on an
 	// explicit admin request with consent granted and an enabled provider. The real
 	// OpenAI-compatible client reads the key from aiproviders server-side.
+	// AI_PLANNER_TIMEOUT caps one draft as a whole (all providers and formats).
+	plannerTimeout := envDuration("AI_PLANNER_TIMEOUT", 5*time.Minute)
 	plannerSvc := cpplanner.NewService(
 		cpplanner.New(
 			cpplanner.NewHTTPLLM(),
@@ -274,6 +308,8 @@ func main() {
 				ConsentGranted:   os.Getenv("AI_PLANNER_CONSENT") == "true",
 				MonthlyBudgetUSD: envFloat("AI_PLANNER_BUDGET_USD"),
 				USDPer1kTokens:   envFloat("AI_PLANNER_USD_PER_1K"),
+				FreeModelsOnly:   aiFreeOnly,
+				Timeout:          plannerTimeout,
 			},
 		),
 		adminSecret,
@@ -363,14 +399,24 @@ func main() {
 		log.Printf("remediation: fila de jobs desabilitada (REMEDIATION_ENABLED != true)")
 	}
 	if aiConfigEnabled {
+		// Pre-configured free providers: created (disabled, keyless) only when the id
+		// is absent — an operator's edits are never overwritten.
+		switch created, err := aiReg.EnsurePresets(); {
+		case err != nil:
+			log.Printf("ai-providers: presets NÃO garantidos: %v", err)
+		case len(created) > 0:
+			log.Printf("ai-providers: presets criados (desabilitados, sem chave): %s", strings.Join(created, ", "))
+		default:
+			log.Printf("ai-providers: presets já existentes (%s) — nada alterado", strings.Join(cpaiproviders.PresetIDs(), ", "))
+		}
 		aiSvc.Register(mux)
-		log.Printf("ai-providers: config de provedores HABILITADA (chaves cifradas, admin-bearer)")
+		log.Printf("ai-providers: config de provedores HABILITADA (chaves cifradas, admin-bearer + sessão gsad)")
 	} else {
 		log.Printf("ai-providers: config de provedores desabilitada (AI_CONFIG_ENABLED != true)")
 	}
 	if plannerEnabled {
 		plannerSvc.Register(mux)
-		log.Printf("remediation-planner: rascunho de IA HABILITADO (advisory; consentimento=%v)", os.Getenv("AI_PLANNER_CONSENT") == "true")
+		log.Printf("remediation-planner: rascunho de IA HABILITADO (advisory; consentimento=%v; tempo total por rascunho=%s)", os.Getenv("AI_PLANNER_CONSENT") == "true", plannerTimeout)
 	} else {
 		log.Printf("remediation-planner: desabilitado (AI_PLANNER_ENABLED != true)")
 	}
@@ -413,6 +459,37 @@ func mustEnv(key string) string {
 		log.Fatalf("required environment variable %s is not set", key)
 	}
 	return v
+}
+
+// envBool parses a boolean env var (strconv.ParseBool: true/false/1/0/...),
+// returning def when unset or unparseable — for a default-true safety switch an
+// unparseable value therefore keeps the safe default.
+func envBool(key string, def bool) bool {
+	v := os.Getenv(key)
+	if v == "" {
+		return def
+	}
+	b, err := strconv.ParseBool(v)
+	if err != nil {
+		log.Printf("%s=%q inválido; usando o padrão %v", key, v, def)
+		return def
+	}
+	return b
+}
+
+// envDuration parses a Go duration env var ("90s", "5m"), returning def when unset,
+// unparseable or not positive.
+func envDuration(key string, def time.Duration) time.Duration {
+	v := os.Getenv(key)
+	if v == "" {
+		return def
+	}
+	d, err := time.ParseDuration(v)
+	if err != nil || d <= 0 {
+		log.Printf("%s=%q inválido; usando o padrão %s", key, v, def)
+		return def
+	}
+	return d
 }
 
 // envFloat parses a float env var, returning 0 when unset or unparseable.

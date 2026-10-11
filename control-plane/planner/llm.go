@@ -19,8 +19,8 @@ type Usage struct {
 }
 
 // ChatRequest is one structured-output completion against a resolved provider. The
-// real client (a later slice) must send NO temperature (Claude 5 rule) and request
-// structured output via Schema.
+// real client (HTTPLLM) sends NO temperature (Claude 5 rule) and requests structured
+// output via Schema (response_format json_schema, with the fallbacks in httpllm.go).
 type ChatRequest struct {
 	BaseURL  string
 	APIKey   string
@@ -42,16 +42,26 @@ type LLM interface {
 	Chat(ctx context.Context, req ChatRequest) (ChatResponse, error)
 }
 
-// Provider is the resolved endpoint the Planner sends to.
+// Provider is a resolved endpoint the Planner may send to. Kind + BaseURL + Model
+// decide whether the model is FREE (aiproviders.IsFree); with EURegion, ZDR and
+// DataPolicyAck they are the governance terms the Planner re-checks at use time
+// (aiproviders.GovernanceRefusal).
 type Provider struct {
-	Name    string
-	BaseURL string
-	APIKey  string
-	Model   string
+	ID            string
+	Name          string
+	Kind          string
+	BaseURL       string
+	APIKey        string
+	Model         string
+	EURegion      bool
+	ZDR           bool
+	DataPolicyAck bool
 }
 
-// ProviderResolver yields an ENABLED, governed provider (the real impl wraps the
-// aiproviders registry; a fake is used in tests). It errors if none is usable.
+// ProviderResolver yields the ENABLED providers in priority order (the Planner
+// tries the next one on any non-2xx answer, timeout or network error). The real
+// impl wraps the aiproviders registry; a fake is used in tests. It errors if none
+// is usable.
 type ProviderResolver interface {
-	Resolve(ctx context.Context) (Provider, error)
+	Resolve(ctx context.Context) ([]Provider, error)
 }

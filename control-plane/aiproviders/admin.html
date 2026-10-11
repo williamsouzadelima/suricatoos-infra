@@ -39,7 +39,7 @@
 <body>
 <header>
   <h1>Provedores de IA</h1>
-  <div class="sub">Chaves cifradas em repouso · <b>write-only</b> (nunca exibidas) · só habilita provedor <b>UE + ZDR</b> (governança). Admin.</div>
+  <div class="sub">Chaves cifradas em repouso · <b>write-only</b> (nunca exibidas) · só habilita <b>modelo gratuito com ciência</b> da política de dados (com <code>AI_FREE_MODELS_ONLY=false</code>, também provedor <b>UE + ZDR</b>) (governança). Admin.</div>
 </header>
 <main>
   <div class="card">
@@ -70,7 +70,7 @@
       </div>
     </div>
     <div class="row">
-      <div><label for="base">Base URL (https)</label><input id="base" type="text" placeholder="https://openrouter.ai/api/v1"></div>
+      <div><label for="base">Base URL (https; com só modelos gratuitos é ignorada: vale a oficial do tipo)</label><input id="base" type="text" placeholder="https://openrouter.ai/api/v1"></div>
       <div><label for="model">Modelo (opcional)</label><input id="model" type="text" placeholder="ex.: anthropic/claude-..."></div>
     </div>
     <label for="key">Chave de API (deixe em branco p/ manter a atual)</label>
@@ -78,13 +78,14 @@
     <div class="checks">
       <label><input id="eu" type="checkbox"> Região UE</label>
       <label><input id="zdr" type="checkbox"> ZDR (zero retention)</label>
+      <label><input id="ack" type="checkbox"> Ciência: modelo gratuito pode registrar/usar os prompts (sem ZDR)</label>
       <label><input id="enabled" type="checkbox"> Habilitado</label>
     </div>
     <div style="margin-top:12px;display:flex;gap:8px">
       <button id="save" class="primary" type="button">Salvar</button>
       <button id="reset" type="button">Limpar</button>
     </div>
-    <div class="sub" style="margin-top:8px">Só é possível <b>habilitar</b> um provedor marcado como UE + ZDR.</div>
+    <div class="sub" style="margin-top:8px">Só é possível <b>habilitar</b> com modelo gratuito (id terminado em <code>:free</code>, ou <code>openrouter/free</code>) no endpoint oficial do OpenRouter/UnoRouter e a ciência marcada — com <code>AI_FREE_MODELS_ONLY=true</code> (padrão) a ciência é sempre exigida, mesmo com UE/ZDR; com a regra desligada, também vale provedor UE + ZDR. Trocar o tipo ou o endpoint de um provedor com chave exige colar a chave de novo.</div>
   </div>
 </main>
 
@@ -142,6 +143,10 @@
       gov.appendChild(badge("UE", p.eu_region ? "ok" : "off"));
       gov.appendChild(document.createTextNode(" "));
       gov.appendChild(badge("ZDR", p.zdr ? "ok" : "off"));
+      if (p.data_policy_ack) {
+        gov.appendChild(document.createTextNode(" "));
+        gov.appendChild(badge("ciência", "warn"));
+      }
       tr.appendChild(gov);
       var st = document.createElement("td");
       st.appendChild(badge(p.enabled ? "habilitado" : "desabilitado", p.enabled ? "ok" : "off"));
@@ -168,6 +173,7 @@
     $("key").value = "";
     $("eu").checked = !!p.eu_region;
     $("zdr").checked = !!p.zdr;
+    $("ack").checked = !!p.data_policy_ack;
     $("enabled").checked = !!p.enabled;
     $("formTitle").textContent = "Editar: " + (p.name || "");
     window.scrollTo(0, document.body.scrollHeight);
@@ -176,7 +182,7 @@
   function resetForm() {
     $("pid").value = ""; $("name").value = ""; $("kind").value = "openrouter";
     $("base").value = ""; $("model").value = ""; $("key").value = "";
-    $("eu").checked = false; $("zdr").checked = false; $("enabled").checked = false;
+    $("eu").checked = false; $("zdr").checked = false; $("ack").checked = false; $("enabled").checked = false;
     $("formTitle").textContent = "Novo provedor";
   }
 
@@ -188,7 +194,8 @@
   function save() {
     var body = {
       name: $("name").value.trim(), kind: $("kind").value, base_url: $("base").value.trim(),
-      model: $("model").value.trim(), eu_region: $("eu").checked, zdr: $("zdr").checked, enabled: $("enabled").checked
+      model: $("model").value.trim(), eu_region: $("eu").checked, zdr: $("zdr").checked,
+      data_policy_ack: $("ack").checked, enabled: $("enabled").checked
     };
     var id = $("pid").value;
     if (id) { body.id = id; }

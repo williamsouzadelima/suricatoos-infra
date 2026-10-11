@@ -21,11 +21,20 @@ func (f *fakeLLM) Chat(_ context.Context, req ChatRequest) (ChatResponse, error)
 }
 
 type fakeResolver struct {
-	prov Provider
-	err  error
+	prov  Provider
+	provs []Provider // when set: the candidates in priority order (prov is ignored)
+	err   error
 }
 
-func (f fakeResolver) Resolve(context.Context) (Provider, error) { return f.prov, f.err }
+func (f fakeResolver) Resolve(context.Context) ([]Provider, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	if len(f.provs) > 0 {
+		return f.provs, nil
+	}
+	return []Provider{f.prov}, nil
+}
 
 func sampleReq() PlanRequest {
 	return PlanRequest{
@@ -40,7 +49,8 @@ func sampleReq() PlanRequest {
 const okContent = `{"summary":"Resumo","steps":[{"action":"Aplicar KB5041580","detail":"via WUA em host-1"}],"rationale":"r","prioritization":"p","caveats":"c"}`
 
 func newPlanner(llm LLM, consent bool) *Planner {
-	return New(llm, fakeResolver{prov: Provider{Name: "OpenRouter", BaseURL: "https://x/v1", APIKey: "k", Model: "m"}}, Config{ConsentGranted: consent})
+	// A legacy UE + ZDR provider (rule off): it meets the governance bar.
+	return New(llm, fakeResolver{prov: Provider{Name: "OpenRouter", BaseURL: "https://x/v1", APIKey: "k", Model: "m", EURegion: true, ZDR: true}}, Config{ConsentGranted: consent})
 }
 
 func TestPlan_ConsentOffRefusesWithoutCalling(t *testing.T) {
@@ -125,7 +135,7 @@ func TestPlan_LLMErrorPropagates(t *testing.T) {
 func TestPlan_BudgetRefusesSecondCall(t *testing.T) {
 	llm := &fakeLLM{resp: ChatResponse{Content: okContent, Usage: Usage{PromptTokens: 1000, CompletionTokens: 1000}}}
 	// cap muito baixo: a 1ª chamada passa (gasto 0 < cap) e estoura o teto; a 2ª é recusada.
-	p := New(llm, fakeResolver{prov: Provider{Name: "p", BaseURL: "b", APIKey: "k", Model: "m"}},
+	p := New(llm, fakeResolver{prov: Provider{Name: "p", BaseURL: "b", APIKey: "k", Model: "m", EURegion: true, ZDR: true}},
 		Config{ConsentGranted: true, MonthlyBudgetUSD: 0.001, USDPer1kTokens: 0.005})
 	if _, err := p.Plan(context.Background(), sampleReq()); err != nil {
 		t.Fatalf("1ª chamada deveria passar: %v", err)

@@ -3,6 +3,7 @@ package aiproviders
 import (
 	"bytes"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -15,11 +16,20 @@ import (
 	"time"
 )
 
-// Sentinel errors the service maps to HTTP status codes.
+// Sentinel errors the service maps to HTTP status codes (ErrFreeOnly: free.go).
 var (
-	ErrNotFound   = errors.New("provedor não encontrado")
-	ErrGovernance = errors.New("provedor fora da régua (exige UE + ZDR para habilitar)")
+	ErrNotFound = errors.New("provedor não encontrado")
+	// ErrGovernance: enabling outside the governance bar (GovernanceRefusal; the
+	// error message carries the reason). Mapped to HTTP 422.
+	ErrGovernance = errors.New("provedor fora da régua de governança da IA")
 	ErrValidation = errors.New("configuração de provedor inválida")
+	// ErrKeyRebind: an update would send the STORED key to another recipient — the
+	// kind changed, or the endpoint changed to anything but the same kind's
+	// official one — without a new api_key. Mapped to HTTP 422; nothing changes.
+	ErrKeyRebind = errors.New("cole a chave de novo ao trocar o tipo/endpoint")
+	// ErrNotOfficialEndpoint: the models listing only queries the routers' official
+	// endpoints (models.go). Mapped to HTTP 422.
+	ErrNotOfficialEndpoint = errors.New("a lista de modelos só consulta o endpoint oficial do OpenRouter/UnoRouter")
 )
 
 // Registry is the persisted set of configured providers. Writes are serialized and
@@ -28,20 +38,34 @@ type Registry struct {
 	mu        sync.Mutex
 	path      string
 	kek       []byte
+	freeOnly  bool // AI_FREE_MODELS_ONLY: only free models of openrouter/unorouter
 	providers map[string]*Provider
 	now       func() time.Time
 	newID     func() string
 }
 
+// Option configures a Registry.
+type Option func(*Registry)
+
+// WithFreeModelsOnly turns the free-models-only rule on or off (free.go). The
+// control-plane turns it on by default (AI_FREE_MODELS_ONLY); a Registry built
+// without this option keeps the rule off.
+func WithFreeModelsOnly(on bool) Option {
+	return func(r *Registry) { r.freeOnly = on }
+}
+
 // NewRegistry loads the store from path (missing file = fresh). kek is the host
 // key-encryption-key (see LoadOrCreateKEK).
-func NewRegistry(path string, kek []byte) (*Registry, error) {
+func NewRegistry(path string, kek []byte, opts ...Option) (*Registry, error) {
 	r := &Registry{
 		path:      path,
 		kek:       kek,
 		providers: map[string]*Provider{},
 		now:       time.Now,
 		newID:     randID,
+	}
+	for _, o := range opts {
+		o(r)
 	}
 	if path == "" {
 		return r, nil
@@ -65,32 +89,58 @@ func NewRegistry(path string, kek []byte) (*Registry, error) {
 
 // UpsertInput is the operator-supplied config. APIKey == "" on an update keeps the
 // stored key (metadata-only change); on a create it means "no key yet".
+// DataPolicyAck is the operator's acknowledgment of a free model's data policy;
+// who/when are recorded by the server (Upsert's by + clock), never supplied here.
 type UpsertInput struct {
-	ID       string
-	Name     string
-	Kind     string
-	BaseURL  string
-	Model    string
-	EURegion bool
-	ZDR      bool
-	Enabled  bool
-	APIKey   string
+	ID            string
+	Name          string
+	Kind          string
+	BaseURL       string
+	Model         string
+	EURegion      bool
+	ZDR           bool
+	Enabled       bool
+	DataPolicyAck bool
+	APIKey        string
 }
 
 // Upsert creates or updates a provider and persists it. The API key is encrypted
-// before storage and never returned. A provider may be ENABLED only if it meets the
-// governance bar (EU region + ZDR).
+// before storage and never returned. With the free-models-only rule on, only the
+// openrouter/unorouter kinds and only free models are accepted (ErrFreeOnly). A
+// provider may be ENABLED only if it meets the governance bar (GovernanceRefusal).
+// The stored key and the acknowledgment belong to the recipient they were given
+// for — the kind AND the endpoint: moving a key-bearing provider elsewhere takes a
+// new api_key (ErrKeyRebind), and a move restarts the acknowledgment.
 func (r *Registry) Upsert(in UpsertInput, by string) (PublicProvider, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	in.Name = strings.TrimSpace(in.Name)
 	in.BaseURL = strings.TrimSpace(in.BaseURL)
+	in.Model = strings.TrimSpace(in.Model)
 	if in.Name == "" {
 		return PublicProvider{}, fmt.Errorf("%w: name obrigatório", ErrValidation)
 	}
 	if !validKind(in.Kind) {
-		return PublicProvider{}, fmt.Errorf("%w: kind %q (esperado openrouter|openai_compatible)", ErrValidation, in.Kind)
+		return PublicProvider{}, fmt.Errorf("%w: kind %q (esperado openrouter|unorouter|openai_compatible)", ErrValidation, in.Kind)
+	}
+	if r.freeOnly {
+		// Zero-cost contract: neither a generic gateway nor a paid model may even be
+		// stored while the rule is on (a stored one could be enabled later).
+		if !freeOnlyKind(in.Kind) {
+			return PublicProvider{}, fmt.Errorf("%w: tipo %q não permitido — use openrouter ou unorouter", ErrFreeOnly, in.Kind)
+		}
+		// The endpoint is FIXED by the kind: any base_url in the request is ignored
+		// and the router's official API is stored. Otherwise anyone who can save a
+		// provider could repoint one that already holds a key at a host they control
+		// and have the server send that write-only key there.
+		in.BaseURL = OfficialBaseURL(in.Kind)
+		if !IsFreeModel(in.Kind, in.Model) {
+			if in.Model == "" {
+				return PublicProvider{}, fmt.Errorf("%w: informe um modelo gratuito (%s)", ErrFreeOnly, FreeRule)
+			}
+			return PublicProvider{}, fmt.Errorf("%w: modelo %q não é gratuito (%s)", ErrFreeOnly, in.Model, FreeRule)
+		}
 	}
 	if in.BaseURL == "" {
 		in.BaseURL = defaultBaseURL(in.Kind) // preset for named routers; "" for openai_compatible
@@ -98,11 +148,20 @@ func (r *Registry) Upsert(in UpsertInput, by string) (PublicProvider, error) {
 	if err := validateBaseURL(in.BaseURL); err != nil {
 		return PublicProvider{}, fmt.Errorf("%w: %v", ErrValidation, err)
 	}
-	// Governance (decision #3): enabling a provider that is not EU-region AND ZDR
-	// would route attested data to a processor outside the privacy contract. Allow
-	// it to be STORED (disabled) but never ENABLED.
-	if in.Enabled && (!in.EURegion || !in.ZDR) {
-		return PublicProvider{}, ErrGovernance
+	// Governance (decision #3): enabling a provider outside the privacy contract
+	// would route attested data to a processor that may retain it. Allow it to be
+	// STORED (disabled) but never ENABLED outside the bar (GovernanceRefusal): with
+	// the free rule on, a free model with the operator's acknowledgment of its data
+	// policy (may log/train on prompts) — always; with it off, EU region AND ZDR, or
+	// such a free model (on its router's official endpoint) acknowledged.
+	if in.Enabled {
+		terms := Terms{
+			Kind: in.Kind, BaseURL: in.BaseURL, Model: in.Model,
+			EURegion: in.EURegion, ZDR: in.ZDR, DataPolicyAck: in.DataPolicyAck,
+		}
+		if why := GovernanceRefusal(terms, r.freeOnly); why != "" {
+			return PublicProvider{}, fmt.Errorf("%w: %s", ErrGovernance, why)
+		}
 	}
 
 	var p *Provider
@@ -111,13 +170,33 @@ func (r *Registry) Upsert(in UpsertInput, by string) (PublicProvider, error) {
 		if p == nil {
 			return PublicProvider{}, ErrNotFound
 		}
-	} else {
+	}
+	// The stored key belongs to the recipient it was pasted for: the kind AND the
+	// endpoint. Without a new api_key, neither may change — whatever the rule — or
+	// an update would send that write-only key to another router or host. The one
+	// move that keeps the key is re-pinning the SAME kind's official endpoint on the
+	// SAME host the key was pasted for (rePinsOnTheKeysHost).
+	moved := p != nil && (p.Kind != in.Kind || !sameEndpoint(p.BaseURL, in.BaseURL))
+	if moved && len(p.KeyCipher) > 0 && in.APIKey == "" && !rePinsOnTheKeysHost(p, in) {
+		return PublicProvider{}, fmt.Errorf("%w: a chave guardada é do tipo %q em %s", ErrKeyRebind, p.Kind, p.BaseURL)
+	}
+	if p == nil {
 		p = &Provider{ID: r.newID()}
 		r.providers[p.ID] = p
 	}
+	now := r.now()
 	p.Name, p.Kind, p.BaseURL, p.Model = in.Name, in.Kind, in.BaseURL, in.Model
 	p.EURegion, p.ZDR, p.Enabled = in.EURegion, in.ZDR, in.Enabled
-	p.UpdatedBy, p.UpdatedAt = by, r.now()
+	p.UpdatedBy, p.UpdatedAt = by, now
+	switch {
+	case !in.DataPolicyAck:
+		p.DataPolicyAck, p.DataPolicyAckBy, p.DataPolicyAckAt = false, "", time.Time{}
+	case !p.DataPolicyAck || moved:
+		// A new acknowledgment — or one now given for another recipient (the kind or
+		// the endpoint changed): record who gave it and when. While it stays given
+		// for the same recipient, later edits do not rewrite who acknowledged.
+		p.DataPolicyAck, p.DataPolicyAckBy, p.DataPolicyAckAt = true, by, now
+	}
 	if in.APIKey != "" {
 		ct, err := encrypt(r.kek, []byte(in.APIKey))
 		if err != nil {
@@ -195,6 +274,65 @@ func (r *Registry) DecryptedKey(id string) (string, PublicProvider, error) {
 	return string(key), p.Public(), nil
 }
 
+// FreeModelsOnly reports whether the free-models-only rule is on.
+func (r *Registry) FreeModelsOnly() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.freeOnly
+}
+
+// catalogSource is what the free-models listing needs to query a provider's catalog.
+type catalogSource struct {
+	kind    string
+	baseURL string
+	key     string // plaintext; "" when none is stored. NEVER returned or logged.
+	sig     string // changes whenever kind, endpoint or key changes (cache validity)
+}
+
+// modelsSource returns the catalog endpoint and the decrypted key of provider id.
+// Unlike DecryptedKey it does NOT require the provider to be enabled: the operator
+// lists the models to PICK one before enabling. SERVER-SIDE ONLY — the key goes
+// only to the router's OFFICIAL /models, never into a response.
+//
+// The listing is reachable from a session, so it queries ONLY a router's official
+// endpoint, whatever the rule: a provider stored with another base_url (a generic
+// gateway, a custom endpoint saved with the rule off, or one stored before the
+// rule) is refused (ErrNotOfficialEndpoint) without any request. Otherwise saving
+// a provider with a chosen base_url and listing its models would send the stored
+// key — or a server-side request — to any host.
+func (r *Registry) modelsSource(id string) (catalogSource, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	p, ok := r.providers[id]
+	if !ok {
+		return catalogSource{}, ErrNotFound
+	}
+	official := OfficialBaseURL(p.Kind)
+	if official == "" {
+		return catalogSource{}, fmt.Errorf("%w (tipo %q)", ErrNotOfficialEndpoint, p.Kind)
+	}
+	if !IsOfficialEndpoint(p.Kind, p.BaseURL) {
+		hint := ""
+		if r.freeOnly {
+			hint = " — salve o provedor de novo para fixá-la (com só modelos gratuitos a base vem do tipo; sem chave nova, só se a base antiga já estiver no host oficial — senão, cole a chave de novo)"
+		}
+		return catalogSource{}, fmt.Errorf("%w: base_url %q não é %s%s", ErrNotOfficialEndpoint, p.BaseURL, official, hint)
+	}
+	src := catalogSource{kind: p.Kind, baseURL: official}
+	keySig := "sem-chave"
+	if len(p.KeyCipher) > 0 {
+		key, err := decrypt(r.kek, p.KeyCipher)
+		if err != nil {
+			return catalogSource{}, fmt.Errorf("decifrar chave: %w", err)
+		}
+		src.key = string(key)
+		sum := sha256.Sum256(p.KeyCipher) // fingerprint of the CIPHERTEXT (random nonce), not of the key
+		keySig = hex.EncodeToString(sum[:8])
+	}
+	src.sig = p.Kind + "\x00" + p.BaseURL + "\x00" + keySig
+	return src, nil
+}
+
 func (r *Registry) saveLocked() error {
 	if r.path == "" {
 		return nil
@@ -214,6 +352,30 @@ func (r *Registry) saveLocked() error {
 		return err
 	}
 	return os.Rename(tmp, r.path)
+}
+
+// sameEndpoint reports whether two base URLs are the same destination (a trailing
+// slash does not change where the requests go).
+func sameEndpoint(a, b string) bool {
+	return strings.TrimRight(a, "/") == strings.TrimRight(b, "/")
+}
+
+// rePinsOnTheKeysHost reports whether an update of p only re-pins the official
+// endpoint of the SAME kind, while p's stored endpoint already sat on that official
+// HOST (e.g. a legacy path on openrouter.ai): the stored key then keeps going to the
+// host it was pasted for. A record on any other host — a proxy, the other router
+// (a unorouter record on openrouter.ai holding an OpenRouter key), the official
+// host on another port — needs the key pasted again.
+func rePinsOnTheKeysHost(p *Provider, in UpsertInput) bool {
+	return p.Kind == in.Kind && IsOfficialEndpoint(in.Kind, in.BaseURL) &&
+		sameHost(p.BaseURL, OfficialBaseURL(in.Kind))
+}
+
+// sameHost reports whether two URLs address the same host[:port] (case-insensitive).
+func sameHost(a, b string) bool {
+	ua, errA := url.Parse(a)
+	ub, errB := url.Parse(b)
+	return errA == nil && errB == nil && ua.Host != "" && strings.EqualFold(ua.Host, ub.Host)
 }
 
 func randID() string {

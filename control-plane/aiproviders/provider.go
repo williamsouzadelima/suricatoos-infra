@@ -2,9 +2,15 @@
 // scanner's AI features (e.g. the remediation-planner). Each provider's API key is
 // encrypted at rest with a host key-encryption-key (AES-256-GCM) and is NEVER
 // returned by the API — only a masked last-4 and a has-key flag. A provider may be
-// ENABLED only if it meets the AI-governance bar (EU region + zero data retention),
-// so a key can be web-configured without weakening the privacy contract (ADR-0010 /
-// reports governance). The plaintext key is read ONLY server-side, by the planner.
+// ENABLED only if it meets the AI-governance bar (GovernanceRefusal, free.go) — with
+// AI_FREE_MODELS_ONLY (default on), only a FREE model of OpenRouter/UnoRouter on its
+// official endpoint, ALWAYS with the operator's recorded acknowledgment of the free
+// tier's data policy (data_policy_ack); with it off, EU region + zero data
+// retention, OR such a free model acknowledged — so a key can be web-configured
+// without weakening the privacy contract (ADR-0010 / reports governance). The key
+// stays bound to the kind and endpoint it was pasted for (Registry.Upsert).
+// The plaintext key is read ONLY server-side, by the planner and by the free-models
+// listing (outbound to the provider itself).
 package aiproviders
 
 import (
@@ -62,22 +68,31 @@ type Provider struct {
 	KeyLast4  string    `json:"key_last4,omitempty"`
 	UpdatedBy string    `json:"updated_by,omitempty"`
 	UpdatedAt time.Time `json:"updated_at,omitempty"`
+	// The operator's acknowledgment that a free model may log/train on prompts
+	// (no ZDR). By/At are set by the SERVER from the requesting operator, never
+	// from the request body.
+	DataPolicyAck   bool      `json:"data_policy_ack,omitempty"`
+	DataPolicyAckBy string    `json:"data_policy_ack_by,omitempty"`
+	DataPolicyAckAt time.Time `json:"data_policy_ack_at,omitzero"`
 }
 
 // PublicProvider is the API-facing view: everything EXCEPT any key material.
 type PublicProvider struct {
-	ID        string    `json:"id"`
-	Name      string    `json:"name"`
-	Kind      string    `json:"kind"`
-	BaseURL   string    `json:"base_url"`
-	Model     string    `json:"model,omitempty"`
-	EURegion  bool      `json:"eu_region"`
-	ZDR       bool      `json:"zdr"`
-	Enabled   bool      `json:"enabled"`
-	HasKey    bool      `json:"has_key"`
-	KeyLast4  string    `json:"key_last4,omitempty"`
-	UpdatedBy string    `json:"updated_by,omitempty"`
-	UpdatedAt time.Time `json:"updated_at,omitempty"`
+	ID              string    `json:"id"`
+	Name            string    `json:"name"`
+	Kind            string    `json:"kind"`
+	BaseURL         string    `json:"base_url"`
+	Model           string    `json:"model,omitempty"`
+	EURegion        bool      `json:"eu_region"`
+	ZDR             bool      `json:"zdr"`
+	Enabled         bool      `json:"enabled"`
+	HasKey          bool      `json:"has_key"`
+	KeyLast4        string    `json:"key_last4,omitempty"`
+	UpdatedBy       string    `json:"updated_by,omitempty"`
+	UpdatedAt       time.Time `json:"updated_at,omitempty"`
+	DataPolicyAck   bool      `json:"data_policy_ack"`
+	DataPolicyAckBy string    `json:"data_policy_ack_by,omitempty"`
+	DataPolicyAckAt time.Time `json:"data_policy_ack_at,omitzero"`
 }
 
 // Public returns the key-free view safe to serialize to any client.
@@ -87,6 +102,7 @@ func (p *Provider) Public() PublicProvider {
 		EURegion: p.EURegion, ZDR: p.ZDR, Enabled: p.Enabled,
 		HasKey: len(p.KeyCipher) > 0, KeyLast4: p.KeyLast4,
 		UpdatedBy: p.UpdatedBy, UpdatedAt: p.UpdatedAt,
+		DataPolicyAck: p.DataPolicyAck, DataPolicyAckBy: p.DataPolicyAckBy, DataPolicyAckAt: p.DataPolicyAckAt,
 	}
 }
 

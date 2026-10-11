@@ -11,7 +11,7 @@ import (
 func serviceServer(t *testing.T, consent bool) *httptest.Server {
 	t.Helper()
 	llm := &fakeLLM{resp: ChatResponse{Content: okContent}}
-	p := New(llm, fakeResolver{prov: Provider{Name: "p", BaseURL: "b", APIKey: "k", Model: "m"}}, Config{ConsentGranted: consent})
+	p := New(llm, fakeResolver{prov: Provider{Name: "p", BaseURL: "b", APIKey: "k", Model: "m", EURegion: true, ZDR: true}}, Config{ConsentGranted: consent})
 	m := http.NewServeMux()
 	NewService(p, "s3cret").Register(m)
 	srv := httptest.NewServer(m)
@@ -51,6 +51,44 @@ func TestService_ConsentOffForbidden(t *testing.T) {
 	resp, _ := post(t, srv, "s3cret", reqBody)
 	if resp.StatusCode != http.StatusForbidden {
 		t.Fatalf("consentimento off = %d, want 403", resp.StatusCode)
+	}
+}
+
+func TestService_NonFreeModelForbidden(t *testing.T) {
+	llm := &fakeLLM{resp: ChatResponse{Content: okContent}}
+	p := New(llm, fakeResolver{prov: Provider{Name: "p", Kind: "openrouter", BaseURL: "b", APIKey: "k", Model: "openai/gpt-5.5"}},
+		Config{ConsentGranted: true, FreeModelsOnly: true})
+	m := http.NewServeMux()
+	NewService(p, "s3cret").Register(m)
+	srv := httptest.NewServer(m)
+	t.Cleanup(srv.Close)
+
+	resp, body := post(t, srv, "s3cret", reqBody)
+	if resp.StatusCode != http.StatusForbidden || !strings.Contains(body, "não gratuito") {
+		t.Fatalf("modelo pago com a regra ligada = %d %s, want 403", resp.StatusCode, body)
+	}
+	if llm.calls != 0 {
+		t.Fatalf("nenhuma chamada ao modelo pago: %d", llm.calls)
+	}
+}
+
+// A provider outside the governance bar at use time (rule off: neither UE + ZDR nor
+// a free model acknowledged) is refused like the free rule: 403, no model call.
+func TestService_UngovernedProviderForbidden(t *testing.T) {
+	llm := &fakeLLM{resp: ChatResponse{Content: okContent}}
+	p := New(llm, fakeResolver{prov: Provider{Name: "p", Kind: "openai_compatible", BaseURL: "https://gw.example/v1", APIKey: "k", Model: "m"}},
+		Config{ConsentGranted: true})
+	m := http.NewServeMux()
+	NewService(p, "s3cret").Register(m)
+	srv := httptest.NewServer(m)
+	t.Cleanup(srv.Close)
+
+	resp, body := post(t, srv, "s3cret", reqBody)
+	if resp.StatusCode != http.StatusForbidden || !strings.Contains(body, "régua") {
+		t.Fatalf("provedor fora da régua = %d %s, want 403", resp.StatusCode, body)
+	}
+	if llm.calls != 0 {
+		t.Fatalf("nenhuma chamada a provedor fora da régua: %d", llm.calls)
 	}
 }
 

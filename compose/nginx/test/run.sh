@@ -15,6 +15,9 @@
 #               catch-all /agent/ reaberto (o bloco de proxy antigo). Os casos de
 #               rota fechada TÊM de reprovar nela — prova de que a matriz
 #               discrimina. O arquivo rastreado nunca é alterado.
+#   mutante-planner  CONTROLE DE MUTAÇÃO: cópia do default.conf SEM a location do
+#               planner (o pedido cai no /agent/api/, que lê por 30 s). O caso do
+#               upstream lento TEM de reprovar nela.
 #
 # Precisa de docker, curl, openssl, jq e python3.
 #   compose/nginx/test/run.sh            roda tudo
@@ -39,6 +42,9 @@ LABEL="$LABEL_KEY=$RUN_ID"
 NET="nginx-ci-$RUN_ID"
 STUB_CTR="nginx-ci-stub-$RUN_ID"
 HOST="scanner.suricatoos.com"
+# Atraso do upstream no caso do planner: acima dos 30 s do /agent/api/ e bem
+# abaixo dos 360 s da location do planner.
+PLAN_SLOW_S=35
 WORK="${NGINX_CI_WORK:-${RUNNER_TEMP:-${TMPDIR:-/tmp}}}/nginx-ci-$RUN_ID"
 PKI="$WORK/pki"
 STUB_LOG="$WORK/stub-log/requests.jsonl"
@@ -53,6 +59,7 @@ FORGED=(-H 'X-Suricatoos-Gate: gsad-session' -H 'X-Client-Cert-DN: CN=forjado'
 PASSED=0 FAILED=0 SEQ=0
 FAILED_CASES=()
 MODE=normal                     # normal | mutante
+MUT_DESC=""                     # o que o mutante em execução mudou
 MUT_TOTAL=0 MUT_FAILED=0
 MUT_NOT_FAILED=()
 PROFILE="" NGINX_CTR="" PORT="" USE_PROXY_PROTOCOL=0
@@ -279,6 +286,26 @@ open(dst, "w", encoding="utf-8").write(mutante)
 PY
 }
 
+# Mutante do planner: tira a location própria do planner, numa cópia; o pedido cai
+# no /agent/api/ (30 s). Falha se não achar exatamente um bloco.
+mutate_conf_planner() {  # mutate_conf_planner ORIGEM DESTINO
+  python3 - "$1" "$2" <<'PY'
+import re
+import sys
+
+src, dst = sys.argv[1:3]
+texto = open(src, encoding="utf-8").read()
+bloco = re.compile(
+    r"^[ \t]*location = /agent/api/v1/remediation/plan \{.*?^[ \t]*\}[ \t]*\r?\n",
+    re.M | re.S,
+)
+mutante, n = bloco.subn("", texto)
+if n != 1:
+    sys.exit(f"esperava 1 bloco 'location = /agent/api/v1/remediation/plan' em {src}; achei {n}")
+open(dst, "w", encoding="utf-8").write(mutante)
+PY
+}
+
 # ------------------------------------------------------------------ casos ----
 
 log_lines() {
@@ -478,6 +505,33 @@ case_bearer_api() {
   end_case
 }
 
+# (d2) planner: location própria (match exato) com os MESMOS cabeçalhos limpos do
+# /agent/api/ — nem a marca de portão nem a identidade que o cliente mandar
+# chegam ao CP (proxy_set_header vazio = header não repassado).
+case_planner_route() {
+  local h
+  begin_case "planner /agent/api/v1/remediation/plan → CP /api/v1/remediation/plan, sem marca de portão nem identidade do cliente"
+  send POST /agent/api/v1/remediation/plan "${FORGED[@]}"
+  expect_status 200
+  expect_upstream control-plane POST /api/v1/remediation/plan
+  for h in X-Suricatoos-Gate X-Client-Cert-DN X-Client-Cert-Verify X-Client-Cert-Serial X-Operator; do
+    expect_no_header "$h"
+  done
+  end_case
+}
+
+# (d3) planner: um rascunho leva até AI_PLANNER_TIMEOUT (5 min). O CP responde
+# depois de PLAN_SLOW_S, acima dos 30 s do /agent/api/: só a location própria
+# (360 s) deixa a resposta chegar. Sem ela, 504 do nginx (ver mutante-planner).
+case_planner_slow() {
+  begin_case "planner: resposta do CP após ${PLAN_SLOW_S}s ainda chega (o /agent/api/ cortaria em 30 s)"
+  send POST /agent/api/v1/remediation/plan -H "X-Stub-Delay: $PLAN_SLOW_S" \
+    --max-time $((PLAN_SLOW_S + 30))
+  expect_status 200
+  expect_upstream control-plane POST /api/v1/remediation/plan
+  end_case
+}
+
 # (e) portão de sessão forte (auth_request → gsad: cookie E token).
 cases_session_gate() {
   local api=/ai-providers/api/providers
@@ -568,16 +622,21 @@ cases_default() {
   cases_closed
   cases_public
   case_bearer_api
+  case_planner_route
+  case_planner_slow
   cases_session_gate
   cases_cookie_gate
   cases_mtls
 }
 
-# Standalone: sem PROXY protocol e sem mTLS — nada de mTLS é afirmado aqui.
+# Standalone: sem PROXY protocol e sem mTLS — nada de mTLS é afirmado aqui. O
+# planner passa pelo /agent/api/ (que herda o proxy_read_timeout 1h do server):
+# só os cabeçalhos são conferidos.
 cases_standalone() {
   cases_closed
   cases_public
   case_bearer_api
+  case_planner_route
   cases_session_gate
 }
 
@@ -589,7 +648,7 @@ run_profile() {  # run_profile PERFIL ARQUIVO_CONF PROXY_PROTOCOL(0|1) FUNÇÃO_
   USE_PROXY_PROTOCOL="$3"
   NGINX_CTR=""
   if [ "$MODE" = mutante ]; then
-    section "controle de mutação: catch-all /agent/ reaberto numa cópia do default.conf"
+    section "controle de mutação: $MUT_DESC"
   else
     section "perfil $PROFILE ($(basename "$conf"))"
   fi
@@ -658,10 +717,19 @@ main() {
 
   if mutate_conf "$NGINX_DIR/default.conf" "$WORK/default-mutante.conf"; then
     MODE=mutante
+    MUT_DESC="catch-all /agent/ reaberto numa cópia do default.conf"
     run_profile mutante "$WORK/default-mutante.conf" 1 cases_closed
     MODE=normal
   else
     record_failure "controle de mutação: não consegui gerar o mutante"
+  fi
+  if mutate_conf_planner "$NGINX_DIR/default.conf" "$WORK/default-sem-planner.conf"; then
+    MODE=mutante
+    MUT_DESC="location do planner removida numa cópia do default.conf"
+    run_profile mutante-planner "$WORK/default-sem-planner.conf" 1 case_planner_slow
+    MODE=normal
+  else
+    record_failure "controle de mutação (planner): não consegui gerar o mutante"
   fi
 
   section "resumo"
@@ -670,7 +738,7 @@ main() {
     mut_ok=1
     echo "controle de mutação: $MUT_FAILED/$MUT_TOTAL casos reprovados, como esperado"
   else
-    echo "controle de mutação FALHOU: $MUT_FAILED de $MUT_TOTAL casos reprovaram com o catch-all reaberto"
+    echo "controle de mutação FALHOU: $MUT_FAILED de $MUT_TOTAL casos reprovaram nos mutantes (catch-all /agent/ reaberto; location do planner removida)"
     for c in "${MUT_NOT_FAILED[@]}"; do echo "  não reprovou: $c"; done
   fi
   echo "casos: $PASSED ok, $FAILED com falha"
