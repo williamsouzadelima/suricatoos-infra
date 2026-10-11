@@ -9,6 +9,6 @@
   "contains_secret": false,
   "output": {
     "token_id": "AbCdEfGhIjKl",
-    "revoked_certs": 48
+    "revoked": true
   }
 }

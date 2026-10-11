@@ -13,7 +13,7 @@
     "scan_status": "Done",
     "scan_start": "2026-10-11T10:00:00Z",
     "scan_end": "2026-10-11T11:00:00Z",
-    "filter_applied": "apply_overrides=1 min_qod=70 rows=-1",
+    "filter_applied": "apply_overrides=1 min_qod=70 levels=chml rows=-1",
     "counts": {
       "critical": 1,
       "high": 4,
@@ -27,18 +27,7 @@
       "q30_69": 3,
       "q70_100": 43
     },
-    "top_findings": [
-      {
-        "oid": "1.3.6.1.4.1.25623.1.0.100000",
-        "name": "Exemplo de NVT",
-        "severity": 9.8,
-        "qod": 97,
-        "hosts_affected": 2,
-        "cves": [
-          "CVE-2099-0001"
-        ]
-      }
-    ],
+    "hosts_count": 2,
     "hosts": [
       {
         "ip": "192.0.2.10",
@@ -47,6 +36,14 @@
         "medium": 3,
         "low": 0,
         "log": 5
+      },
+      {
+        "ip": "192.0.2.11",
+        "critical": 0,
+        "high": 2,
+        "medium": 6,
+        "low": 2,
+        "log": 25
       }
     ],
     "hosts_truncated": false

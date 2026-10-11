@@ -72,7 +72,7 @@
     "gvm_comment": { "type": "string", "maxLength": 400, "allOf": [ { "$ref": "#/$defs/no_control" } ], "description": "gvmd object comment; the node prefixes 'fleet:<command_id> ' for traceability in the GSA" },
     "gmp_filter": { "type": "string", "minLength": 1, "maxLength": 1024, "allOf": [ { "$ref": "#/$defs/no_control" } ], "description": "EXPLICIT GMP filter string applied inside the addressed report only; the node never falls back to gvmd's implicit or saved filters (ADR-0011 D1)" },
     "ip_literal": { "type": "string", "minLength": 2, "maxLength": 39, "pattern": "^[0-9A-Fa-f:.]+$", "allOf": [ { "$ref": "#/$defs/no_control" } ], "description": "IPv4/IPv6 literal; the node parses it authoritatively (a hostname is refused)" },
-    "ip_or_cidr": { "type": "string", "minLength": 2, "maxLength": 43, "pattern": "^[0-9A-Fa-f:.]+(/[0-9]{1,3})?$", "allOf": [ { "$ref": "#/$defs/no_control" } ], "description": "IPv4/IPv6 or CIDR LITERAL — never a hostname (no scan-time DNS rebinding). The node re-checks it with its local scope gate" },
+    "ip_or_cidr": { "type": "string", "minLength": 2, "maxLength": 43, "pattern": "^[0-9A-Fa-f:.]+(/[0-9]{1,3})?$", "allOf": [ { "$ref": "#/$defs/no_control" } ], "description": "IPv4/IPv6 or CIDR LITERAL — never a hostname (no scan-time DNS rebinding). The node re-checks it with its local scope gate (a CIDR containing a self/hub IP is denied)" },
     "port_range": { "type": "string", "minLength": 3, "maxLength": 1024, "pattern": "^[TU]:[0-9,-]+$", "allOf": [ { "$ref": "#/$defs/no_control" } ], "description": "GVM port_range, same grammar scan_bridge.py accepts, e.g. T:1-65535" },
     "alive_test": {
       "description": "GVM alive test. Default when omitted: 'ICMP, TCP-SYN Service & ARP Ping'. Fallback (ADR-0011): if the local gvmd refuses that value, the node uses 'ICMP, TCP-ACK Service & ARP Ping' and reports the value actually applied as alive_test_effective; it never silently falls back to 'Consider Alive' or 'Scan Config Default'.",
@@ -121,7 +121,7 @@
       }
     },
     "payload_task_ref": {
-      "description": "task.start | task.stop | task.resume | task.delete (delete = trash, never ultimate)",
+      "description": "task.start | task.stop | task.resume | task.delete (delete = trash, never ultimate). For start/resume the node re-checks the hosts of the task's target against the tenant scope before deciding (scope_denied; a non-literal host is refused)",
       "type": "object",
       "required": ["task_id"],
       "additionalProperties": false,
@@ -134,7 +134,7 @@
       "properties": {
         "name": { "$ref": "#/$defs/gvm_name" },
         "comment": { "$ref": "#/$defs/gvm_comment" },
-        "target_id": { "$ref": "#/$defs/uuid", "description": "must be owned by the tenant's gvmd user" },
+        "target_id": { "$ref": "#/$defs/uuid", "description": "must be owned by the tenant's gvmd user; its hosts are re-checked against the tenant scope (scope_denied; a non-literal host is refused)" },
         "scan_config_id": { "$ref": "#/$defs/uuid" },
         "scanner_id": { "$ref": "#/$defs/uuid", "description": "default: the local 'OpenVAS Default' scanner (08b69003-5fc2-4037-a479-93b440211c73)" },
         "schedule_id": { "$ref": "#/$defs/uuid", "description": "links the new task to an existing schedule owned by the tenant" }
@@ -164,7 +164,7 @@
       }
     },
     "payload_target_create": {
-      "description": "Scope-gated: every hosts entry must be an IP/CIDR literal inside the tenant's LOCAL scope and outside the absolute deny list (loopback, link-local/metadata, multicast, unspecified, self/hub). No credentials, no asset filter, no reverse lookup (out of v1 by design). Exactly one of port_list_id | port_range.",
+      "description": "Scope-gated: every hosts entry must be an IP/CIDR literal inside the tenant's LOCAL scope and outside the absolute deny list (loopback, link-local/metadata, multicast, unspecified, and the node's own and the hub's IPs — a CIDR that CONTAINS one of those is denied too). No credentials, no asset filter, no reverse lookup (out of v1 by design). Exactly one of port_list_id | port_range.",
       "type": "object",
       "required": ["name", "hosts"],
       "additionalProperties": false,
@@ -255,13 +255,15 @@
       ]
     },
     "payload_report_summary": {
+      "description": "Counts of ONE report (D4). There is NO free filter: the node builds the explicit GMP filter from these fixed parameters ('apply_overrides=<0|1> min_qod=<n> levels=<levels> rows=-1'), so narrowing by host, port, NVT, name, CVE or vulnerability is impossible by construction. Counts in the local sensitive budget.",
       "type": "object",
-      "required": ["report_id", "filter"],
+      "required": ["report_id", "min_qod", "apply_overrides", "levels"],
       "additionalProperties": false,
       "properties": {
         "report_id": { "$ref": "#/$defs/uuid" },
-        "filter": { "$ref": "#/$defs/gmp_filter" },
-        "top": { "type": "integer", "minimum": 1, "maximum": 50, "description": "how many top findings (by severity, then hosts affected); default 20" }
+        "min_qod": { "type": "integer", "minimum": 0, "maximum": 100 },
+        "apply_overrides": { "type": "boolean" },
+        "levels": { "type": "string", "minLength": 1, "maxLength": 5, "pattern": "^c?h?m?l?g?$", "allOf": [ { "$ref": "#/$defs/no_control" } ], "description": "non-empty subset of c (critical), h, m, l, g (log), each at most once, in this order" }
       }
     },
     "payload_agent_ref": {
@@ -282,13 +284,13 @@
       }
     },
     "payload_enroll_token_create": {
-      "description": "Mints a scanner bootstrap token (ADR-0004) for the envelope's tenant. The secret is returned ONCE in the result (contains_secret=true). Caps tighter than the admin API: ttl <= 168h, deployment max_uses <= 1000.",
+      "description": "Mints a scanner bootstrap token (ADR-0004) for the envelope's tenant, for ENDPOINT AGENTS only (v1): scanner-sensor tokens stay a local, admin-bearer action (ADR-0007: whoever sets Scope.Tenant controls tenant -> cert O -> partition). The secret is returned ONCE in the result (contains_secret=true). Caps tighter than the admin API: ttl <= 168h, deployment max_uses <= 1000.",
       "type": "object",
       "required": ["token_type", "policy", "ttl_hours"],
       "additionalProperties": false,
       "properties": {
         "token_type": { "enum": ["single_host", "deployment"] },
-        "policy": { "enum": ["agent-endpoint", "scanner-sensor"], "description": "cert OU the enrolled agent/sensor receives" },
+        "policy": { "const": "agent-endpoint", "description": "cert OU the enrolled agent receives; v1 accepts only agent-endpoint" },
         "ttl_hours": { "type": "integer", "minimum": 1, "maximum": 168 },
         "max_uses": { "type": "integer", "minimum": 1, "maximum": 1000 }
       },
@@ -297,23 +299,20 @@
       ]
     },
     "payload_enroll_token_revoke": {
-      "description": "Revokes the token AND every certificate enrolled with it (the existing kill-switch semantics of DELETE /api/v1/tokens/{id}).",
+      "description": "Revokes ONLY the token: future enrollments with it stop. Certificates already issued with it stay valid — revoking them in bulk is a LOCAL action (today's DELETE /api/v1/tokens/{id} revokes everything; slice F2.2 adds a token-only route for the connector).",
       "type": "object",
       "required": ["token_id"],
       "additionalProperties": false,
       "properties": { "token_id": { "$ref": "#/$defs/token_id" } }
     },
     "payload_sensor_job_enqueue": {
-      "description": "Enqueues an ADR-0007 sensor scan job (source=operator-scope) for the envelope's tenant. ALL targets must pass the node's scope gate — one out-of-scope target rejects the whole command (scope_denied); nothing is dropped silently.",
+      "description": "Enqueues an ADR-0007 sensor scan job (source=operator-scope) for the envelope's tenant. ALL targets must pass the node's scope gate — one out-of-scope target rejects the whole command (scope_denied); nothing is dropped silently. v1 carries only targets and ports (which the sensor honors): the sensor applies ITS OWN alive test, scan config and maximum duration (ADR-0007 scanrun), so the contract does not pretend to set them.",
       "type": "object",
       "required": ["targets"],
       "additionalProperties": false,
       "properties": {
         "targets": { "type": "array", "minItems": 1, "maxItems": 256, "uniqueItems": true, "items": { "$ref": "#/$defs/ip_or_cidr" } },
-        "ports": { "$ref": "#/$defs/port_range" },
-        "scan_config": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-z0-9][a-z0-9-]*$", "allOf": [ { "$ref": "#/$defs/no_control" } ], "description": "scan config name as control-plane/sensorjobs accepts, e.g. full-and-fast" },
-        "alive_test": { "$ref": "#/$defs/alive_test" },
-        "max_duration": { "type": "string", "minLength": 2, "maxLength": 5, "pattern": "^[1-9][0-9]{0,3}[mh]$", "description": "Go-style duration in minutes or hours, e.g. 6h" }
+        "ports": { "$ref": "#/$defs/port_range" }
       }
     },
     "payload_empty": {

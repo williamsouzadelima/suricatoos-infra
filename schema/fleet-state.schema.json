@@ -127,7 +127,7 @@
           "additionalProperties": false,
           "properties": {
             "allowed_types": { "type": "array", "uniqueItems": true, "items": { "$ref": "fleet-command.schema.json#/$defs/command_type" } },
-            "sensitive_per_hour": { "type": "integer", "minimum": 0, "maximum": 1000, "description": "local budget shared by the opt-in types and report.export" }
+            "sensitive_per_hour": { "type": "integer", "minimum": 0, "maximum": 1000, "description": "local budget shared by the opt-in types, report.export and report.summary" }
           }
         },
         "policy_sha256": { "$ref": "fleet-command.schema.json#/$defs/sha256_hex" }

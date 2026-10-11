@@ -32,6 +32,15 @@
       }
     },
     {
+      "file": "invalid/command/enroll-token-create-scanner-sensor.json",
+      "target": "fleet-command.schema.json",
+      "description": "I1: scanner-sensor tokens stay local/admin-bearer (ADR-0007)",
+      "expect": {
+        "keyword": "const",
+        "path": "/payload/policy"
+      }
+    },
+    {
       "file": "invalid/command/enroll-token-create-single-host-max-uses.json",
       "target": "fleet-command.schema.json",
       "description": "single_host tokens have max_uses 1",
@@ -200,6 +209,69 @@
       "expect": {
         "keyword": "enum",
         "path": "/payload/variant"
+      }
+    },
+    {
+      "file": "invalid/command/report-summary-host-filter.json",
+      "target": "fleet-command.schema.json",
+      "description": "C1: no free filter, so no narrowing by host/port/NVT",
+      "expect": {
+        "keyword": "additionalProperties",
+        "path": "/payload"
+      }
+    },
+    {
+      "file": "invalid/command/report-summary-levels-out-of-order.json",
+      "target": "fleet-command.schema.json",
+      "description": "levels is a subset of chmlg in that order",
+      "expect": {
+        "keyword": "pattern",
+        "path": "/payload/levels"
+      }
+    },
+    {
+      "file": "invalid/command/report-summary-levels-repeated.json",
+      "target": "fleet-command.schema.json",
+      "description": "each level at most once",
+      "expect": {
+        "keyword": "pattern",
+        "path": "/payload/levels"
+      }
+    },
+    {
+      "file": "invalid/command/report-summary-min-qod-over-100.json",
+      "target": "fleet-command.schema.json",
+      "description": "min_qod is 0-100",
+      "expect": {
+        "keyword": "maximum",
+        "path": "/payload/min_qod"
+      }
+    },
+    {
+      "file": "invalid/command/report-summary-without-levels.json",
+      "target": "fleet-command.schema.json",
+      "description": "every summary parameter is explicit",
+      "expect": {
+        "keyword": "required",
+        "path": "/payload"
+      }
+    },
+    {
+      "file": "invalid/command/sensor-job-enqueue-alive-test.json",
+      "target": "fleet-command.schema.json",
+      "description": "I2: the sensor applies its own alive test",
+      "expect": {
+        "keyword": "additionalProperties",
+        "path": "/payload"
+      }
+    },
+    {
+      "file": "invalid/command/sensor-job-enqueue-scan-config.json",
+      "target": "fleet-command.schema.json",
+      "description": "I2: the sensor applies its own scan config",
+      "expect": {
+        "keyword": "additionalProperties",
+        "path": "/payload"
       }
     },
     {
@@ -473,6 +545,24 @@
       }
     },
     {
+      "file": "invalid/result/enroll-token-create-output-scanner-sensor.json",
+      "target": "fleet-result.schema.json",
+      "description": "I1: the fleet only mints agent-endpoint tokens",
+      "expect": {
+        "keyword": "const",
+        "path": "/output/policy"
+      }
+    },
+    {
+      "file": "invalid/result/enroll-token-revoke-with-revoked-certs.json",
+      "target": "fleet-result.schema.json",
+      "description": "I1: revoking a token no longer revokes its certificates",
+      "expect": {
+        "keyword": "additionalProperties",
+        "path": "/output"
+      }
+    },
+    {
       "file": "invalid/result/failed-with-output.json",
       "target": "fleet-result.schema.json",
       "description": "a failure carries an error, not an output",
@@ -497,6 +587,24 @@
       "expect": {
         "keyword": "required",
         "path": ""
+      }
+    },
+    {
+      "file": "invalid/result/report-summary-with-top-findings.json",
+      "target": "fleet-result.schema.json",
+      "description": "C1: top findings (OID/name/CVE) left v1 — only report.export carries findings",
+      "expect": {
+        "keyword": "additionalProperties",
+        "path": "/output"
+      }
+    },
+    {
+      "file": "invalid/result/report-summary-without-hosts-count.json",
+      "target": "fleet-result.schema.json",
+      "description": "the number of hosts is part of the counts",
+      "expect": {
+        "keyword": "required",
+        "path": "/output"
       }
     },
     {
@@ -661,7 +769,7 @@
     {
       "file": "valid/command/enroll-token-revoke.json",
       "target": "fleet-command.schema.json",
-      "description": "enroll_token.revoke (kill switch of every cert of the token)"
+      "description": "enroll_token.revoke: revokes ONLY the token (issued certificates stay valid)"
     },
     {
       "file": "valid/command/feed-sync-now.json",
@@ -706,7 +814,7 @@
     {
       "file": "valid/command/report-summary.json",
       "target": "fleet-command.schema.json",
-      "description": "report.summary with an explicit filter"
+      "description": "report.summary with the fixed parameters (the node builds the filter)"
     },
     {
       "file": "valid/command/schedule-create.json",
@@ -726,7 +834,7 @@
     {
       "file": "valid/command/sensor-job-enqueue.json",
       "target": "fleet-command.schema.json",
-      "description": "sensor_job.enqueue (scope-gated, all-or-nothing)"
+      "description": "sensor_job.enqueue: targets + ports only (scope-gated, all-or-nothing; the sensor uses its own scan settings)"
     },
     {
       "file": "valid/command/state-resync.json",

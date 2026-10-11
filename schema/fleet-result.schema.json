@@ -278,9 +278,9 @@
       }
     },
     "output_report_summary": {
-      "description": "Aggregates only: counts by severity and QoD band, top findings by NVT (no per-host evidence, description or solution) and per-IP counts. Hostnames are never included.",
+      "description": "COUNTS ONLY (v1): by severity, by QoD band, number of hosts and, per host IP, the counts by severity. No NVT, OID, name, CVE, port, evidence or hostname — which vulnerabilities a host has only leaves through report.export. filter_applied echoes the filter the NODE built from the fixed parameters. (Aggregated top findings with k-anonymity: open question of ADR-0011.)",
       "type": "object",
-      "required": ["report_id", "task_id", "scan_status", "filter_applied", "counts", "qod_histogram", "top_findings", "hosts", "hosts_truncated"],
+      "required": ["report_id", "task_id", "scan_status", "filter_applied", "counts", "qod_histogram", "hosts_count", "hosts", "hosts_truncated"],
       "additionalProperties": false,
       "properties": {
         "report_id": { "$ref": "fleet-command.schema.json#/$defs/uuid" },
@@ -300,23 +300,7 @@
             "q70_100": { "type": "integer", "minimum": 0 }
           }
         },
-        "top_findings": {
-          "type": "array",
-          "maxItems": 50,
-          "items": {
-            "type": "object",
-            "required": ["oid", "name", "severity", "qod", "hosts_affected"],
-            "additionalProperties": false,
-            "properties": {
-              "oid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[0-9A-Za-z.:-]+$" },
-              "name": { "type": "string", "minLength": 1, "maxLength": 256, "allOf": [ { "$ref": "fleet-command.schema.json#/$defs/no_control" } ] },
-              "severity": { "type": "number", "minimum": 0, "maximum": 10 },
-              "qod": { "type": "integer", "minimum": 0, "maximum": 100 },
-              "hosts_affected": { "type": "integer", "minimum": 1 },
-              "cves": { "type": "array", "maxItems": 20, "uniqueItems": true, "items": { "type": "string", "maxLength": 32, "pattern": "^CVE-[0-9]{4}-[0-9]{4,}$" } }
-            }
-          }
-        },
+        "hosts_count": { "type": "integer", "minimum": 0, "description": "hosts with at least one result under the node-built filter" },
         "hosts": {
           "type": "array",
           "maxItems": 1000,
@@ -364,19 +348,20 @@
         "token_id": { "$ref": "fleet-command.schema.json#/$defs/token_id" },
         "token": { "type": "string", "minLength": 20, "maxLength": 200, "pattern": "^st_[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$", "description": "the scanner bootstrap token 'st_<id>.<secret>' (ADR-0004), shown ONCE" },
         "token_type": { "enum": ["single_host", "deployment"] },
-        "policy": { "enum": ["agent-endpoint", "scanner-sensor"] },
+        "policy": { "const": "agent-endpoint" },
         "max_uses": { "type": "integer", "minimum": 1, "maximum": 1000 },
         "expires_at": { "$ref": "fleet-command.schema.json#/$defs/utc_time" },
         "ca_pin": { "$ref": "fleet-command.schema.json#/$defs/pin", "description": "fingerprint of the node's SCANNER enrollment CA, for the enrolling agent's --ca-pin" }
       }
     },
     "output_enroll_token_revoke": {
+      "description": "the token is revoked (no new enrollment); certificates already issued with it are NOT revoked by this command",
       "type": "object",
-      "required": ["token_id", "revoked_certs"],
+      "required": ["token_id", "revoked"],
       "additionalProperties": false,
       "properties": {
         "token_id": { "$ref": "fleet-command.schema.json#/$defs/token_id" },
-        "revoked_certs": { "type": "integer", "minimum": 0, "description": "certificates enrolled with this token that were revoked with it" }
+        "revoked": { "const": true }
       }
     },
     "output_sensor_job_enqueue": {

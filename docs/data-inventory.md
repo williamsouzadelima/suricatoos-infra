@@ -80,9 +80,9 @@ Coletamos apenas o mínimo necessário para **correlação de vulnerabilidade ba
 | Eventos (status de tarefa, report concluído com contagens, agente online/offline, feed, remediação pendente, rejeição por política) | `fleet-event.schema.json` | nó→hub | atividade da frota | baixa |
 | Comando assinado (tipo, tenant, payload, `issued_by`, janela, nonce, assinatura) | `fleet-command.schema.json` | hub→nó | executar UMA ação do catálogo | baixa/média (`issued_by` identifica o operador do hub) |
 | Ack e resultado (decisão e motivo, status, ids, valores anteriores dos campos alterados, contagens) | `fleet-result.schema.json` | nó→hub | estado do comando e rollback manual | baixa |
-| Resumo de report (`report.summary`: contagens por severidade/QoD, top achados por NVT, contagens por IP) | `fleet-result.schema.json#/$defs/output_report_summary` | nó→hub, **sob comando** | priorização | média (agregado de vulnerabilidade por IP) |
+| Resumo de report (`report.summary`: só contagens — por severidade, por faixa de QoD, nº de hosts e por IP; sem NVT, OID, nome, CVE ou porta; filtro montado pelo nó) | `fleet-result.schema.json#/$defs/output_report_summary` | nó→hub, **sob comando**, orçado | priorização | média (revela quais IPs têm quantas vulnerabilidades por severidade) |
 | Relatório (`report.export`: edição `technical`, `client` ou `executive`; completo, ou delta quando há `delta_report_id`) | artefato gzip + `fleet-result.schema.json#/$defs/artifact` | nó→hub, **só sob comando explícito** | entregar o relatório | **alta** (vulnerabilidades detalhadas por host do cliente; a edição `executive` é sumário, mas segue sob a mesma regra) |
-| Segredo de token do scanner (`enroll_token.create`) | `fleet-result.schema.json#/$defs/output_enroll_token_create` (`token`) | nó→hub, uma vez, `contains_secret: true` | instalar um agente/sensor | **alta** (segredo) |
+| Segredo de token do scanner (`enroll_token.create`, só `agent-endpoint`) | `fleet-result.schema.json#/$defs/output_enroll_token_create` (`token`) | nó→hub, uma vez, `contains_secret: true` | instalar um agente/sensor | **alta** (segredo) |
 
 **O que NÃO sai do nó por este canal:**
 
@@ -96,8 +96,9 @@ Coletamos apenas o mínimo necessário para **correlação de vulnerabilidade ba
 - Conteúdo de feeds.
 
 > **`report.export` é o ÚNICO caminho de achado detalhado:** exige comando assinado, permitido pela política
-> **local** (o operador do nó pode removê-lo), conta no orçamento local de comandos sensíveis (30/h) e fica na
-> auditoria local.
+> **local** (o operador do nó pode removê-lo), conta no orçamento local de comandos sensíveis (30/h, somado
+> com `report.summary` e os opt-in) e fica na auditoria local. O `report.summary` não carrega achado: só
+> contagens, com filtro que o hub não escolhe.
 >
 > **Artefatos:** gzip, ≤ 64 MiB, com sha256 do gzip e do original. O nó grava o export num arquivo temporário
 > `0600` no `FLEET_STATE_DIR` e o apaga quando o hub aceita o upload (ou quando o comando termina em falha); a

@@ -22,8 +22,8 @@ nova exposta.
 O problema difícil **não é o transporte** (o sensor do ADR-0007 já faz phone-home mTLS): é dar a um
 console remoto poder **de escrita** sobre scanners de terceiros sem transformar o hub num ponto único de
 comprometimento de toda a frota. Um hub invadido não pode virar: varredura fora do escopo autorizado,
-apagamento definitivo de histórico, criação de usuário/credencial no gvmd, ou exfiltração silenciosa de
-todos os achados de todos os clientes.
+apagamento definitivo de histórico, criação de usuário ou credencial no gvmd, nem exfiltração silenciosa e
+sem limite de achados — o que sai do nó é contado, orçado e auditado localmente.
 
 Decisões fixas do plano aprovado pelo mantenedor (11/10/2026), que este ADR **não reabre**:
 
@@ -59,8 +59,10 @@ O que já existe e é reusado (verificado, read-only):
   num crash** (lá, ack só depois do push).
 - `sensor/internal/scope/scope.go` — `CheckHost`: só **IP/CIDR literal** (hostname recusado → sem DNS
   rebinding), CIDR tem de caber **inteiro** numa faixa autorizada, deny absoluto de espaço degenerado
-  (loopback, link-local/metadata, multicast, não-especificado) **e** sobreposição de CIDR com ele, mais os IPs
-  próprios (`SCAN_SELF_DENY_IPS`).
+  (loopback, link-local/metadata, multicast, não-especificado) **e** sobreposição de CIDR com ele. Os IPs
+  próprios (`SCAN_SELF_DENY_IPS`) só são negados quando o alvo é **um IP**: um CIDR que contém um IP próprio
+  passa (ramo CIDR do `CheckHost`). A frota fecha essa lacuna no contrato (regra de escopo do Catálogo) e a
+  F2.4 a corrige na extração do pacote.
 - `control-plane/tenants/tenants.go` — registro `{name, scope, gmp_user, enabled}`; `Known` (habilitado),
   `ScopeSpec`, `GmpUser`; arquivo `TENANTS_FILE` (não-secreto). As senhas gvmd por tenant ficam à parte, em
   `SENSOR_TENANT_SECRETS` (`{tenant: senha}`, host-only `0600`, `compose/docker-compose.override.yml`).
@@ -132,8 +134,8 @@ O que já existe e é reusado (verificado, read-only):
    nonce → tenant → catálogo/política/orçamento → payload → escopo), com motivo de rejeição tipado e
    decisão **persistida antes** de qualquer efeito.
 4. **Catálogo fechado v1** (22 tipos), cada um com payload e saída em schema; escrita **opt-in por nó**;
-   delete **sempre para a lixeira**; nada de escopo, tenant, usuários/RBAC do gvmd, credenciais, aprovação de
-   remediação ou passthrough GMP.
+   delete **sempre para a lixeira**; nada de escopo, tenant, usuários/RBAC do gvmd, credenciais de alvo,
+   aprovação de remediação ou passthrough GMP; `report.summary` só devolve contagens.
 5. **D1–D6 como acima**; estado e eventos **minimizados** (D4); **auditoria local** JSONL encadeada por hash,
    com a cauda enviada ao hub como testemunha.
 6. **DARK**: `FLEET_ENABLED=false` + profile `fleet`; ligar exige o profile, a flag, o bundle de enroll com
@@ -360,10 +362,10 @@ O nó para na **primeira** falha. Os motivos são `fleet-result.schema.json#/$de
 | 6 | `tenant` conhecido **e habilitado** no nó (central: `TENANTS_FILE`; standalone/sensor: `== FLEET_TENANT`); escrita exige também usuário gvmd + segredo do tenant | `tenant_unknown` | sim |
 | 7 | tipo no catálogo v1 e suportado por este `node_kind` | `unsupported` | sim |
 | 7 | tipo presente em `allow` da política local | `type_not_allowed` | sim |
-| 7 | orçamento local de comandos sensíveis (opt-in + `report.export`) não estourado | `rate_limited` | sim |
+| 7 | orçamento local de comandos sensíveis (opt-in + `report.export` + `report.summary`) não estourado | `rate_limited` | sim |
 | 8 | payload válido para o tipo (schema estrito + regras semânticas) | `bad_payload` | sim |
 | 8 | `report.export`: a combinação (`format`, `lang`, `variant`) está em `capabilities.report_formats` do estado `node` | `unsupported_report_variant` | sim |
-| 9 | hosts/targets ⊆ escopo do tenant e fora do deny absoluto | `scope_denied` | sim |
+| 9 | escopo: os hosts de `target.create/modify`, os alvos de `sensor_job.enqueue` e os hosts do target de `task.start/resume` e de `task.create/modify` com `target_id` (lidos no gvmd antes da decisão) são IP/CIDR literais ⊆ escopo do tenant, fora do espaço degenerado e **sem conter** IP próprio nem do hub | `scope_denied` | sim |
 | — | o store anti-replay/journal não pôde ser gravado | `unavailable` | não (fail-closed) |
 
 Na linha 0, `type` só precisa casar `^[a-z][a-z_]*\.[a-z][a-z_]*$` (`command_type_any`): um tipo fora do
@@ -500,7 +502,7 @@ corpo gzip), `X-Fleet-Original-Content-Type` (`application/pdf` | `application/x
 | lote de eventos | 1–100 eventos, ≤ 1 MiB |
 | artefato | ≤ 64 MiB (67 108 864 bytes) de gzip; ≤ 4 por comando (v1: exatamente 1, só `report.export`) |
 | outbox de eventos | 10 000 eventos; cheio ⇒ descarta os mais antigos e conta em `outbox_dropped` |
-| orçamento local de comandos sensíveis | 30/h por nó (`policy.json` `sensitive_per_hour`) |
+| orçamento local de comandos sensíveis | 30/h por nó (`policy.json` `sensitive_per_hour`), somando opt-in, `report.export` e `report.summary` |
 
 ## Catálogo de comandos v1
 
@@ -512,11 +514,11 @@ do tenant (o objeto nasce na partição dele).
 | Tipo | Payload | Política padrão | Nós | Execução | Usuário gvmd | Saída |
 |---|---|---|---|---|---|---|
 | `state.resync` | `payload_state_resync` | permitido | todos | reenvia já os kinds pedidos (kind inexistente no nó é ignorado) | atual (leitura) | `output_state_resync` |
-| `task.start` | `payload_task_ref` | permitido | todos | `start_task` | atual | `output_task_action` |
+| `task.start` | `payload_task_ref` | permitido | todos | re-checa os hosts do target contra o escopo (linha 9) → `start_task` | atual | `output_task_action` |
 | `task.stop` | `payload_task_ref` | permitido | todos | `stop_task` | atual | `output_task_action` |
-| `task.resume` | `payload_task_ref` | permitido | todos | `resume_task` | atual | `output_task_action` |
-| `task.create` | `payload_task_create` | opt-in | todos | `create_task` (alvo/agenda do tenant; scanner padrão `OpenVAS Default`) | tenant | `output_task_create` |
-| `task.modify` | `payload_task_modify` | opt-in | todos | `modify_task` (`schedule_id: ""` desvincula) | tenant | `output_task_modify` |
+| `task.resume` | `payload_task_ref` | permitido | todos | re-checa os hosts do target contra o escopo (linha 9) → `resume_task` | atual | `output_task_action` |
+| `task.create` | `payload_task_create` | opt-in | todos | re-checa os hosts do target (linha 9) → `create_task` (alvo/agenda do tenant; scanner padrão `OpenVAS Default`) | tenant | `output_task_create` |
+| `task.modify` | `payload_task_modify` | opt-in | todos | com `target_id`, re-checa os hosts do novo target (linha 9) → `modify_task` (`schedule_id: ""` desvincula) | tenant | `output_task_modify` |
 | `task.clone` | `payload_task_clone` | opt-in | todos | `clone_task` (+ renomeia se `name`) | tenant | `output_task_clone` |
 | `task.delete` | `payload_task_ref` | opt-in | todos | `delete_task(ultimate=false)` → **lixeira** | tenant | `output_trash` |
 | `target.create` | `payload_target_create` | opt-in | todos | portão de escopo → `create_target` | tenant | `output_target_create` |
@@ -526,22 +528,36 @@ do tenant (o objeto nasce na partição dele).
 | `schedule.modify` | `payload_schedule_modify` | opt-in | todos | `modify_schedule` | tenant | `output_schedule_modify` |
 | `schedule.delete` | `payload_schedule_ref` | opt-in | todos | `delete_schedule(ultimate=false)` → **lixeira** | tenant | `output_trash` |
 | `report.export` | `payload_report_export` | permitido (conta no orçamento) | todos | `get_report` com formato/idioma/variante (edição)/filtro **explícitos** e, se houver `delta_report_id`, em modo delta → gzip → `PUT` artefato; combinação não anunciada ⇒ `unsupported_report_variant` | atual | `output_report_export` + `artifacts[1]` |
-| `report.summary` | `payload_report_summary` | permitido | todos | `get_report` com filtro explícito → contagens por severidade/QoD, top achados por NVT, hosts por IP | atual | `output_report_summary` |
+| `report.summary` | `payload_report_summary` | permitido (conta no orçamento) | todos | `get_report` com o filtro que o **nó** monta de `min_qod`/`apply_overrides`/`levels` (sem filtro livre) → só contagens: por severidade, por faixa de QoD, nº de hosts e por IP | atual | `output_report_summary` |
 | `agent.scan_now` | `payload_agent_ref` | permitido | central | API admin local `POST /api/v1/agents/{id}/commands` (`scan_now` = re-coleta de inventário, **não** varredura) | — | `output_agent_scan_now` |
 | `agent.revoke` | `payload_agent_revoke` | opt-in | central | API admin local `POST /api/v1/agents/{id}/revoke` (nova, F2.2): revoga **só** os serials desse agente | — | `output_agent_revoke` |
-| `enroll_token.create` | `payload_enroll_token_create` | opt-in | central | `POST /api/v1/tokens` com o tenant do envelope (TTL ≤ 168 h; `deployment` ≤ 1000 usos) | — | `output_enroll_token_create` (`contains_secret: true`) |
-| `enroll_token.revoke` | `payload_enroll_token_revoke` | opt-in | central | `DELETE /api/v1/tokens/{id}` — revoga **também todos os certificados** emitidos por ele | — | `output_enroll_token_revoke` |
-| `sensor_job.enqueue` | `payload_sensor_job_enqueue` | opt-in | central | portão de escopo local → `POST /api/v1/tenants/{t}/scan-jobs` (`source=operator-scope`) | — | `output_sensor_job_enqueue` |
+| `enroll_token.create` | `payload_enroll_token_create` | opt-in | central | `POST /api/v1/tokens` com o tenant do envelope e **só** `policy=agent-endpoint` (TTL ≤ 168 h; `deployment` ≤ 1000 usos); token `scanner-sensor` continua local, com admin-bearer (ADR-0007) | — | `output_enroll_token_create` (`contains_secret: true`) |
+| `enroll_token.revoke` | `payload_enroll_token_revoke` | opt-in | central | revoga **só o token** (corta enrolls futuros) pela rota da F2.2; os certificados já emitidos continuam válidos — revogá-los em massa é ação **local** (o `DELETE /api/v1/tokens/{id}` de hoje revoga tudo) | — | `output_enroll_token_revoke` |
+| `sensor_job.enqueue` | `payload_sensor_job_enqueue` | opt-in | central | portão de escopo local → `POST /api/v1/tenants/{t}/scan-jobs` (`source=operator-scope`) só com `targets` (+ `ports`); o sensor usa o alive test, a scan config e a duração **dele** (ADR-0007) | — | `output_sensor_job_enqueue` |
 | `feed.sync_now` | `payload_empty` | opt-in | central, standalone | feed-updater `POST /sync` (assíncrono; `409` dele = `already_running`) | — | `output_feed_sync_now` |
 
 Regras transversais:
 
 - **Política padrão** (sem `policy.json`): `allow` = os tipos "permitido" suportados pelo `node_kind`;
-  `sensitive_per_hour` = 30. Opt-in = o operador **local** acrescenta o tipo em `allow`. Nenhum comando altera
+  `sensitive_per_hour` = 30 (soma dos opt-in, `report.export` e `report.summary`). Opt-in = o operador **local** acrescenta o tipo em `allow`. Nenhum comando altera
   a política. `policy_sha256` = sha256 do JSON compacto da política (com `allow` ordenado), publicado no
   estado `node`.
-- **Objeto único.** Cada comando age sobre **um** objeto (sem operação em lote): o raio de um comando é
-  limitado por construção.
+- **Objeto único.** Cada comando age sobre **um** objeto (sem operação em lote). O raio não é zero em dois
+  casos, declarados: um token `deployment` (≤ 1000 usos, ≤ 168 h) habilita até 1000 enrolls de agente; e
+  `agent.revoke` corta um agente de vez (volta só com re-enroll local). Revogação em massa de certificados não
+  existe no v1 — é ação local.
+- **`report.summary` sem filtro livre.** O hub escolhe só `min_qod` (0–100), `apply_overrides` e `levels`
+  (subconjunto de `chmlg`, nessa ordem); o nó monta `apply_overrides=<0|1> min_qod=<n> levels=<levels> rows=-1`
+  e devolve só contagens (por severidade, por faixa de QoD, nº de hosts e por IP). Não há como estreitar por
+  host, porta, NVT, nome, CVE ou vulnerabilidade, e nenhum OID, nome ou CVE sai: isso só por `report.export`.
+  Conta no orçamento de sensíveis.
+- **Escopo, regra completa.** Todo host que entra no gvmd pela frota, ou que uma tarefa vai varrer por ordem
+  dela (`task.start/resume`, `task.create/modify` com `target_id`), passa pelo portão: IP/CIDR literal (host
+  não literal no target ⇒ `scope_denied`), ⊆ escopo do tenant, fora do espaço degenerado e **sem conter**
+  nenhum IP de `FLEET_SELF_DENY_IPS` nem os IPs resolvidos do host de `FLEET_HUB_URL`. Consequência
+  operacional: um alvo que cubra o próprio nó (ex.: o `/24` inteiro da LAN onde ele mora) é negado, e o hub
+  precisa montar faixas que não o contenham — o nó nunca injeta exclusões sozinho. O `sensor/internal/scope`
+  de hoje só nega IP próprio isolado; a F2.4 fecha isso no pacote extraído, com teste.
 - **Lixeira, nunca `ultimate`.** Restaurar ou esvaziar a lixeira é ação **local** (GSA). Criação e alteração
   não têm rollback automático: `output_*_modify.before` traz os valores anteriores dos campos alterados
   (exceto `comment`) para reverter à mão.
@@ -578,10 +594,14 @@ Regras transversais:
   `unsupported_report_variant` — nunca cai em silêncio para outra edição.
 - **Escopo em `sensor_job.enqueue`:** **todos** os alvos passam pelo portão local; um fora do escopo rejeita o
   comando inteiro (`scope_denied`) — nada é descartado em silêncio. A `sensorjobs` ainda aplica o seu próprio
-  portão (defesa em profundidade).
+  portão (defesa em profundidade). No v1 o payload só leva `targets` e `ports`: o sensor aplica o alive test,
+  a scan config e a duração máxima **dele** (`scanrun` do ADR-0007), e o contrato não finge controlá-los.
 - **Fora do v1, por desenho:** ampliar/alterar escopo ou tenant; usuários, papéis e permissões do gvmd;
-  credenciais (de alvo ou de qualquer tipo); aprovar/rejeitar remediação; passthrough GMP; esvaziar lixeira
-  ou `delete ultimate`; editar a política local.
+  credenciais de alvo (SSH, SMB, ESXi, SNMP); token de enroll `scanner-sensor` e revogação em massa de
+  certificados; parâmetros de varredura do sensor no `sensor_job.enqueue`; aprovar/rejeitar remediação;
+  passthrough GMP; esvaziar lixeira ou `delete ultimate`; editar a política local. O único segredo que o v1
+  cria é o token `agent-endpoint` do `enroll_token.create` (uso único ou limitado, TTL ≤ 168 h, entregue uma
+  vez).
 
 ## Estado e eventos
 
@@ -651,12 +671,12 @@ Eventos de escopo **nó** não levam `tenant`; os de escopo **tenant** levam sem
 
 | Ameaça | Mitigações | Residual (honesto) |
 |---|---|---|
-| **Hub comprometido** (fila + chave de comando) | catálogo fechado (sem escopo, tenant, usuários/RBAC, credenciais, aprovação de remediação, passthrough GMP); escrita **opt-in por nó** (padrão = só operação e leitura); escopo local e inalterável remotamente (D2); comando de objeto único; delete só para a lixeira; orçamento local de 30 sensíveis/h; auditoria local encadeada; kill switch local (`FLEET_ENABLED=false` ou parar o profile) | dentro da política local, o hub age: inicia/para tarefas existentes e exporta relatórios (permitidos por padrão). Quem não quiser isso remove `task.*`/`report.export` de `allow` |
+| **Hub comprometido** (fila + chave de comando) | catálogo fechado (sem escopo, tenant, usuários/RBAC, credenciais de alvo, aprovação de remediação, passthrough GMP); escrita **opt-in por nó** (padrão = só operação e leitura); escopo local e inalterável remotamente (D2), re-checado também ao iniciar tarefa; comando de objeto único; delete só para a lixeira; `report.summary` só com contagens; orçamento local de 30 sensíveis/h; auditoria local encadeada; kill switch local (`FLEET_ENABLED=false` ou parar o profile) | dentro da política local, o hub age: inicia/para tarefas existentes, lê contagens e exporta relatórios (permitidos por padrão; quem não quiser remove `task.*`/`report.*` de `allow`). Se o operador liberar os comandos de token: **(a)** `enroll_token.create` minta tokens `agent-endpoint` (≤ 1000 usos, ≤ 168 h) para qualquer tenant conhecido do nó, e um agente falso injeta inventário falso naquele tenant; **(b)** `enroll_token.revoke` revoga tokens e trava enrolls novos (DoS de onboarding) — certificados já emitidos não caem |
 | **MITM** nó↔hub | TLS ≥ 1.3 + mTLS; servidor verificado (`FLEET_HUB_CA_FILE` ou trust store; hostname sempre); comando assinado com chave **separada** da CA e do TLS (um terminador TLS não forja comando); pins da CA da frota e da chave de comando entregues out-of-band no enroll | com TLS quebrado, o atacante lê estado/resultados e atrasa ou derruba comandos (DoS); não executa nada |
 | **Replay** | nonce de uso único em store persistido até `not_after + skew`; janela ≤ 24 h; `node_id` e `tenant` dentro da assinatura; `command_id` idempotente; store ilegível ⇒ piso de replay | — |
 | **Nó comprometido** | o certificado identifica só aquele nó (CN=`node_id`, `OU=fleet-node`, CA da frota separada da CA de enroll); o hub autoriza tudo pelo CN (`403`/`404`); o nó não tem chave de assinatura; o hub trata **todo** dado de nó como não-confiável — nunca deriva autorização dele, nunca o cruza para outro nó ou tenant, e escapa ao renderizar (nomes são texto livre: XSS armazenado) | o nó mente sobre o próprio estado e resultados; revogar no hub corta o canal, não o nó |
-| **Exfiltração** | D4: só metadado e contagens; achado detalhado só via `report.export` explícito, orçado e removível da política; nada de hostname, `comment`, inventário ou segredo; artefato com sha256 e teto; hub fora da internet (tailnet) no canário | um hub comprometido com `report.export` permitido baixa relatórios dos tenants do nó, no ritmo do orçamento |
-| **Abuso de escopo** | escopo LOCAL (registro de tenants ou `FLEET_SCAN_SCOPE`); só IP/CIDR literal (sem DNS rebinding); CIDR inteiro dentro do escopo; deny absoluto (loopback, link-local/metadata, multicast, não-especificado, IPs próprios e do hub via `FLEET_SELF_DENY_IPS`); sem credencial/asset filter/reverse lookup em target; `sensor_job.enqueue` passa pelo portão local **e** pelo da `sensorjobs` | alvos criados **localmente** (GSA) seguem sob responsabilidade do operador local: `task.start` de tarefa local não re-checa escopo |
+| **Exfiltração** | D4: estado e eventos só com metadado e contagens; `report.summary` (orçado) só devolve contagens — por severidade, por faixa de QoD, nº de hosts e por IP —, com filtro montado pelo nó, sem estreitar por host, porta ou NVT; achado detalhado (NVT, CVE, porta, evidência) só via `report.export` explícito, orçado e removível da política; nada de `comment`, inventário ou segredo; artefato com sha256 e teto; hub fora da internet (tailnet) no canário | com a política padrão, um hub comprometido vê, por relatório, **quais IPs têm quantas vulnerabilidades por severidade** (`report.summary`) e baixa relatórios completos (`report.export`), tudo no ritmo do orçamento (30/h somados) e registrado na auditoria local |
+| **Abuso de escopo** | escopo LOCAL (registro de tenants ou `FLEET_SCAN_SCOPE`); só IP/CIDR literal (sem DNS rebinding); CIDR inteiro dentro do escopo; deny absoluto (loopback, link-local/metadata, multicast, não-especificado) e de **qualquer CIDR que contenha** IP próprio (`FLEET_SELF_DENY_IPS`) ou do hub; os hosts do target são re-checados também em `task.start/resume` e `task.create/modify(target_id)`; sem credencial/asset filter/reverse lookup em target; `sensor_job.enqueue` passa pelo portão local **e** pelo da `sensorjobs` | um target criado localmente com host fora do escopo continua existindo, mas a frota não o dispara (`scope_denied`); a lacuna de CIDR do `scope.go` atual só some com a F2.4 |
 | **Roubo do token de enroll** | uso único, TTL curto, pins out-of-band, CSR com prova de posse, `node_id` único (`409`) | quem usar o token antes do dono enrola um nó falso: o hub deve confirmar o nó (CN/fingerprint) out-of-band antes de enfileirar comandos para ele |
 | **Roubo da chave do nó** | chave `0600`, TTL de 30 dias + renew, revogação no hub, alerta de sessões concorrentes do mesmo CN (obrigação do hub) | até a revogação, o ladrão consome os comandos do nó (não os executa no nó) e forja estado/resultado em nome dele |
 | **Adulteração da auditoria** | JSONL encadeado + cauda como testemunha no hub | root no nó reescreve o arquivo; o hub detecta a quebra na próxima cauda |
@@ -690,7 +710,8 @@ Eventos de escopo **nó** não levam `tenant`; os de escopo **tenant** levam sem
 ## LGPD
 
 Do nó para o hub saem **metadado operacional e contagens** (D4): versões, saúde, ids e nomes de objetos GVM,
-status, entradas IP/CIDR literais de alvos e escopos, contagens por severidade. **Não saem:** achados
+status, entradas IP/CIDR literais de alvos e escopos, contagens por severidade (por IP só no `report.summary`,
+sob comando e orçado). **Não saem:** achados
 detalhados (fora de `report.export` explícito), hostnames de agentes e entradas não-literais de alvos,
 `comment` de objetos, inventário de agentes, payload/resultado técnico de remediação, senhas, chaves e segredos
 (exceto o segredo de `enroll_token.create`, uma vez, marcado). `issued_by` (operador do hub) entra na
@@ -704,7 +725,8 @@ sensibilidade por dado: [docs/data-inventory.md — Canal de gestão da frota (A
   `fleet/contract/testdata/` e teste que valida exemplos contra `schema/fleet-*.schema.json`; `go.work` + CI do
   módulo.
 - **F2.2 — API admin local.** No control-plane: bearer **dedicado** da frota (`FLEET_CP_TOKEN`) aceito **só**
-  nas rotas que o conector usa; rotas novas `POST /api/v1/agents/{id}/revoke` e listagens sem segredo
+  nas rotas que o conector usa; rotas novas `POST /api/v1/agents/{id}/revoke`, uma rota (ou variante) que
+  revoga **só o token** — o `DELETE /api/v1/tokens/{id}` de hoje revoga também os certificados — e listagens sem segredo
   (`GET /api/v1/agents`, `GET /api/v1/sensors` com heartbeats persistidos, `GET /api/v1/scan-jobs`,
   `GET /api/v1/remediation/jobs`); superfície do operador local (status, política, auditoria) atrás do gate de
   sessão gsad do nginx — sem porta nova. DARK.
@@ -713,7 +735,8 @@ sensibilidade por dado: [docs/data-inventory.md — Canal de gestão da frota (A
   gvmd 26.x aceita o padrão); testes sem gvmd, no estilo de `test_scan_bridge.py`.
 - **F2.4 — política, escopo, anti-replay e auditoria.** `policy.json` + padrão; portão de escopo extraído de
   `sensor/internal/scope` para pacote compartilhado (sem cópia divergente; `scope_test.go` e
-  `degenerate_test.go` migram junto); store anti-replay/journal; auditoria encadeada; orçamento de sensíveis.
+  `degenerate_test.go` migram junto) e com a regra de CIDR que **contém** IP próprio ou do hub (o `scope.go`
+  atual só nega IP isolado), testada; store anti-replay/journal; auditoria encadeada; orçamento de sensíveis.
 - **F2.5 — estado e eventos.** Coletores por kind com hash; outbox durável; detecção de transições.
 - **F2.6 — conector, compose e CI.** `fleet/cmd/fleet-connector` (enroll → renew → heartbeat → estado →
   long-poll → verificação → ack → execução → artefato → resultado); serviço `fleet-connector` no profile
@@ -768,3 +791,7 @@ sensibilidade por dado: [docs/data-inventory.md — Canal de gestão da frota (A
    da lista, e se isso cabe no D4 (é contagem, não achado).
 5. **Usuário gvmd de menor privilégio** para leitura e operação, em vez do usuário atual (D6 mantém o atual
    no v1).
+6. **Top findings agregados com k-anonimato** no `report.summary` (só quando o conjunto cobrir ≥ *k* hosts),
+   para priorizar sem abrir o achado por host. No v1, OID, nome e CVE só saem por `report.export`.
+7. **Parâmetros de varredura no `sensor_job.enqueue`.** Follow-up do ADR-0007: o sensor passar a aceitar alive
+   test, scan config e duração e devolver os valores **efetivos** — só então o contrato os expõe.
