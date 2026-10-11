@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -58,11 +59,11 @@ func TestEnqueueIsPendingUnsigned(t *testing.T) {
 func TestApproveSignsAndIsVerifiable(t *testing.T) {
 	r, key := testReg(t)
 	j := enq(t, r, "win1", "acme")
-	appr, err := r.Approve(j.JobID, "operator@strati")
+	appr, err := r.Approve(j.JobID, "operator@example.com")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if appr.State != StateApproved || appr.Signature == "" || appr.ApprovedBy != "operator@strati" {
+	if appr.State != StateApproved || appr.Signature == "" || appr.ApprovedBy != "operator@example.com" {
 		t.Fatalf("approve result wrong: %+v", appr)
 	}
 	if !Verify(appr, key.Public()) {
@@ -489,6 +490,66 @@ func TestMarkVerifiedAfterLapsedExpiry(t *testing.T) {
 	}
 	if verified.State != StateVerified || verified.Result == nil || verified.Result.After != "patched" {
 		t.Errorf("the verified job lost its apply result: %+v", verified)
+	}
+}
+
+// Reject overwrites ApprovedBy/ApprovedAt with whoever rejected, which would erase
+// the approver of a signed (possibly applied) change. The audit log line is where
+// the previous approver survives: exactly one line per EFFECTIVE rejection, none for
+// a no-op.
+func TestRejectLogsThePreviousApprover(t *testing.T) {
+	logs := captureLog(t)
+	rejectLines := func() []string {
+		var out []string
+		for _, l := range strings.Split(logs.String(), "\n") {
+			if strings.Contains(l, "rejeitado por") {
+				out = append(out, l)
+			}
+		}
+		return out
+	}
+
+	r, _ := testReg(t)
+	j := jobIn(t, r, StateApplied) // approved by "op" (jobIn), then delivered, acked and applied
+	if err := r.Reject(j.JobID, "bob"); err != nil {
+		t.Fatal(err)
+	}
+	lines := rejectLines()
+	if len(lines) != 1 {
+		t.Fatalf("want exactly 1 audit line for the rejection, got %d: %q", len(lines), lines)
+	}
+	for _, want := range []string{
+		j.JobID, `rejeitado por "bob"`, `aprovador anterior "op"`, "estado anterior APPLIED", "tenant=acme", "agent=win1",
+	} {
+		if !strings.Contains(lines[0], want) {
+			t.Errorf("the audit line should contain %q: %s", want, lines[0])
+		}
+	}
+
+	// A no-op (already terminal) and an unknown id change nothing, so log nothing.
+	if err := r.Reject(j.JobID, "mallory"); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Reject("nao-existe", "mallory"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("unknown id: err = %v, want ErrNotFound", err)
+	}
+	if n := len(rejectLines()); n != 1 {
+		t.Errorf("a reject that changed nothing must not log (%d lines): %q", n, rejectLines())
+	}
+
+	// A job nobody approved has no previous approver: it is logged as "".
+	p := jobIn(t, r, StatePendingApproval)
+	if err := r.Reject(p.JobID, "alice"); err != nil {
+		t.Fatal(err)
+	}
+	lines = rejectLines()
+	if len(lines) != 2 {
+		t.Fatalf("want 2 audit lines in total, got %d: %q", len(lines), lines)
+	}
+	for _, want := range []string{p.JobID, `rejeitado por "alice"`, `aprovador anterior ""`, "estado anterior PENDING_APPROVAL"} {
+		if !strings.Contains(lines[1], want) {
+			t.Errorf("the audit line should contain %q: %s", want, lines[1])
+		}
 	}
 }
 

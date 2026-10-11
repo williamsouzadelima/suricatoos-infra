@@ -357,7 +357,7 @@ func main() {
 	}
 	if remediationEnabled {
 		// Agent routes (poll/ack/report) are nginx mTLS-gated + CRL fail-closed in the
-		// service; operator routes (enqueue/approve/reject) are admin-bearer gated.
+		// service; operator routes (enqueue/list/approve/reject/verified) are admin-bearer gated.
 		// DANGER: safe only behind the F2c nginx wiring — see service.go auth() note.
 		remSvc.Register(mux)
 		log.Printf("remediation: fila de jobs HABILITADA (ADR-0010)")

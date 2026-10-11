@@ -105,8 +105,10 @@ job no próximo poll, verifica a assinatura/janela e aplica **dentro da janela**
   re-scan; o agente nunca se auto-declara verificado.
 - **Acompanhar:** `GET .../remediation/jobs` (bearer) lista os jobs do mais novo para o mais antigo, com o
   resultado reportado pelo agente (`result`). Filtros opcionais: `state` (ex.: `APPLIED`, `FAILED`),
-  `tenant`, `agent_id`; `limit` (padrão 200, máximo 1000). O `payload` **não** é devolvido (só o
-  `payload_sha256`): ele é opaco para a fila e pode carregar configuração sensível.
+  `tenant`, `agent_id`; `limit` (padrão 200, máximo 1000). O `payload` e o `nonce` **não** são
+  devolvidos (só o `payload_sha256`): a listagem é um resumo técnico e enxuto, **não** uma fronteira de
+  confidencialidade — quem tem o bearer já vê o payload nas respostas de enqueue/approve, e o `result`
+  do agente (`detail`/`before`/`after`) pode repetir valores técnicos dele.
 
   ```bash
   curl -sS "https://scanner.suricatoos.com/agent/api/v1/remediation/jobs?state=APPLIED&tenant=<tenant>" \
@@ -126,8 +128,30 @@ job no próximo poll, verifica a assinatura/janela e aplica **dentro da janela**
   `APPROVED` ou `DELIVERED` sem ack viram `EXPIRED`). `ACKED` e `APPLIED` **não expiram**: o relatório
   do agente ainda é aceito depois do prazo e um job aplicado segue verificável. Jobs terminais
   (`VERIFIED`/`FAILED`/`EXPIRED`/`REJECTED`) criados há mais de 7 dias saem da fila no próximo
-  enfileiramento; um job `ACKED`/`APPLIED` parado **não** é limpo sozinho — feche-o você: `APPLIED` com
-  `verified` (ou `reject`), `ACKED` cujo agente sumiu com `reject`.
+  enfileiramento; um job `ACKED`/`APPLIED` parado **não** é limpo sozinho — feche-o você, com cuidado:
+  - `APPLIED`: **prefira `verified`** (preserva o aprovador e o resultado). `reject` só se o fix de fato
+    deve ser tratado como descartado — e leia o aviso abaixo antes.
+  - `ACKED` (o agente recebeu e sumiu): hoje o agente dá o `ack` **depois** de aplicar, então um `ACKED`
+    parado costuma já ter sido aplicado, com só o relatório perdido. **Antes de rejeitar, confira no
+    host do agente o `remediation.journal.json`** (no diretório de estado do agente, o mesmo da
+    identidade do enroll): uma entrada com o `job_id` e `"status":"applied"` significa que o fix **já
+    foi aplicado** — rejeitar só esconderia isso na fila. Sem entrada (ou com `failed`) não há registro
+    de aplicação bem-sucedida, mas o journal é best-effort: na dúvida, confira o estado real do host.
+  - **Aviso sobre o `reject`:** (1) ele **sobrescreve** `approved_by`/`approved_at` com quem rejeitou —
+    apagando o aprovador de uma mudança que foi assinada e talvez aplicada. **Antes de rejeitar um job
+    que já foi aprovado, registre o aprovador original** (ticket/nota) consultando a listagem, que traz
+    `approved_by`/`approved_at`:
+
+    ```bash
+    curl -sS "https://scanner.suricatoos.com/agent/api/v1/remediation/jobs?tenant=<tenant>&agent_id=<cn-do-host>" \
+      -H "Authorization: Bearer $ADMIN_SECRET"
+    ```
+
+    O control-plane também grava no log uma linha por rejeição efetiva com o aprovador anterior
+    (`remediation: job <id> rejeitado por "<quem>" (estado anterior …; aprovador anterior "<aprovador>" em …)`).
+    (2) O `reject` **não recolhe** um job já entregue: o agente pode estar aplicando ou já ter aplicado;
+    o job só sai da fila (não é re-entregue e o relatório tardio do agente é descartado). Para desfazer o
+    efeito use o `before`/`rollback_token` (§4); para impedir um agente de agir, revogue o cert (§5).
 
 ## 4. Reverter (rollback)
 
@@ -145,7 +169,7 @@ job no próximo poll, verifica a assinatura/janela e aplica **dentro da janela**
 | Global | `REMEDIATION_ENABLED=` (remover/false) + recreate | rotas de remediação não montam |
 | Por tenant | desligar consentimento do tenant | nenhum job novo para aquele tenant |
 | Por host/cert | **revogar o cert** (CRL) | o agente perde poll/ack/report (CRL fail-closed) |
-| Por job | não aprovar / `reject` | sem assinatura, o agente não age |
+| Por job | não aprovar / `reject` **antes da entrega** | sem assinatura, o agente não age; um job já entregue **não** é recolhido pelo `reject` (§3) |
 
 Nada é irreversível por acidente: um job vazado **sem aprovação** é inerte (não tem assinatura), expira
 (`expires_at`) e o reaper o limpa.

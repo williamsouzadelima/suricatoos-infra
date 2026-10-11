@@ -168,13 +168,13 @@ func TestFullApprovalFlowHTTP(t *testing.T) {
 	p.Body.Close()
 
 	// Approve (admin + X-Operator) → signed.
-	ap := adminReq(t, "POST", srv.URL+"/api/v1/remediation/jobs/"+job.JobID+"/approve", "", "operator@strati")
+	ap := adminReq(t, "POST", srv.URL+"/api/v1/remediation/jobs/"+job.JobID+"/approve", "", "operator@example.com")
 	if ap.StatusCode != http.StatusOK {
 		t.Fatalf("approve = %d, want 200", ap.StatusCode)
 	}
 	appr := decodeJob(t, ap)
 	ap.Body.Close()
-	if appr.State != StateApproved || appr.Signature == "" || appr.ApprovedBy != "operator@strati" {
+	if appr.State != StateApproved || appr.Signature == "" || appr.ApprovedBy != "operator@example.com" {
 		t.Fatalf("approved job wrong: %+v", appr)
 	}
 	if !Verify(appr, key.Public()) {
@@ -451,10 +451,10 @@ func TestVerifiedRoute(t *testing.T) {
 
 	// O header X-Operator (sessão gsad, na UI) também vale.
 	second := jobIn(t, reg, StateApplied)
-	if code := status(second.JobID, "", "operator@strati"); code != http.StatusOK {
+	if code := status(second.JobID, "", "operator@example.com"); code != http.StatusOK {
 		t.Errorf("verified com X-Operator = %d, want 200", code)
 	}
-	if out := logs.String(); !strings.Contains(out, `"operator@strati"`) {
+	if out := logs.String(); !strings.Contains(out, `"operator@example.com"`) {
 		t.Errorf("o log deveria citar o X-Operator: %q", out)
 	}
 }
@@ -551,7 +551,7 @@ func TestListRouteFiltersOrdersAndLimits(t *testing.T) {
 		}
 		return j
 	}
-	j0 := mk(0, "acme", "win1", `{"secret":"TOP-SECRET-PAYLOAD"}`) // PENDING_APPROVAL
+	j0 := mk(0, "acme", "win1", `{"marker":"PAYLOAD-MARKER-XYZ"}`) // PENDING_APPROVAL
 	j1 := mk(1, "acme", "win2", `{"set":"x"}`)
 	j2 := mk(2, "globex", "win3", `{"set":"y"}`) // PENDING_APPROVAL
 	if _, err := reg.Approve(j1.JobID, "op"); err != nil {
@@ -577,9 +577,10 @@ func TestListRouteFiltersOrdersAndLimits(t *testing.T) {
 		t.Errorf("total=%d limit=%d, want 4 e 200", lb.Total, lb.Limit)
 	}
 
-	// O payload NUNCA sai (é opaco para a fila e pode carregar dado sensível); o
-	// hash que o amarra à assinatura e a própria assinatura podem.
-	if strings.Contains(raw, "TOP-SECRET-PAYLOAD") || strings.Contains(raw, `"payload":`) || strings.Contains(raw, `"nonce"`) {
+	// A listagem é um resumo técnico e enxuto: payload e nonce não saem (não é uma
+	// fronteira de confidencialidade, só mantém o resumo pequeno); saem o hash que
+	// amarra o payload à assinatura e a própria assinatura.
+	if strings.Contains(raw, "PAYLOAD-MARKER-XYZ") || strings.Contains(raw, `"payload":`) || strings.Contains(raw, `"nonce"`) {
 		t.Errorf("a listagem vazou payload/nonce: %s", raw)
 	}
 	if !strings.Contains(raw, `"payload_sha256"`) || !strings.Contains(raw, `"signature"`) {
@@ -643,5 +644,94 @@ func TestListRouteFiltersOrdersAndLimits(t *testing.T) {
 	// Parâmetro presente porém vazio = ausente (usa o padrão).
 	if code, _, got := getList(t, srv, "?limit=&state="); code != http.StatusOK || got.Limit != 200 || got.Total != 4 {
 		t.Errorf("limit/state vazios deveriam usar o padrão: code=%d limit=%d total=%d", code, got.Limit, got.Total)
+	}
+}
+
+// operatorID is the single place that decides WHO acted on approve/reject/verified.
+// That identity lands in the audit trail, so it is trimmed and a blank one counts as
+// "no operator" (the caller answers 400).
+func TestOperatorIDTrimsAndNeverReturnsBlank(t *testing.T) {
+	approved := func(b operatorBody) string { return b.ApprovedBy }
+	for _, tc := range []struct{ name, header, body, want string }{
+		{"header", "alice", "", "alice"},
+		{"header is trimmed", "  alice\t", "", "alice"},
+		{"body", "", `{"approved_by":"bob"}`, "bob"},
+		{"body is trimmed", "", `{"approved_by":"  bob \n"}`, "bob"},
+		{"header wins over the body", "alice", `{"approved_by":"bob"}`, "alice"},
+		{"blank header falls back to the body", "   ", `{"approved_by":"bob"}`, "bob"},
+		{"blank header and no body", "   ", "", ""},
+		{"blank body field", "", `{"approved_by":"   "}`, ""},
+		{"tabs and newlines only", "", `{"approved_by":"\t\n \r"}`, ""},
+		{"no header and no body", "", "", ""},
+		{"malformed body", "", `{"approved_by":`, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest("POST", "/x", strings.NewReader(tc.body))
+			if tc.header != "" {
+				req.Header.Set("X-Operator", tc.header)
+			}
+			if got := operatorID(httptest.NewRecorder(), req, approved); got != tc.want {
+				t.Errorf("operatorID = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// All three audit-bearing operator routes refuse a blank operator (400, nothing
+// changes) and record a padded one trimmed.
+func TestOperatorRoutesRefuseBlankOperatorAndRecordItTrimmed(t *testing.T) {
+	for _, rt := range []struct {
+		action, field string
+		fresh, after  JobState // state of the job the route acts on, before and after a successful call
+		okCode        int
+	}{
+		{"approve", "approved_by", StatePendingApproval, StateApproved, http.StatusOK},
+		{"reject", "rejected_by", StatePendingApproval, StateRejected, http.StatusNoContent},
+		{"verified", "verified_by", StateApplied, StateVerified, http.StatusOK},
+	} {
+		t.Run(rt.action, func(t *testing.T) {
+			srv, reg, _ := testService(t)
+			defer srv.Close()
+			logs := captureLog(t)
+			post := func(id, body string) int {
+				t.Helper()
+				resp := adminReq(t, "POST", srv.URL+"/api/v1/remediation/jobs/"+id+"/"+rt.action, body, "")
+				resp.Body.Close()
+				return resp.StatusCode
+			}
+			j := jobIn(t, reg, rt.fresh)
+
+			// Blank (spaces; tab+newline+space) → 400, and the job is left alone.
+			for _, blank := range []string{"   ", `\t\n `} {
+				body := `{"` + rt.field + `":"` + blank + `"}`
+				if code := post(j.JobID, body); code != http.StatusBadRequest {
+					t.Errorf("%s with a blank operator (%s) = %d, want 400", rt.action, body, code)
+				}
+			}
+			if got := stateOf(t, reg, j.JobID); got != rt.fresh {
+				t.Fatalf("a refused %s changed the job to %s", rt.action, got)
+			}
+
+			// Padded → accepted, and recorded without the padding.
+			if code := post(j.JobID, `{"`+rt.field+`":"  alice  "}`); code != rt.okCode {
+				t.Fatalf("%s with a padded operator = %d, want %d", rt.action, code, rt.okCode)
+			}
+			if got := stateOf(t, reg, j.JobID); got != rt.after {
+				t.Fatalf("state after %s = %s, want %s", rt.action, got, rt.after)
+			}
+			if rt.action != "verified" { // verified keeps no field: its record is the audit log
+				got, _ := reg.Get(j.JobID, "win1", "acme")
+				if got.ApprovedBy != "alice" {
+					t.Errorf("%s recorded the operator as %q, want %q", rt.action, got.ApprovedBy, "alice")
+				}
+			}
+			out := logs.String()
+			if strings.Contains(out, `"  alice  "`) {
+				t.Errorf("the audit log kept the padding: %s", out)
+			}
+			if rt.action == "verified" && !strings.Contains(out, `verificado por "alice"`) {
+				t.Errorf("the audit log should name the trimmed verifier: %s", out)
+			}
+		})
 	}
 }

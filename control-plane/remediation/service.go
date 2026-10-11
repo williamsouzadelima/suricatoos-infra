@@ -234,7 +234,8 @@ func (s *Service) ApproveHandler() http.HandlerFunc {
 // RejectHandler serves POST /api/v1/remediation/jobs/{id}/reject (admin bearer).
 // The operator is REQUIRED and recorded: X-Operator, or — because nginx clears that
 // header on /agent/api/ — rejected_by in the body (approved_by is still accepted
-// for compatibility with the older runbook).
+// for compatibility with the older runbook). See Registry.Reject for what a
+// rejection overwrites (the approver) and what it does not do (recall a delivered job).
 func (s *Service) RejectHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if !s.adminOK(w, r) {
@@ -309,7 +310,7 @@ func (s *Service) VerifiedHandler() http.HandlerFunc {
 // future consumers — can see APPLIED/FAILED outcomes. Optional filters: state
 // (case-insensitive), tenant, agent_id; limit (default 200, capped at 1000). A bad
 // state/limit is a 400, not an empty list, so a typo cannot read as "no jobs".
-// Each job is a jobView: the payload is NOT returned.
+// Each job is a jobView: a compact technical summary (payload_sha256, no payload).
 func (s *Service) ListHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if !s.adminOK(w, r) {
@@ -345,12 +346,14 @@ func (s *Service) ListHandler() http.HandlerFunc {
 	}
 }
 
-// jobView is what the status routes (list, verified) expose of a job. It is an
-// explicit allow-list — a field added to RemediationJob later is NOT exposed by
-// default — and it deliberately OMITS the payload (opaque to the queue, so it may
-// carry sensitive configuration; payload_sha256 identifies it) and the nonce. The
-// signature is public by nature. Unset timestamps are omitted (omitzero) rather than
-// printed as year 1.
+// jobView is what the status routes (list, verified) expose of a job: a compact,
+// technical summary, as an explicit allow-list (a field added to RemediationJob later
+// is NOT exposed by default). The payload (payload_sha256 identifies it) and the
+// nonce are left out to keep the listing small and technical — NOT as a
+// confidentiality boundary: the bearer holder already gets the payload in the
+// enqueue/approve responses, and the agent's result (detail/before/after) may repeat
+// technical values from it. The signature is public by nature. Unset timestamps are
+// omitted (omitzero) rather than printed as year 1.
 type jobView struct {
 	JobID         string    `json:"job_id"`
 	CorrelationID string    `json:"correlation_id"`
@@ -394,15 +397,16 @@ type operatorBody struct {
 
 // operatorID returns the identity acting on an operator route: the X-Operator
 // header when set (nginx sets it from the gsad session) or else the body field that
-// pick selects. "" means none was given — the caller answers 400. The body is
-// capped and a malformed one simply yields "".
+// pick selects. The identity goes into the audit trail, so it is trimmed and a blank
+// one (empty or only whitespace) counts as none: "" means no operator was given —
+// the caller answers 400. The body is capped and a malformed one simply yields "".
 func operatorID(w http.ResponseWriter, r *http.Request, pick func(operatorBody) string) string {
-	if op := r.Header.Get("X-Operator"); op != "" {
+	if op := strings.TrimSpace(r.Header.Get("X-Operator")); op != "" {
 		return op
 	}
 	var b operatorBody
 	_ = json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&b)
-	return pick(b)
+	return strings.TrimSpace(pick(b))
 }
 
 // Register wires all remediation routes onto mux. Intended to be mounted DARK

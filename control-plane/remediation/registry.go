@@ -236,6 +236,14 @@ func (r *Registry) Approve(jobID, approver string) (*RemediationJob, error) {
 }
 
 // Reject terminally rejects a job (records who). Idempotent on terminal jobs.
+//
+// It overwrites ApprovedBy/ApprovedAt with the rejecter — which erases the approver
+// of a signed (possibly already applied) change — so every effective rejection
+// writes ONE audit log line that keeps the previous state and the previous approver
+// (a no-op on a terminal job writes none). It does NOT recall a job already handed
+// to the agent: it only takes the job out of the queue (no redelivery; a late
+// Report is discarded). Which states may be rejected is unchanged here — any
+// non-terminal one; narrowing that is a tracked follow-up.
 func (r *Registry) Reject(jobID, approver string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -246,10 +254,20 @@ func (r *Registry) Reject(jobID, approver string) error {
 	if j.State.terminal() {
 		return nil
 	}
+	prevState, prevBy, prevAt := j.State, j.ApprovedBy, j.ApprovedAt
 	j.State = StateRejected
 	j.ApprovedBy = approver
 	j.ApprovedAt = r.now().UTC()
-	return r.saveLocked()
+	if err := r.saveLocked(); err != nil {
+		return err
+	}
+	prevWhen := "-"
+	if !prevAt.IsZero() {
+		prevWhen = prevAt.UTC().Format(time.RFC3339)
+	}
+	log.Printf("remediation: job %s rejeitado por %q (estado anterior %s; aprovador anterior %q em %s; tenant=%s agent=%s)",
+		jobID, approver, prevState, prevBy, prevWhen, j.Tenant, j.AgentID)
+	return nil
 }
 
 // Poll returns the next deliverable job for the agent identified by (agentID,
