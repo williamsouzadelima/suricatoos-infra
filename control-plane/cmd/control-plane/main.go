@@ -336,6 +336,8 @@ func main() {
 		mux.HandleFunc("POST /v1/scan-jobs/{id}/ack", sensorJobSvc.AckHandler())
 		mux.HandleFunc("POST /v1/heartbeat", sensorJobSvc.HeartbeatHandler())
 		mux.HandleFunc("POST /api/v1/tenants/{t}/scan-jobs", sensorJobSvc.EnqueueHandler(adminSecret))
+		// Operator listing of the tenant's jobs (admin bearer; same flag as enqueue).
+		mux.HandleFunc("GET /api/v1/tenants/{t}/scan-jobs", sensorJobSvc.ListHandler(adminSecret))
 		// Feed mirror (ADR-0007): signed manifest + content-addressed blobs to the
 		// sensor's local GVM. Signed with `authority` for now (a dedicated feed key
 		// is the key-separation slice); the sensor verifies with the pinned CA pubkey.
@@ -355,7 +357,7 @@ func main() {
 	}
 	if remediationEnabled {
 		// Agent routes (poll/ack/report) are nginx mTLS-gated + CRL fail-closed in the
-		// service; operator routes (enqueue/approve/reject) are admin-bearer gated.
+		// service; operator routes (enqueue/list/approve/reject/verified) are admin-bearer gated.
 		// DANGER: safe only behind the F2c nginx wiring — see service.go auth() note.
 		remSvc.Register(mux)
 		log.Printf("remediation: fila de jobs HABILITADA (ADR-0010)")

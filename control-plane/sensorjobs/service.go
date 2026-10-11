@@ -1,9 +1,11 @@
 package sensorjobs
 
 import (
+	"crypto/subtle"
 	"encoding/json"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -14,7 +16,7 @@ import (
 type RevokedFunc func(serialHex string) bool
 
 // Service serves the sensor scan-job routes. All sensor-facing routes are mTLS +
-// CRL gated; the admin enqueue route is bearer gated.
+// CRL gated; the admin enqueue and list routes are bearer gated.
 type Service struct {
 	reg     *Registry
 	known   TenantKnown
@@ -74,8 +76,10 @@ func (s *Service) PollHandler() http.HandlerFunc {
 	}
 }
 
-// AckHandler serves POST /v1/scan-jobs/{id}/ack: mark the job accepted. Owner-
-// scoped by the sensor's tenant O; a foreign/unknown id → 404 (no enumeration).
+// AckHandler serves POST /v1/scan-jobs/{id}/ack: the sensor concludes the job
+// (DONE) — it acks only after the scan ran and its report was pushed. Owner-scoped
+// by the sensor's tenant O; a foreign/unknown id — or a job the sensor never
+// received (still PENDING) — → 404 (no enumeration). A repeated ack is a 204.
 func (s *Service) AckHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id, ok := s.auth(w, r)
@@ -134,8 +138,7 @@ type enqueueBody struct {
 // dropped and reported. 422 when nothing is left in scope.
 func (s *Service) EnqueueHandler(adminSecret string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if adminSecret == "" || r.Header.Get("Authorization") != "Bearer "+adminSecret {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
+		if !adminOK(w, r, adminSecret) {
 			return
 		}
 		tenant := r.PathValue("t")
@@ -171,6 +174,57 @@ func (s *Service) EnqueueHandler(adminSecret string) http.HandlerFunc {
 		}
 		writeJSON(w, http.StatusCreated, map[string]any{"job": job, "dropped": dropped})
 	}
+}
+
+// ListHandler serves GET /api/v1/tenants/{t}/scan-jobs (admin bearer): tenant {t}'s
+// jobs, newest first (created_at desc), so an operator can follow dispatch → DONE.
+// Strictly that tenant's jobs — another tenant's are never returned. Optional
+// filters: state (case-insensitive) and limit (default 200, capped at 1000); a bad
+// state/limit is a 400, not an empty list, so a typo cannot read as "no jobs". A
+// tenant with no jobs (or an unknown one) gets 200 with an empty list.
+func (s *Service) ListHandler(adminSecret string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !adminOK(w, r, adminSecret) {
+			return
+		}
+		tenant := r.PathValue("t")
+		if tenant == "" {
+			http.Error(w, "tenant obrigatório", http.StatusBadRequest)
+			return
+		}
+		q := r.URL.Query()
+		var f ListFilter
+		if v := strings.TrimSpace(q.Get("state")); v != "" {
+			f.State = JobState(strings.ToUpper(v))
+			if !f.State.valid() {
+				http.Error(w, "state inválido (use PENDING|DELIVERED|DONE|EXPIRED; ACKED só em registros antigos)", http.StatusBadRequest)
+				return
+			}
+		}
+		if v := strings.TrimSpace(q.Get("limit")); v != "" {
+			n, err := strconv.Atoi(v)
+			if err != nil || n < 1 {
+				http.Error(w, "limit deve ser um inteiro >= 1", http.StatusBadRequest)
+				return
+			}
+			f.Limit = n
+		}
+		jobs, total := s.reg.List(tenant, f)
+		writeJSON(w, http.StatusOK, map[string]any{"jobs": jobs, "total": total, "limit": clampLimit(f.Limit)})
+	}
+}
+
+// adminOK gates the operator routes on the admin bearer. The comparison is
+// constant-time and an EMPTY secret closes the route (a naive compare would let
+// "Authorization: Bearer " through when the secret is unset). On failure it writes
+// 401 and returns false.
+func adminOK(w http.ResponseWriter, r *http.Request, adminSecret string) bool {
+	want := "Bearer " + adminSecret
+	if adminSecret == "" || subtle.ConstantTimeCompare([]byte(r.Header.Get("Authorization")), []byte(want)) != 1 {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return false
+	}
+	return true
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

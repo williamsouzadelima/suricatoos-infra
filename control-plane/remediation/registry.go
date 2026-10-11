@@ -17,6 +17,10 @@ import (
 // ErrNotFound is returned when a job id is unknown (or out of the caller's scope).
 var ErrNotFound = errors.New("job não encontrado")
 
+// ErrInvalidState is returned (wrapped, with the details) when the job exists but
+// its state does not allow the requested transition. The HTTP layer maps it to 409.
+var ErrInvalidState = errors.New("estado do job não permite a operação")
+
 // Registry is the persistent, approval-gated remediation queue. Modeled on
 // sensorjobs' registry (serialized writes, atomic temp+rename persist,
 // unguessable ids) but adds the human-approval gate and per-job signing, and
@@ -94,6 +98,14 @@ const defaultReapRetention = 7 * 24 * time.Hour
 // Reap removes terminal jobs older than retention (by CreatedAt), bounding the
 // queue file's growth, and returns the count removed. Called opportunistically
 // from Enqueue; the wiring may also call it on a timer.
+//
+// Only TERMINAL states go (VERIFIED, FAILED, EXPIRED, REJECTED). ACKED and APPLIED
+// are not terminal and, since Poll no longer expires them by ExpiresAt, NOTHING
+// here removes them: an ACKED job leaves that state when the agent reports
+// (→ APPLIED/FAILED), an APPLIED one when an operator marks it verified
+// (→ VERIFIED) or rejects it. A job stuck there (agent gone, nobody verifies it)
+// stays in the queue until one of those happens — there is deliberately no
+// age-based policy for them yet.
 func (r *Registry) Reap(retention time.Duration) int {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -224,6 +236,14 @@ func (r *Registry) Approve(jobID, approver string) (*RemediationJob, error) {
 }
 
 // Reject terminally rejects a job (records who). Idempotent on terminal jobs.
+//
+// It overwrites ApprovedBy/ApprovedAt with the rejecter — which erases the approver
+// of a signed (possibly already applied) change — so every effective rejection
+// writes ONE audit log line that keeps the previous state and the previous approver
+// (a no-op on a terminal job writes none). It does NOT recall a job already handed
+// to the agent: it only takes the job out of the queue (no redelivery; a late
+// Report is discarded). Which states may be rejected is unchanged here — any
+// non-terminal one; narrowing that is a tracked follow-up.
 func (r *Registry) Reject(jobID, approver string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -234,16 +254,29 @@ func (r *Registry) Reject(jobID, approver string) error {
 	if j.State.terminal() {
 		return nil
 	}
+	prevState, prevBy, prevAt := j.State, j.ApprovedBy, j.ApprovedAt
 	j.State = StateRejected
 	j.ApprovedBy = approver
 	j.ApprovedAt = r.now().UTC()
-	return r.saveLocked()
+	if err := r.saveLocked(); err != nil {
+		return err
+	}
+	prevWhen := "-"
+	if !prevAt.IsZero() {
+		prevWhen = prevAt.UTC().Format(time.RFC3339)
+	}
+	log.Printf("remediation: job %s rejeitado por %q (estado anterior %s; aprovador anterior %q em %s; tenant=%s agent=%s)",
+		jobID, approver, prevState, prevBy, prevWhen, j.Tenant, j.AgentID)
+	return nil
 }
 
 // Poll returns the next deliverable job for the agent identified by (agentID,
 // tenant) — FIFO by CreatedAt — marking it DELIVERED. Eligible = APPROVED, or
 // DELIVERED-but-unacked past the redeliver window. Jobs outside their
-// maintenance window are held; expired jobs are swept. A job for a DIFFERENT
+// maintenance window are held. Jobs whose ExpiresAt lapsed BEFORE the agent took
+// them (PENDING_APPROVAL, APPROVED, DELIVERED-unacked) are swept to EXPIRED; an
+// ACKED or APPLIED job is never expired here (see JobState.expirable), so a late
+// Report still lands and an applied job stays verifiable. A job for a DIFFERENT
 // agent or tenant is never returned.
 func (r *Registry) Poll(agentID, tenant string) (*RemediationJob, bool) {
 	r.mu.Lock()
@@ -256,7 +289,7 @@ func (r *Registry) Poll(agentID, tenant string) (*RemediationJob, bool) {
 		if j.AgentID != agentID || j.Tenant != tenant || j.State.terminal() {
 			continue
 		}
-		if !j.ExpiresAt.IsZero() && now.After(j.ExpiresAt) {
+		if j.State.expirable() && !j.ExpiresAt.IsZero() && now.After(j.ExpiresAt) {
 			j.State = StateExpired
 			changed = true
 			continue
@@ -359,23 +392,29 @@ func (r *Registry) Report(jobID, agentID, tenant string, res *Result) bool {
 	return true
 }
 
-// MarkVerified moves an APPLIED job to VERIFIED. This is SERVER-SIDE only (called
-// after a re-scan confirms the fix) — the agent can never set it. A job not in
-// APPLIED is left unchanged.
-func (r *Registry) MarkVerified(jobID string) bool {
+// MarkVerified moves an APPLIED job to VERIFIED and returns it. This is
+// SERVER-SIDE only (an operator route, after a re-scan confirms the fix) — the
+// agent can never set it. APPLIED is the only state that qualifies: any other
+// existing job is left unchanged and gets ErrInvalidState (a FAILED job must not
+// be resurrected, a VERIFIED one is not verified twice); an unknown id gets
+// ErrNotFound. APPLIED never expires by ExpiresAt, so a slow re-scan can still
+// close it.
+func (r *Registry) MarkVerified(jobID string) (*RemediationJob, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	j, ok := r.jobs[jobID]
 	if !ok {
-		return false
+		return nil, ErrNotFound
 	}
-	if j.State == StateApplied {
-		j.State = StateVerified
-		if err := r.saveLocked(); err != nil {
-			log.Printf("remediation: saveLocked após verify job=%s: %v", jobID, err)
-		}
+	if j.State != StateApplied {
+		return nil, fmt.Errorf("%w: job %s não está em APPLIED (estado %s)", ErrInvalidState, jobID, j.State)
 	}
-	return true
+	j.State = StateVerified
+	if err := r.saveLocked(); err != nil {
+		j.State = StateApplied // memory and disk must agree
+		return nil, err
+	}
+	return j.clone(), nil
 }
 
 // Get returns a clone of a job scoped to (agentID, tenant) — foreign/unknown → false.
@@ -387,6 +426,65 @@ func (r *Registry) Get(jobID, agentID, tenant string) (*RemediationJob, bool) {
 		return nil, false
 	}
 	return j.clone(), true
+}
+
+// Listing bounds: a status listing is never unbounded.
+const (
+	defaultListLimit = 200
+	maxListLimit     = 1000
+)
+
+// clampLimit maps a requested page size to the effective one: n <= 0 means "not
+// given" (the default); anything above the cap is cut to the cap.
+func clampLimit(n int) int {
+	if n <= 0 {
+		return defaultListLimit
+	}
+	return min(n, maxListLimit)
+}
+
+// ListFilter narrows List; a zero field matches everything.
+type ListFilter struct {
+	State   JobState
+	Tenant  string
+	AgentID string
+	Limit   int // <= 0 → defaultListLimit; capped at maxListLimit
+}
+
+// List returns clones of the jobs matching f — newest first (CreatedAt desc; the
+// job id breaks a tie so the order is stable) and at most f.Limit of them — plus
+// how many matched before the cut, so a caller can tell the listing was truncated.
+//
+// This is an operator view across ALL tenants and agents: unlike Get it is not
+// scoped to one agent's identity, so only a bearer-gated route may expose it. The
+// clones carry the full payload; the HTTP layer decides what to show.
+func (r *Registry) List(f ListFilter) (jobs []*RemediationJob, total int) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var match []*RemediationJob
+	for _, j := range r.jobs {
+		if (f.State != "" && j.State != f.State) ||
+			(f.Tenant != "" && j.Tenant != f.Tenant) ||
+			(f.AgentID != "" && j.AgentID != f.AgentID) {
+			continue
+		}
+		match = append(match, j)
+	}
+	sort.Slice(match, func(a, b int) bool {
+		if !match[a].CreatedAt.Equal(match[b].CreatedAt) {
+			return match[a].CreatedAt.After(match[b].CreatedAt)
+		}
+		return match[a].JobID < match[b].JobID
+	})
+	total = len(match)
+	if limit := clampLimit(f.Limit); len(match) > limit {
+		match = match[:limit]
+	}
+	jobs = make([]*RemediationJob, 0, len(match))
+	for _, j := range match {
+		jobs = append(jobs, j.clone())
+	}
+	return jobs, total
 }
 
 func (r *Registry) saveLocked() error {

@@ -17,19 +17,38 @@ const PolicyScannerSensor = "scanner-sensor"
 
 // JobState is a job's delivery lifecycle in the cloud queue. The scan RESULT
 // lifecycle lives on the sensor + the sensor-report path; here we only track
-// dispatch: PENDING → DELIVERED (polled) → ACKED (sensor accepted), or EXPIRED.
-// DONE is set when the matching sensor-report is imported (by the report path).
+// dispatch: PENDING → DELIVERED (polled) → DONE (sensor acked), or EXPIRED.
+//
+// The sensor acks only AFTER it ran the scan and pushed its report
+// (sensor/internal/supervisor), so an ack means "concluded" and Registry.Ack
+// records it as DONE. A job whose scan or push failed is never acked: it stays
+// DELIVERED and is redelivered, until it expires.
+//
+// ACKED is LEGACY: queue files written before Ack marked DONE carry it. Nothing
+// assigns it any more; the constant is kept so those records still load and read
+// back. It is non-terminal, so an old one is swept to EXPIRED by Poll at its
+// ExpiresAt and then reaped like any terminal job.
 type JobState string
 
 const (
 	StatePending   JobState = "PENDING"
 	StateDelivered JobState = "DELIVERED"
-	StateAcked     JobState = "ACKED"
+	StateAcked     JobState = "ACKED" // legacy, no longer assigned (see JobState)
 	StateDone      JobState = "DONE"
 	StateExpired   JobState = "EXPIRED"
 )
 
 func (s JobState) terminal() bool { return s == StateDone || s == StateExpired }
+
+// valid reports whether s is one of the known states (the listing filter accepts
+// exactly these, including the legacy ACKED so old records can still be found).
+func (s JobState) valid() bool {
+	switch s {
+	case StatePending, StateDelivered, StateAcked, StateDone, StateExpired:
+		return true
+	}
+	return false
+}
 
 // Source records where a job's targets came from (both funnel into one queue).
 type Source string
