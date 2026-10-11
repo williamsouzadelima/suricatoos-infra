@@ -44,8 +44,10 @@ nginx já aplicada. **O dono roda isto no host** (merge/deploy = William).
    REMEDIATION_ENABLED=true
    # REMEDIATION_JOBS_FILE=/data/remediation-jobs.json   # trocar o nome = perder a fila
    ```
-3. **nginx**: garanta que o `default.conf` com a location `/agent/v1/remediation-jobs` (mTLS) está no
-   volume e recarregado (`nginx -t && nginx -s reload`, ou recreate do container).
+3. **nginx**: garanta que o `default.conf` com a location `/agent/v1/remediation-jobs` (mTLS) está
+   aplicado: após o `git pull`, `nginx -t` num container descartável e **recrie** o nginx
+   (`docker compose up -d --no-deps --force-recreate nginx`) — o reload não pega o arquivo novo
+   (bind-mount de arquivo único; ver `deploy-pipeline.md` §4).
 4. **Por tenant**: a remediação só vale para tenant com consentimento ligado (default off; só admin).
 
 Recarregue o control-plane (`docker compose up -d --no-deps control-plane`). O log deve dizer

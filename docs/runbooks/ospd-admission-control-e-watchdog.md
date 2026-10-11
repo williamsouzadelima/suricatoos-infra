@@ -162,20 +162,22 @@ segurança do nível server (`include conf.d/headers.conf`). Por isso cada bloco
 re-inclui o `headers.conf` **antes** do `add_header`. O `always` também é obrigatório,
 senão o header não sai nas respostas `401`/`403`/`429`.
 
-⚠️ **Gotcha do volume:** `nginx_config_vol` é montado **depois** do bind-mount do
-`default.conf`, então o volume vence:
+⚠️ **Gotcha do bind-mount de arquivo único:** o nginx lê o `default.conf` por bind-mount de
+arquivo único. O `git pull` troca o arquivo por rename (inode novo) e o container em execução
+segue com o antigo: `nginx -s reload` relê o conteúdo VELHO, sem erro — e `up -d` sozinho não
+recria o nginx. Não se copia nada para o volume: valide num container descartável e **recrie**
+o nginx (detalhes em `deploy-pipeline.md` §4):
 
 ```sh
-VOL=/var/lib/docker/volumes/<projeto>_nginx_config_vol/_data
-cp compose/nginx/default.conf "$VOL/default.conf"
-docker compose exec nginx nginx -t
-docker compose exec nginx nginx -s reload      # reload, não restart
+docker compose run --rm --no-deps --entrypoint nginx nginx -t
+docker compose up -d --no-deps --force-recreate nginx
 ```
 
-Verificar:
+Verificar — pelo **nome** do host (com roteamento por SNI na frente, `127.0.0.1`/`localhost`
+podem cair em outro vhost):
 
 ```sh
-curl -skI https://127.0.0.1/agents/data.json | grep -iE 'cache-control|strict-transport'
+curl -skI --resolve <dominio>:443:127.0.0.1 https://<dominio>/agents/data.json | grep -iE 'cache-control|strict-transport'
 # esperado: Cache-Control: no-store  E  os headers de segurança presentes
 ```
 
@@ -194,7 +196,8 @@ docker compose up -d --force-recreate --no-deps ospd-openvas
 # 2) watchdog: puramente aditivo, basta desligar
 systemctl disable --now openvas-watchdog.timer
 
-# 3) nginx: restaure o default.conf anterior no VOLUME, nginx -t, nginx -s reload
+# 3) nginx: restaure o default.conf anterior (git), nginx -t num container descartável e
+#    recrie o nginx (--no-deps --force-recreate), como na seção 3
 ```
 
 Nenhuma das três toca em dado: não há migração de schema, nem alteração de volume de

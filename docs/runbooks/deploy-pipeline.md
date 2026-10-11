@@ -70,21 +70,30 @@ rede interna do docker (sem porta publicada).
 
 ## 4. Aplicar a config do nginx (mTLS + rota /ingest/)
 
-⚠️ **Gotcha conhecido:** `nginx_config_vol` é montado **depois** do bind-mount do
-`default.conf`, então o volume vence. Copie o config atualizado para o volume e
-faça **restart** (não reload). E garanta o mount da CA.
+⚠️ **Gotcha:** o nginx lê o `compose/nginx/default.conf` por **bind-mount de arquivo
+único** (o `nginx_config_vol` fica por baixo e só fornece o resto de `conf.d`, como o
+`headers.conf`). O `git pull` troca o arquivo por rename — inode novo — e o container em
+execução segue com o antigo: `nginx -s reload` relê o conteúdo VELHO, sem erro e sem aviso;
+e `up -d` sozinho não recria o nginx, porque a config do serviço não mudou, só o arquivo.
+Por isso **não** se copia nada para o volume e **não** se usa reload: valide e **recrie** o
+container. Vale também para o `standalone.conf`. O mount da CA de enrollment
+(`/etc/nginx/enroll-ca.crt`) já vem no override; o arquivo precisa existir no host (§0).
 
 ```sh
-# 1) confirme que o nginx tem o mount da CA (override): /etc/nginx/enroll-ca.crt
-docker compose up -d --no-deps --force-recreate nginx   # pega o novo volume mount da CA
+cd <clone>/compose    # sempre do diretório do compose (ver OPERATIONS.md)
+git pull
 
-# 2) copie o default.conf atualizado para dentro do volume que o nginx lê
-VOL=/var/lib/docker/volumes/greenbone-community-edition_nginx_config_vol/_data
-cp compose/nginx/default.conf "$VOL/default.conf"
+# 1) valide o arquivo NOVO num container descartável (mesma rede e mesmos mounts do serviço;
+#    o nginx em execução ainda enxerga o inode antigo)
+docker compose run --rm --no-deps --entrypoint nginx nginx -t
 
-# 3) valide a sintaxe e recarregue
-docker compose exec nginx nginx -t
-docker compose exec nginx nginx -s reload
+# 2) recrie só o nginx: o bind-mount passa a apontar para o arquivo novo e o container
+#    pega também um mount novo, como o da CA (override): /etc/nginx/enroll-ca.crt
+docker compose up -d --no-deps --force-recreate nginx
+
+# 3) confira pelo NOME do host: com roteamento por SNI na frente, localhost pode cair em
+#    outro vhost
+curl -sS --resolve <dominio>:443:127.0.0.1 -o /dev/null -w 'status=%{http_code}\n' https://<dominio>/
 ```
 
 ## 5. Verificar (smoke test com cert de agente)
@@ -139,8 +148,8 @@ suricatoos-agent install --state <mesmo state do enroll>
 
 ```sh
 docker compose stop ingest && docker compose rm -f ingest
-# e remova a location /ingest/ + as linhas ssl_verify_client do default.conf,
-# recopie p/ o volume e nginx -s reload.
+# e remova a location /ingest/ + as linhas ssl_verify_client do default.conf, valide
+# (nginx -t) e recrie o nginx (--no-deps --force-recreate), como no passo 4.
 ```
 
 ## Notas de segurança
