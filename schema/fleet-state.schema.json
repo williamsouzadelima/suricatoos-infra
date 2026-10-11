@@ -33,7 +33,7 @@
       "description": "agents, tokens, sensors, scan_requests and remediation exist only on the central node; the others on every node kind.",
       "enum": ["node", "tasks", "targets", "schedules", "reports", "agents", "tokens", "sensors", "scan_requests", "remediation", "scope", "audit_tail"]
     },
-    "state_kind_any": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-z][a-z_]*$", "description": "a state kind AS RECEIVED in the resync of a heartbeat response (v1 values are state_kind): the node ignores, and alerts on, a kind it does not know instead of failing the whole response — the one exception to strict validation (ADR-0011 'Versões e evolução')" },
+    "state_kind_any": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-z][a-z_]*$", "allOf": [ { "$ref": "fleet-command.schema.json#/$defs/no_control" } ], "description": "a state kind AS RECEIVED in the resync of a heartbeat response (v1 values are state_kind): the node ignores, and alerts on, a kind it does not know instead of failing the whole response — the one exception to strict validation (ADR-0011 'Versões e evolução')" },
     "feed_type": { "enum": ["nvt", "scap", "cert", "gvmd_data"] },
     "gvm_status": { "type": "string", "minLength": 1, "maxLength": 32, "pattern": "^[A-Za-z][A-Za-z ]*$", "allOf": [ { "$ref": "fleet-command.schema.json#/$defs/no_control" } ], "description": "gvmd task/report status verbatim (New, Requested, Queued, Running, Stop Requested, Stopped, Done, Interrupted, Delete Requested, Processing, ...); a string, not an enum, so a new gvmd status does not break the contract" },
     "severity_counts": {

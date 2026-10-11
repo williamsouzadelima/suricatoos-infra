@@ -347,6 +347,9 @@ mesmas nos exemplos, para Python e Go darem o mesmo veredito.
 - **Instantes reais.** Todo tempo RFC 3339 é um instante que existe no calendário: sem 30/02, sem hora 24 e sem
   segundo 60. O v1 não precisa de segundo bissexto, e o `time` do Go não o representa. O padrão de `utc_time`
   fixa a faixa de cada campo, e o dia do mês é conferido como `format: date-time` (no envelope, `bad_envelope`).
+- **Sem caractere de controle** nos textos do contrato, em especial nenhum `\n` final. No Python, o `$` de um
+  padrão casa antes de uma quebra de linha final; no RE2 do Go, não. É o `no_control` do schema, que vale também
+  para `token_id`, para o tipo como recebido (`command_type_any`) e para o kind como recebido (`state_kind_any`).
 - **Caracteres XML 1.0** nos textos que chegam ao gvmd (nomes, `comment`, iCalendar, filtro): sem U+FFFE/U+FFFF e
   sem controle C0 além do que o campo já permite (o iCalendar aceita TAB, CR e LF). O `no_control` e o
   `icalendar` do schema recusam esses caracteres; o surrogate desemparelhado sai pela regra do parser acima.
@@ -413,9 +416,9 @@ possui chave de assinatura: um nó comprometido não forja comando para outro.
 ### Envelope assinado e forma canônica
 
 O envelope (`fleet-command.schema.json`) tem 12 campos: os 10 assinados abaixo + `payload` (objeto JSON) +
-`signature` (base64 padrão, em forma canônica, dos 64 bytes Ed25519). `fleet-command.schema.json#/$defs/envelope` é o mesmo envelope
-na forma que a linha 0 confere (`type` = `command_type_any`, `payload` = qualquer objeto). A mensagem assinada é
-a **forma canônica**:
+`signature` (base64 padrão, em forma canônica, dos 64 bytes Ed25519). `fleet-command.schema.json#/$defs/envelope`
+é o mesmo envelope na forma que a linha 0 confere (`type` = `command_type_any`, `payload` = qualquer objeto). A
+mensagem assinada é a **forma canônica**:
 
 ```
 suricatoos-fleet-command-v1\n
@@ -656,9 +659,10 @@ Vetores obrigatórios:
 - Da "Codificação JSON": payload com `<`, `>`, `&` e U+2028 literais (`accept`) e o mesmo payload re-escapado
   em HTML depois do hash (`payload_mismatch`); chave duplicada no envelope e no payload, chave com caixa
   diferente (`"Node_ID"`), dado depois do valor e inteiro com fração ou expoente, `70.0` e `7e1`
-  (`bad_envelope`, recusa léxica); e, das regras estritas, `signature` em base64 não canônico, instante inexistente
-  (30/02), hora 24, segundo 60, aninhamento de 33 níveis e surrogate desemparelhado (`bad_envelope`), mais U+FFFE
-  num nome de payload (`bad_payload`).
+  (`bad_envelope`, recusa léxica).
+- Das regras estritas: `signature` em base64 não canônico, instante inexistente (30/02), hora 24,
+  segundo 60, aninhamento de 33 níveis e surrogate desemparelhado (`bad_envelope`); `\n` final no tipo
+  (`bad_envelope`); U+FFFE num nome de payload ou `\n` final num `token_id` (`bad_payload`).
 
 ### Rotas do hub
 

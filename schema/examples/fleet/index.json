@@ -50,6 +50,15 @@
       }
     },
     {
+      "file": "invalid/command/enroll-token-revoke-token-id-trailing-newline.json",
+      "target": "fleet-command.schema.json",
+      "description": "no control character in an identifier: a trailing newline passes Python's '$' but not Go's (no_control)",
+      "expect": {
+        "keyword": "not",
+        "path": "/payload/token_id"
+      }
+    },
+    {
       "file": "invalid/command/envelope--fraction-in-unknown-payload-member.json",
       "target": "fleet-command.schema.json#/$defs/envelope",
       "description": "an envelope has no 'number': a fraction anywhere, even in a member the schema does not know, is refused lexically first",
@@ -74,6 +83,15 @@
       "expect": {
         "keyword": "type",
         "path": "/payload"
+      }
+    },
+    {
+      "file": "invalid/command/envelope--type-trailing-newline.json",
+      "target": "fleet-command.schema.json#/$defs/envelope",
+      "description": "the type AS RECEIVED (command_type_any) refuses control characters too: a trailing newline would pass Python's '$'",
+      "expect": {
+        "keyword": "not",
+        "path": "/type"
       }
     },
     {
@@ -784,6 +802,15 @@
       "description": "resync items still match the kind pattern",
       "expect": {
         "keyword": "pattern",
+        "path": "/resync/0"
+      }
+    },
+    {
+      "file": "invalid/heartbeat/heartbeat_response--resync-kind-trailing-newline.json",
+      "target": "fleet-heartbeat.schema.json#/$defs/heartbeat_response",
+      "description": "the kind AS RECEIVED (state_kind_any) refuses control characters: a trailing newline would pass Python's '$'",
+      "expect": {
+        "keyword": "not",
         "path": "/resync/0"
       }
     },
