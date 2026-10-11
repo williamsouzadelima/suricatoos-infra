@@ -438,7 +438,7 @@ class FailClosed(WithTmp):
 
     def test_missing_project_name(self):
         # sem `name` nao da para conferir o nome das redes: nao se aprova no escuro
-        cfg = json.load(open(FIXTURE, encoding="utf-8"))
+        cfg = load_ok()
         del cfg["name"]
         self.assert_input_error(self.write(cfg), "name")
 

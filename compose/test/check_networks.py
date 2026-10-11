@@ -3,11 +3,19 @@
 
 POR QUE EXISTE
   Todos os servicos do projeto viviam na mesma rede. O docker-socket-proxy
-  aceita POST em /containers (= criar container = root no host) e o :8080 do
-  control-plane / :9090 do ingest assumem que SO o nginx chega neles. A topologia
-  nova (redes docker-api, backend e egress, declaradas em
-  docker-compose.override.yml) so vale se ninguem a desfizer sem querer: este
-  script e o portao que reprova o PR quando isso acontece.
+  aceita POST em /containers (= criar container = root no host), o :8008 do
+  feed-updater e' uma API admin sem auth propria, e o :8080 do control-plane /
+  :9090 do ingest sao interfaces internas do nginx. A topologia nova (redes
+  docker-api, backend e egress, declaradas em docker-compose.override.yml) tira
+  gsad, gvmd e o resto da `default` do caminho -- e so vale se ninguem a desfizer
+  sem querer: este script e o portao que reprova o PR quando isso acontece.
+
+  Alcance REAL na backend (internal): nginx, control-plane, ingest e feed-updater
+  se enxergam entre si. NAO e' o "so o nginx" que a remediacao exige (condicao (c)
+  do WIRING-CRITICAL em control-plane/remediation/service.go): essa condicao
+  continua NAO atendida e a remediacao segue DARK; o follow-up e' uma rede
+  exclusiva nginx<->control-plane, com a CRL servida ao ingest por um caminho do
+  nginx. Este portao NAO garante essa condicao.
 
 USO
   # Resolve cada combinacao de COMPOSE_FILE em uso com
@@ -78,7 +86,10 @@ PINNED = {
     # HTTP do nginx; egress: o espelho MSRC baixa da internet de dentro do container
     # (os pulls de imagem sao do daemon, via proxy).
     "feed-updater": {"docker-api", "backend", "egress"},
-    # Fora da default: so o nginx (e o ingest, p/ a CRL) chegam no :8080/:9090.
+    # Fora da default: gsad/gvmd/ospd nao chegam no :8080/:9090. Quem chega, pela backend:
+    # no :8080 o nginx, o ingest (CRL) e o feed-updater; no :9090 o nginx, o control-plane
+    # e o feed-updater -- NAO e' "so o nginx": a condicao (c) do WIRING-CRITICAL da
+    # remediacao segue NAO atendida (follow-up: rede exclusiva nginx<->control-plane).
     # egress: planner de IA / push p/ o Score precisam de saida p/ internet.
     "control-plane": {"backend", "egress"},
     "ingest": {"backend", "egress"},
