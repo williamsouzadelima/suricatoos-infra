@@ -19,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/williamsouzadelima/suricatoos-infra/control-plane/sessiongate"
 	"github.com/williamsouzadelima/suricatoos-infra/control-plane/tokens"
 )
 
@@ -84,17 +85,20 @@ func (s *Service) Handler() http.HandlerFunc {
 // GSAD_SID + same-origin), exactly like /provision/install. The tenant comes from
 // the ?tenant= query. The GSA is single-admin (only the admin logs into the web),
 // so the session gate is an admin gate in practice; the {t} is still validated
-// against the registry, so an unknown tenant is refused regardless.
+// against the registry, so an unknown tenant is refused regardless. As defense in
+// depth it is wrapped in sessiongate.Require: a request without the marker nginx sets
+// only on session-gated locations is refused (403) before any token is minted.
 func (s *Service) SessionHandler() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+	return sessiongate.Require(func(w http.ResponseWriter, r *http.Request) {
 		s.serve(w, r, r.URL.Query().Get("tenant"))
-	}
+	})
 }
 
 // SessionTenantsHandler serves GET /provision/tenants (session-gated by nginx) —
-// the enabled tenant names for the UI selector. No token minted, no secrets.
+// the enabled tenant names for the UI selector. No token minted, no secrets. Also
+// wrapped in sessiongate.Require (defense in depth), like SessionHandler.
 func (s *Service) SessionTenantsHandler() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+	return sessiongate.Require(func(w http.ResponseWriter, r *http.Request) {
 		var names []string
 		if s.cfg.Tenants != nil {
 			names = s.cfg.Tenants()
@@ -105,7 +109,7 @@ func (s *Service) SessionTenantsHandler() http.HandlerFunc {
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Cache-Control", "no-store")
 		_ = json.NewEncoder(w).Encode(map[string]any{"tenants": names})
-	}
+	})
 }
 
 // serve is the shared core: validate tenant, mint a scoped token, render the command.

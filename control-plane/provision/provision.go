@@ -5,7 +5,9 @@
 //
 // SECURITY: this endpoint mints enrollment tokens WITHOUT the admin bearer, so it
 // MUST be reachable only behind nginx session validation (auth_request to gsad).
-// It is mounted on a path nginx guards; never expose it unguarded.
+// It is mounted on a path nginx guards; never expose it unguarded. As defense in
+// depth the handler also requires the sessiongate marker, which nginx sets only on
+// session-gated locations (see Handler).
 package provision
 
 import (
@@ -16,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/williamsouzadelima/suricatoos-infra/control-plane/sessiongate"
 	"github.com/williamsouzadelima/suricatoos-infra/control-plane/tokens"
 )
 
@@ -54,9 +57,11 @@ type response struct {
 	ExpiresAt time.Time `json:"expires_at"`
 }
 
-// Handler serves GET /provision/install?os=<linux|darwin|windows>.
+// Handler serves GET /provision/install?os=<linux|darwin|windows>. It is wrapped in
+// sessiongate.Require: a request without the marker nginx sets only on session-gated
+// locations is refused (403) before any token is minted.
 func (s *Service) Handler() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+	return sessiongate.Require(func(w http.ResponseWriter, r *http.Request) {
 		goos := r.URL.Query().Get("os")
 		switch goos {
 		case "linux", "darwin", "windows":
@@ -88,7 +93,7 @@ func (s *Service) Handler() http.HandlerFunc {
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Cache-Control", "no-store")
 		_ = json.NewEncoder(w).Encode(resp)
-	}
+	})
 }
 
 // command renders the one-liner the operator pastes. Linux/macOS pipe install.sh

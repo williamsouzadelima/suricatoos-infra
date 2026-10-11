@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+
+	"github.com/williamsouzadelima/suricatoos-infra/control-plane/sessiongate"
 )
 
 // Service exposes the admin API for managing AI providers. Two gates reach the
@@ -15,7 +17,9 @@ import (
 //   - the /ai/providers session routes carry NO bearer and are safe ONLY behind
 //     nginx's STRONG gsad-session gate (auth_request → gsad, token-validated, like
 //     /feed-sync) — for the logged-in operator in the GSA UI. They must NEVER be
-//     exposed through a cookie-only gate (that gate is forgeable).
+//     exposed through a cookie-only gate (that gate is forgeable). As defense in
+//     depth they also refuse (403) any request without the sessiongate marker, which
+//     nginx sets only on session-gated locations.
 //
 // The API key is WRITE-ONLY on every route: accepted on upsert, never returned.
 type Service struct {
@@ -37,7 +41,8 @@ func (s *Service) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/ai/providers", s.listHandler())
 	mux.HandleFunc("DELETE /api/v1/ai/providers/{id}", s.deleteHandler())
 	// Session-gated by nginx (GSA UI). No bearer here — the nginx auth_request→gsad
-	// in front is the security boundary; the control-plane is internal-only.
+	// in front is the security boundary; the control-plane is internal-only. The
+	// handlers also require the sessiongate marker nginx sets only on those locations.
 	mux.HandleFunc("GET /ai/providers", s.SessionListHandler())
 	mux.HandleFunc("POST /ai/providers", s.SessionUpsertHandler())
 	mux.HandleFunc("DELETE /ai/providers/{id}", s.SessionDeleteHandler())
@@ -106,20 +111,24 @@ func (s *Service) deleteHandler() http.HandlerFunc {
 }
 
 // --- session-gated handlers (nginx gsad gate is the boundary; no bearer) ---
+//
+// Each one is wrapped in sessiongate.Require (defense in depth): a request that does
+// not carry the marker nginx sets only on session-gated locations is refused with 403
+// before any logic runs, so a location without the gate cannot reach these routes.
 
 // SessionUpsertHandler serves POST /ai/providers for the GSA UI.
 func (s *Service) SessionUpsertHandler() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) { s.doUpsert(w, r) }
+	return sessiongate.Require(s.doUpsert)
 }
 
 // SessionListHandler serves GET /ai/providers for the GSA UI.
 func (s *Service) SessionListHandler() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) { s.doList(w, r) }
+	return sessiongate.Require(s.doList)
 }
 
 // SessionDeleteHandler serves DELETE /ai/providers/{id} for the GSA UI.
 func (s *Service) SessionDeleteHandler() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) { s.doDelete(w, r) }
+	return sessiongate.Require(s.doDelete)
 }
 
 // --- shared logic (auth already enforced by the wrapper or by nginx) ---

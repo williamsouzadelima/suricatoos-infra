@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
+
+	"github.com/williamsouzadelima/suricatoos-infra/control-plane/sessiongate"
 )
 
 // Service serves the command channel HTTP endpoints.
@@ -79,9 +81,11 @@ func (s *Service) AckHandler() http.HandlerFunc {
 // "Escanear agora" button. It has NO auth of its own and MUST be reached only
 // through the session-gated nginx location (GSAD_SID cookie + same-origin) — the
 // same trust model as the provision endpoint. It enqueues a scan_now (the only
-// UI-triggerable command) on the SAME queue the admin/CLI handler uses.
+// UI-triggerable command) on the SAME queue the admin/CLI handler uses. As defense in
+// depth it is wrapped in sessiongate.Require: a request without the marker nginx sets
+// only on session-gated locations is refused (403) before anything is enqueued.
 func (s *Service) SessionEnqueueHandler() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+	return sessiongate.Require(func(w http.ResponseWriter, r *http.Request) {
 		agentID := strings.TrimSpace(r.URL.Query().Get("id"))
 		if agentID == "" {
 			http.Error(w, "agent id required", http.StatusBadRequest)
@@ -91,7 +95,7 @@ func (s *Service) SessionEnqueueHandler() http.HandlerFunc {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusAccepted)
 		_ = json.NewEncoder(w).Encode(c)
-	}
+	})
 }
 
 // EnqueueHandler serves POST /api/v1/agents/{id}/commands {"type": "scan_now"}.

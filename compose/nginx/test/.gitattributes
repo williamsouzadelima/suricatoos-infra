@@ -1,0 +1,2 @@
+# Scripts da matriz rodam no Linux (CI): sempre LF, inclusive em checkout no Windows.
+* text eol=lf

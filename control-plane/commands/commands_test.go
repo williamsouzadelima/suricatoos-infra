@@ -6,7 +6,17 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/williamsouzadelima/suricatoos-infra/control-plane/sessiongate"
 )
+
+// gatedReq builds a request the way nginx delivers it from a session-gated location:
+// carrying the sessiongate marker header.
+func gatedReq(method, target string) *http.Request {
+	r := httptest.NewRequest(method, target, nil)
+	r.Header.Set(sessiongate.Header, sessiongate.Value)
+	return r
+}
 
 func TestQueueEnqueuePendingAck(t *testing.T) {
 	q := NewQueue()
@@ -162,17 +172,47 @@ func TestSessionEnqueueHandler(t *testing.T) {
 
 	// no id -> 400
 	w := httptest.NewRecorder()
-	h(w, httptest.NewRequest("POST", "/agents/scan", nil))
+	h(w, gatedReq("POST", "/agents/scan"))
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("no id = %d, want 400", w.Code)
 	}
 	// valid id -> 202 + queued on the shared queue (no bearer; nginx gates)
 	w = httptest.NewRecorder()
-	h(w, httptest.NewRequest("POST", "/agents/scan?id=agent-7", nil))
+	h(w, gatedReq("POST", "/agents/scan?id=agent-7"))
 	if w.Code != http.StatusAccepted {
 		t.Fatalf("valid = %d, want 202", w.Code)
 	}
 	if got, ok := q.Pending("agent-7"); !ok || got.Type != CmdScanNow {
 		t.Fatalf("expected pending scan_now for agent-7: %+v ok=%v", got, ok)
+	}
+}
+
+// Without the marker nginx sets only on session-gated locations, the handler must
+// refuse and enqueue nothing (defense in depth: a location that lacks the gate must
+// not be able to trigger scans).
+func TestSessionEnqueueHandlerRequiresGate(t *testing.T) {
+	q := NewQueue()
+	h := NewService(q).SessionEnqueueHandler()
+
+	for _, gate := range []string{"", "1", "GSAD-SESSION"} {
+		r := httptest.NewRequest("POST", "/agents/scan?id=agent-7", nil)
+		if gate != "" {
+			r.Header.Set(sessiongate.Header, gate)
+		}
+		w := httptest.NewRecorder()
+		h(w, r)
+		if w.Code != http.StatusForbidden {
+			t.Fatalf("marker %q = %d, want 403", gate, w.Code)
+		}
+		if _, ok := q.Pending("agent-7"); ok {
+			t.Fatalf("marker %q: a command was enqueued despite the 403", gate)
+		}
+	}
+
+	// Positive control: the marker is the only difference.
+	w := httptest.NewRecorder()
+	h(w, gatedReq("POST", "/agents/scan?id=agent-7"))
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("with marker = %d, want 202", w.Code)
 	}
 }
