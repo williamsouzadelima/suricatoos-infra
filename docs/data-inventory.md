@@ -98,7 +98,7 @@ Coletamos apenas o mínimo necessário para **correlação de vulnerabilidade ba
 
 > **`report.export` é o ÚNICO caminho de achado detalhado:** exige comando assinado, permitido pela política
 > **local** (o operador do nó pode removê-lo), conta no orçamento local de comandos sensíveis (30/h, somado
-> com `report.summary` e os opt-in) e fica na auditoria local. O `report.summary` não carrega achado: só
+> com `report.summary` e os opt-in) e no global de aceitos (120/h), e fica na auditoria local. O `report.summary` não carrega achado: só
 > contagens, com filtro que o hub não escolhe.
 >
 > **Artefatos:** gzip, ≤ 64 MiB comprimido e ≤ 1 GiB descomprimido (o hub descomprime em streaming com teto

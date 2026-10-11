@@ -869,6 +869,15 @@
       }
     },
     {
+      "file": "invalid/state/audit_entry--deferred-final-reason.json",
+      "target": "fleet-state.schema.json#/$defs/audit_entry",
+      "description": "N6: a final reason cannot be deferred",
+      "expect": {
+        "keyword": "enum",
+        "path": "/reason"
+      }
+    },
+    {
       "file": "invalid/state/audit_entry--exec-event-in-reject-stream.json",
       "target": "fleet-state.schema.json#/$defs/audit_entry",
       "description": "I6: executed/result live in the exec stream (own rotation budget)",
@@ -878,12 +887,39 @@
       }
     },
     {
+      "file": "invalid/state/audit_entry--executed-with-reason.json",
+      "target": "fleet-state.schema.json#/$defs/audit_entry",
+      "description": "N6: only rejected/deferred lines carry a reason",
+      "expect": {
+        "keyword": "not",
+        "path": ""
+      }
+    },
+    {
       "file": "invalid/state/audit_entry--hosts-over-64.json",
       "target": "fleet-state.schema.json#/$defs/audit_entry",
       "description": "I6: at most 64 hosts per line (hosts_count carries the total)",
       "expect": {
         "keyword": "maxItems",
         "path": "/hosts"
+      }
+    },
+    {
+      "file": "invalid/state/audit_entry--rejected-deferred-reason.json",
+      "target": "fleet-state.schema.json#/$defs/audit_entry",
+      "description": "N6: not_yet_valid is retryable, never a final rejection",
+      "expect": {
+        "keyword": "enum",
+        "path": "/reason"
+      }
+    },
+    {
+      "file": "invalid/state/audit_entry--rejected-unauthenticated-reason.json",
+      "target": "fleet-state.schema.json#/$defs/audit_entry",
+      "description": "N6: lines 0-2 never get a line of their own (only the periodic count)",
+      "expect": {
+        "keyword": "enum",
+        "path": "/reason"
       }
     },
     {
@@ -980,6 +1016,15 @@
       "file": "invalid/state/node-policy-allowed-types.json",
       "target": "fleet-state.schema.json",
       "description": "M6: one name, 'allow', in policy.json and in the state",
+      "expect": {
+        "keyword": "required",
+        "path": "/data/policy"
+      }
+    },
+    {
+      "file": "invalid/state/node-policy-without-total-per-hour.json",
+      "target": "fleet-state.schema.json",
+      "description": "the global budget of accepted commands is part of the local policy (default 120/h)",
       "expect": {
         "keyword": "required",
         "path": "/data/policy"
@@ -1244,6 +1289,11 @@
       "description": "a batch with one command.rejected_by_policy event"
     },
     {
+      "file": "valid/event/command-rejected-schedule-out-of-scope.json",
+      "target": "fleet-event.schema.json",
+      "description": "a batch with one command.rejected_by_policy event"
+    },
+    {
       "file": "valid/event/command-rejected-unsupported-report-variant.json",
       "target": "fleet-event.schema.json",
       "description": "a batch with one command.rejected_by_policy event"
@@ -1327,6 +1377,11 @@
       "file": "valid/result/ack--rejected-expired.json",
       "target": "fleet-result.schema.json#/$defs/ack",
       "description": "I4: expired is FINAL and recorded"
+    },
+    {
+      "file": "valid/result/ack--rejected-rate-limited.json",
+      "target": "fleet-result.schema.json#/$defs/ack",
+      "description": "the global budget of accepted commands is exhausted (final)"
     },
     {
       "file": "valid/result/ack--rejected-scope-denied.json",

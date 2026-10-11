@@ -11,14 +11,14 @@
       "additionalProperties": false,
       "properties": {
         "schema_version": { "type": "string", "const": "1.0.0", "description": "MAJOR.MINOR.0 of a version the node supports (the PATCH never travels); part of the signed canonical form. The hub only delivers a command whose version is in the node's latest announcement" },
-        "command_id": { "$ref": "#/$defs/uuid", "description": "hub-assigned and unique; the {id} of the ack/result routes. The hub NEVER re-signs a command_id: a redelivery is the same envelope byte for byte. The node indexes its store by nonce AND by command_id — a different canonical form under an already-seen command_id (or nonce) is rejected as replay" },
+        "command_id": { "$ref": "#/$defs/uuid", "description": "hub-assigned and unique; the {id} of the ack/result routes. The hub NEVER re-signs a command_id: a redelivery is the same envelope byte for byte. The node RECORDS every final decision (accepted/rejected; a deferred one is not recorded), keyed by the canonical form and indexed by nonce AND command_id: the SAME canonical form already recorded is a redelivery and gets the recorded ack/result again (verification line 2a, even after not_after); a different canonical form under an already-recorded command_id (or nonce) is rejected as replay" },
         "node_id": { "$ref": "#/$defs/node_id", "description": "the ONE node this command is for; must equal the CN of the node's own fleet certificate (else rejected: wrong_node)" },
         "tenant": { "$ref": "#/$defs/tenant", "description": "tenant the command acts on; must be known AND enabled on the node (central: TENANTS_FILE registry; standalone/sensor: FLEET_TENANT). Existing objects are addressed only inside that tenant's gvmd partition" },
         "type": { "$ref": "#/$defs/command_type" },
         "issued_by": { "$ref": "#/$defs/issued_by" },
         "issued_at": { "$ref": "#/$defs/utc_time", "description": "signing time (hub clock)" },
         "not_after": { "$ref": "#/$defs/utc_time", "description": "expiry; the node requires issued_at < not_after <= issued_at + 24h" },
-        "nonce": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[0-9a-f]{64}$", "description": "32 CSPRNG bytes in hex, single-use; the node keeps it in its store until not_after + 7 days (>= not_after + skew)" },
+        "nonce": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[0-9a-f]{64}$", "description": "32 CSPRNG bytes in hex, single-use; the node keeps the store entry until min(not_after, issued_at + 24h) + 7 days — not_after + 7 days (>= not_after + skew) for every valid window, while the min caps bad_window entries" },
         "payload_sha256": { "$ref": "#/$defs/sha256_hex" },
         "payload": { "type": "object", "description": "compact JSON; its shape depends on type (see allOf)" },
         "signature": { "type": "string", "minLength": 88, "maxLength": 88, "pattern": "^[A-Za-z0-9+/]{86}==$", "description": "standard base64 of the 64-byte Ed25519 signature over the canonical form (not part of the canonical)" }
@@ -173,10 +173,11 @@
         "comment": { "$ref": "#/$defs/gvm_comment" },
         "target_id": { "$ref": "#/$defs/uuid" },
         "scan_config_id": { "$ref": "#/$defs/uuid" },
-        "schedule_id": { "anyOf": [ { "$ref": "#/$defs/uuid" }, { "const": "" } ], "description": "a schedule owned by the tenant links it; \"\" unlinks" }
+        "schedule_id": { "anyOf": [ { "$ref": "#/$defs/uuid" }, { "const": "" } ], "description": "a schedule owned by the tenant links it, and then the hosts of the task's target are re-checked against the tenant scope (scope_denied); \"\" unlinks" }
       }
     },
     "payload_task_clone": {
+      "description": "task.clone. When the source task has a schedule (the clone would run on it), the hosts of its target are re-checked against the tenant scope first (scope_denied; a non-literal host is refused).",
       "type": "object",
       "required": ["task_id"],
       "additionalProperties": false,
@@ -186,7 +187,7 @@
       }
     },
     "payload_target_create": {
-      "description": "Scope-gated: every hosts entry must be an IP/CIDR literal inside the tenant's LOCAL scope and outside the absolute deny list (loopback, link-local/metadata, multicast, unspecified, and the node's own and the hub's IPs — a CIDR that CONTAINS one of those is denied too). No credentials, no asset filter, no reverse lookup (out of v1 by design). Exactly one of port_list_id | port_range.",
+      "description": "Scope-gated: every hosts entry must be an IP/CIDR literal inside the tenant's LOCAL scope and outside the absolute deny list (loopback, link-local/metadata, multicast, unspecified, and the node's own and the hub's IPs — a CIDR that CONTAINS one of those is denied too, and exclude_hosts never rescues it; the connector adds the hub's IPs itself: resolved from FLEET_HUB_URL at start-up and on every connection, plus each connection's remote IP). exclude_hosts entries only need to be literals (excluding never widens). No credentials, no asset filter, no reverse lookup (out of v1 by design). Exactly one of port_list_id | port_range.",
       "type": "object",
       "required": ["name", "hosts"],
       "additionalProperties": false,
@@ -202,7 +203,7 @@
       "oneOf": [ { "required": ["port_list_id"] }, { "required": ["port_range"] } ]
     },
     "payload_target_modify": {
-      "description": "Same scope gate as target.create for any new hosts/exclude_hosts. At most one of port_list_id | port_range.",
+      "description": "Same scope gate as target.create for new hosts (exclude_hosts: literals only, never a rescue for a CIDR that contains a self/hub IP). At most one of port_list_id | port_range.",
       "type": "object",
       "required": ["target_id"],
       "minProperties": 2,
@@ -227,7 +228,7 @@
       "properties": { "target_id": { "$ref": "#/$defs/uuid" } }
     },
     "payload_schedule_create": {
-      "description": "Creates a schedule and, when task_ids is present, links each task to it (each link is a task modification: the node's local policy must also allow task.modify).",
+      "description": "Creates a schedule and, when task_ids is present, links each task to it (each link is a task modification: the node's local policy must also allow task.modify). The hosts of those tasks' targets are re-checked against the tenant scope first (scope_denied; a non-literal host is refused).",
       "type": "object",
       "required": ["name", "icalendar", "timezone"],
       "additionalProperties": false,
@@ -240,6 +241,7 @@
       }
     },
     "payload_schedule_modify": {
+      "description": "Modifies a schedule. The hosts of the targets of every task linked to it are re-checked against the tenant scope first (scope_denied; a non-literal host is refused).",
       "type": "object",
       "required": ["schedule_id"],
       "minProperties": 2,

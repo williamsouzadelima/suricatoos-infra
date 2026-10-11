@@ -131,9 +131,9 @@ O que já existe e é reusado (verificado, read-only):
 2. **Envelope assinado com domínio `suricatoos-fleet-command-v1`**, *canonical* length-prefixed idêntico em
    disciplina ao da remediação, amarrando `node_id`, `tenant`, `type`, `issued_by`, janela, `nonce` e o
    `sha256` do payload.
-3. **Verificação local fail-closed, em ordem fixa** (forma → hash do payload → assinatura → janela → nó →
-   nonce e `command_id` → tenant → catálogo/política/orçamento → payload → escopo), com motivo tipado e
-   decisão **persistida antes** de qualquer efeito.
+3. **Verificação local fail-closed, em ordem fixa** (forma → hash do payload → assinatura → reentrega →
+   janela → nó → nonce e `command_id` → tenant → catálogo/política/orçamento → payload → escopo), com motivo
+   tipado e decisão **persistida antes** de qualquer efeito.
 4. **Catálogo fechado v1** (22 tipos), cada um com payload e saída em schema; escrita **opt-in por nó**;
    delete **sempre para a lixeira**; nada de escopo, tenant, usuários/RBAC do gvmd, credenciais de alvo,
    aprovação de remediação ou passthrough GMP; `report.summary` só devolve contagens.
@@ -154,7 +154,7 @@ O que já existe e é reusado (verificado, read-only):
 | `fleet/contract` | tipos dos 6 schemas, `Canonical`/`Verify`/`VerifyAt`, validação por tipo, golden vectors (`fleet/contract/testdata/`) |
 | cliente do hub | HTTPS ≥ TLS 1.3 + mTLS, certificado recarregado a cada handshake (molde `sensor/internal/cloud`) |
 | verificador + store anti-replay/journal | ordem fixa de checagens; nonce, decisão e resultado persistidos (escrita atômica, `fsync`, `0600`) |
-| política local | `FLEET_STATE_DIR/policy.json` (`allow`, `sensitive_per_hour`); só o operador local edita |
+| política local | `FLEET_STATE_DIR/policy.json` (`allow`, `sensitive_per_hour`, `total_per_hour`); só o operador local edita |
 | portão de escopo | lógica de `sensor/internal/scope` extraída para pacote compartilhado (F2.4) |
 | coletores de estado + outbox de eventos | hash por kind; outbox durável, entrega ≥ 1 vez |
 | auditoria local | dois fluxos append-only encadeados por hash, com rotação própria: `FLEET_STATE_DIR/audit-exec.jsonl` e `audit-reject.jsonl` |
@@ -203,7 +203,7 @@ artefatos, rotas `/fleet/v1/*`.
 | `FLEET_GMP_USER`, `FLEET_GMP_PASSWORD_FILE` | usuário gvmd atual do nó | leitura e operação (D6) |
 | `FLEET_TENANT`, `FLEET_SCAN_SCOPE`, `FLEET_TENANT_GMP_USER`, `FLEET_TENANT_GMP_PASSWORD_FILE` | — | standalone/sensor: o **único** tenant local, seu escopo e seu usuário gvmd de escrita (D2/D6) |
 | `TENANTS_FILE`, `SENSOR_TENANT_SECRETS` | os do compose | central: registro de tenants e senhas por tenant, montados **read-only** |
-| `FLEET_SELF_DENY_IPS` | — | IPs do próprio nó e do hub: nunca alvo (como `SCAN_SELF_DENY_IPS`) |
+| `FLEET_SELF_DENY_IPS` | — | IPs do próprio nó: nunca alvo (como `SCAN_SELF_DENY_IPS`); os IPs do hub o conector acrescenta sozinho (regra de escopo do Catálogo) |
 | `FLEET_CP_TOKEN_FILE` | — | central: bearer **dedicado** da frota para a API admin local (o control-plane o recebe em `FLEET_CP_TOKEN`) |
 | `FLEET_CLOCK_SKEW` | `2m` | tolerância de relógio (a mesma da remediação); máximo `10m` — acima disso o conector não sobe |
 | `FLEET_STATE_INTERVAL` | `60s` | período de coleta de estado (mínimo 30 s) |
@@ -233,8 +233,9 @@ NÓ (só SAÍDA :443 mTLS)                                        HUB (commandce
  4. state ── PUT /fleet/v1/state/{kind} {content_sha256, data} — só kinds com hash novo ou em resync ─▶ ◀── 204
  5. no hub, um operador pede "iniciar a tarefa T do tenant acme no nó N": o hub monta e ASSINA o envelope
  6. poll ── GET /fleet/v1/commands?wait=25 ─▶ ◀── 200 {commands:[envelope…]}  |  204 ao fim do wait
- 7. verificação LOCAL em ordem: forma → sha256(payload) → Ed25519 (chave PINADA) → janela ±skew → node_id → nonce
-        → tenant → catálogo/node_kind/política/orçamento → payload → escopo  ⇒ decisão gravada (nonce + command_id, fsync)
+ 7. verificação LOCAL em ordem: forma → sha256(payload) → Ed25519 (chave PINADA) → já gravado? (reenvia a decisão)
+        → janela ±skew → node_id → nonce → tenant → catálogo/node_kind/política/orçamento → payload → escopo
+        ⇒ decisão gravada (nonce + command_id, fsync)
         auditoria: exec(received → executed) | reject(rejected/deferred + motivo); não autenticado: só contado
  8. ack ── POST /fleet/v1/commands/{id}/ack {decision: accepted|rejected|deferred, reason?} ─▶ ◀── 204
         (rejeição de comando AUTÊNTICO também vira o evento command.rejected_by_policy)
@@ -289,7 +290,8 @@ exemplo trabalhado deste ADR byte a byte.
 - **Rollback do hub.** O anúncio cobre esse caso: o hub rebaixado responde `426` ao primeiro corpo acima das
   versões dele, ou anuncia a lista nova na resposta do heartbeat. O nó rebaixa na hora, e os itens da fila saem
   na versão nova no próximo envio. O hub só entrega comando cuja versão está no último anúncio do nó; um
-  comando pendente que ficou fora dele não é entregue nem re-assinado, e vence no hub sem ack.
+  comando pendente que ficou fora dele não é entregue nem re-assinado e termina `expired_undelivered` no hub
+  (ver "Anti-replay").
 - **Estrito na mesma versão.** O envelope de comando é sempre estrito, e todo corpo numa versão (MAJOR.MINOR)
   que o receptor suporta também é validado estrito: campo desconhecido é erro, não é ignorado. A **única
   exceção** é o `resync` da resposta do heartbeat. Os itens dele só casam o padrão de kind
@@ -342,7 +344,9 @@ exemplo trabalhado deste ADR byte a byte.
   `ca_mismatch`) — no v1 nada rotaciona.
 - **Re-enroll.** Certificado vencido não renova. Re-enrolar o **mesmo** `node_id` exige um token que o hub
   **amarrou** a esse `node_id` (sem isso, `409`); o store local (anti-replay, journal, auditoria) é
-  reaproveitado e os três pins são reaplicados a partir do ambiente.
+  reaproveitado e os três pins são reaplicados a partir do ambiente. Em **todo** (re)enroll, com ou sem o
+  `FLEET_STATE_DIR` apagado, o hub **descarta** os comandos pendentes daquele `node_id` (a identidade é nova e
+  nunca os recebe) e o nó grava um piso de replay = agora (ver "Anti-replay").
 - **Obrigações do hub em toda rota mTLS:** certificado da CA da frota, `OU == fleet-node` **exato**,
   `CN == node_id`, revogação checada **fail-closed** — certificado revogado ou desconhecido ⇒ `403`, backend de
   revogação indisponível ⇒ `503` (transitório; nunca `403`, que poria a frota inteira em `blocked`); `node_id`
@@ -420,26 +424,28 @@ payload_sha256=64:202e584626515573d531f5508c9094f8d6b705e0fc0fe6fbf29c76969fef31
 
 ### Verificação no nó (ordem fixa, fail-closed)
 
-O nó para na **primeira** falha. Os motivos são `fleet-result.schema.json#/$defs/reject_reason`; a coluna
-**Decisão** diz o destino do comando (ack em `fleet-result.schema.json#/$defs/ack`).
+O nó para na **primeira** falha. A linha 2a não é falha: é o atalho da reentrega, consultado logo depois da
+autenticação. Os motivos são `fleet-result.schema.json#/$defs/reject_reason`; a coluna **Decisão** diz o
+destino do comando (ack em `fleet-result.schema.json#/$defs/ack`).
 
 | # | Checagem | Motivo se falhar | Decisão |
 |---|---|---|---|
 | 0 | forma (`#/$defs/envelope`): JSON estrito (ver "Codificação JSON"), `schema_version` = `MAJOR.MINOR.0` de uma versão que o nó suporta, formatos exatos (tempos, nonce, assinatura), tamanhos | `bad_envelope` | sem ack (só contado) |
 | 1 | `sha256(bytes crus de payload) == payload_sha256` | `payload_mismatch` | sem ack (só contado) |
 | 2 | Ed25519 sobre a forma canônica com a chave **pinada** (1 + 2 = `Verify`) | `bad_signature` | sem ack (só contado) |
+| 2a | reentrega: a forma canônica (que inclui o nonce) já está **gravada** no store, inclusive como `replay` ⇒ reenvia o ack e o resultado gravados, sem reavaliar as linhas 3–9 e sem executar de novo | — | a decisão gravada |
 | 3 | `issued_at < not_after ≤ issued_at + 24 h` | `bad_window` | `rejected`, final |
 | 3 | `t ≥ issued_at − skew` | `not_yet_valid` | `deferred` |
 | 3 | `t ≤ not_after + skew` (3 = `VerifyAt`; `t` = relógio de verificação, abaixo; skew = `FLEET_CLOCK_SKEW`, 2 min, máx. 10 min) | `expired` | `rejected`, final |
 | 4 | `node_id == CN do próprio certificado` | `wrong_node` | `rejected`, final |
-| 5 | nonce **ou** `command_id` já gravado com **outra** forma canônica (a mesma forma = reentrega) | `replay` | `rejected`, final |
+| 5 | nonce **ou** `command_id` já gravado com **outra** forma canônica (a mesma forma já saiu na 2a) | `replay` | `rejected`, final |
 | 6 | `tenant` conhecido **e habilitado** no nó (central: `TENANTS_FILE`; standalone/sensor: `== FLEET_TENANT`); escrita exige também usuário gvmd + segredo do tenant | `tenant_unknown` | `rejected`, final |
 | 7 | tipo no catálogo v1 e suportado por este `node_kind` | `unsupported` | `rejected`, final |
 | 7 | tipo presente em `allow` da política local | `type_not_allowed` | `rejected`, final |
-| 7 | aceitar este comando não estoura o orçamento local de sensíveis (opt-in + `report.export` + `report.summary`) | `rate_limited` | `rejected`, final |
+| 7 | aceitar este comando não estoura nenhum dos dois orçamentos locais: o global de aceitos (`total_per_hour`, qualquer tipo) e o de sensíveis (opt-in + `report.export` + `report.summary`) | `rate_limited` | `rejected`, final |
 | 8 | payload válido para o tipo (schema estrito + regras semânticas) | `bad_payload` | `rejected`, final |
 | 8 | `report.export`: a combinação (`format`, `lang`, `variant`) está em `capabilities.report_formats` do estado `node` | `unsupported_report_variant` | `rejected`, final |
-| 9 | escopo: os hosts de `target.create/modify`, os alvos de `sensor_job.enqueue` e os hosts do target de `task.start/resume` e de `task.create/modify` com `target_id` (lidos no gvmd antes da decisão) são IP/CIDR literais ⊆ escopo do tenant, fora do espaço degenerado e **sem conter** IP próprio nem do hub | `scope_denied` | `rejected`, final |
+| 9 | escopo: os hosts de `target.create/modify`; os alvos de `sensor_job.enqueue`; os hosts do target de `task.start/resume` e de `task.create/modify` com `target_id`; e os dos targets das tarefas que o comando liga a uma agenda ou cuja agenda ele altera (`schedule.create` com `task_ids`, `task.modify` com `schedule_id` não vazio, `task.clone` de tarefa com agenda, `schedule.modify`). Tudo lido no gvmd antes da decisão; tem de ser IP/CIDR literal ⊆ escopo do tenant, fora do espaço degenerado e **sem conter** IP próprio nem do hub | `scope_denied` | `rejected`, final |
 | — | o store anti-replay/journal não pôde ser gravado, ou a leitura no gvmd da linha 9 falhou | `unavailable` | `deferred` |
 
 Na linha 0, `type` só precisa casar `^[a-z][a-z_]*\.[a-z][a-z_]*$` (`command_type_any`, como em
@@ -451,11 +457,12 @@ Na linha 0, `type` só precisa casar `^[a-z][a-z_]*\.[a-z][a-z_]*$` (`command_ty
   linhas periódicas do fluxo `reject` (evento `unauthenticated`), e informa o total em
   `unauthenticated_rejections` no heartbeat.
 - **`rejected` = final (linhas 3–9).** Gravado com o nonce **e** o `command_id` antes do ack; a reentrega do
-  mesmo envelope recebe o mesmo ack, e o hub não o reentrega por conta própria. Corrigida a causa local, o hub
-  emite **outro** comando (novo id, novo nonce). Os das linhas 6–9 também viram o evento
-  `command.rejected_by_policy`.
+  mesmo envelope recebe o mesmo ack (linha 2a), mesmo depois de `not_after`, e o hub não o reentrega por conta
+  própria. Corrigida a causa local, o hub emite **outro** comando (novo id, novo nonce). Os das linhas 6–9
+  também viram o evento `command.rejected_by_policy`.
 - **`deferred` = retentável (`not_yet_valid`, `unavailable`).** Nada é gravado; o hub pode reentregar o
-  **mesmo** envelope, byte a byte, até `not_after`, e uma decisão final posterior substitui o `deferred`.
+  **mesmo** envelope, byte a byte, até `not_after`, e uma decisão final posterior substitui o `deferred`. Um
+  `deferred` que chega ao hub **depois** de uma decisão final é ignorado: a final vence.
 
 `accepted` também é decisão final: gravada com o nonce e o `command_id` antes do ack e de qualquer efeito.
 
@@ -465,24 +472,32 @@ Na linha 0, `type` só precisa casar `^[a-z][a-z_]*\.[a-z][a-z_]*$` (`command_ty
   forma canônica e com dois índices — **nonce** e **`command_id`** → `{sha256(forma canônica), decisão,
   motivo, resultado sem segredo}`. Toda decisão final (`accepted` ou `rejected`) é gravada **antes** do ack
   (um `replay` fica gravado pela própria forma canônica; os índices continuam apontando para a primeira).
-  Cada entrada vive até `not_after` + 7 dias (≥ `not_after` + skew, o mínimo do anti-replay); o journal do
-  resultado, idem.
+  Cada entrada vive até `min(not_after, issued_at + 24 h)` + 7 dias; o journal do resultado, idem. O `min`
+  vale para o `bad_window`, cujo `not_after` pode estar em qualquer futuro, e impede um hub de crescer o store
+  sem limite. Para todo comando de janela válida, o prazo é `not_after` + 7 dias, ≥ `not_after` + skew (o
+  mínimo do anti-replay).
 - **Chave de idempotência (normativo).** O hub reentrega o envelope **byte a byte** idêntico e **nunca**
   re-assina um `command_id` — nem para renovar a janela: vencido, ele emite outro comando. No nó, forma
   canônica diferente sob nonce **ou** `command_id` já gravados ⇒ `replay`. A F2.1 cria o vetor golden disso.
 - **Reentrega ≠ replay.** O hub reentrega um comando entregue e sem ack após 60 s, até `not_after` (entrega
-  ≥ 1 vez), e também um `deferred`. Mesma forma canônica ⇒ o nó **não executa de novo**: reenvia o ack e, se
-  houver, o resultado gravados — menos o do `enroll_token.create` (abaixo).
+  ≥ 1 vez), e também um `deferred`. Mesma forma canônica já gravada ⇒ o nó **não executa de novo** nem
+  reavalia janela e política (linha 2a, logo depois da assinatura): reenvia o ack e, se houver, o resultado
+  gravados — menos o do `enroll_token.create` (abaixo). Uma reentrega depois de `not_after` recebe a decisão
+  gravada, nunca `expired`, e uma entrada gravada nunca é sobrescrita.
+- **Fim no hub.** Um comando que passa de `not_after` + skew + 5 min só com `deferred`, ou sem ack nenhum
+  (linhas 0–2 não geram ack; comando fora do último anúncio de versões do nó não é entregue), termina
+  **`expired_undelivered`** no hub. É estado terminal: o hub não o reentrega nem o re-assina, e o operador emite
+  outro comando.
 - **Só grava envelope autenticado** (a partir da linha 3): gravar nonce de envelope não autenticado deixaria um
   MITM "queimar" nonces legítimos.
 - **Relógio de verificação.** `t = max(agora, marca)`, em que a **marca d'água** é o maior instante já visto,
   persistido a cada minuto e a cada decisão: um relógio que volte no reboot não reabre janela vencida.
   `FLEET_CLOCK_SKEW` vale no máximo 10 min (acima disso o conector não sobe). O `server_time` do hub serve
   **só** para relatar `clock_offset_s` e alertar: o nó nunca ajusta `t` pelo relógio do hub.
-- **Store ilegível — ou ausente com o certificado do nó presente — no boot** ⇒ o nó grava um **piso de
-  replay** = `t` e rejeita (`replay`, detalhe `cache reiniciado`) todo comando com `issued_at < piso + skew`;
-  depois de 24 h + skew o piso deixa de importar (janela máxima). Sem store gravável, nenhum comando é aceito
-  (`deferred` com `unavailable`).
+- **Store ilegível — ou ausente com o certificado do nó presente — no boot, e em todo (re)enroll** ⇒ o nó grava
+  um **piso de replay** = `t` e rejeita (`replay`, detalhe `cache reiniciado`) todo comando com
+  `issued_at < piso + skew`; depois de 24 h + skew o piso deixa de importar (janela máxima). Sem store
+  gravável, nenhum comando é aceito (`deferred` com `unavailable`).
 - **Ack antes, resultado depois.** O ack é a **decisão**; o resultado, o **desfecho**. Crash entre o ack e o
   resultado ⇒ no boot o nó **não re-executa**: reporta `failed` com `error.code = interrupted` (o estado
   seguinte mostra o que de fato aconteceu).
@@ -529,8 +544,8 @@ Formato do arquivo (`golden-v1.json`, UTF-8, um objeto JSON):
 | `vectors[].canonical` | a forma canônica exata (string, com os `\n`) |
 | `vectors[].canonical_sha256` | sha256 hex de `canonical` |
 | `vectors[].payload_sha256` | sha256 hex dos bytes crus de `payload` |
-| `vectors[].seen` | opcional: sha256 das formas canônicas já gravadas no store sob o mesmo nonce/`command_id` (vetores de linha 5) |
-| `vectors[].expect` | `accept` ou um `reject_reason` |
+| `vectors[].seen` | opcional: sha256 das formas canônicas já **gravadas** no store (decisão final) sob o mesmo nonce/`command_id` (vetores das linhas 2a e 5) |
+| `vectors[].expect` | `accept`, `redelivery` (a forma já está em `seen`: o nó reenvia a decisão gravada, sem reavaliar) ou um `reject_reason` |
 
 O vetor `accept/task.start` é o exemplo acima: `command_json` = o envelope, `canonical` = os bytes assinados,
 `canonical_sha256` = `a9a4d1759628b5708691988ce1512e3cbfa6881f90dfc0000d3fea08edcb7d74`,
@@ -541,7 +556,8 @@ Vetores obrigatórios: `accept` (um por formato de payload);
 chave; mensagem assinada com o domínio da remediação); `not_yet_valid`/`expired` **nas bordas** (`issued_at −
 skew` e `not_after + skew` aceitos; ±1 s rejeitado); `bad_window` (`not_after ≤ issued_at`; janela > 24 h);
 `wrong_node`; `replay` (mesmo `command_id` — ou mesmo nonce — com outra forma canônica: o hub re-assinou; o
-vetor traz em `seen` as formas canônicas já gravadas); `bad_envelope` (fração de segundo, offset, nonce maiúsculo, campo faltando, campo
+vetor traz em `seen` as formas canônicas já gravadas); `redelivery` (a própria forma em `seen`, com `verify_at`
+depois de `not_after` + skew: nunca `expired`); `bad_envelope` (fração de segundo, offset, nonce maiúsculo, campo faltando, campo
 desconhecido, `schema_version` que o nó não suporta — `1.1.0` num nó só `1.0` — ou com PATCH, `1.0.1`); payload com UTF-8 (acentos) hasheado sobre os bytes crus. Vetores
 **só-canonical** com valores contendo `\n`, `=` e `:` (que o envelope v1 recusa por formato) provam que o
 framing é injetivo mesmo assim — e que um *join* ingênuo colidiria. Da "Codificação JSON": payload com `<`, `>`, `&`
@@ -564,7 +580,7 @@ contratual (`fleet-heartbeat.schema.json#/$defs/version_unsupported`).
 | `PUT /fleet/v1/state/{kind}` | mTLS | `fleet-state.schema.json` (`kind` == `{kind}`) | `204` sem corpo | `400` schema, `kind` ≠ caminho, `content_sha256` ≠ sha256 dos bytes de `data`; `403`; `404` kind desconhecido; `413` > 16 MiB **descomprimido** (com gzip, o hub descomprime em streaming e aborta no teto); `429` |
 | `POST /fleet/v1/events` | mTLS | `fleet-event.schema.json` | `204` sem corpo (também com `event_id` repetido) | `400`; `403`; `413`; `429` |
 | `GET /fleet/v1/commands?wait=25` | mTLS | sem corpo; `wait` inteiro 5–30 (s) | `200` + `fleet-command.schema.json#/$defs/poll_response` (1–10 comandos, mais antigo primeiro); `204` sem corpo se nada chegou até o fim do `wait` | `400` `wait` inválido; `403`; `429` |
-| `POST /fleet/v1/commands/{id}/ack` | mTLS | `fleet-result.schema.json#/$defs/ack` | `204` sem corpo (ack idêntico repetido também) | `400`; `403`; `404` comando inexistente ou de outro nó; `409` decisão **final** diferente já registrada (um `deferred` anterior é substituído, nunca conflita); `429` |
+| `POST /fleet/v1/commands/{id}/ack` | mTLS | `fleet-result.schema.json#/$defs/ack` | `204` sem corpo (ack idêntico repetido também) | `400`; `403`; `404` comando inexistente ou de outro nó; `409` decisão **final** diferente já registrada; um `deferred` anterior é substituído pela final, e um `deferred` que chega **depois** de uma final é ignorado com `204` (a final vence); `429` |
 | `POST /fleet/v1/commands/{id}/result` | mTLS | `fleet-result.schema.json` (`command_id` == `{id}`) | `204` sem corpo (resultado idêntico repetido também) | `400` schema, id ≠ caminho, artefato listado e não recebido; `403`; `404`; `409` resultado diferente já registrado; `413` > 256 KiB; `429` |
 | `PUT /fleet/v1/artifacts/{command_id}/{name}` | mTLS | corpo **binário gzip** + cabeçalhos abaixo | `201` sem corpo (reenvio idêntico também) | `400` sha256 do corpo ≠ cabeçalho, cabeçalho faltando ou `name` inválido; `403`; `404` comando inexistente, de outro nó ou de tipo ≠ `report.export`; `409` outro conteúdo com o mesmo nome; `411` sem `Content-Length`; `413` > 64 MiB; `415` `Content-Type` ≠ `application/gzip`; `429` |
 
@@ -616,6 +632,7 @@ seguem essa regra: cada um passa pelas linhas 0–9.
 | intervalo de poll | ≥ 5 s entre dois polls (piso do nó, qualquer que seja o `poll_wait_s`); backoff exponencial até 5 min quando um poll só traz rejeições |
 | auditoria local | fluxo `exec` 32 MiB × 8 arquivos; fluxo `reject` 32 MiB × 4; linha ≤ 8 KiB; ≤ 1 linha `unauthenticated` por minuto; ≤ 1 linha `version_mismatch` a cada 10 min |
 | orçamento local de comandos sensíveis | 30/h por nó (`policy.json` `sensitive_per_hour`), somando opt-in, `report.export` e `report.summary` |
+| orçamento local de comandos aceitos | 120/h por nó (`policy.json` `total_per_hour`), qualquer tipo; os sensíveis contam nos dois |
 
 ## Catálogo de comandos v1
 
@@ -631,14 +648,14 @@ do tenant (o objeto nasce na partição dele).
 | `task.stop` | `payload_task_ref` | permitido | todos | `stop_task` | atual | `output_task_action` |
 | `task.resume` | `payload_task_ref` | permitido | todos | re-checa os hosts do target contra o escopo (linha 9) → `resume_task` | atual | `output_task_action` |
 | `task.create` | `payload_task_create` | opt-in | todos | re-checa os hosts do target (linha 9) → `create_task` (alvo/agenda do tenant; scanner padrão `OpenVAS Default`) | tenant | `output_task_create` |
-| `task.modify` | `payload_task_modify` | opt-in | todos | com `target_id`, re-checa os hosts do novo target (linha 9) → `modify_task` (`schedule_id: ""` desvincula) | tenant | `output_task_modify` |
-| `task.clone` | `payload_task_clone` | opt-in | todos | `clone_task` (+ renomeia se `name`) | tenant | `output_task_clone` |
+| `task.modify` | `payload_task_modify` | opt-in | todos | com `target_id`, re-checa os hosts do novo target; com `schedule_id` não vazio, os do target da tarefa (linha 9) → `modify_task` (`schedule_id: ""` desvincula) | tenant | `output_task_modify` |
+| `task.clone` | `payload_task_clone` | opt-in | todos | tarefa de origem com agenda ⇒ re-checa os hosts do target dela (linha 9) → `clone_task` (+ renomeia se `name`) | tenant | `output_task_clone` |
 | `task.delete` | `payload_task_ref` | opt-in | todos | `delete_task(ultimate=false)` → **lixeira** | tenant | `output_trash` |
 | `target.create` | `payload_target_create` | opt-in | todos | portão de escopo → `create_target` | tenant | `output_target_create` |
-| `target.modify` | `payload_target_modify` | opt-in | todos | portão de escopo (se `hosts`/`exclude_hosts`) → `modify_target` | tenant | `output_target_modify` |
+| `target.modify` | `payload_target_modify` | opt-in | todos | portão de escopo nos `hosts` novos (`exclude_hosts` só literal) → `modify_target` | tenant | `output_target_modify` |
 | `target.delete` | `payload_target_ref` | opt-in | todos | `delete_target(ultimate=false)` → **lixeira** | tenant | `output_trash` |
-| `schedule.create` | `payload_schedule_create` | opt-in (com `task_ids`, também exige `task.modify` permitido) | todos | `create_schedule` + `modify_task(schedule_id)` p/ cada `task_ids` | tenant | `output_schedule_create` |
-| `schedule.modify` | `payload_schedule_modify` | opt-in | todos | `modify_schedule` | tenant | `output_schedule_modify` |
+| `schedule.create` | `payload_schedule_create` | opt-in (com `task_ids`, também exige `task.modify` permitido) | todos | com `task_ids`, re-checa os hosts dos targets dessas tarefas (linha 9) → `create_schedule` + `modify_task(schedule_id)` p/ cada `task_ids` | tenant | `output_schedule_create` |
+| `schedule.modify` | `payload_schedule_modify` | opt-in | todos | re-checa os hosts dos targets das tarefas ligadas à agenda (linha 9) → `modify_schedule` | tenant | `output_schedule_modify` |
 | `schedule.delete` | `payload_schedule_ref` | opt-in | todos | `delete_schedule(ultimate=false)` → **lixeira** | tenant | `output_trash` |
 | `report.export` | `payload_report_export` | permitido (conta no orçamento) | todos | `get_report` com formato/idioma/variante (edição)/filtro **explícitos** e, se houver `delta_report_id`, em modo delta → gzip → `PUT` artefato; combinação não anunciada ⇒ `unsupported_report_variant` | atual | `output_report_export` + `artifacts[1]` |
 | `report.summary` | `payload_report_summary` | permitido (conta no orçamento) | todos | `get_report` com o filtro que o **nó** monta de `min_qod`/`apply_overrides`/`levels` (sem filtro livre) → só contagens: por severidade, por faixa de QoD, nº de hosts e por IP | atual | `output_report_summary` |
@@ -651,13 +668,17 @@ do tenant (o objeto nasce na partição dele).
 
 Regras transversais:
 
-- **Política local** (`FLEET_STATE_DIR/policy.json` = `{"allow": [...], "sensitive_per_hour": n}`, o mesmo
-  objeto que vai em `policy` no estado `node`). Sem o arquivo: `allow` = os tipos "permitido" suportados pelo
-  `node_kind` e `sensitive_per_hour` = 30. Opt-in = o operador **local** acrescenta o tipo em `allow`; nenhum
-  comando altera a política. `policy_sha256` = sha256 do objeto em JSON compacto, com chaves ordenadas e
-  `allow` ordenado — o hub recalcula a partir do estado. **Orçamento:** janela **deslizante** de 1 h,
-  persistida no reinício, somando opt-in, `report.export` e `report.summary`; **só comando aceito consome** (a
-  linha 7 só pergunta se aceitar este estouraria; o consumo é gravado junto com a decisão `accepted`).
+- **Política local** (`FLEET_STATE_DIR/policy.json` = `{"allow": [...], "sensitive_per_hour": n,
+  "total_per_hour": m}`, o mesmo objeto que vai em `policy` no estado `node`). Sem o arquivo: `allow` = os tipos
+  "permitido" suportados pelo `node_kind`, `sensitive_per_hour` = 30 e `total_per_hour` = 120. Opt-in = o
+  operador **local** acrescenta o tipo em `allow`; nenhum comando altera a política. `policy_sha256` = sha256
+  do objeto em JSON compacto, com chaves ordenadas e `allow` ordenado — o hub recalcula a partir do estado.
+  **Dois orçamentos**, cada um numa janela **deslizante** de 1 h persistida no reinício: o **global** de
+  aceitos (`total_per_hour`, qualquer tipo) e o de **sensíveis** (`sensitive_per_hour`: opt-in,
+  `report.export` e `report.summary`, que contam nos dois). **Só comando aceito consome**: a linha 7 só
+  pergunta se aceitar este estouraria algum dos dois, e o consumo é gravado junto com a decisão `accepted`. O
+  global limita o quanto um hub comprometido faz crescer o fluxo `exec` da auditoria (conta em "Hub
+  comprometido").
 - **Objeto único.** Cada comando age sobre **um** objeto (sem operação em lote). O raio não é zero em dois
   casos, declarados: um token `deployment` (≤ 1000 usos, ≤ 168 h) habilita até 1000 enrolls de agente; e
   `agent.revoke` corta um agente de vez (volta só com re-enroll local). Revogação em massa de certificados não
@@ -667,13 +688,22 @@ Regras transversais:
   e devolve só contagens (por severidade, por faixa de QoD, nº de hosts e por IP). Não há como estreitar por
   host, porta, NVT, nome, CVE ou vulnerabilidade, e nenhum OID, nome ou CVE sai: isso só por `report.export`.
   Conta no orçamento de sensíveis.
-- **Escopo, regra completa.** Todo host que entra no gvmd pela frota, ou que uma tarefa vai varrer por ordem
-  dela (`task.start/resume`, `task.create/modify` com `target_id`), passa pelo portão: IP/CIDR literal (host
-  não literal no target ⇒ `scope_denied`), ⊆ escopo do tenant, fora do espaço degenerado e **sem conter**
-  nenhum IP de `FLEET_SELF_DENY_IPS` nem os IPs resolvidos do host de `FLEET_HUB_URL`. Consequência
-  operacional: um alvo que cubra o próprio nó (ex.: o `/24` inteiro da LAN onde ele mora) é negado, e o hub
-  precisa montar faixas que não o contenham — o nó nunca injeta exclusões sozinho. O `sensor/internal/scope`
-  de hoje só nega IP próprio isolado; a F2.4 fecha isso no pacote extraído, com teste.
+- **Escopo, regra completa.** Passa pelo portão todo host que entra no gvmd pela frota e todo host que uma
+  tarefa vai varrer por ordem dela. Isso inclui iniciar (`task.start/resume`), apontar para um target
+  (`task.create/modify` com `target_id`) e ligar uma agenda a uma tarefa ou alterar uma agenda ligada a tarefas
+  (`schedule.create` com `task_ids`, `task.modify` com `schedule_id` não vazio, `task.clone` de tarefa com
+  agenda, `schedule.modify`): nesses casos, os hosts dos targets de todas as tarefas afetadas.
+  - O portão exige IP/CIDR literal (host não literal no target ⇒ `scope_denied`), ⊆ escopo do tenant, fora do
+    espaço degenerado e **sem conter** IP próprio nem do hub.
+  - IP próprio = `FLEET_SELF_DENY_IPS`. IPs do hub = os que o conector resolve sozinho de `FLEET_HUB_URL`, na
+    subida e a cada conexão, mais o IP remoto de cada conexão estabelecida; ele os soma ao self-deny, e sem
+    eles não há conexão nem comando.
+  - `exclude_hosts` só precisa ser IP/CIDR literal (excluir nunca amplia) e **não salva** um `hosts` que
+    contenha IP próprio ou do hub: esse CIDR é negado mesmo que `exclude_hosts` cubra o IP.
+  - Consequência operacional: um alvo que cubra o próprio nó (ex.: o `/24` inteiro da LAN onde ele mora) é
+    negado, e o hub precisa montar faixas que não o contenham — o nó nunca injeta exclusões sozinho.
+  - O `sensor/internal/scope` de hoje só nega IP próprio isolado; a F2.4 fecha isso no pacote extraído, com
+    teste.
 - **Lixeira, nunca `ultimate`.** Restaurar ou esvaziar a lixeira é ação **local** (GSA). Criação e alteração
   não têm rollback automático: `output_*_modify.before` traz os valores anteriores dos campos alterados
   (exceto `comment`) para reverter à mão.
@@ -802,15 +832,15 @@ Eventos de escopo **nó** não levam `tenant`; os de escopo **tenant** levam sem
 
 | Ameaça | Mitigações | Residual (honesto) |
 |---|---|---|
-| **Hub comprometido** (fila + chave de comando) | catálogo fechado (sem escopo, tenant, usuários/RBAC, credenciais de alvo, aprovação de remediação, passthrough GMP); escrita **opt-in por nó** (padrão = só operação e leitura); escopo local e inalterável remotamente (D2), re-checado também ao iniciar tarefa; comando de objeto único; delete só para a lixeira; `report.summary` só com contagens; orçamento local de 30 sensíveis/h; auditoria local encadeada; kill switch local (`FLEET_ENABLED=false` ou parar o profile) | dentro da política local, o hub age: inicia/para tarefas existentes, lê contagens e exporta relatórios (permitidos por padrão; quem não quiser remove `task.*`/`report.*` de `allow`). Se o operador liberar os comandos de token: **(a)** `enroll_token.create` minta tokens `agent-endpoint` (≤ 1000 usos, ≤ 168 h) para qualquer tenant conhecido do nó, e um agente falso injeta inventário falso naquele tenant; **(b)** `enroll_token.revoke` revoga tokens e trava enrolls novos (DoS de onboarding) — certificados já emitidos não caem |
+| **Hub comprometido** (fila + chave de comando) | catálogo fechado (sem escopo, tenant, usuários/RBAC, credenciais de alvo, aprovação de remediação, passthrough GMP); escrita **opt-in por nó** (padrão = só operação e leitura); escopo local e inalterável remotamente (D2), re-checado também ao iniciar ou agendar tarefa; comando de objeto único; delete só para a lixeira; `report.summary` só com contagens; orçamentos locais de 120 aceitos/h e 30 sensíveis/h; auditoria local encadeada; kill switch local (`FLEET_ENABLED=false` ou parar o profile) | dentro da política local, o hub age: inicia/para tarefas existentes, lê contagens e exporta relatórios (permitidos por padrão; quem não quiser remove `task.*`/`report.*` de `allow`). Se o operador liberar os comandos de token: **(a)** `enroll_token.create` minta tokens `agent-endpoint` (≤ 1000 usos, ≤ 168 h) para qualquer tenant conhecido do nó, e um agente falso injeta inventário falso naquele tenant; **(b)** `enroll_token.revoke` revoga tokens e trava enrolls novos (DoS de onboarding) — certificados já emitidos não caem. **(c)** Com comandos permitidos, o hub faz crescer o fluxo `exec` da auditoria (3 linhas por aceito) para empurrar a rotação. O orçamento global limita isso a 120 × 24 × 3 = 8 640 linhas/dia: ~3,7 MB/dia com linhas típicas (~0,4 KiB), e os 256 MiB do `exec` guardam ~2,5 meses. No pior caso que os campos limitados permitem (`issued_by` de 128 caracteres e os 30 sensíveis/h como `target.create` opt-in com 64 hosts IPv6 na linha), ~10 MB/dia, ~4 semanas. Sem o orçamento global (~2 aceitos/s no piso de poll), seriam ~200 MB/dia, pouco mais de 1 dia. A regra de lacuna do hub não ajuda aqui, porque a testemunha é o próprio atacante |
 | **MITM** nó↔hub | TLS ≥ 1.3 + mTLS; servidor verificado (`FLEET_HUB_CA_FILE` ou trust store; hostname sempre) **e pinado** (`FLEET_HUB_PIN`, obrigatório — uma CA de interceptação na rede do cliente não basta); comando assinado com chave **separada** da CA e do TLS (um terminador TLS não forja comando); pins da CA da frota e da chave de comando entregues out-of-band no enroll; envelope não autenticado não gera ack nem linha individual de auditoria (só contagem), então o MITM não finaliza comando legítimo nem enche a auditoria | com TLS quebrado, o atacante lê estado/resultados e atrasa ou derruba comandos (DoS); não executa nada |
-| **Replay** | nonce **e** `command_id` indexados no store persistido, decisão final gravada antes do ack; o hub nunca re-assina um `command_id`; janela ≤ 24 h; relógio de verificação monotônico (marca d'água persistida); `node_id` e `tenant` dentro da assinatura; store ilegível ou ausente ⇒ piso de replay | — |
+| **Replay** | nonce **e** `command_id` indexados no store persistido, decisão final gravada antes do ack; o hub nunca re-assina um `command_id`; janela ≤ 24 h; relógio de verificação monotônico (marca d'água persistida); `node_id` e `tenant` dentro da assinatura; store ilegível ou ausente, ou (re)enroll ⇒ piso de replay, e no (re)enroll o hub descarta os comandos pendentes do `node_id` | — |
 | **Nó comprometido** | o certificado identifica só aquele nó (CN=`node_id`, `OU=fleet-node`, CA da frota separada da CA de enroll); o hub autoriza tudo pelo CN (`403`/`404`); o nó não tem chave de assinatura; o hub trata **todo** dado de nó como não-confiável — nunca deriva autorização dele, nunca o cruza para outro nó ou tenant, e escapa ao renderizar (nomes são texto livre: XSS armazenado) | o nó mente sobre o próprio estado e resultados; revogar no hub corta o canal, não o nó |
 | **Exfiltração** | D4: estado e eventos só com metadado e contagens; `report.summary` (orçado) só devolve contagens — por severidade, por faixa de QoD, nº de hosts e por IP —, com filtro montado pelo nó, sem estreitar por host, porta ou NVT; achado detalhado (NVT, CVE, porta, evidência) só via `report.export` explícito, orçado e removível da política; nada de `comment`, inventário ou segredo; artefato com sha256 e teto; hub fora da internet (tailnet) no canário | com a política padrão, um hub comprometido vê, por relatório, **quais IPs têm quantas vulnerabilidades por severidade** (`report.summary`) e baixa relatórios completos (`report.export`), tudo no ritmo do orçamento (30/h somados) e registrado na auditoria local |
-| **Abuso de escopo** | escopo LOCAL (registro de tenants ou `FLEET_SCAN_SCOPE`); só IP/CIDR literal (sem DNS rebinding); CIDR inteiro dentro do escopo; deny absoluto (loopback, link-local/metadata, multicast, não-especificado) e de **qualquer CIDR que contenha** IP próprio (`FLEET_SELF_DENY_IPS`) ou do hub; os hosts do target são re-checados também em `task.start/resume` e `task.create/modify(target_id)`; sem credencial/asset filter/reverse lookup em target; `sensor_job.enqueue` passa pelo portão local **e** pelo da `sensorjobs` | um target criado localmente com host fora do escopo continua existindo, mas a frota não o dispara (`scope_denied`); a lacuna de CIDR do `scope.go` atual só some com a F2.4 |
+| **Abuso de escopo** | escopo LOCAL (registro de tenants ou `FLEET_SCAN_SCOPE`); só IP/CIDR literal (sem DNS rebinding); CIDR inteiro dentro do escopo; deny absoluto (loopback, link-local/metadata, multicast, não-especificado) e de **qualquer CIDR que contenha** IP próprio (`FLEET_SELF_DENY_IPS`) ou do hub; os hosts do target são re-checados também em `task.start/resume`, `task.create/modify(target_id)` e em todo comando que liga ou altera agenda de tarefa (`schedule.create` com `task_ids`, `task.modify` com `schedule_id`, `task.clone` de tarefa com agenda, `schedule.modify`); `exclude_hosts` não salva um CIDR com IP próprio ou do hub; sem credencial/asset filter/reverse lookup em target; `sensor_job.enqueue` passa pelo portão local **e** pelo da `sensorjobs` | um target criado localmente com host fora do escopo continua existindo, mas a frota não o dispara nem o liga a uma agenda (`scope_denied`); uma tarefa assim que **já** tem agenda local segue disparando pelo gvmd, por configuração local que a frota não toca; a lacuna de CIDR do `scope.go` atual só some com a F2.4 |
 | **Roubo do token de enroll** | uso único, TTL curto, pins out-of-band, CSR com prova de posse, `node_id` único (`409`) | quem usar o token antes do dono enrola um nó falso: o hub deve confirmar o nó (CN/fingerprint) out-of-band antes de enfileirar comandos para ele |
 | **Roubo da chave do nó** | chave `0600`, TTL de 30 dias + renew, revogação no hub, alerta de sessões concorrentes do mesmo CN (obrigação do hub) | até a revogação, o ladrão consome os comandos do nó (não os executa no nó) e forja estado/resultado em nome dele |
-| **Adulteração da auditoria** (e enchente) | dois fluxos JSONL encadeados (`exec` e `reject`), cada um com `seq` monotônico e orçamento de rotação próprio — enchente de rejeição não apaga execução; linhas 0–2 só como contagem periódica; piso de poll e backoff; cauda dos dois fluxos como testemunha no hub, com regra de lacuna | root no nó reescreve os arquivos; o hub detecta a quebra da cadeia ou a lacuna de `seq` na próxima cauda |
+| **Adulteração da auditoria** (e enchente) | dois fluxos JSONL encadeados (`exec` e `reject`), cada um com `seq` monotônico e orçamento de rotação próprio — enchente de rejeição não apaga execução; orçamento global de 120 aceitos/h — uma enchente de comando permitido leva ≥ ~4 semanas para girar o `exec` (conta em "Hub comprometido"); linhas 0–2 só como contagem periódica; piso de poll e backoff; cauda dos dois fluxos como testemunha no hub, com regra de lacuna | root no nó reescreve os arquivos; o hub detecta a quebra da cadeia ou a lacuna de `seq` na próxima cauda |
 | **Vazamento de segredo** | `contains_secret` só em `enroll_token.create`; segredo nunca em disco/log/auditoria do nó; reinício antes da entrega ⇒ token revogado localmente + `secret_lost`; o hub não loga, cifra em repouso e mostra uma vez | — |
 
 ### Honestidade operacional

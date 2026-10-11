@@ -124,11 +124,12 @@
         "policy": {
           "description": "the LOCAL policy in force — the same object as FLEET_STATE_DIR/policy.json (edited only on the node, never by a command)",
           "type": "object",
-          "required": ["allow", "sensitive_per_hour"],
+          "required": ["allow", "sensitive_per_hour", "total_per_hour"],
           "additionalProperties": false,
           "properties": {
             "allow": { "type": "array", "uniqueItems": true, "items": { "$ref": "fleet-command.schema.json#/$defs/command_type" } },
-            "sensitive_per_hour": { "type": "integer", "minimum": 0, "maximum": 1000, "description": "local budget shared by the opt-in types, report.export and report.summary" }
+            "sensitive_per_hour": { "type": "integer", "minimum": 0, "maximum": 1000, "description": "local budget shared by the opt-in types, report.export and report.summary (default 30); they also count in total_per_hour" },
+            "total_per_hour": { "type": "integer", "minimum": 0, "maximum": 3600, "description": "GLOBAL local budget of ACCEPTED commands of any type per sliding hour (default 120): bounds how fast a compromised hub can grow the exec audit stream with allowed commands" }
           }
         },
         "policy_sha256": { "$ref": "fleet-command.schema.json#/$defs/sha256_hex", "description": "sha256 of the policy object serialized as compact JSON with keys sorted and 'allow' sorted — the hub can recompute it from 'policy'" }
@@ -501,7 +502,7 @@
             "size": { "type": "integer", "minimum": 1, "maximum": 67108864 }
           }
         },
-        "reason": { "$ref": "fleet-result.schema.json#/$defs/reject_reason" },
+        "reason": { "$ref": "fleet-result.schema.json#/$defs/reject_reason", "description": "only on rejected (a final_reason) and deferred (a deferred_reason) lines: an unauthenticated envelope (lines 0-2) never gets a line of its own, only the periodic unauthenticated count" },
         "status": { "enum": ["succeeded", "failed"] },
         "error_code": { "$ref": "fleet-result.schema.json#/$defs/error_code" },
         "unauthenticated": {
@@ -531,7 +532,9 @@
       },
       "allOf": [
         { "if": { "properties": { "event": { "enum": ["connector_started", "identity_changed", "policy_changed", "received", "executed", "result"] } }, "required": ["event"] }, "then": { "properties": { "stream": { "const": "exec" } } }, "else": { "properties": { "stream": { "const": "reject" } } } },
-        { "if": { "properties": { "event": { "enum": ["rejected", "deferred"] } }, "required": ["event"] }, "then": { "required": ["reason"] } },
+        { "if": { "properties": { "event": { "const": "rejected" } }, "required": ["event"] }, "then": { "required": ["reason"], "properties": { "reason": { "$ref": "fleet-result.schema.json#/$defs/final_reason" } } } },
+        { "if": { "properties": { "event": { "const": "deferred" } }, "required": ["event"] }, "then": { "required": ["reason"], "properties": { "reason": { "$ref": "fleet-result.schema.json#/$defs/deferred_reason" } } } },
+        { "if": { "properties": { "event": { "enum": ["rejected", "deferred"] } }, "required": ["event"] }, "else": { "not": { "required": ["reason"] } } },
         { "if": { "properties": { "event": { "const": "unauthenticated" } }, "required": ["event"] }, "then": { "required": ["unauthenticated"] } },
         { "if": { "properties": { "event": { "const": "version_mismatch" } }, "required": ["event"] }, "then": { "required": ["versions"] } }
       ]
