@@ -16,6 +16,11 @@ o gsad valida cookie E token. Sem ele a location confiaria só no cookie, que
 qualquer cliente forja; e um auth_request para uma location que não existe cai
 no fallback da SPA, que responde 200: portão aberto.
 
+Regra 3 (espelho da 1 para o ingest): toda location que faz proxy para o ingest
+declara, no PRÓPRIO nível, `proxy_set_header X-Suricatoos-UI`: "1" (a marca que
+libera GET /agents, a postura da frota) só onde a regra 2 vale, e vazio ("") em
+todas as outras — sem a linha, o valor que o cliente mandar chega ao ingest.
+
 Uso: gate_lint.py ARQUIVO.conf [...]   (sai com 1 se alguma location violar)
 Só stdlib; não precisa de docker.
 """
@@ -25,8 +30,11 @@ HEADER = "x-suricatoos-gate"
 VALUE = "gsad-session"
 # Locations com portão de sessão — as únicas que podem setar a marca.
 SESSAO = {"/ai-providers/api/", "= /agents/scan", "/agent/provision/"}
+# Marca de origem-UI que o ingest exige em GET /agents.
+UI_HEADER = "x-suricatoos-ui"
+UI_VALUE = "1"
 # Marcas de confiança (header em minúsculas → valor) que exigem o portão forte.
-MARCAS = {HEADER: VALUE, "x-suricatoos-ui": "1"}
+MARCAS = {HEADER: VALUE, UI_HEADER: UI_VALUE}
 
 
 def tokens(text):
@@ -114,9 +122,50 @@ def nivel(kids, nome, n):
     ]
 
 
-def check_fortes(tree):
+def vai_ao(kids, porta, servico):
+    """A location faz proxy para o serviço (porta no proxy_pass ou `set $x servico`)."""
+    return any(
+        (d[0] == "proxy_pass" and porta in d[-1]) or (d[0] == "set" and d[-1] == servico)
+        for d in ([word(a) for a in d] for d, _ in walk(kids) if d)
+    )
+
+
+def internas_de(tree):
+    """Nomes ("= /x") das locations com `internal` no próprio nível."""
+    return {loc for loc, kids in locations(tree) if nivel(kids, "internal", 1)}
+
+
+def forte(kids, internas):
+    """A regra 2 vale: auth_request no próprio nível, todo alvo uma location interna."""
+    alvos = [alvo for _, alvo in nivel(kids, "auth_request", 2)]
+    return bool(alvos) and all(f"= {alvo}" in internas for alvo in alvos)
+
+
+def check_ingest(tree, internas):
+    """Regra 3: X-Suricatoos-UI declarado em toda location que vai ao ingest."""
+    erros, linhas = [], []
+    for loc, kids in locations(tree):
+        if not vai_ao(kids, ":9090", "ingest"):
+            continue
+        valores = [v for _, h, v in nivel(kids, "proxy_set_header", 3) if h.lower() == UI_HEADER]
+        if len(valores) != 1 or valores[0] not in ("", UI_VALUE):
+            erros.append(
+                f"{loc}: vai ao ingest e precisa de exatamente uma linha proxy_set_header "
+                f'X-Suricatoos-UI ("" ou "{UI_VALUE}"); achei {valores or "nenhuma"}'
+            )
+            estado = "ERRO "
+        elif valores[0] == UI_VALUE:
+            if not forte(kids, internas):
+                erros.append(f"{loc}: põe X-Suricatoos-UI {UI_VALUE} sem o portão forte (regra 2)")
+            estado = "seta "
+        else:
+            estado = "limpa"
+        linhas.append(f"  {estado}  {loc}")
+    return linhas, erros
+
+
+def check_fortes(tree, internas):
     """Regra 2: marca de confiança só com auth_request para location interna."""
-    internas = {loc for loc, kids in locations(tree) if nivel(kids, "internal", 1)}
     erros, linhas = [], []
     for loc, kids in locations(tree):
         marcas = [
@@ -150,12 +199,7 @@ def check(path):
         if kids is None or not args or word(args[0]) != "location":
             continue
         loc = " ".join(word(a) for a in args[1:])
-        diretivas = [[word(a) for a in d] for d, _ in walk(kids) if d]
-        vai_ao_cp = any(
-            (d[0] == "proxy_pass" and ":8080" in d[-1])
-            or (d[0] == "set" and d[-1] == "control-plane")
-            for d in diretivas
-        )
+        vai_ao_cp = vai_ao(kids, ":8080", "control-plane")
         # Só as diretivas do nível da location: dentro de `if` não valem p/ todo pedido.
         valores = [
             word(d[2])
@@ -177,21 +221,25 @@ def check(path):
         linhas.append(f"  {'seta ' if esperado else 'limpa'}  {loc}")
     for loc in sorted(SESSAO - vistas):
         erros.append(f"{loc}: location de sessão não encontrada indo ao control-plane")
-    fortes, erros_fortes = check_fortes(tree)
-    return linhas, fortes, erros + erros_fortes
+    internas = internas_de(tree)
+    ingest, erros_ingest = check_ingest(tree, internas)
+    fortes, erros_fortes = check_fortes(tree, internas)
+    return linhas, ingest, fortes, erros + erros_ingest + erros_fortes
 
 
 def main(paths):
     falhou = False
     for path in paths:
         try:
-            linhas, fortes, erros = check(path)
+            linhas, ingest, fortes, erros = check(path)
         except (OSError, SyntaxError, ValueError) as exc:
             print(f"{path}: não consegui analisar: {exc}")
             falhou = True
             continue
         print(f"{path}: {len(linhas)} locations vão ao control-plane")
         print("\n".join(linhas))
+        print(f"{path}: {len(ingest)} locations vão ao ingest")
+        print("\n".join(ingest))
         print(f"{path}: {len(fortes)} locations põem marca de confiança")
         print("\n".join(fortes))
         for e in erros:

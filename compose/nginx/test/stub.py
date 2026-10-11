@@ -5,8 +5,10 @@ Responde pelos upstreams do compose — control-plane:8080, ingest:9090,
 gsad:9392 e feed-updater:8008 — num único container com esses aliases de rede.
 Cada requisição recebida vira UMA linha JSON (no arquivo de --log e no stdout)
 ANTES da resposta, com: o upstream, o método, o caminho cru (com query), o id do
-caso (header X-Case-Id) e os headers que a matriz confere. Header ausente fica
-fora de "headers"; valores repetidos aparecem juntos, separados por ", ".
+caso (header X-Case-Id) e os headers que a matriz confere — entre eles
+Content-Length e Transfer-Encoding, que mostram se o pedido trouxe corpo. Header
+ausente fica fora de "headers"; valores repetidos aparecem juntos, separados por
+", ".
 
 gsad, GET /gmp?cmd=get_capabilities&token=T: 200 só se T == good-token e o
 Cookie tiver GSAD_SID=good-sid; senão 401 (é o que o auth_request consulta).
@@ -34,6 +36,8 @@ CONFERIDOS = (
     "X-Client-Cert-Serial",
     "X-Operator",
     "X-Suricatoos-UI",
+    "Content-Length",
+    "Transfer-Encoding",
 )
 TOKEN_BOM = "good-token"
 SID_BOM = "good-sid"

@@ -19,9 +19,12 @@
 #               planner (o pedido cai no /agent/api/, que lê por 30 s). O caso do
 #               upstream lento TEM de reprovar nela.
 #   mutante-sessao   CONTROLE DE MUTAÇÃO: cópia do default.conf SEM os
-#               `auth_request /_session_auth;` (de volta ao portão só-de-cookie em
-#               /agents/data.json, /agents/scan e /agent/provision/). Os casos de
-#               sessão forjada TÊM de reprovar nela.
+#               `auth_request /_session_auth;` e `/_feedsync_auth;` (de volta ao
+#               portão só-de-cookie em /agents/data.json, /agents/scan,
+#               /agent/provision/ e /feed-sync/). Os casos de sessão forjada TÊM de
+#               reprovar nela.
+#   mutante-sessao-sa  O mesmo controle numa cópia do standalone.conf (sem os
+#               `auth_request /_session_auth;`, inclusive o do /feed-sync/).
 #
 # Precisa de docker, curl, openssl, jq e python3.
 #   compose/nginx/test/run.sh            roda tudo
@@ -58,6 +61,11 @@ STUB_LOG="$WORK/stub-log/requests.jsonl"
 FORGED=(-H 'X-Suricatoos-Gate: gsad-session' -H 'X-Client-Cert-DN: CN=forjado'
         -H 'X-Client-Cert-Verify: SUCCESS' -H 'X-Client-Cert-Serial: 0A'
         -H 'X-Operator: forjado')
+# Identidade de certificado forjada (com O/OU de sensor) e, em FORGED_ID, também a
+# de operador: as rotas de sessão e o /ingest/ sem mTLS não derivam identidade.
+FORGED_CERT=(-H 'X-Client-Cert-DN: CN=forjado,OU=scanner-sensor,O=lab'
+             -H 'X-Client-Cert-Verify: SUCCESS' -H 'X-Client-Cert-Serial: 0A')
+FORGED_ID=("${FORGED_CERT[@]}" -H 'X-Operator: forjado')
 
 # Estado da execução.
 PASSED=0 FAILED=0 SEQ=0
@@ -310,9 +318,11 @@ open(dst, "w", encoding="utf-8").write(mutante)
 PY
 }
 
-# Mutante do portão de sessão: tira as linhas `auth_request /_session_auth;`, numa
-# cópia — as três locations voltam a confiar só no cookie não-vazio (o resto do
-# bloco, inclusive o `set $session_token`, fica). Falha se não achar exatamente 3.
+# Mutante do portão de sessão: tira as linhas `auth_request /_session_auth;` e
+# `auth_request /_feedsync_auth;`, numa cópia — /agents/data.json, /agents/scan,
+# /agent/provision/ e /feed-sync/ voltam a confiar só no cookie não-vazio (o resto
+# do bloco, inclusive o `set` do token, fica). O /_ai_auth não entra. Falha se não
+# achar exatamente 4 (são 4 nos dois configs).
 mutate_conf_session() {  # mutate_conf_session ORIGEM DESTINO
   python3 - "$1" "$2" <<'PY'
 import re
@@ -320,10 +330,10 @@ import sys
 
 src, dst = sys.argv[1:3]
 texto = open(src, encoding="utf-8").read()
-linha = re.compile(r"^[ \t]*auth_request /_session_auth;[ \t]*\r?\n", re.M)
+linha = re.compile(r"^[ \t]*auth_request /_(session|feedsync)_auth;[ \t]*\r?\n", re.M)
 mutante, n = linha.subn("", texto)
-if n != 3:
-    sys.exit(f"esperava 3 linhas 'auth_request /_session_auth;' em {src}; achei {n}")
+if n != 4:
+    sys.exit(f"esperava 4 linhas 'auth_request /_session_auth;' ou '/_feedsync_auth;' em {src}; achei {n}")
 open(dst, "w", encoding="utf-8").write(mutante)
 PY
 }
@@ -595,7 +605,7 @@ cases_session_gate() {
 # 20) e todo pedido que passa do cookie e do Origin conta, inclusive os que o gsad
 # recusa. Os casos (e) e (f) gastam 13 por perfil (cada perfil sobe um nginx com
 # zona própria); passando de ~21 seguidos o nginx responde 503 e o caso falha por
-# um motivo que não é o portão.
+# um motivo que não é o portão. O /feed-sync/ usa a zona feedsync (burst 40): 4.
 
 with_token() {  # with_token CAMINHO TOKEN — acrescenta token= à query
   case "$1" in
@@ -605,7 +615,7 @@ with_token() {  # with_token CAMINHO TOKEN — acrescenta token= à query
 }
 
 ui_no_cookie() {  # ui_no_cookie MÉTODO CAMINHO
-  begin_case "portão de sessão $2: sem cookie → 401, nada chega a upstream nenhum (nem ao gsad)"
+  begin_case "portão de sessão $1 $2: sem cookie → 401, nada chega a upstream nenhum (nem ao gsad)"
   send "$1" "$(with_token "$2" good-token)"
   expect_status 401
   expect_no_upstream
@@ -613,7 +623,7 @@ ui_no_cookie() {  # ui_no_cookie MÉTODO CAMINHO
 }
 
 ui_foreign_origin() {  # ui_foreign_origin MÉTODO CAMINHO
-  begin_case "portão de sessão $2: Origin de outro site → 403, nada chega a upstream nenhum"
+  begin_case "portão de sessão $1 $2: Origin de outro site → 403, nada chega a upstream nenhum"
   send "$1" "$(with_token "$2" good-token)" -H 'Cookie: GSAD_SID=good-sid' \
     -H 'Origin: https://outro-site.example'
   expect_status 403
@@ -621,26 +631,56 @@ ui_foreign_origin() {  # ui_foreign_origin MÉTODO CAMINHO
   end_case
 }
 
+# A subrequisição do portão chegou ao gsad: GET /gmp?cmd=get_capabilities com o
+# token do pedido e SEM corpo — nem Content-Length nem Transfer-Encoding, mesmo
+# quando o pedido pai é um POST com corpo (proxy_pass_request_body off +
+# Content-Length ""; sem isso o gsad esperaria um corpo que não vem).
+expect_gsad_consulted() {  # expect_gsad_consulted TOKEN
+  expect_upstream gsad GET "/gmp?cmd=get_capabilities&token=$1"
+  expect_no_header Content-Length
+  expect_no_header Transfer-Encoding
+}
+
 # O que o portão só-de-cookie deixava passar: cookie qualquer, sem token. O gsad
 # é consultado (com token vazio) e recusa.
 ui_forged() {  # ui_forged MÉTODO CAMINHO UPSTREAM
-  begin_case "portão de sessão $2: cookie forjado sem token → 401 (o gsad recusa), nada chega ao $3"
+  begin_case "portão de sessão $1 $2: cookie forjado sem token → 401 (o gsad recusa), nada chega ao $3"
   send "$1" "$2" -H 'Cookie: GSAD_SID=qualquer'
   expect_status 401
   expect_not_at "$3"
-  expect_upstream gsad GET '/gmp?cmd=get_capabilities&token='
+  expect_gsad_consulted ''
   end_case
 }
 
 # Sessão válida: o gsad aceita cookie + token e o pedido chega ao upstream com a
-# marca que só o nginx põe (a que o cliente mandar é trocada).
+# marca que só o nginx põe (a que o cliente mandar é trocada) e sem a identidade
+# de certificado/operador que o cliente mandar. No POST, o corpo chega inteiro ao
+# upstream (Content-Length 2, o `{}` do send) e a subrequisição vai sem ele.
 ui_valid() {  # ui_valid MÉTODO CAMINHO UPSTREAM CAMINHO_NO_UPSTREAM HEADER VALOR
-  begin_case "portão de sessão $2: sessão válida (cookie + token) → $3 $4 com $5: $6"
-  send "$1" "$(with_token "$2" good-token)" -H 'Cookie: GSAD_SID=good-sid' -H "$5: forjado"
+  local h
+  begin_case "portão de sessão $1 $2: sessão válida (cookie + token) → $3 $4 com $5: $6, sem identidade do cliente"
+  send "$1" "$(with_token "$2" good-token)" -H 'Cookie: GSAD_SID=good-sid' -H "$5: forjado" \
+    "${FORGED_ID[@]}"
   expect_status 200
-  expect_upstream gsad GET '/gmp?cmd=get_capabilities&token=good-token'
+  expect_gsad_consulted good-token
   expect_upstream "$3" "$1" "$4"
   expect_header "$5" "$6"
+  for h in X-Client-Cert-DN X-Client-Cert-Verify X-Client-Cert-Serial X-Operator; do
+    expect_no_header "$h"
+  done
+  if [ "$1" = POST ]; then expect_header Content-Length 2; fi
+  end_case
+}
+
+# /feed-sync/ (tela "Status do feed" → feed-updater): sessão válida chega ao
+# feed-updater; no POST o corpo chega inteiro e a subrequisição vai sem ele.
+feed_valid() {  # feed_valid MÉTODO CAMINHO CAMINHO_NO_FEED_UPDATER
+  begin_case "portão de sessão $1 $2: sessão válida (cookie + token) → feed-updater $3"
+  send "$1" "$(with_token "$2" good-token)" -H 'Cookie: GSAD_SID=good-sid'
+  expect_status 200
+  expect_gsad_consulted good-token
+  expect_upstream feed-updater "$1" "$3"
+  if [ "$1" = POST ]; then expect_header Content-Length 2; fi
   end_case
 }
 
@@ -653,19 +693,43 @@ cases_ui_forged() {
   ui_forged GET /agent/provision/tenants control-plane
   ui_forged GET '/agent/provision/enroll-command?tenant=acme&target=docker' control-plane
 
-  begin_case "portão de sessão /agents/data.json: cookie forjado com o token certo → 401, nada chega ao ingest"
+  begin_case "portão de sessão GET /agents/data.json: cookie forjado com o token certo → 401, nada chega ao ingest"
   send GET '/agents/data.json?token=good-token' -H 'Cookie: GSAD_SID=qualquer'
   expect_status 401
   expect_not_at ingest
-  expect_upstream gsad GET '/gmp?cmd=get_capabilities&token=good-token'
+  expect_gsad_consulted good-token
   end_case
 
-  begin_case "portão de sessão /agents/data.json: cookie certo sem token → 401, nada chega ao ingest"
+  begin_case "portão de sessão GET /agents/data.json: cookie certo sem token → 401, nada chega ao ingest"
   send GET /agents/data.json -H 'Cookie: GSAD_SID=good-sid'
   expect_status 401
   expect_not_at ingest
-  expect_upstream gsad GET '/gmp?cmd=get_capabilities&token='
+  expect_gsad_consulted ''
   end_case
+}
+
+# /feed-sync/ (tela "Status do feed" → feed-updater): o mesmo portão forte — no
+# default.conf pelo /_feedsync_auth, no standalone pelo /_session_auth. Antes, no
+# standalone, só o cookie não-vazio: um cookie qualquer desligava o agendamento
+# (POST /schedule) ou disparava sync (POST /sync).
+cases_feed_forged() {
+  ui_forged GET /feed-sync/status feed-updater
+  ui_forged POST /feed-sync/sync feed-updater
+}
+
+cases_feed_session() {
+  ui_no_cookie GET /feed-sync/status
+  ui_foreign_origin POST /feed-sync/schedule
+  cases_feed_forged
+  feed_valid GET /feed-sync/status '/status?token=good-token'
+  feed_valid POST /feed-sync/schedule '/schedule?token=good-token'
+}
+
+# Sessão forjada em todas as rotas com o portão forte desta matriz — o que os
+# mutantes de portão de sessão (default e standalone) têm de reprovar.
+cases_session_forged() {
+  cases_ui_forged
+  cases_feed_forged
 }
 
 cases_ui_session() {
@@ -716,6 +780,41 @@ cases_mtls() {
   expect_status 403
   expect_no_upstream
   end_case
+
+  begin_case "mTLS /ingest/: com certificado → ingest /agents sem a marca de UI do cliente e com o DN do certificado"
+  send GET /ingest/agents --cert "$PKI/client.crt" --key "$PKI/client.key" \
+    -H 'X-Suricatoos-UI: 1' -H 'X-Client-Cert-DN: CN=forjado'
+  expect_status 200
+  expect_upstream ingest GET /agents
+  expect_no_header X-Suricatoos-UI
+  expect_header_contains X-Client-Cert-DN CN=test-agent
+  expect_header_lacks X-Client-Cert-DN forjado
+  end_case
+}
+
+# (h) /ingest/ do standalone (sem mTLS): a marca de UI e a identidade de cert que
+# o cliente mandar nunca chegam ao ingest. X-Suricatoos-UI 1 liberaria GET /agents
+# (a postura da frota); X-Client-Cert-* é a identidade que o scan-request e o
+# sensor-report do ingest aceitam (no default.conf, vinda do cert verificado).
+cases_ingest_standalone() {
+  local h
+  begin_case "/ingest/ sem mTLS: GET /ingest/agents com marca de UI e identidade forjadas → ingest /agents sem nenhuma delas"
+  send GET /ingest/agents -H 'X-Suricatoos-UI: 1' "${FORGED_CERT[@]}"
+  expect_status 200
+  expect_upstream ingest GET /agents
+  for h in X-Suricatoos-UI X-Client-Cert-DN X-Client-Cert-Verify X-Client-Cert-Serial; do
+    expect_no_header "$h"
+  done
+  end_case
+
+  begin_case "/ingest/ sem mTLS: POST /ingest/v1/sensor-report com identidade de sensor forjada → ingest sem X-Client-Cert-*"
+  send POST /ingest/v1/sensor-report "${FORGED_CERT[@]}"
+  expect_status 200
+  expect_upstream ingest POST /v1/sensor-report
+  for h in X-Suricatoos-UI X-Client-Cert-DN X-Client-Cert-Verify X-Client-Cert-Serial; do
+    expect_no_header "$h"
+  done
+  end_case
 }
 
 cases_default() {
@@ -726,6 +825,7 @@ cases_default() {
   case_planner_slow
   cases_session_gate
   cases_ui_session
+  cases_feed_session
   cases_mtls
 }
 
@@ -739,6 +839,8 @@ cases_standalone() {
   case_planner_route
   cases_session_gate
   cases_ui_session
+  cases_feed_session
+  cases_ingest_standalone
 }
 
 # ----------------------------------------------------------------- perfis ----
@@ -834,11 +936,19 @@ main() {
   fi
   if mutate_conf_session "$NGINX_DIR/default.conf" "$WORK/default-sem-portao-sessao.conf"; then
     MODE=mutante
-    MUT_DESC="auth_request /_session_auth removido numa cópia do default.conf"
-    run_profile mutante-sessao "$WORK/default-sem-portao-sessao.conf" 1 cases_ui_forged
+    MUT_DESC="auth_request /_session_auth e /_feedsync_auth removidos numa cópia do default.conf"
+    run_profile mutante-sessao "$WORK/default-sem-portao-sessao.conf" 1 cases_session_forged
     MODE=normal
   else
-    record_failure "controle de mutação (portão de sessão): não consegui gerar o mutante"
+    record_failure "controle de mutação (portão de sessão, default): não consegui gerar o mutante"
+  fi
+  if mutate_conf_session "$NGINX_DIR/standalone.conf" "$WORK/standalone-sem-portao-sessao.conf"; then
+    MODE=mutante
+    MUT_DESC="auth_request /_session_auth removido numa cópia do standalone.conf"
+    run_profile mutante-sessao-sa "$WORK/standalone-sem-portao-sessao.conf" 0 cases_session_forged
+    MODE=normal
+  else
+    record_failure "controle de mutação (portão de sessão, standalone): não consegui gerar o mutante"
   fi
 
   section "resumo"
@@ -847,7 +957,7 @@ main() {
     mut_ok=1
     echo "controle de mutação: $MUT_FAILED/$MUT_TOTAL casos reprovados, como esperado"
   else
-    echo "controle de mutação FALHOU: $MUT_FAILED de $MUT_TOTAL casos reprovaram nos mutantes (catch-all /agent/ reaberto; location do planner removida; auth_request /_session_auth removido)"
+    echo "controle de mutação FALHOU: $MUT_FAILED de $MUT_TOTAL casos reprovaram nos mutantes (catch-all /agent/ reaberto; location do planner removida; portão de sessão forte removido no default e no standalone)"
     for c in "${MUT_NOT_FAILED[@]}"; do echo "  não reprovou: $c"; done
   fi
   echo "casos: $PASSED ok, $FAILED com falha"
