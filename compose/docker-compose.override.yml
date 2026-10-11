@@ -192,6 +192,30 @@ services:
       AI_PLANNER_USD_PER_1K: "${AI_PLANNER_USD_PER_1K:-0.005}"
       # Provedor a usar (id); vazio = primeiro habilitado.
       AI_PLANNER_PROVIDER_ID: "${AI_PLANNER_PROVIDER_ID:-}"
+      # --- Fila de comandos dos agentes ("Escanear agora") — durável OPCIONAL ---
+      # Sem COMMANDS_FILE a fila vive só em memória: um restart/deploy do control-plane
+      # perde os pedidos ainda não entregues. Para persistir (0600, escrita atômica,
+      # relida no boot), descomente as duas linhas abaixo ou defina COMMANDS_FILE no
+      # control-plane.env. Arquivo corrompido ou sem permissão de escrita = o
+      # control-plane não sobe (de propósito: nada de fila vazia silenciosa). Trocar
+      # o nome do arquivo num deploy que já opera = perder os pedidos pendentes.
+      # COMMANDS_TTL: comando PENDING/DELIVERED mais velho que isso vira EXPIRED e
+      # deixa de ser entregue (duração Go; padrão 24h). O estado de cada comando
+      # (PENDING/DELIVERED/ACKED/SUPERSEDED/EXPIRED) sai em
+      # GET /agent/api/v1/agents/<agent-id>/commands (Bearer ADMIN_SECRET).
+      # COMMANDS_MAX_AGENTS: teto de agentes DISTINTOS na fila (padrão 5000). Um id novo
+      # além do teto recebe 503, depois de recuperar o espaço de agentes sem comando
+      # vivo e ociosos há mais que o TTL (agente com comando vivo nunca é removido).
+      # Existe porque cada mudança regrava o arquivo inteiro sob o lock de todo poll e o
+      # boot carrega tudo: fila sem limite vira indisponibilidade do control-plane.
+      # Ids inválidos (fora de 1..128 bytes, sem caracteres de controle nem de DN) levam
+      # 400 em qualquer rota. Com TOKEN_DB_PATH definido (control-plane.env) o botão
+      # "Escanear agora" só aceita agentes enrolados (404 para os demais); sem
+      # TOKEN_DB_PATH essa checagem fica desligada, porque o store em memória esquece
+      # os enrollments a cada restart. A rota com Bearer não faz essa checagem.
+      # COMMANDS_FILE: "${COMMANDS_FILE:-/data/commands.json}"
+      # COMMANDS_TTL: "${COMMANDS_TTL:-24h}"
+      # COMMANDS_MAX_AGENTS: "${COMMANDS_MAX_AGENTS:-5000}"
       # TTL curto p/ certs renovados (limita latência de revogação de cert vazado).
       RENEW_CERT_TTL: 720h
     volumes:

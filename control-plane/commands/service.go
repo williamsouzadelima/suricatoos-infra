@@ -1,7 +1,10 @@
 package commands
 
 import (
+	"crypto/subtle"
 	"encoding/json"
+	"errors"
+	"log"
 	"net/http"
 	"strings"
 
@@ -12,11 +15,23 @@ import (
 type Service struct {
 	q           *Queue
 	allowedType map[string]bool
+	known       func(agentID string) bool
 }
 
-// NewService returns a Service over q.
-func NewService(q *Queue) *Service {
-	return &Service{q: q, allowedType: map[string]bool{CmdScanNow: true}}
+// NewService returns a Service over q. known, when set, says whether an agent id is
+// an enrolled agent; the Agents UI route (SessionEnqueueHandler) refuses ids it does
+// not recognize. nil means no check (use it when there is no durable enrollment
+// record to ask). The admin-bearer route never consults it.
+func NewService(q *Queue, known func(agentID string) bool) *Service {
+	return &Service{q: q, allowedType: map[string]bool{CmdScanNow: true}, known: known}
+}
+
+// adminOK reports whether r carries "Authorization: Bearer <secret>". The compare is
+// constant-time and an empty secret never matches (fail closed), as in the other
+// admin services.
+func adminOK(r *http.Request, secret string) bool {
+	want := "Bearer " + secret
+	return secret != "" && subtle.ConstantTimeCompare([]byte(r.Header.Get("Authorization")), []byte(want)) == 1
 }
 
 // agentCN extracts the agent identity (cert CommonName) from the client cert DN
@@ -37,8 +52,10 @@ func agentCN(r *http.Request) string {
 }
 
 // PollHandler serves GET /commands: returns the pending command for the agent
-// identified by its mTLS client cert (204 when none). The route MUST be gated by
-// nginx mTLS so X-Client-Cert-DN is trustworthy.
+// identified by its mTLS client cert (204 when none) and marks it DELIVERED. The
+// body is the bare Command ({id,type,created_at}) — the lifecycle state is for the
+// operator's history route, never part of the agent contract. The route MUST be
+// gated by nginx mTLS so X-Client-Cert-DN is trustworthy.
 func (s *Service) PollHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		cn := agentCN(r)
@@ -46,7 +63,7 @@ func (s *Service) PollHandler() http.HandlerFunc {
 			http.Error(w, "client certificate required", http.StatusForbidden)
 			return
 		}
-		c, ok := s.q.Pending(cn)
+		c, ok := s.q.Poll(cn)
 		if !ok {
 			w.WriteHeader(http.StatusNoContent)
 			return
@@ -56,8 +73,8 @@ func (s *Service) PollHandler() http.HandlerFunc {
 	}
 }
 
-// AckHandler serves POST /commands/ack {"id": "..."}: removes the agent's pending
-// command once it has been processed. Identity comes from the client cert.
+// AckHandler serves POST /commands/ack {"id": "..."}: marks the agent's command
+// ACKED once it has been processed. Identity comes from the client cert.
 func (s *Service) AckHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		cn := agentCN(r)
@@ -77,6 +94,29 @@ func (s *Service) AckHandler() http.HandlerFunc {
 	}
 }
 
+// enqueue queues cmdType for agentID and answers 202 with the Command, or: 400 for an
+// id that could not be an agent's, 503 when the queue is full, 500 when the command
+// could not be persisted. A 202 always means "queued, durably if the queue is".
+func (s *Service) enqueue(w http.ResponseWriter, agentID, cmdType string) {
+	c, err := s.q.Enqueue(agentID, cmdType)
+	switch {
+	case errors.Is(err, ErrInvalidAgentID):
+		http.Error(w, "invalid agent id", http.StatusBadRequest)
+		return
+	case errors.Is(err, ErrQueueFull):
+		log.Printf("commands: fila cheia — agente %q recusado (limite de agentes distintos)", agentID)
+		http.Error(w, "command queue is full", http.StatusServiceUnavailable)
+		return
+	case err != nil:
+		log.Printf("commands: enfileirar %s para o agente %q: %v", cmdType, agentID, err)
+		http.Error(w, "could not persist the command", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusAccepted)
+	_ = json.NewEncoder(w).Encode(c)
+}
+
 // SessionEnqueueHandler serves POST /agents/scan?id=<agent> for the Agents UI's
 // "Escanear agora" button. It has NO auth of its own and MUST be reached only
 // through the session-gated nginx location (GSAD_SID cookie + same-origin) — the
@@ -84,6 +124,10 @@ func (s *Service) AckHandler() http.HandlerFunc {
 // UI-triggerable command) on the SAME queue the admin/CLI handler uses. As defense in
 // depth it is wrapped in sessiongate.Require: a request without the marker nginx sets
 // only on session-gated locations is refused (403) before anything is enqueued.
+//
+// That gate is weaker than a bearer, so this route is also the one that cannot be
+// allowed to create queue entries out of thin air: the id must be well formed (400)
+// and, when the service has an enrollment lookup, an enrolled agent (404).
 func (s *Service) SessionEnqueueHandler() http.HandlerFunc {
 	return sessiongate.Require(func(w http.ResponseWriter, r *http.Request) {
 		agentID := strings.TrimSpace(r.URL.Query().Get("id"))
@@ -91,10 +135,15 @@ func (s *Service) SessionEnqueueHandler() http.HandlerFunc {
 			http.Error(w, "agent id required", http.StatusBadRequest)
 			return
 		}
-		c := s.q.Enqueue(agentID, CmdScanNow)
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusAccepted)
-		_ = json.NewEncoder(w).Encode(c)
+		if !validAgentID(agentID) {
+			http.Error(w, "invalid agent id", http.StatusBadRequest)
+			return
+		}
+		if s.known != nil && !s.known(agentID) {
+			http.Error(w, "unknown agent", http.StatusNotFound)
+			return
+		}
+		s.enqueue(w, agentID, CmdScanNow)
 	})
 }
 
@@ -103,8 +152,7 @@ func (s *Service) SessionEnqueueHandler() http.HandlerFunc {
 // an on-demand scan; gvmd's play button cannot drive a passive agent.
 func (s *Service) EnqueueHandler(adminSecret string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if auth := r.Header.Get("Authorization"); !strings.HasPrefix(auth, "Bearer ") ||
-			strings.TrimPrefix(auth, "Bearer ") != adminSecret {
+		if !adminOK(r, adminSecret) {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
@@ -124,9 +172,30 @@ func (s *Service) EnqueueHandler(adminSecret string) http.HandlerFunc {
 			http.Error(w, "unknown command type", http.StatusBadRequest)
 			return
 		}
-		c := s.q.Enqueue(agentID, body.Type)
+		s.enqueue(w, agentID, body.Type)
+	}
+}
+
+// HistoryHandler serves GET /api/v1/agents/{id}/commands: the agent's recent
+// commands, newest first, each with its state (PENDING, DELIVERED, ACKED,
+// SUPERSEDED, EXPIRED) and timestamps — how an operator learns whether the agent
+// picked a request up. Admin-authenticated (Bearer adminSecret). An agent with no
+// commands gets an empty list, not a 404: the queue does not know which agents exist.
+func (s *Service) HistoryHandler(adminSecret string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !adminOK(r, adminSecret) {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		agentID := r.PathValue("id")
+		if agentID == "" {
+			http.Error(w, "agent id required", http.StatusBadRequest)
+			return
+		}
 		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusAccepted)
-		_ = json.NewEncoder(w).Encode(c)
+		_ = json.NewEncoder(w).Encode(struct {
+			AgentID  string   `json:"agent_id"`
+			Commands []Record `json:"commands"`
+		}{AgentID: agentID, Commands: s.q.History(agentID)})
 	}
 }

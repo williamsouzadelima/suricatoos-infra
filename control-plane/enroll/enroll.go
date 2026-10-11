@@ -140,7 +140,7 @@ func (s *Service) Enroll(req Request) (Response, error) {
 	if req.AgentID == "" || req.CSR == "" || req.Token == "" {
 		return Response{}, fmt.Errorf("%w: campos obrigatórios ausentes", ErrBadRequest)
 	}
-	if err := validateAgentID(req.AgentID); err != nil {
+	if err := ValidateAgentID(req.AgentID); err != nil {
 		return Response{}, fmt.Errorf("%w: %v", ErrBadRequest, err)
 	}
 
@@ -383,9 +383,11 @@ func clientMessage(err error) string {
 	}
 }
 
-// validateAgentID rejects empty/oversized ids and any control or DN-special
-// character, preventing ambiguous Distinguished-Name rendering downstream.
-func validateAgentID(id string) error {
+// ValidateAgentID rejects empty/oversized ids and any control or DN-special
+// character, preventing ambiguous Distinguished-Name rendering downstream. It is
+// THE definition of what an agent id may look like: the command queue reuses it, so
+// it only ever holds ids a real agent could have been enrolled with.
+func ValidateAgentID(id string) error {
 	if len(id) == 0 || len(id) > 128 {
 		return errors.New("agent_id deve ter 1..128 caracteres")
 	}
