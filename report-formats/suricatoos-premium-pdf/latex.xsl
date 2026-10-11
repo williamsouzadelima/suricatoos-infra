@@ -342,6 +342,9 @@ SPDX-License-Identifier: GPL-2.0-or-later
     <s k="lbl_report_date" en="REPORT DATE" pt="DATA DO RELATÓRIO" es="FECHA DEL INFORME"/>
     <s k="lbl_classification" en="CLASSIFICATION" pt="CLASSIFICAÇÃO" es="CLASIFICACIÓN"/>
     <s k="val_confidential" en="Confidential" pt="Confidencial" es="Confidencial"/>
+    <!-- Pagina de sumario (navegacao), logo depois do resumo executivo. NAO e'
+         secao: sem numero e fora da arvore de marcadores. -->
+    <s k="toc_title" en="Contents" pt="Sumário" es="Índice"/>
     <!-- Executive summary -->
     <s k="sec_exec" en="Executive Summary" pt="Resumo Executivo" es="Resumen Ejecutivo"/>
     <s k="overall_risk" en="OVERALL RISK RATING" pt="CLASSIFICAÇÃO GERAL DE RISCO" es="CLASIFICACIÓN GENERAL DE RIESGO"/>
@@ -1691,13 +1694,18 @@ SPDX-License-Identifier: GPL-2.0-or-later
 % e no `pdfinfo`) sao dado do relatorio e tem de sair traduzidos.
 % Sem `hidelinks` o hyperref desenharia um quadro colorido em volta de cada
 % \href, que e' exatamente a moldura que o modelo nao tem.
-\usepackage[unicode=true,hidelinks]{hyperref}
-% Só metadado aqui. `bookmarks'/`bookmarksopen' NAO cabem em \hypersetup: o
-% hyperref so' honra as duas como opcao de CARGA do pacote, e passa-las depois
-% rendia o unico warning do log ("Option `bookmarks' has already been used")
-% sem produzir arvore nenhuma --- o documento nao usa \section, entao nao ha
-% o que indexar. Uma arvore de navegacao de verdade e' \pdfbookmark emitido
-% por secao, que e' feature, nao opcao de preambulo.
+% A ARVORE DE MARCADORES. O documento nao usa \section, entao o hyperref nao
+% indexa nada sozinho: cada marcador e' um \pdfbookmark do design system
+% (nivel 0 = secao, posto pelo \suriSection; nivel 1 = host da secao 3 e card
+% da secao 5, anunciados abaixo com \suriBookmark -- suricatoos-page.sty).
+% `bookmarksopen'/`bookmarksopenlevel' vao AQUI, como opcao de CARGA: e' so'
+% onde o hyperref as honra (em \hypersetup ele avisa "Option ... has already
+% been used" e ignora). O hyperref abre o item de nivel L quando L e' MENOR que
+% bookmarksopenlevel, entao 0 deixa cada secao fechada: o painel abre com as
+% seis secoes, so' o nivel 0 a' vista, e o leitor expande a que quiser -- numa
+% tortura de 180+ paginas a secao 5 sozinha tem centenas de cards.
+\usepackage[unicode=true,hidelinks,bookmarksopen=true,bookmarksopenlevel=0]{hyperref}
+% Só metadado aqui.
 \hypersetup{pdftitle={</xsl:text>
     <xsl:value-of select="gvm:t('pdftitle')"/>
     <xsl:text>},pdfauthor={Suricatoos Security Platform}}
@@ -1998,7 +2006,8 @@ SPDX-License-Identifier: GPL-2.0-or-later
          no longer picks a colour. The DERIVATION above stays exactly as it was —
          highest severity present wins — because it is the rating itself. -->
 
-    <xsl:text>\suriSection{1}{</xsl:text><xsl:value-of select="gvm:t('sec_exec')"/><xsl:text>}
+    <xsl:call-template name="section-open"><xsl:with-param name="n" select="1"/></xsl:call-template>
+    <xsl:text>
 
 </xsl:text>
 
@@ -2325,7 +2334,8 @@ SPDX-License-Identifier: GPL-2.0-or-later
        pairs of the results when it does not, numeric ascending by port number —
        plus, last, the single aggregated general/* row. -->
   <xsl:template name="hosts-ports">
-    <xsl:text>\suriSection{3}{</xsl:text><xsl:value-of select="gvm:t('sec_hosts_ports')"/><xsl:text>}
+    <xsl:call-template name="section-open"><xsl:with-param name="n" select="3"/></xsl:call-template>
+    <xsl:text>
 \setsectionrunner{3}{</xsl:text><xsl:value-of select="gvm:t('sec_hosts_ports_run')"/><xsl:text>}
 
 \suriPara{</xsl:text><xsl:value-of select="gvm:t('hp_intro')"/><xsl:text>}
@@ -2400,6 +2410,12 @@ SPDX-License-Identifier: GPL-2.0-or-later
              reader has to see that the host was assessed — with the note in
              place of the mini-tables. -->
         <xsl:when test="count($rows) = 0">
+          <!-- Host limpo tambem e' host avaliado: tem marcador como os outros. -->
+          <xsl:call-template name="host-bookmark">
+            <xsl:with-param name="n" select="position()"/>
+            <xsl:with-param name="ip" select="string($ip)"/>
+            <xsl:with-param name="hostname" select="string($hostname)"/>
+          </xsl:call-template>
           <xsl:call-template name="host-banner">
             <xsl:with-param name="ip" select="$ip"/>
             <xsl:with-param name="hostname" select="$hostname"/>
@@ -2420,6 +2436,8 @@ SPDX-License-Identifier: GPL-2.0-or-later
                  it is a tall one: a \clearpage there would leave the section
                  title alone on a page. -->
             <xsl:with-param name="first" select="position() = 1"/>
+            <!-- Numero do host na ordem dos cards: nome do marcador. -->
+            <xsl:with-param name="bmn" select="position()"/>
           </xsl:call-template>
         </xsl:otherwise>
       </xsl:choose>
@@ -2460,6 +2478,10 @@ SPDX-License-Identifier: GPL-2.0-or-later
          its navy band orphaned on the page before (measured).  25 rows land the
          tallest card at ~729px against the 816px the opener leaves. -->
     <xsl:param name="percol" select="25"/>
+    <!-- Numero do host para o marcador do PDF. So' o PRIMEIRO card de um host
+         ($start = 1) leva marcador: os de continuacao repetem a faixa, mas sao
+         o mesmo host. -->
+    <xsl:param name="bmn" select="0"/>
     <xsl:variable name="total" select="count($rows)"/>
     <xsl:variable name="rest" select="$total - $start + 1"/>
     <xsl:variable name="take">
@@ -2481,6 +2503,13 @@ SPDX-License-Identifier: GPL-2.0-or-later
     <xsl:if test="$start &gt; 1 or (number($take) &gt; $percol and number($first) != 1)">
       <xsl:text>\clearpage
 </xsl:text>
+    </xsl:if>
+    <xsl:if test="$start = 1">
+      <xsl:call-template name="host-bookmark">
+        <xsl:with-param name="n" select="$bmn"/>
+        <xsl:with-param name="ip" select="string($ip)"/>
+        <xsl:with-param name="hostname" select="string($hostname)"/>
+      </xsl:call-template>
     </xsl:if>
     <xsl:call-template name="host-banner">
       <xsl:with-param name="ip" select="$ip"/>
@@ -2608,7 +2637,8 @@ SPDX-License-Identifier: GPL-2.0-or-later
          node-sets que a tabela itera (veja "O CONJUNTO DE ACHADOS"). -->
     <xsl:variable name="n-low" select="count($nvt-low)"/>
     <xsl:variable name="n-ok" select="count($rows-conf) + count($grp-reps)"/>
-    <xsl:text>\suriSection{4}{</xsl:text><xsl:value-of select="gvm:t('sec_findings_summary')"/><xsl:text>}
+    <xsl:call-template name="section-open"><xsl:with-param name="n" select="4"/></xsl:call-template>
+    <xsl:text>
 </xsl:text>
 
     <!-- Confirmed findings.  The slab is unconditional now: in the design system
@@ -3059,14 +3089,24 @@ SPDX-License-Identifier: GPL-2.0-or-later
          (real-report), entao o numero e' constante e nao um contador do LaTeX
          — \suriSection carrega o numero como DADO, e ele tambem alimenta o
          "S5 . ACHADOS DETALHADOS" do cabecalho corrido. -->
-    <xsl:text>\suriSection{5}{</xsl:text><xsl:value-of select="gvm:t('sec_detailed')"/><xsl:text>}
+    <xsl:call-template name="section-open"><xsl:with-param name="n" select="5"/></xsl:call-template>
+    <xsl:text>
 </xsl:text>
     <!-- Confirmed first; the low-confidence block is only introduced when there
          is something in it, so a clean report reads exactly as before.
          A mesma tarja da secao 4 titula os dois blocos: quem le a pagina 6 ja'
          aprendeu o que "ACHADOS CONFIRMADOS" e "INDICADORES A VALIDAR"
          significam, e a faixa de QoD vem escrita na propria tarja. -->
+    <!-- Com indicadores, a secao tem DUAS sequencias de cards e a segunda
+         recomeca no #1 (como a tabela dela no sumario). No painel de
+         marcadores as duas tarjas entram como itens de nivel 1, entre as
+         sequencias que titulam, e e' isso que separa os dois "#1". Sem
+         indicadores nao ha tarja na pagina e nao ha item no painel. -->
     <xsl:if test="$n-low &gt; 0">
+      <xsl:call-template name="bookmark">
+        <xsl:with-param name="name" select="'bm-s5-confirmados'"/>
+        <xsl:with-param name="text" select="gvm:t('sub_confirmed')"/>
+      </xsl:call-template>
       <xsl:text>\suriSummaryHead{confirmados}
 </xsl:text>
       <!-- A tarja anuncia um bloco; sem nenhum confirmado ele ficava vazio,
@@ -3082,7 +3122,12 @@ SPDX-License-Identifier: GPL-2.0-or-later
     </xsl:call-template>
     <xsl:if test="$n-low &gt; 0">
       <xsl:text>\clearpage
-\suriSummaryHead{indicadores}
+</xsl:text>
+      <xsl:call-template name="bookmark">
+        <xsl:with-param name="name" select="'bm-s5-indicadores'"/>
+        <xsl:with-param name="text" select="gvm:t('sub_indicators')"/>
+      </xsl:call-template>
+      <xsl:text>\suriSummaryHead{indicadores}
 \warnbox{</xsl:text><xsl:value-of select="gvm:t('ind_intro_a')"/>
       <xsl:text>\textbf{</xsl:text><xsl:value-of select="gvm:t('ind_intro_em1')"/><xsl:text>}</xsl:text>
       <xsl:value-of select="gvm:t('ind_intro_b')"/>
@@ -3166,9 +3211,17 @@ SPDX-License-Identifier: GPL-2.0-or-later
            o primeiro card normal e' o #(grupos + 1), e nao o #1 — o leitor
            procurava o numero do sumario e achava outro achado. Indicadores
            numeram a partir de 1, como a tabela deles. -->
+      <xsl:variable name="cardnum" select="position() + count($grp-reps[$low = 0])"/>
+      <!-- Marcador do PDF (nivel 1, sob a secao 5): o MESMO numero e o MESMO
+           titulo (o traduzido) que o card mostra. -->
+      <xsl:call-template name="bookmark">
+        <xsl:with-param name="name" select="concat('bm-', $anchor)"/>
+        <xsl:with-param name="head" select="concat('#', $cardnum)"/>
+        <xsl:with-param name="text" select="string($name-pt)"/>
+      </xsl:call-template>
       <xsl:text>\findingcard{</xsl:text><xsl:value-of select="$sevkey"/>
       <xsl:text>}{\hypertarget{</xsl:text><xsl:value-of select="$anchor"/><xsl:text>}{}\#</xsl:text>
-      <xsl:value-of select="position() + count($grp-reps[$low = 0])"/><xsl:text>}{</xsl:text>
+      <xsl:value-of select="$cardnum"/><xsl:text>}{</xsl:text>
       <xsl:value-of select="$name_escaped"/>
       <xsl:if test="string($name-pt) != string(nvt/name)">
         <xsl:text>\findingorig{</xsl:text>
@@ -3570,6 +3623,15 @@ SPDX-License-Identifier: GPL-2.0-or-later
         </xsl:variable>
         <xsl:variable name="ghosts" select="exsl:node-set($ghosts-rtf)/h[not(@v = preceding-sibling::h[1]/@v)]"/>
 
+        <!-- Marcador do PDF (nivel 1, sob a secao 5): o numero e' o da linha
+             do grupo no sumario (mesma ordem, entao o mesmo position()), que e'
+             o que o primeiro card normal continua (#grupos + 1); o titulo e' o
+             que o card mostra. -->
+        <xsl:call-template name="bookmark">
+          <xsl:with-param name="name" select="concat('bm-grp-', translate(nvt/@oid, '.', '-'))"/>
+          <xsl:with-param name="head" select="concat('#', position())"/>
+          <xsl:with-param name="text" select="concat(gvm:t('grp_title'), ': ', $g)"/>
+        </xsl:call-template>
         <!-- Card consolidado (pg-08 do modelo). O \hypertarget vai dentro do
              titulo pelo mesmo motivo do card de achado: solto na pagina ele
              abriria um paragrafo vazio antes do card. -->
@@ -4656,9 +4718,8 @@ SPDX-License-Identifier: GPL-2.0-or-later
     <!-- Section 2 of the report. The runner of the running header is set apart
          from the title because the title does not fit it (\suriSection would
          otherwise upper-case the whole "Mapa de Exposicao de Portas"). -->
-    <xsl:text>\suriSection{2}{</xsl:text>
-    <xsl:value-of select="gvm:t('sec_hexmap')"/>
-    <xsl:text>}
+    <xsl:call-template name="section-open"><xsl:with-param name="n" select="2"/></xsl:call-template>
+    <xsl:text>
 \setsectionrunner{2}{</xsl:text>
     <xsl:value-of select="gvm:t('hx_runner')"/>
     <xsl:text>}
@@ -4826,9 +4887,8 @@ SPDX-License-Identifier: GPL-2.0-or-later
     <xsl:variable name="hosts" select="gvm:report()/host[string-length(normalize-space(ip)) &gt; 0]"/>
     <xsl:variable name="noiph" select="$nhosts - count($hosts)"/>
     <xsl:variable name="nglobal" select="count(exsl:node-set($hx-ord-rtf)/c)"/>
-    <xsl:text>\suriSection{6}{</xsl:text>
-    <xsl:value-of select="gvm:t('sec_hexmap_host')"/>
-    <xsl:text>}
+    <xsl:call-template name="section-open"><xsl:with-param name="n" select="6"/></xsl:call-template>
+    <xsl:text>
 \setsectionrunner{6}{</xsl:text>
     <xsl:value-of select="gvm:t('hx_host_runner')"/>
     <xsl:text>}
@@ -4990,6 +5050,141 @@ SPDX-License-Identifier: GPL-2.0-or-later
   </xsl:template>
 
   <!-- ================================================================= -->
+  <!-- Navegacao: secoes, sumario e marcadores do PDF                    -->
+  <!-- ================================================================= -->
+
+  <!-- AS SEIS SECOES, numero e titulo, num lugar so'. Cada abertura de secao
+       (section-open) e cada linha do sumario (contents-page) le daqui, entao o
+       sumario nao tem como listar um titulo que a secao nao mostra. Elemento
+       <sec>/@key e nao <s>/@k: <s k> e' a tabela de i18n, e a regua do CI
+       (check-veracity.py) recusa chave de i18n definida duas vezes. -->
+  <xsl:variable name="sections-rtf">
+    <sec n="1" key="sec_exec"/>
+    <sec n="2" key="sec_hexmap"/>
+    <sec n="3" key="sec_hosts_ports"/>
+    <sec n="4" key="sec_findings_summary"/>
+    <sec n="5" key="sec_detailed"/>
+    <sec n="6" key="sec_hexmap_host"/>
+  </xsl:variable>
+  <xsl:variable name="sections" select="exsl:node-set($sections-rtf)/sec"/>
+
+  <!-- Abre a secao n: o \hypertarget{sec-n} (o alvo da linha do sumario)
+       e o \suriSection, que ja' poe o marcador de nivel 0 ("n  Titulo") e o
+       rotulo da pagina que o sumario imprime. O alvo vem ANTES do
+       \suriSection e explicito no .tex: e' la' que os portoes de links do CI
+       o contam junto do \hyperlink do sumario. Toda secao abre no alto de uma
+       folha (o \clearpage vem de real-report), entao o destino fica no alto da
+       area de texto, em cima do titulo; e, fora do alto da folha, o \hypertarget
+       devolve o \lastskip (o \Hy@SaveLastskip do hyperref), e o \addvspace do
+       \suriSection continua tomando o maximo. Sem quebra de linha no fim: quem
+       chama escreve o que vem depois (runner, \suriPara...). -->
+  <xsl:template name="section-open">
+    <xsl:param name="n"/>
+    <xsl:text>\hypertarget{sec-</xsl:text><xsl:value-of select="$n"/><xsl:text>}{}%
+\suriSection{</xsl:text><xsl:value-of select="$n"/><xsl:text>}{</xsl:text>
+    <xsl:value-of select="gvm:t(string($sections[@n = $n]/@key))"/>
+    <xsl:text>}</xsl:text>
+  </xsl:template>
+
+  <!-- A pagina de SUMARIO, logo depois do resumo executivo: as seis secoes,
+       cada linha um link para o alto da secao, com a pagina em que ela abre
+       (\suritocline le o rotulo que o \suriSection grava). Desenho, regras e
+       faces sao do suricatoos-page.sty; daqui so' sai dado. -->
+  <xsl:template name="contents-page">
+    <xsl:text>\suriContents{</xsl:text><xsl:value-of select="gvm:t('toc_title')"/><xsl:text>}
+\begin{suritoc}
+</xsl:text>
+    <xsl:for-each select="$sections">
+      <xsl:text>\suritocrow{\hyperlink{sec-</xsl:text><xsl:value-of select="@n"/>
+      <xsl:text>}{\suritocline{</xsl:text><xsl:value-of select="@n"/><xsl:text>}{</xsl:text>
+      <xsl:value-of select="gvm:t(string(@key))"/>
+      <xsl:text>}}}
+</xsl:text>
+    </xsl:for-each>
+    <xsl:text>\end{suritoc}
+</xsl:text>
+  </xsl:template>
+
+  <!-- Teto, em caracteres, do texto de um marcador (fora o "#N  " ou o IP da
+       frente). O painel de marcadores e' estreito e quase todo visualizador
+       corta com reticencias o que nao cabe; 100 deixa inteiro o nome de NVT
+       comum (raramente passa de 90) e corta, com reticencias proprias, o que
+       viraria um paragrafo no painel. -->
+  <xsl:param name="bookmark-max" select="100"/>
+
+  <!-- O TEXTO de um marcador do PDF, em LaTeX que o \pdfstringdef do hyperref
+       converte: SO' texto escapado (escape_text), sem \surjb, \surwb nem
+       \suriTruncMark, que sao composicao e sairiam como lixo ou aviso no
+       painel. $head (o "#N" do card, ou o IP do host) vai inteiro; $text
+       (titulo, hostname) e' normalizado e, acima de $bookmark-max, cortado na
+       ULTIMA fronteira de palavra (gvm:cut-at, a mesma regra do nome do projeto
+       na capa) com \textellipsis no lugar do resto. Os dois ficam separados por
+       DOIS espacos, o formato "N  Titulo" do nivel 0 (\space: espaco digitado
+       em dobro o TeX colapsaria). -->
+  <xsl:template name="bookmark-text">
+    <xsl:param name="head" select="''"/>
+    <xsl:param name="text" select="''"/>
+    <xsl:variable name="t" select="normalize-space($text)"/>
+    <xsl:variable name="over" select="string-length($t) &gt; number($bookmark-max)"/>
+    <xsl:variable name="keep">
+      <xsl:choose>
+        <xsl:when test="$over">
+          <xsl:value-of select="gvm:hx-min2(gvm:cut-at($t, number($bookmark-max) + 1, floor(number($bookmark-max) div 2) + 1), number($bookmark-max))"/>
+        </xsl:when>
+        <xsl:otherwise><xsl:value-of select="string-length($t)"/></xsl:otherwise>
+      </xsl:choose>
+    </xsl:variable>
+    <xsl:call-template name="escape_text">
+      <xsl:with-param name="string" select="normalize-space($head)"/>
+    </xsl:call-template>
+    <xsl:if test="string-length(normalize-space($head)) &gt; 0 and string-length($t) &gt; 0">
+      <xsl:text>\space\space </xsl:text>
+    </xsl:if>
+    <xsl:call-template name="escape_text">
+      <xsl:with-param name="string" select="substring($t, 1, number($keep))"/>
+    </xsl:call-template>
+    <xsl:if test="$over"><xsl:text>\textellipsis</xsl:text></xsl:if>
+  </xsl:template>
+
+  <!-- Anuncia o marcador de nivel 1 da PROXIMA caixa (\findingcard,
+       \consolidatedcard, \hostcard ou \suriSummaryHead): a caixa o emite na
+       linha do proprio titulo (suricatoos-page.sty explica por que nao aqui).
+       $name: ancora do marcador, so' [A-Za-z0-9-]. -->
+  <xsl:template name="bookmark">
+    <xsl:param name="name"/>
+    <xsl:param name="head" select="''"/>
+    <xsl:param name="text" select="''"/>
+    <xsl:text>\suriBookmark{1}{</xsl:text><xsl:value-of select="$name"/><xsl:text>}{</xsl:text>
+    <xsl:call-template name="bookmark-text">
+      <xsl:with-param name="head" select="$head"/>
+      <xsl:with-param name="text" select="$text"/>
+    </xsl:call-template>
+    <xsl:text>}
+</xsl:text>
+  </xsl:template>
+
+  <!-- O marcador de um host da secao 3: o que a faixa do card mostra, o IP e o
+       hostname. Host sem endereco nem nome (registro anonimo) ainda precisa de
+       um titulo no painel: HOST n, na ordem dos cards. -->
+  <xsl:template name="host-bookmark">
+    <xsl:param name="n"/>
+    <xsl:param name="ip"/>
+    <xsl:param name="hostname"/>
+    <xsl:call-template name="bookmark">
+      <xsl:with-param name="name" select="concat('bm-host-', $n)"/>
+      <xsl:with-param name="head" select="$ip"/>
+      <xsl:with-param name="text">
+        <xsl:choose>
+          <xsl:when test="string-length(normalize-space($ip)) + string-length(normalize-space($hostname)) &gt; 0">
+            <xsl:value-of select="$hostname"/>
+          </xsl:when>
+          <xsl:otherwise><xsl:value-of select="concat(gvm:t('chip_host'), ' ', $n)"/></xsl:otherwise>
+        </xsl:choose>
+      </xsl:with-param>
+    </xsl:call-template>
+  </xsl:template>
+
+  <!-- ================================================================= -->
   <!-- Document assembly                                                 -->
   <!-- ================================================================= -->
 
@@ -5006,7 +5201,11 @@ SPDX-License-Identifier: GPL-2.0-or-later
        `suribare' sozinhas, dentro de \suriCover / \suriBackCover.
        Numeracao das secoes, para quem emite \suriSection: 1 resumo executivo,
        2 mapa de exposicao de portas, 3 hosts e portas abertas, 4 sumario de
-       achados, 5 achados detalhados, 6 apendice (exposicao por host). -->
+       achados, 5 achados detalhados, 6 apendice (exposicao por host); a
+       tabela $sections, que section-open e o sumario leem.
+       O SUMARIO (contents-page) entra entre o resumo executivo e o mapa de
+       portas, numa folha propria: o resumo continua sendo a primeira pagina
+       depois da capa, e o sumario nao e' secao (sem numero). -->
   <xsl:template name="real-report">
     <xsl:call-template name="header"/>
     <xsl:call-template name="newline"/>
@@ -5015,6 +5214,9 @@ SPDX-License-Identifier: GPL-2.0-or-later
     <!-- \suriCover fecha com \clearpage: a pagina 2 ja abre no papel claro. -->
     <xsl:call-template name="cover-page"/>
     <xsl:call-template name="executive-summary"/>
+    <xsl:text>\clearpage
+</xsl:text>
+    <xsl:call-template name="contents-page"/>
     <xsl:text>\clearpage
 </xsl:text>
     <xsl:call-template name="hexmap-section"/>
