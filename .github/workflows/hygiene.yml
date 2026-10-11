@@ -1,0 +1,31 @@
+name: hygiene
+
+# Higiene do repositório PÚBLICO: nenhum IPv4 público literal em arquivo de texto
+# rastreado (ci/hygiene/check_public_hygiene.py). Sem filtro de paths: um IP novo
+# pode entrar em qualquer arquivo.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  public-ipv4:
+    name: public ipv4 literals
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: install pytest
+        run: python -m pip install --upgrade pip pytest
+      - name: pytest (checker)
+        run: python -m pytest ci/hygiene -q
+      - name: check repository
+        run: python ci/hygiene/check_public_hygiene.py

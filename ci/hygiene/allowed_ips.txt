@@ -1,0 +1,30 @@
+# IPv4 públicos que podem aparecer literais em arquivos rastreados deste repositório
+# (lidos por ci/hygiene/check_public_hygiene.py).
+#
+# Formato: um IPv4 por linha, seguido de `# justificativa`. A justificativa é
+# obrigatória: linha sem ela derruba o checador. Linhas em branco e as que começam
+# com `#` são ignoradas.
+#
+# SÓ entra aqui IP legítimo: de terceiros, de documentação, número que parece IP
+# ou infraestrutura PRÓPRIA da plataforma que o código usa como valor default.
+# NUNCA entra IP de ambiente real (host de terceiros, alvo de scan): esse se troca,
+# no arquivo, por um endereço de documentação (RFC 5737: 192.0.2.0/24,
+# 198.51.100.0/24, 203.0.113.0/24).
+#
+# O próprio checador varre este arquivo; as entradas abaixo valem por construção.
+
+# --- fixtures de teste que precisam de "um IP público qualquer" ----------------------
+1.1.1.1         # resolver público (Cloudflare) como host de exemplo em gmp-bridge/test_scan_bridge.py
+1.1.1.2         # endereço vizinho de 1.1.1.1, segundo host de exemplo nas mesmas fixtures
+1.2.3.4         # IP público fictício ("fora do escopo") nos testes Go de control-plane/sensorjobs e ingest/
+8.8.8.8         # resolver público (Google): alvo "fora do escopo" nos testes Go de scope/allowlist
+198.51.101.1    # logo FORA de 198.51.100.0/24 (RFC 5737): teste de fronteira de CIDR em ingest/scanlaunch/allowlist_test.go
+172.233.0.0     # base de um /16 do provedor de hospedagem da infra própria: fixture de ingest/scanlaunch/allowlist_test.go
+
+# --- não é endereço ---------------------------------------------------------------
+2.3.1.1         # NÃO é endereço: referência de regra CIS (seção 2.3.1.1) em agent/internal/remediate/handler_config_test.go
+
+# --- infraestrutura própria da plataforma (não é cliente) ---------------------------
+172.233.11.97   # scanner (infra própria): deny-list de autoproteção em ingest/scanlaunch/allowlist.go (default funcional), citado no ADR 0006
+172.233.13.124  # score/reNgine (infra própria): idem
+172.233.13.89   # host de laboratório interno (infra própria): idem
