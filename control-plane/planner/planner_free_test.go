@@ -13,7 +13,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/williamsouzadelima/suricatoos-infra/control-plane/aiproviders"
 )
@@ -101,9 +100,10 @@ func (h hostRouter) RoundTrip(r *http.Request) (*http.Response, error) {
 	return http.DefaultTransport.RoundTrip(r2)
 }
 
-// routedLLM is the real HTTP client with the routes above.
+// routedLLM is the real HTTP client (same timeout and redirect policy) with the
+// routes above.
 func routedLLM(routes hostRouter) *HTTPLLM {
-	return &HTTPLLM{hc: &http.Client{Timeout: 60 * time.Second, Transport: routes}}
+	return &HTTPLLM{hc: newLLMClient(routes)}
 }
 
 // chatBody is an OpenAI-compatible completion whose message content is content.

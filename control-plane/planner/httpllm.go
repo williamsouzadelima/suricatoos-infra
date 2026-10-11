@@ -57,16 +57,32 @@ func (e *StatusError) Error() string {
 // HTTPLLM is the real OpenAI-compatible chat client — it serves OpenRouter,
 // UnoRouter and any compatible gateway with one code path. It obeys the Claude 5
 // rules: it sends NO temperature and NO assistant prefill, and requests structured
-// output via response_format json_schema (with the fallbacks in Chat). It makes an
-// EXTERNAL call, so it only runs when the operator explicitly triggers a draft with
-// consent (the Planner gates consent/free rule/budget before this is reached).
+// output via response_format json_schema (with the fallbacks in Chat). It never
+// follows a redirect (newLLMClient). It makes an EXTERNAL call, so it only runs
+// when the operator explicitly triggers a draft with consent (the Planner gates
+// consent/free rule/budget before this is reached).
 type HTTPLLM struct {
 	hc *http.Client
 }
 
-// NewHTTPLLM builds a client with a conservative timeout.
+// NewHTTPLLM builds a client with a conservative timeout that follows no redirect.
 func NewHTTPLLM() *HTTPLLM {
-	return &HTTPLLM{hc: &http.Client{Timeout: 60 * time.Second}}
+	return &HTTPLLM{hc: newLLMClient(nil)}
+}
+
+// newLLMClient is the planner's outbound client: bounded per attempt and following
+// NO redirect — a 307/308 would re-send the request body, the prompt, to wherever
+// Location points. The 3xx itself comes back as the provider's non-2xx answer
+// (StatusError), so the Planner moves on to the next provider. rt == nil uses the
+// default transport.
+func newLLMClient(rt http.RoundTripper) *http.Client {
+	return &http.Client{
+		Transport: rt,
+		Timeout:   60 * time.Second,
+		CheckRedirect: func(*http.Request, []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
 }
 
 // Chat posts one structured-output completion to BaseURL+"/chat/completions". It
