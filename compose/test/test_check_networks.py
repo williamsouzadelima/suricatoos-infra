@@ -189,10 +189,19 @@ class Mutations(WithTmp):
         drop_net(cfg, "nginx", "backend")                # nao alcancaria control-plane/ingest
         self.assert_rejected(cfg, "SVC-NETS", "nginx")
 
-    def test_feed_updater_loses_default(self):
+    def test_feed_updater_back_on_default(self):
+        # na default o gsad/ospd/gvmd alcancariam a API admin SEM auth do :8008
         cfg = load_ok()
-        drop_net(cfg, "feed-updater", "default")         # sem saida p/ o espelho MSRC
+        add_net(cfg, "feed-updater", "default")
         self.assert_rejected(cfg, "SVC-NETS", "feed-updater")
+        self.assertIn("a mais: {default}", hits(cfg, "SVC-NETS", "feed-updater")[0].message)
+        self.assertIn(":8008", hits(cfg, "SVC-NETS", "feed-updater")[0].message)
+
+    def test_feed_updater_loses_egress(self):
+        cfg = load_ok()
+        drop_net(cfg, "feed-updater", "egress")          # sem saida p/ o espelho MSRC
+        self.assert_rejected(cfg, "SVC-NETS", "feed-updater")
+        self.assertIn("faltando: {egress}", hits(cfg, "SVC-NETS", "feed-updater")[0].message)
 
     # --- upstream: mudar a rede recria o gvmd/ospd e mata scan --------------
     def test_upstream_services_must_stay_on_default_only(self):

@@ -42,10 +42,10 @@ services:
       # Scripts de instalação one-shot servidos em /install.sh e /install.ps1.
       - ../packaging/install:/usr/share/suricatoos/install:ro
     # Redes (racional no bloco `networks:` do fim do arquivo). MANTÉM a `default` — é
-    # por ela que o nginx fala com o gsad e com o feed-updater, e é por ela que saem as
-    # portas publicadas — e ENTRA na `backend`, onde estão o control-plane e o ingest.
-    # As duas têm de ser listadas: ao declarar `networks:` o Compose deixa de ligar o
-    # serviço à `default` implícita (listar só `backend` derrubaria a UI).
+    # por ela que o nginx fala com o gsad e é por ela que saem as portas publicadas — e
+    # ENTRA na `backend`, onde estão o control-plane, o ingest e o feed-updater. As duas
+    # têm de ser listadas: ao declarar `networks:` o Compose deixa de ligar o serviço à
+    # `default` implícita (listar só `backend` derrubaria a UI).
     networks:
       - default
       - backend
@@ -90,15 +90,18 @@ services:
     restart: unless-stopped
     depends_on:
       - docker-socket-proxy
-    # `docker-api`: único caminho até o proxy do docker (DOCKER_HOST abaixo). `backend`:
-    # upstream HTTP do nginx (:8008), junto de control-plane e ingest. `default`: MANTIDA
-    # — o espelho MSRC baixa da internet de dentro deste container, e uma rede `internal`
-    # não tem saída. (Mudar o conjunto de redes recria o container: não faça durante um
+    # FORA da `default`: o :8008 é a API admin do feed-updater e NÃO tem autenticação
+    # própria (o portão é o nginx); na `default` o gsad, o ospd e o gvmd a alcançariam.
+    # `docker-api`: único caminho até o proxy do docker (DOCKER_HOST abaixo); os pulls de
+    # imagem são do daemon, via proxy, e não precisam de saída daqui. `backend`: upstream
+    # HTTP do nginx (:8008), junto de control-plane e ingest. `egress`: a saída para a
+    # internet do espelho MSRC, que baixa de dentro deste container (uma rede `internal`
+    # não tem saída). (Mudar o conjunto de redes recria o container: não faça durante um
     # sync de feed em andamento — ver /feed-sync/status.)
     networks:
-      - default
       - docker-api
       - backend
+      - egress
     environment:
       TZ: America/Sao_Paulo
       COMPOSE_DIR: /compose
@@ -219,11 +222,15 @@ services:
       RENEW_CERT_TTL: 720h
     volumes:
       - /var/lib/suricatoos-cp:/data
-    # FORA da `default`. `backend` (internal): só o nginx e o ingest (CRL) chegam no
-    # :8080 — a premissa do código de remediação (remediation/service.go, WIRING-CRITICAL
-    # c), que até aqui não era verdade para nenhum outro container do projeto. `egress`:
-    # a saída para a internet que o planner de IA precisa (chamada ao provedor de LLM);
-    # a `backend`, sendo internal, não tem.
+    # FORA da `default`. `backend` (internal): alcançam o :8080 o nginx, o ingest (a CRL,
+    # por SCAN_CRL_URL) e o feed-updater (upstream do nginx, na mesma rede) — o gsad, o
+    # gvmd, o ospd e o resto da `default` não. ATENÇÃO: isso NÃO atende a condição (c) do
+    # WIRING-CRITICAL da remediação (control-plane/remediation/service.go, ~l.37-44:
+    # ":8080 alcançável só pelo nginx"). A REMEDIAÇÃO segue DARK (REMEDIATION_ENABLED=false)
+    # e não deve ser ligada antes do follow-up: rede exclusiva nginx<->control-plane, com a
+    # CRL servida ao ingest por um caminho do nginx. `egress`: a saída para a internet que
+    # o planner de IA precisa (chamada ao provedor de LLM); a `backend`, sendo internal,
+    # não tem.
     networks:
       - backend
       - egress
@@ -302,7 +309,8 @@ services:
       # ADR-0007: registro de tenants (control-plane grava) + secrets gvmd por-tenant,
       # read-only. O control-plane grava tenants.json em /var/lib/suricatoos-cp.
       - /var/lib/suricatoos-cp:/cp:ro
-    # FORA da `default`: o gsad e o resto do projeto não chegam no :9090. `backend`
+    # FORA da `default`: o gsad, o gvmd e o resto da `default` não chegam no :9090 (chegam
+    # o nginx, o control-plane e o feed-updater, que dividem a `backend`). `backend`
     # (internal): o nginx entrega o tráfego dos agentes e o ingest busca a CRL no
     # control-plane (SCAN_CRL_URL, por nome) — os dois nesta rede. `egress`: a saída para
     # a internet do push dos achados do sensor para o Score (SENSOR_SCORE_URL).
@@ -384,13 +392,14 @@ volumes:
 # POR QUE: até aqui tudo vivia na `default`. Qualquer container comprometido (o gsad,
 # por exemplo, que o nginx expõe à internet) alcançava (a) o docker-socket-proxy, que
 # aceita POST em /containers — é como o feed-updater recria os feeds — e portanto leva
-# ao host; e (b) o :8080 do control-plane e o :9090 do ingest, cujo código assume que
-# SÓ o nginx chega neles (control-plane/remediation/service.go, WIRING-CRITICAL c).
+# ao host; (b) a API admin do feed-updater (:8008), que não tem autenticação própria; e
+# (c) o :8080 do control-plane e o :9090 do ingest, que o código assume alcançáveis só
+# pelo nginx (control-plane/remediation/service.go, WIRING-CRITICAL c).
 #
 #   default     Implícita: NÃO é declarada aqui e não pode ser tocada (mudar a config
 #               dela faz o Compose recriar a rede, com os containers que estão nela).
 #               UI, feeds e motor do GVM: nginx, gsa, gsad, gvmd, ospd-openvas, pg-gvm,
-#               redis... e o feed-updater. Quem já estava nela fica EXATAMENTE como
+#               redis... Quem já estava nela e não é citado abaixo fica EXATAMENTE como
 #               estava: mudar a rede do gvmd/ospd-openvas os recriaria no deploy, e
 #               recriar o ospd-openvas mata o scan em curso.
 #   docker-api  internal. docker-socket-proxy + feed-updater, só: o único caminho até a
@@ -398,22 +407,27 @@ volumes:
 #   backend     internal. Os upstreams HTTP do nginx — control-plane (:8080), ingest
 #               (:9090), feed-updater (:8008) — e o próprio nginx. O ingest busca a CRL
 #               no control-plane por esta rede (SCAN_CRL_URL). Quem não está aqui
-#               (gsad, gvmd, ...) não chega no :8080 nem no :9090.
-#   egress      NÃO internal. control-plane e ingest, só. Uma rede internal não tem saída
-#               para a internet, e esses dois precisam dela: o planner de IA do
-#               control-plane chama o provedor de LLM e o ingest empurra os achados do
-#               sensor para o Score. Sem esta rede essas funções morreriam em silêncio
-#               assim que fossem ligadas.
+#               (gsad, gvmd, ...) não chega no :8080, no :9090 nem no :8008.
+#   egress      NÃO internal. control-plane, ingest e feed-updater, só. Uma rede internal
+#               não tem saída para a internet, e esses três precisam dela: o planner de IA
+#               do control-plane chama o provedor de LLM, o ingest empurra os achados do
+#               sensor para o Score e o feed-updater baixa o espelho MSRC. Sem esta rede
+#               essas funções morreriam em silêncio assim que fossem ligadas.
+#
+# LIMITE CONHECIDO (follow-up, NÃO implementado aqui): a condição (c) do WIRING-CRITICAL da
+# remediação — ":8080 alcançável só pelo nginx" — continua NÃO atendida: o ingest e o
+# feed-updater também chegam no :8080 pela `backend`. A REMEDIAÇÃO segue DARK
+# (REMEDIATION_ENABLED=false) e não deve ser ligada antes de uma rede exclusiva
+# nginx<->control-plane, com a CRL servida ao ingest por um caminho do nginx.
 #
 # O nginx continua também na `default`: fala com o gsad, publica as portas e é por ela
 # que chega o IP real do cliente (set_real_ip_from 172.16.0.0/12 em nginx/default.conf).
 # A `backend` ser internal garante que juntar o nginx a ela não mexe nisso — uma rede
 # internal não tem gateway, então a saída e a publicação de portas seguem pela `default`.
-# O mesmo vale para o feed-updater.
 #
 # ARMADILHAS
 #  - Declarar `networks:` num serviço tira a `default` implícita: quem precisa dela
-#    (nginx, feed-updater) a lista de novo.
+#    (o nginx) a lista de novo.
 #  - Em `networks:` só se ADICIONA. `!override`/`!reset` apagam o que os outros arquivos
 #    do COMPOSE_FILE definem.
 #  - As redes ficam AQUI, no override, que entra em todas as combinações de COMPOSE_FILE
@@ -427,12 +441,20 @@ volumes:
 # (os únicos cujas redes mudaram). gvmd, ospd-openvas, pg-gvm e redis-server NÃO são
 # tocados, então não há scan em curso a esperar. Nesta ordem:
 #   docker compose up -d --no-deps nginx
-#   docker compose up -d --no-deps control-plane ingest
+#   docker compose up -d --no-deps control-plane
+#   # conferir que /agent/v1/crl.der responde (via nginx) antes de seguir
+#   docker compose up -d --no-deps ingest     # e ver "scanlaunch: CRL carregada" no log
 #   docker compose up -d --no-deps docker-socket-proxy feed-updater
-# O nginx vai primeiro: passa a estar nas duas redes e segue alcançando o control-plane e
-# o ingest enquanto eles ainda estão na `default`. O último passo não deve rodar com um
-# sync de feed em andamento. Cada rede nova consome uma sub-rede do pool de endereços do
-# docker: num host compartilhado, confira `docker network ls` antes.
+# O nginx vai primeiro: passa a estar nas duas redes e segue alcançando control-plane,
+# ingest e feed-updater enquanto eles ainda estão na `default`. O ingest vai DEPOIS do
+# control-plane de propósito: uma CRL já carregada não se perde se um refresh falhar (o
+# ingest antigo, ainda na `default`, só loga a falha), mas um ingest RECÉM-iniciado cujo
+# primeiro fetch falha nega tudo (fail-closed) até o próximo refresh. A mesma lógica vale
+# para o rollback. O último passo não deve rodar com um sync de feed em andamento; depois
+# do primeiro sync manual, confira que nginx, control-plane, ingest e docker-socket-proxy
+# NÃO reiniciaram (o `docker compose` de dentro do feed-updater é o do docker:27-cli, de
+# versão diferente da do host). Cada rede nova consome uma sub-rede do pool de endereços
+# do docker: num host compartilhado, confira `docker network ls` antes.
 # ---------------------------------------------------------------------------
 networks:
   docker-api:

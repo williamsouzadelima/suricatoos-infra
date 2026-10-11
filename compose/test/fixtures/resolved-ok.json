@@ -27,7 +27,7 @@
       "networks": { "docker-api": null }
     },
     "feed-updater": {
-      "networks": { "backend": null, "default": null, "docker-api": null }
+      "networks": { "backend": null, "docker-api": null, "egress": null }
     },
     "gpg-data": {
       "image": "registry.community.greenbone.net/community/gpg-data",

@@ -59,9 +59,11 @@ PINNED = {
     # Fala com o gsad (default), publica as portas (default) e alcanca
     # control-plane/ingest/feed-updater (backend).
     "nginx": {DEFAULT, "backend"},
-    # default: saida p/ internet (espelho MSRC) e e por onde o nginx chega nele;
-    # docker-api: o proxy; backend: upstream HTTP do nginx.
-    "feed-updater": {DEFAULT, "docker-api", "backend"},
+    # FORA da default: o :8008 e' a API admin SEM auth propria (o portao e' o nginx),
+    # entao gsad/ospd/gvmd nao podem alcanca-lo. docker-api: o proxy; backend: upstream
+    # HTTP do nginx; egress: o espelho MSRC baixa da internet de dentro do container
+    # (os pulls de imagem sao do daemon, via proxy).
+    "feed-updater": {"docker-api", "backend", "egress"},
     # Fora da default: so o nginx (e o ingest, p/ a CRL) chegam no :8080/:9090.
     # egress: planner de IA / push p/ o Score precisam de saida p/ internet.
     "control-plane": {"backend", "egress"},
@@ -70,10 +72,10 @@ PINNED = {
 
 # Redes que o projeto declara - nem mais, nem menos - e se sao `internal`.
 EXPECTED_NETWORKS = {
-    DEFAULT: False,      # portas publicadas do nginx e saida do feed-updater
+    DEFAULT: False,      # portas publicadas do nginx
     "docker-api": True,  # sem rota p/ fora: so proxy + feed-updater
     "backend": True,     # sem rota p/ fora; nao pode virar gateway do nginx
-    "egress": False,     # internal cortaria a saida de control-plane/ingest
+    "egress": False,     # internal cortaria a saida de control-plane/ingest/feed-updater
 }
 
 # Servicos que a politica cita por nome e que PRECISAM existir no config
@@ -92,10 +94,9 @@ WHY_INTERNAL = {
                "publicadas e o IP real do cliente (set_real_ip_from 172.16.0.0/12 em "
                "nginx/default.conf) passariam a depender dela. Se control-plane/ingest "
                "precisam de saida p/ internet, ela vem da egress, nao de tirar o internal",
-    DEFAULT: "`internal: true` na default derruba as portas publicadas do nginx e a saida "
-             "do feed-updater (espelho MSRC)",
-    "egress": "`internal: true` corta a saida p/ internet de control-plane/ingest (planner "
-              "de IA, push dos achados do sensor p/ o Score)",
+    DEFAULT: "`internal: true` na default derruba as portas publicadas do nginx",
+    "egress": "`internal: true` corta a saida p/ internet de control-plane/ingest/feed-updater "
+              "(planner de IA, push dos achados do sensor p/ o Score, espelho MSRC)",
 }
 
 WHY_NETWORK = {
@@ -103,9 +104,9 @@ WHY_NETWORK = {
                   "so docker-socket-proxy e feed-updater",
     "backend": "backend e a rede dos upstreams HTTP do nginx (control-plane, ingest, "
                "feed-updater): quem mais entrar enxerga :8080/:9090",
-    "egress": "egress e so do control-plane e do ingest (saida p/ internet)",
-    DEFAULT: "a default e a rede do motor do GVM: control-plane/ingest e o proxy do "
-             "docker ficam FORA dela",
+    "egress": "egress e so do control-plane, do ingest e do feed-updater (saida p/ internet)",
+    DEFAULT: "a default e a rede do motor do GVM: control-plane/ingest/feed-updater e o "
+             "proxy do docker ficam FORA dela",
 }
 
 # Combinacoes de COMPOSE_FILE em uso (relativas a compose/). As duas primeiras
@@ -242,11 +243,17 @@ def check(cfg):
         if missing:
             parts.append("faltando: %s" % _fmt(missing))
         notes = [WHY_NETWORK[n] for n in sorted(extra) if n in WHY_NETWORK]
+        if name == "feed-updater" and DEFAULT in extra:
+            notes.append("o :8008 e a API admin SEM auth do feed-updater (o portao e o nginx): "
+                         "na default o gsad/ospd/gvmd a alcancariam")
+        if name == "feed-updater" and "egress" in missing:
+            notes.append("sem a egress o espelho MSRC (download de dentro do container) "
+                         "fica sem saida")
         if name not in PINNED:
             notes.append("servico do upstream/sem regra propria: so na default; mudar a "
                          "rede dele muda o hash da config e o deploy o RECRIA (gvmd/"
                          "ospd-openvas: mata scan em curso)")
-        if name in ("nginx", "feed-updater") and DEFAULT in missing:
+        if name == "nginx" and DEFAULT in missing:
             notes.append("declarar `networks:` num servico remove a default implicita: "
                          "liste `default` de novo")
         out.append(Violation(
