@@ -317,6 +317,67 @@ class Mutations(WithTmp):
         cfg["services"]["docker-socket-proxy"]["volumes"] = []
         self.assert_rejected(cfg, "SOCKET", "docker-socket-proxy")
 
+    # --- volumes_from: herdar os volumes do proxy e' montar o socket ----------
+    def volumes_from_hits(self, cfg, name):
+        return [v for v in cn.check(cfg)
+                if v.rule == "SOCKET" and v.message.startswith(name + " ") and "volumes_from" in v.message]
+
+    def test_volumes_from_the_proxy_inherits_the_docker_socket(self):
+        for entry in ("docker-socket-proxy", "docker-socket-proxy:ro", "docker-socket-proxy:rw",
+                      "service:docker-socket-proxy", "service:docker-socket-proxy:ro",
+                      "container:greenbone-community-edition-docker-socket-proxy-1",
+                      "container:greenbone-community-edition-docker-socket-proxy-1:ro"):
+            cfg = load_ok()
+            cfg["services"]["gsad"]["volumes_from"] = [entry]
+            self.assertTrue(self.volumes_from_hits(cfg, "gsad"), entry)
+        cfg = load_ok()
+        cfg["services"]["ingest"]["volumes_from"] = ["docker-socket-proxy:ro"]
+        self.assert_rejected(cfg, "SOCKET", "ingest")                # + exit code do CLI
+        self.assertIn("volumes_from", hits(cfg, "SOCKET", "ingest")[0].message)
+
+    def test_volumes_from_a_service_that_wrongly_mounts_the_socket_is_refused_too(self):
+        cfg = load_ok()
+        add_volume(cfg, "gsad", bind("/var/run/docker.sock", "/var/run/docker.sock"))    # ja e' violacao
+        cfg["services"]["ingest"]["volumes_from"] = ["service:gsad:ro"]
+        self.assertTrue(hits(cfg, "SOCKET", "gsad monta"))
+        self.assertTrue(self.volumes_from_hits(cfg, "ingest"))
+
+    def test_volumes_from_chain_is_followed(self):
+        # gsad herda do proxy; o ingest herda do gsad: o socket chega nos dois
+        cfg = load_ok()
+        cfg["services"]["gsad"]["volumes_from"] = ["docker-socket-proxy"]
+        cfg["services"]["ingest"]["volumes_from"] = ["gsad"]
+        self.assertTrue(self.volumes_from_hits(cfg, "gsad"))
+        self.assertTrue(self.volumes_from_hits(cfg, "ingest"))
+
+    def test_volumes_from_cycle_terminates(self):
+        cfg = load_ok()
+        cfg["services"]["gsad"]["volumes_from"] = ["gvmd"]
+        cfg["services"]["gvmd"]["volumes_from"] = ["gsad", "docker-socket-proxy"]
+        self.assertTrue(self.volumes_from_hits(cfg, "gvmd"))
+        self.assertTrue(self.volumes_from_hits(cfg, "gsad"))
+
+    def test_the_proxy_is_the_sanctioned_owner_so_its_own_volumes_from_is_not_blamed(self):
+        # o problema, aqui, e' o gsad montar o socket (reportado); o proxy herdar dele nao
+        # cria exposicao nova -- ele ja' e' o unico dono permitido
+        cfg = load_ok()
+        add_volume(cfg, "gsad", bind("/var/run/docker.sock", "/var/run/docker.sock"))
+        cfg["services"]["docker-socket-proxy"]["volumes_from"] = ["gsad"]
+        socket_msgs = [v.message for v in cn.check(cfg) if v.rule == "SOCKET"]
+        self.assertEqual(len(socket_msgs), 1, socket_msgs)
+        self.assertTrue(socket_msgs[0].startswith("gsad monta"))
+
+    def test_ordinary_volumes_from_is_not_flagged(self):
+        cfg = load_ok()
+        cfg["services"]["gsad"]["volumes_from"] = ["gvmd:ro"]
+        cfg["services"]["ingest"]["volumes_from"] = ["service:control-plane", "container:outro-container:rw"]
+        self.assertEqual(cn.check(cfg), [])
+
+    def test_malformed_volumes_from_entries_do_not_crash(self):
+        cfg = load_ok()
+        cfg["services"]["gsad"]["volumes_from"] = [None, 7, "", ":", "service:", "container:"]
+        self.assertEqual(cn.check(cfg), [])
+
     def test_absolute_source_is_checked_whatever_the_declared_type(self):
         # fail-safe: o tipo declarado nao desativa a conferencia do caminho
         cfg = load_ok()

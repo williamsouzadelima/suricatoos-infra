@@ -33,7 +33,8 @@ USO
 
 REGRAS (ids na saida): PRES-SVC/PRES-NET (presenca), NET-INTERNAL (flag internal),
   NET-DECL (rede local, driver padrao, nome <projeto>_<chave>), SVC-NETS (redes exatas por
-  servico), NETMODE, PORTS (nao publicam porta), SOCKET (so o proxy monta o docker.sock),
+  servico), NETMODE, PORTS (nao publicam porta), SOCKET (so o proxy monta o docker.sock --
+  por bind, diretorio ancestral, volume nomeado com device ou volumes_from do proxy),
   COVER (todo YAML de compose/ esta em alguma combinacao) e HASH (modo --hashes).
 
 SAIDA
@@ -262,6 +263,31 @@ def socket_mounts(svc):
     return found
 
 
+def volumes_from_refs(svc):
+    """Nomes que o servico referencia em `volumes_from`: "servico[:ro|rw]",
+    "service:servico[:ro|rw]" ou "container:nome[:ro|rw]". Entrada que nao e' texto, vazia ou
+    so' com o prefixo e' ignorada (sem excecao)."""
+    refs = []
+    for entry in svc.get("volumes_from") or []:
+        if not isinstance(entry, str):
+            continue
+        parts = entry.strip().split(":")
+        if len(parts) > 1 and parts[-1] in ("ro", "rw"):
+            parts = parts[:-1]
+        if len(parts) > 1 and parts[0] in ("service", "container"):
+            parts = parts[1:]
+        ref = ":".join(parts)
+        if ref:
+            refs.append(ref)
+    return refs
+
+
+def _inherits(ref, guarded):
+    """`ref` (de um volumes_from) herda o socket? Ou e' um servico guardado, ou -- na forma
+    `container:` -- um container cujo nome carrega o do proxy (<projeto>-docker-socket-proxy-1)."""
+    return ref in guarded or SOCKET_OWNER in ref
+
+
 def socket_volumes(cfg):
     """{volume nomeado: descricao} dos volumes de topo que sao um bind do docker.sock
     disfarcado (driver_opts.device apontando para o socket ou um diretorio que o contem)."""
@@ -441,6 +467,26 @@ def check(cfg):
         out.append(Violation(
             "SOCKET", "o volume nomeado %s aponta (driver_opts.device) para %s: e um bind do "
             "docker.sock disfarcado de volume nomeado" % (vname, note)))
+
+    # SOCKET (volumes_from): herdar os volumes do proxy -- ou de quem monta o socket, ou de
+    # quem herda de um deles -- e' ter o socket montado sem declarar nenhum `volumes:`.
+    refs = {name: volumes_from_refs(services[name]) for name in services}
+    guarded = {SOCKET_OWNER} | owners
+    changed = True
+    while changed:                                           # fecho transitivo (e termina em ciclo)
+        changed = False
+        for name in sorted(services):
+            if name not in guarded and any(_inherits(r, guarded) for r in refs[name]):
+                guarded.add(name)
+                changed = True
+    for name in sorted(services):
+        if name == SOCKET_OWNER:
+            continue
+        for ref in refs[name]:
+            if _inherits(ref, guarded):
+                out.append(Violation(
+                    "SOCKET", "%s usa volumes_from %s: herdaria os volumes de %s, inclusive o "
+                    "docker.sock -- so o %s pode ter o socket" % (name, ref, ref, SOCKET_OWNER)))
 
     return out
 
