@@ -46,7 +46,8 @@ permissions:
 jobs:
   redes:
     name: redes do compose (politica + resolve)
-    runs-on: ubuntu-latest
+    # Runner fixado, nao ubuntu-latest: a prova do esqueleto depende do Engine/iptables; subir a versao e' mudanca deliberada.
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
@@ -66,7 +67,8 @@ jobs:
 
   esqueleto:
     name: pilha-esqueleto (isolamento, gateway e IP de origem no Engine do CI)
-    runs-on: ubuntu-latest
+    # Runner fixado, nao ubuntu-latest: a prova do esqueleto depende do Engine/iptables; subir a versao e' mudanca deliberada.
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4

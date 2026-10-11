@@ -608,6 +608,26 @@ class WorkflowSkeletonJob(unittest.TestCase):
         self.assertIsNotNone(m, "job %s ausente do workflow" % name)
         return m.group(1)
 
+    def test_every_job_pins_the_runner_to_a_specific_ubuntu_release_and_says_why(self):
+        # a prova do esqueleto depende do Engine/iptables do runner, e `ubuntu-latest` muda
+        # de versao sem nenhum diff neste repositorio: subir a versao tem de ser deliberado
+        text = self.read()
+        jobs = re.findall(r"^  ([A-Za-z][\w-]*):\s*$", text.split("\njobs:\n", 1)[1], re.M)
+        self.assertEqual(sorted(jobs), ["esqueleto", "redes"])
+        lines = text.splitlines()
+        runs_on = [i for i, line in enumerate(lines) if re.match(r"^    runs-on:", line)]
+        self.assertEqual(len(runs_on), len(jobs), "todo job declara runs-on")
+        runners = set()
+        for i in runs_on:
+            runner = lines[i].split(":", 1)[1].strip()
+            runners.add(runner)
+            self.assertRegex(runner, r"^ubuntu-\d{2}\.\d{2}$")
+            self.assertNotIn("latest", runner)
+            above = lines[i - 1].strip()
+            self.assertTrue(above.startswith("#") and "deliberad" in above,
+                            "falta o comentario do porque logo acima de %r" % lines[i].strip())
+        self.assertEqual(len(runners), 1, "os jobs usam o MESMO runner: %s" % sorted(runners))
+
     def test_skeleton_job_runs_the_script(self):
         self.assertIn("python3 compose/test/skeleton_stack.py", self.job("esqueleto"))
 
