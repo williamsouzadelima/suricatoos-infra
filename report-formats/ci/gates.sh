@@ -78,7 +78,8 @@ overfull_baseline() {
     # nascem com 0, a mesma regua das outras.
     */v1-numeracao | */v2-indicadores-vazios | */v3-consolidado-qod | \
     */v4-instancias | */v5-acao-traduzida | */v6-vulns-unicas | \
-    */v7a-faixas | */v7b-lowconf | */v8-ancora | */v9-nome-capa) echo 0 ;;
+    */v7a-faixas | */v7b-lowconf | */v7c-todos-lowconf | \
+    */v8-ancora | */v9-nome-capa) echo 0 ;;
     *) return 1 ;;
   esac
 }
