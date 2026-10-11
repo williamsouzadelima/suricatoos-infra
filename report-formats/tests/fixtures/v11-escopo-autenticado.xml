@@ -1,0 +1,185 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+Fixture SINTETICA do CI de veracidade do Suricatoos Premium PDF
+(report-formats/ci/check-veracity.py roda sobre o .tex desta fixture nos 3
+idiomas). Enderecos RFC 5737, nomes genericos sob .example, OIDs da faixa
+sintetica 1.3.6.1.4.1.25623.1.0.99xxxx (nao existem no feed); nenhum dado de
+scan real.
+
+Secao 6 (escopo, metodologia e limitacoes), o relatorio que traz tudo:
+- tarefa E alvo nomeados; <hosts><count> igual ao numero de <host> (sem a
+  ressalva da contagem do scanner); janela de 42 min 13 s, que sai "42 min";
+- filtro com piso de QoD ALTO (min_qod=80, acima do piso de 70 do proprio
+  relatorio), so' quatro niveis (levels=chml), overrides aplicados e export
+  parcial: o filtro deixou 4 dos 12 resultados do scan;
+- autenticacao por host, com os detalhes Auth-<protocolo>-Success|Failure que o
+  scanner grava: 192.0.2.10 autenticado por SSH; 192.0.2.11 com SSH falho e SMB
+  bem-sucedido (conta como autenticado); 192.0.2.12 so' com falha (SMB); e
+  198.51.100.20 sem registro nenhum. Tabela com 4 linhas, abaixo do teto;
+- <errors> com 3 erros em 2 hosts, abaixo do teto da tabela (sem corte).
+-->
+<report extension="pdf" content_type="application/pdf" id="00000000-0000-4000-8000-000000000041">
+  <task id="00000000-0000-4000-8000-000000000001">
+    <name>Example Authenticated Scope Review</name>
+    <comment></comment>
+    <target id="00000000-0000-4000-8000-000000000003">
+      <trash>0</trash>
+      <name>Example Internal Servers</name>
+      <comment></comment>
+    </target>
+  </task>
+  <scan_run_status>Done</scan_run_status>
+  <timezone>Coordinated Universal Time</timezone>
+  <timezone_abbrev>UTC</timezone_abbrev>
+  <scan_start>2026-09-01T09:00:00Z</scan_start>
+  <scan_end>2026-09-01T09:42:13Z</scan_end>
+  <hosts><count>4</count></hosts>
+  <result_count>12<full>12</full><filtered>4</filtered><critical><full>1</full><filtered>1</filtered></critical><high><full>3</full><filtered>2</filtered></high><medium><full>5</full><filtered>1</filtered></medium><low><full>2</full><filtered>0</filtered></low><log><full>1</full><filtered>0</filtered></log><false_positive><full>0</full><filtered>0</filtered></false_positive></result_count>
+  <filters id="00000000-0000-4000-8000-000000000002">
+    <term>apply_overrides=1 levels=chml rows=-1 min_qod=80 first=1 sort-reverse=severity</term>
+  </filters>
+  <ports start="1" max="-1">
+    <port>443/tcp<host>192.0.2.10</host></port>
+    <port>22/tcp<host>192.0.2.10</host></port>
+    <port>445/tcp<host>192.0.2.11</host></port>
+    <port>general/tcp<host>192.0.2.11</host></port>
+  </ports>
+  <host>
+    <ip>192.0.2.10</ip>
+    <start>2026-09-01T09:01:00Z</start>
+    <end>2026-09-01T09:40:00Z</end>
+    <detail><name>hostname</name><value>host01.example.com</value></detail>
+    <detail><name>best_os_txt</name><value>Example Linux 1.0</value></detail>
+    <detail><name>Auth-SSH-Success</name><value>Protocol SSH, Port 22, User scanuser</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991180</name><description>Example SSH Authorization</description></source><extra></extra></detail>
+  </host>
+  <host>
+    <ip>192.0.2.11</ip>
+    <start>2026-09-01T09:01:00Z</start>
+    <end>2026-09-01T09:41:00Z</end>
+    <detail><name>hostname</name><value>host02.example.com</value></detail>
+    <detail><name>Auth-SSH-Failure</name><value>Protocol SSH, Port 22, User scanuser: Login failure</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991180</name><description>Example SSH Authorization</description></source><extra></extra></detail>
+    <detail><name>Auth-SMB-Success</name><value>Protocol SMB, Port 445, User scanuser</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991181</name><description>Example SMB Authorization</description></source><extra></extra></detail>
+  </host>
+  <host>
+    <ip>192.0.2.12</ip>
+    <start>2026-09-01T09:01:00Z</start>
+    <end>2026-09-01T09:41:30Z</end>
+    <detail><name>hostname</name><value>host03.example.com</value></detail>
+    <detail><name>Auth-SMB-Failure</name><value>Protocol SMB, Port 445, User scanuser: Login failure</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991181</name><description>Example SMB Authorization</description></source><extra></extra></detail>
+  </host>
+  <host>
+    <ip>198.51.100.20</ip>
+    <start>2026-09-01T09:01:00Z</start>
+    <end>2026-09-01T09:42:00Z</end>
+    <detail><name>hostname</name><value>host04.example.com</value></detail>
+  </host>
+  <results start="1" max="-1">
+    <result id="v-0001">
+      <host>192.0.2.10<hostname>host01.example.com</hostname></host>
+      <port>443/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.991101">
+        <type>nvt</type>
+        <name>Example Web Server Remote Code Execution</name>
+        <family>Synthetic</family>
+        <cvss_base>9.8</cvss_base>
+        <tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags>
+        <solution type="Mitigation">Apply the configuration change described by the vendor.</solution>
+        <refs></refs>
+      </nvt>
+      <threat>Critical</threat>
+      <severity>9.8</severity>
+      <qod><value>98</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for the web server advisory.</description>
+    </result>
+    <result id="v-0002">
+      <host>192.0.2.10<hostname>host01.example.com</hostname></host>
+      <port>22/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.991102">
+        <type>nvt</type>
+        <name>Example SSH Server Weak Key Exchange</name>
+        <family>Synthetic</family>
+        <cvss_base>8.1</cvss_base>
+        <tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags>
+        <solution type="Mitigation">Restrict the key exchange algorithms offered by the service.</solution>
+        <refs></refs>
+      </nvt>
+      <threat>High</threat>
+      <severity>8.1</severity>
+      <qod><value>80</value><type>remote_active</type></qod>
+      <description>Synthetic detection output for the SSH key exchange advisory.</description>
+    </result>
+    <result id="v-0003">
+      <host>192.0.2.11<hostname>host02.example.com</hostname></host>
+      <port>445/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.991103">
+        <type>nvt</type>
+        <name>Example File Service Privilege Escalation</name>
+        <family>Synthetic</family>
+        <cvss_base>7.5</cvss_base>
+        <tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=VendorFix</tags>
+        <solution type="VendorFix">Upgrade the file service to the release that fixes the advisory.</solution>
+        <refs></refs>
+      </nvt>
+      <threat>High</threat>
+      <severity>7.5</severity>
+      <qod><value>97</value><type>package</type></qod>
+      <description>Synthetic detection output for the file service advisory (authenticated package check).</description>
+    </result>
+    <result id="v-0004">
+      <host>192.0.2.11<hostname>host02.example.com</hostname></host>
+      <port>general/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.991104">
+        <type>nvt</type>
+        <name>Example Kernel Missing Security Update</name>
+        <family>Synthetic</family>
+        <cvss_base>5.3</cvss_base>
+        <tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=VendorFix</tags>
+        <solution type="VendorFix">Install the kernel update published by the vendor.</solution>
+        <refs></refs>
+      </nvt>
+      <threat>Medium</threat>
+      <severity>5.3</severity>
+      <qod><value>97</value><type>package</type></qod>
+      <description>Synthetic detection output for the kernel update advisory (authenticated package check).</description>
+    </result>
+  </results>
+  <errors>
+    <count>3</count>
+    <error>
+      <host>192.0.2.12<asset asset_id=""/><hostname>host03.example.com</hostname></host>
+      <port>general/tcp</port>
+      <description>NVT timed out after 320 seconds.</description>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.991190">
+        <type>nvt</type>
+        <name>Example Service Detection</name>
+        <cvss_base>0.0</cvss_base>
+      </nvt>
+      <scan_nvt_version>2026-08-01T00:00:00Z</scan_nvt_version>
+      <severity>-3.0</severity>
+    </error>
+    <error>
+      <host>192.0.2.12<asset asset_id=""/><hostname>host03.example.com</hostname></host>
+      <port>445/tcp</port>
+      <description>SMB login failed for the configured credential: access denied.</description>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.991191">
+        <type>nvt</type>
+        <name>Example SMB Authorization Check</name>
+        <cvss_base>0.0</cvss_base>
+      </nvt>
+      <scan_nvt_version>2026-08-01T00:00:00Z</scan_nvt_version>
+      <severity>-3.0</severity>
+    </error>
+    <error>
+      <host>198.51.100.20<asset asset_id=""/><hostname>host04.example.com</hostname></host>
+      <port>443/tcp</port>
+      <description>Could not open a TLS connection to the service.</description>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.991192">
+        <type>nvt</type>
+        <name>Example TLS Inventory</name>
+        <cvss_base>0.0</cvss_base>
+      </nvt>
+      <scan_nvt_version>2026-08-01T00:00:00Z</scan_nvt_version>
+      <severity>-3.0</severity>
+    </error>
+  </errors>
+</report>

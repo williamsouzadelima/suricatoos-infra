@@ -16,8 +16,10 @@
 #   v*       report-formats/tests/fixtures/*.xml: uma fixture por defeito de
 #            veracidade ja' corrigido (numeracao, indicadores vazios, ...),
 #            mais a v10-navegacao (caminhos de navegacao que as outras nao
-#            percorrem); o cabecalho de cada uma diz qual. Pequenas: segundos
-#            cada.
+#            percorrem) e as v11..v13 da secao 6 (escopo, metodologia e
+#            limitacoes: autenticacao, erros de scan, tarefa que nao iniciou,
+#            tabelas acima do teto); o cabecalho de cada uma diz qual.
+#            Pequenas: segundos cada.
 #
 # Para cada fixture:
 #   1. ponta a ponta: `sh ./generate <xml> > generate.pdf`, cwd = bundle montado

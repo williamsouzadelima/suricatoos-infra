@@ -1,0 +1,502 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+Fixture SINTETICA do CI de veracidade do Suricatoos Premium PDF
+(report-formats/ci/check-veracity.py roda sobre o .tex desta fixture nos 3
+idiomas). Enderecos RFC 5737, nomes genericos sob .example, OIDs da faixa
+sintetica 1.3.6.1.4.1.25623.1.0.99xxxx (nao existem no feed); nenhum dado de
+scan real.
+
+Secao 6 (escopo, metodologia e limitacoes), as duas tabelas ACIMA do teto e as
+contagens que o gvmd declara diferentes das que o relatorio carrega:
+- 12 hosts, todos autenticados por SSH e com falha de SMB: 24 linhas na tabela
+  de autenticacao, 20 impressas e "+ 4" declarado. 192.0.2.21 repete o
+  detalhe Auth-SSH-Success (sai uma vez so') e 192.0.2.22 traz um detalhe
+  Auth-SNMP-Pending, que nao e' Success nem Failure e nao conta;
+- <hosts><count> 15 contra 12 <host>, e <errors><count> 27 contra 25 <error>:
+  as duas contagens do gvmd aparecem ao lado das do relatorio;
+- 25 erros em 5 hosts: 20 linhas e "+ 5" declarado; um erro sem porta e um com
+  NVT sem nome (sai o OID); descricoes longas e com caracteres especiais do
+  LaTeX;
+- scan de 47 s ("47 s"); filtro SEM min_qod e SEM levels (os dois "nao
+  informado"), overrides desligados, export completo (3 de 3).
+-->
+<report extension="pdf" content_type="application/pdf" id="00000000-0000-4000-8000-000000000043">
+  <task id="00000000-0000-4000-8000-000000000001">
+    <name>Example Wide Authenticated Sweep</name>
+    <comment></comment>
+    <target id="00000000-0000-4000-8000-000000000003">
+      <trash>0</trash>
+      <name>Example Branch Office Range</name>
+      <comment></comment>
+    </target>
+  </task>
+  <scan_run_status>Done</scan_run_status>
+  <timezone>Coordinated Universal Time</timezone>
+  <timezone_abbrev>UTC</timezone_abbrev>
+  <scan_start>2026-09-01T09:00:00Z</scan_start>
+  <scan_end>2026-09-01T09:00:47Z</scan_end>
+  <hosts><count>15</count></hosts>
+  <result_count>3<full>3</full><filtered>3</filtered><critical><full>0</full><filtered>0</filtered></critical><high><full>0</full><filtered>0</filtered></high><medium><full>3</full><filtered>3</filtered></medium><low><full>0</full><filtered>0</filtered></low><log><full>0</full><filtered>0</filtered></log><false_positive><full>0</full><filtered>0</filtered></false_positive></result_count>
+  <filters id="00000000-0000-4000-8000-000000000002">
+    <term>apply_overrides=0 rows=-1 first=1 sort-reverse=severity</term>
+  </filters>
+  <ports start="1" max="-1">
+    <port>22/tcp<host>192.0.2.21</host></port>
+    <port>general/tcp<host>192.0.2.21</host></port>
+    <port>443/tcp<host>192.0.2.22</host></port>
+  </ports>
+  <host>
+    <ip>192.0.2.21</ip>
+    <start>2026-09-01T09:00:02Z</start>
+    <end>2026-09-01T09:00:45Z</end>
+    <detail><name>hostname</name><value>host21.example.com</value></detail>
+    <detail><name>Auth-SSH-Success</name><value>Protocol SSH, Port 22, User scanuser</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991380</name><description>Example SSH Authorization</description></source><extra></extra></detail>
+    <detail><name>Auth-SMB-Failure</name><value>Protocol SMB, Port 445, User scanuser: Login failure</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991381</name><description>Example SMB Authorization</description></source><extra></extra></detail>
+    <detail><name>Auth-SSH-Success</name><value>Protocol SSH, Port 2222, User scanuser</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991380</name><description>Example SSH Authorization</description></source><extra></extra></detail>
+  </host>
+  <host>
+    <ip>192.0.2.22</ip>
+    <start>2026-09-01T09:00:02Z</start>
+    <end>2026-09-01T09:00:45Z</end>
+    <detail><name>hostname</name><value>host22.example.com</value></detail>
+    <detail><name>Auth-SNMP-Pending</name><value>Protocol SNMP, Port 161</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991382</name><description>Example SNMP Authorization</description></source><extra></extra></detail>
+    <detail><name>Auth-SSH-Success</name><value>Protocol SSH, Port 22, User scanuser</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991380</name><description>Example SSH Authorization</description></source><extra></extra></detail>
+    <detail><name>Auth-SMB-Failure</name><value>Protocol SMB, Port 445, User scanuser: Login failure</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991381</name><description>Example SMB Authorization</description></source><extra></extra></detail>
+  </host>
+  <host>
+    <ip>192.0.2.23</ip>
+    <start>2026-09-01T09:00:02Z</start>
+    <end>2026-09-01T09:00:45Z</end>
+    <detail><name>hostname</name><value>host23.example.com</value></detail>
+    <detail><name>Auth-SSH-Success</name><value>Protocol SSH, Port 22, User scanuser</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991380</name><description>Example SSH Authorization</description></source><extra></extra></detail>
+    <detail><name>Auth-SMB-Failure</name><value>Protocol SMB, Port 445, User scanuser: Login failure</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991381</name><description>Example SMB Authorization</description></source><extra></extra></detail>
+  </host>
+  <host>
+    <ip>192.0.2.24</ip>
+    <start>2026-09-01T09:00:02Z</start>
+    <end>2026-09-01T09:00:45Z</end>
+    <detail><name>hostname</name><value>host24.example.com</value></detail>
+    <detail><name>Auth-SSH-Success</name><value>Protocol SSH, Port 22, User scanuser</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991380</name><description>Example SSH Authorization</description></source><extra></extra></detail>
+    <detail><name>Auth-SMB-Failure</name><value>Protocol SMB, Port 445, User scanuser: Login failure</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991381</name><description>Example SMB Authorization</description></source><extra></extra></detail>
+  </host>
+  <host>
+    <ip>192.0.2.25</ip>
+    <start>2026-09-01T09:00:02Z</start>
+    <end>2026-09-01T09:00:45Z</end>
+    <detail><name>hostname</name><value>host25.example.com</value></detail>
+    <detail><name>Auth-SSH-Success</name><value>Protocol SSH, Port 22, User scanuser</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991380</name><description>Example SSH Authorization</description></source><extra></extra></detail>
+    <detail><name>Auth-SMB-Failure</name><value>Protocol SMB, Port 445, User scanuser: Login failure</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991381</name><description>Example SMB Authorization</description></source><extra></extra></detail>
+  </host>
+  <host>
+    <ip>192.0.2.26</ip>
+    <start>2026-09-01T09:00:02Z</start>
+    <end>2026-09-01T09:00:45Z</end>
+    <detail><name>hostname</name><value>host26.example.com</value></detail>
+    <detail><name>Auth-SSH-Success</name><value>Protocol SSH, Port 22, User scanuser</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991380</name><description>Example SSH Authorization</description></source><extra></extra></detail>
+    <detail><name>Auth-SMB-Failure</name><value>Protocol SMB, Port 445, User scanuser: Login failure</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991381</name><description>Example SMB Authorization</description></source><extra></extra></detail>
+  </host>
+  <host>
+    <ip>192.0.2.27</ip>
+    <start>2026-09-01T09:00:02Z</start>
+    <end>2026-09-01T09:00:45Z</end>
+    <detail><name>hostname</name><value>host27.example.com</value></detail>
+    <detail><name>Auth-SSH-Success</name><value>Protocol SSH, Port 22, User scanuser</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991380</name><description>Example SSH Authorization</description></source><extra></extra></detail>
+    <detail><name>Auth-SMB-Failure</name><value>Protocol SMB, Port 445, User scanuser: Login failure</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991381</name><description>Example SMB Authorization</description></source><extra></extra></detail>
+  </host>
+  <host>
+    <ip>192.0.2.28</ip>
+    <start>2026-09-01T09:00:02Z</start>
+    <end>2026-09-01T09:00:45Z</end>
+    <detail><name>hostname</name><value>host28.example.com</value></detail>
+    <detail><name>Auth-SSH-Success</name><value>Protocol SSH, Port 22, User scanuser</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991380</name><description>Example SSH Authorization</description></source><extra></extra></detail>
+    <detail><name>Auth-SMB-Failure</name><value>Protocol SMB, Port 445, User scanuser: Login failure</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991381</name><description>Example SMB Authorization</description></source><extra></extra></detail>
+  </host>
+  <host>
+    <ip>192.0.2.29</ip>
+    <start>2026-09-01T09:00:02Z</start>
+    <end>2026-09-01T09:00:45Z</end>
+    <detail><name>hostname</name><value>host29.example.com</value></detail>
+    <detail><name>Auth-SSH-Success</name><value>Protocol SSH, Port 22, User scanuser</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991380</name><description>Example SSH Authorization</description></source><extra></extra></detail>
+    <detail><name>Auth-SMB-Failure</name><value>Protocol SMB, Port 445, User scanuser: Login failure</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991381</name><description>Example SMB Authorization</description></source><extra></extra></detail>
+  </host>
+  <host>
+    <ip>192.0.2.30</ip>
+    <start>2026-09-01T09:00:02Z</start>
+    <end>2026-09-01T09:00:45Z</end>
+    <detail><name>hostname</name><value>host30.example.com</value></detail>
+    <detail><name>Auth-SSH-Success</name><value>Protocol SSH, Port 22, User scanuser</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991380</name><description>Example SSH Authorization</description></source><extra></extra></detail>
+    <detail><name>Auth-SMB-Failure</name><value>Protocol SMB, Port 445, User scanuser: Login failure</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991381</name><description>Example SMB Authorization</description></source><extra></extra></detail>
+  </host>
+  <host>
+    <ip>192.0.2.31</ip>
+    <start>2026-09-01T09:00:02Z</start>
+    <end>2026-09-01T09:00:45Z</end>
+    <detail><name>hostname</name><value>host31.example.com</value></detail>
+    <detail><name>Auth-SSH-Success</name><value>Protocol SSH, Port 22, User scanuser</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991380</name><description>Example SSH Authorization</description></source><extra></extra></detail>
+    <detail><name>Auth-SMB-Failure</name><value>Protocol SMB, Port 445, User scanuser: Login failure</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991381</name><description>Example SMB Authorization</description></source><extra></extra></detail>
+  </host>
+  <host>
+    <ip>192.0.2.32</ip>
+    <start>2026-09-01T09:00:02Z</start>
+    <end>2026-09-01T09:00:45Z</end>
+    <detail><name>hostname</name><value>host32.example.com</value></detail>
+    <detail><name>Auth-SSH-Success</name><value>Protocol SSH, Port 22, User scanuser</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991380</name><description>Example SSH Authorization</description></source><extra></extra></detail>
+    <detail><name>Auth-SMB-Failure</name><value>Protocol SMB, Port 445, User scanuser: Login failure</value><source><type>nvt</type><name>1.3.6.1.4.1.25623.1.0.991381</name><description>Example SMB Authorization</description></source><extra></extra></detail>
+  </host>
+  <results start="1" max="-1">
+    <result id="v-0001">
+      <host>192.0.2.21<hostname>host21.example.com</hostname></host>
+      <port>22/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.991301">
+        <type>nvt</type>
+        <name>Example SSH Server Outdated Version</name>
+        <family>Synthetic</family>
+        <cvss_base>6.4</cvss_base>
+        <tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=VendorFix</tags>
+        <solution type="VendorFix">Upgrade the SSH server to the release that fixes the advisory.</solution>
+        <refs></refs>
+      </nvt>
+      <threat>Medium</threat>
+      <severity>6.4</severity>
+      <qod><value>97</value><type>package</type></qod>
+      <description>Synthetic detection output for Example SSH Server Outdated Version.</description>
+    </result>
+    <result id="v-0002">
+      <host>192.0.2.21<hostname>host21.example.com</hostname></host>
+      <port>general/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.991302">
+        <type>nvt</type>
+        <name>Example Package Manager Missing Updates</name>
+        <family>Synthetic</family>
+        <cvss_base>5.0</cvss_base>
+        <tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=VendorFix</tags>
+        <solution type="VendorFix">Install the pending package updates published by the vendor.</solution>
+        <refs></refs>
+      </nvt>
+      <threat>Medium</threat>
+      <severity>5.0</severity>
+      <qod><value>97</value><type>package</type></qod>
+      <description>Synthetic detection output for Example Package Manager Missing Updates.</description>
+    </result>
+    <result id="v-0003">
+      <host>192.0.2.22<hostname>host22.example.com</hostname></host>
+      <port>443/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.991303">
+        <type>nvt</type>
+        <name>Example TLS Certificate Expired</name>
+        <family>Synthetic</family>
+        <cvss_base>5.0</cvss_base>
+        <tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags>
+        <solution type="Mitigation">Replace the certificate with a valid one.</solution>
+        <refs></refs>
+      </nvt>
+      <threat>Medium</threat>
+      <severity>5.0</severity>
+      <qod><value>99</value><type>package</type></qod>
+      <description>Synthetic detection output for Example TLS Certificate Expired.</description>
+    </result>
+  </results>
+  <errors>
+    <count>27</count>
+    <error>
+      <host>192.0.2.21<asset asset_id=""/><hostname>host21.example.com</hostname></host>
+      <port>general/tcp</port>
+      <description>NVT timed out after 320 seconds.</description>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.991390">
+        <type>nvt</type>
+        <name>Example Service Detection</name>
+        <cvss_base>0.0</cvss_base>
+      </nvt>
+      <scan_nvt_version>2026-08-01T00:00:00Z</scan_nvt_version>
+      <severity>-3.0</severity>
+    </error>
+    <error>
+      <host>192.0.2.21<asset asset_id=""/><hostname>host21.example.com</hostname></host>
+      <port>22/tcp</port>
+      <description>SSH login succeeded but the package inventory command returned an unexpected format; the local security checks that depend on that inventory were skipped for this host.</description>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.991391">
+        <type>nvt</type>
+        <name>Example Package Inventory (dpkg_status)</name>
+        <cvss_base>0.0</cvss_base>
+      </nvt>
+      <scan_nvt_version>2026-08-01T00:00:00Z</scan_nvt_version>
+      <severity>-3.0</severity>
+    </error>
+    <error>
+      <host>192.0.2.21<asset asset_id=""/><hostname>host21.example.com</hostname></host>
+      <port>443/tcp</port>
+      <description>Timeout (&gt; 30 s) while reading /var/lib/example_pkg/status: 100% of the budget used; retry #2 failed &amp; aborted.</description>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.991392">
+        <type>nvt</type>
+        <name>Example File Integrity Check</name>
+        <cvss_base>0.0</cvss_base>
+      </nvt>
+      <scan_nvt_version>2026-08-01T00:00:00Z</scan_nvt_version>
+      <severity>-3.0</severity>
+    </error>
+    <error>
+      <host>192.0.2.22<asset asset_id=""/><hostname>host22.example.com</hostname></host>
+      <port>general/tcp</port>
+      <description>NVT timed out after 320 seconds.</description>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.991390">
+        <type>nvt</type>
+        <name>Example Service Detection</name>
+        <cvss_base>0.0</cvss_base>
+      </nvt>
+      <scan_nvt_version>2026-08-01T00:00:00Z</scan_nvt_version>
+      <severity>-3.0</severity>
+    </error>
+    <error>
+      <host>192.0.2.22<asset asset_id=""/><hostname>host22.example.com</hostname></host>
+      <port>445/tcp</port>
+      <description>SMB login failed for the configured credential: access denied.</description>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.991393">
+        <type>nvt</type>
+        <name>Example SMB Authorization Check</name>
+        <cvss_base>0.0</cvss_base>
+      </nvt>
+      <scan_nvt_version>2026-08-01T00:00:00Z</scan_nvt_version>
+      <severity>-3.0</severity>
+    </error>
+    <error>
+      <host>192.0.2.22<asset asset_id=""/><hostname>host22.example.com</hostname></host>
+      <port></port>
+      <description>Host process ended before the check could start.</description>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.991394">
+        <type>nvt</type>
+        <name></name>
+        <cvss_base>0.0</cvss_base>
+      </nvt>
+      <scan_nvt_version>2026-08-01T00:00:00Z</scan_nvt_version>
+      <severity>-3.0</severity>
+    </error>
+    <error>
+      <host>192.0.2.23<asset asset_id=""/><hostname>host23.example.com</hostname></host>
+      <port>general/tcp</port>
+      <description>NVT timed out after 320 seconds.</description>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.991390">
+        <type>nvt</type>
+        <name>Example Service Detection</name>
+        <cvss_base>0.0</cvss_base>
+      </nvt>
+      <scan_nvt_version>2026-08-01T00:00:00Z</scan_nvt_version>
+      <severity>-3.0</severity>
+    </error>
+    <error>
+      <host>192.0.2.23<asset asset_id=""/><hostname>host23.example.com</hostname></host>
+      <port>161/udp</port>
+      <description>SNMP agent did not answer the configured community.</description>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.991395">
+        <type>nvt</type>
+        <name>Example SNMP Inventory</name>
+        <cvss_base>0.0</cvss_base>
+      </nvt>
+      <scan_nvt_version>2026-08-01T00:00:00Z</scan_nvt_version>
+      <severity>-3.0</severity>
+    </error>
+    <error>
+      <host>192.0.2.23<asset asset_id=""/><hostname>host23.example.com</hostname></host>
+      <port>443/tcp</port>
+      <description>Could not open a TLS connection to the service.</description>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.991396">
+        <type>nvt</type>
+        <name>Example TLS Inventory</name>
+        <cvss_base>0.0</cvss_base>
+      </nvt>
+      <scan_nvt_version>2026-08-01T00:00:00Z</scan_nvt_version>
+      <severity>-3.0</severity>
+    </error>
+    <error>
+      <host>192.0.2.24<asset asset_id=""/><hostname>host24.example.com</hostname></host>
+      <port>general/tcp</port>
+      <description>NVT timed out after 320 seconds.</description>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.991390">
+        <type>nvt</type>
+        <name>Example Service Detection</name>
+        <cvss_base>0.0</cvss_base>
+      </nvt>
+      <scan_nvt_version>2026-08-01T00:00:00Z</scan_nvt_version>
+      <severity>-3.0</severity>
+    </error>
+    <error>
+      <host>192.0.2.24<asset asset_id=""/><hostname>host24.example.com</hostname></host>
+      <port>22/tcp</port>
+      <description>Connection reset by peer during the SSH handshake.</description>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.991397">
+        <type>nvt</type>
+        <name>Example SSH Algorithm Inventory</name>
+        <cvss_base>0.0</cvss_base>
+      </nvt>
+      <scan_nvt_version>2026-08-01T00:00:00Z</scan_nvt_version>
+      <severity>-3.0</severity>
+    </error>
+    <error>
+      <host>192.0.2.24<asset asset_id=""/><hostname>host24.example.com</hostname></host>
+      <port>80/tcp</port>
+      <description>HTTP server answered with an empty reply.</description>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.991398">
+        <type>nvt</type>
+        <name>Example Web Server Detection</name>
+        <cvss_base>0.0</cvss_base>
+      </nvt>
+      <scan_nvt_version>2026-08-01T00:00:00Z</scan_nvt_version>
+      <severity>-3.0</severity>
+    </error>
+    <error>
+      <host>192.0.2.25<asset asset_id=""/><hostname>host25.example.com</hostname></host>
+      <port>general/tcp</port>
+      <description>NVT timed out after 320 seconds.</description>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.991390">
+        <type>nvt</type>
+        <name>Example Service Detection</name>
+        <cvss_base>0.0</cvss_base>
+      </nvt>
+      <scan_nvt_version>2026-08-01T00:00:00Z</scan_nvt_version>
+      <severity>-3.0</severity>
+    </error>
+    <error>
+      <host>192.0.2.25<asset asset_id=""/><hostname>host25.example.com</hostname></host>
+      <port>3306/tcp</port>
+      <description>Database service refused the connection.</description>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.991399">
+        <type>nvt</type>
+        <name>Example Database Detection</name>
+        <cvss_base>0.0</cvss_base>
+      </nvt>
+      <scan_nvt_version>2026-08-01T00:00:00Z</scan_nvt_version>
+      <severity>-3.0</severity>
+    </error>
+    <error>
+      <host>192.0.2.25<asset asset_id=""/><hostname>host25.example.com</hostname></host>
+      <port>8080/tcp</port>
+      <description>HTTP server answered with an empty reply.</description>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.991398">
+        <type>nvt</type>
+        <name>Example Web Server Detection</name>
+        <cvss_base>0.0</cvss_base>
+      </nvt>
+      <scan_nvt_version>2026-08-01T00:00:00Z</scan_nvt_version>
+      <severity>-3.0</severity>
+    </error>
+    <error>
+      <host>192.0.2.21<asset asset_id=""/><hostname>host21.example.com</hostname></host>
+      <port>8443/tcp</port>
+      <description>Could not open a TLS connection to the service.</description>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.991396">
+        <type>nvt</type>
+        <name>Example TLS Inventory</name>
+        <cvss_base>0.0</cvss_base>
+      </nvt>
+      <scan_nvt_version>2026-08-01T00:00:00Z</scan_nvt_version>
+      <severity>-3.0</severity>
+    </error>
+    <error>
+      <host>192.0.2.22<asset asset_id=""/><hostname>host22.example.com</hostname></host>
+      <port>25/tcp</port>
+      <description>SMTP server closed the connection before the banner.</description>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.991400">
+        <type>nvt</type>
+        <name>Example Mail Server Detection</name>
+        <cvss_base>0.0</cvss_base>
+      </nvt>
+      <scan_nvt_version>2026-08-01T00:00:00Z</scan_nvt_version>
+      <severity>-3.0</severity>
+    </error>
+    <error>
+      <host>192.0.2.23<asset asset_id=""/><hostname>host23.example.com</hostname></host>
+      <port>21/tcp</port>
+      <description>FTP server closed the connection before the banner.</description>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.991401">
+        <type>nvt</type>
+        <name>Example FTP Server Detection</name>
+        <cvss_base>0.0</cvss_base>
+      </nvt>
+      <scan_nvt_version>2026-08-01T00:00:00Z</scan_nvt_version>
+      <severity>-3.0</severity>
+    </error>
+    <error>
+      <host>192.0.2.24<asset asset_id=""/><hostname>host24.example.com</hostname></host>
+      <port>53/udp</port>
+      <description>DNS server did not answer the version query.</description>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.991402">
+        <type>nvt</type>
+        <name>Example DNS Server Detection</name>
+        <cvss_base>0.0</cvss_base>
+      </nvt>
+      <scan_nvt_version>2026-08-01T00:00:00Z</scan_nvt_version>
+      <severity>-3.0</severity>
+    </error>
+    <error>
+      <host>192.0.2.25<asset asset_id=""/><hostname>host25.example.com</hostname></host>
+      <port>123/udp</port>
+      <description>NTP server did not answer the monlist query.</description>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.991403">
+        <type>nvt</type>
+        <name>Example NTP Server Detection</name>
+        <cvss_base>0.0</cvss_base>
+      </nvt>
+      <scan_nvt_version>2026-08-01T00:00:00Z</scan_nvt_version>
+      <severity>-3.0</severity>
+    </error>
+    <error>
+      <host>192.0.2.21<asset asset_id=""/><hostname>host21.example.com</hostname></host>
+      <port>general/tcp</port>
+      <description>Host process timed out after 900 seconds; remaining checks for this host were not run.</description>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.991404">
+        <type>nvt</type>
+        <name>Example Host Scan Scheduler</name>
+        <cvss_base>0.0</cvss_base>
+      </nvt>
+      <scan_nvt_version>2026-08-01T00:00:00Z</scan_nvt_version>
+      <severity>-3.0</severity>
+    </error>
+    <error>
+      <host>192.0.2.22<asset asset_id=""/><hostname>host22.example.com</hostname></host>
+      <port>general/tcp</port>
+      <description>Host process timed out after 900 seconds; remaining checks for this host were not run.</description>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.991404">
+        <type>nvt</type>
+        <name>Example Host Scan Scheduler</name>
+        <cvss_base>0.0</cvss_base>
+      </nvt>
+      <scan_nvt_version>2026-08-01T00:00:00Z</scan_nvt_version>
+      <severity>-3.0</severity>
+    </error>
+    <error>
+      <host>192.0.2.23<asset asset_id=""/><hostname>host23.example.com</hostname></host>
+      <port>general/tcp</port>
+      <description>Host process timed out after 900 seconds; remaining checks for this host were not run.</description>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.991404">
+        <type>nvt</type>
+        <name>Example Host Scan Scheduler</name>
+        <cvss_base>0.0</cvss_base>
+      </nvt>
+      <scan_nvt_version>2026-08-01T00:00:00Z</scan_nvt_version>
+      <severity>-3.0</severity>
+    </error>
+    <error>
+      <host>192.0.2.24<asset asset_id=""/><hostname>host24.example.com</hostname></host>
+      <port>general/tcp</port>
+      <description>Host process timed out after 900 seconds; remaining checks for this host were not run.</description>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.991404">
+        <type>nvt</type>
+        <name>Example Host Scan Scheduler</name>
+        <cvss_base>0.0</cvss_base>
+      </nvt>
+      <scan_nvt_version>2026-08-01T00:00:00Z</scan_nvt_version>
+      <severity>-3.0</severity>
+    </error>
+    <error>
+      <host>192.0.2.25<asset asset_id=""/><hostname>host25.example.com</hostname></host>
+      <port>general/tcp</port>
+      <description>Host process timed out after 900 seconds; remaining checks for this host were not run.</description>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.991404">
+        <type>nvt</type>
+        <name>Example Host Scan Scheduler</name>
+        <cvss_base>0.0</cvss_base>
+      </nvt>
+      <scan_nvt_version>2026-08-01T00:00:00Z</scan_nvt_version>
+      <severity>-3.0</severity>
+    </error>
+  </errors>
+</report>

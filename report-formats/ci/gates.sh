@@ -39,7 +39,8 @@
 #                entrega;
 #   veracidade   check-veracity.py: o .tex diz a verdade sobre o XML
 #                (numeracao, secoes, consolidado, instancias, acao, VULNS
-#                UNICAS, faixas, ancoras, nome do projeto);
+#                UNICAS, faixas, ancoras, nome do projeto e a secao 6 de
+#                escopo, metodologia e limitacoes);
 #   navegacao    check-navigation.py: a pagina de sumario lista as 7 secoes
 #                e cada linha leva ao alto da sua; o PDF do generate TEM a
 #                arvore de marcadores (7 secoes no nivel 0; hosts da secao 3 e
@@ -102,11 +103,14 @@ overfull_baseline() {
     es/tortura)    echo 0 ;;
     # Fixtures de veracidade (report-formats/tests/fixtures/), nos 3 idiomas:
     # nascem com 0, a mesma regua das outras. v10-navegacao (secao 3 em varias
-    # paginas, host em dois cards, marcador acima do teto) tambem.
+    # paginas, host em dois cards, marcador acima do teto) tambem, e as tres
+    # da secao 6 (v11 autenticacao e erros, v12 tarefa que nao iniciou, v13
+    # tabelas acima do teto).
     */v1-numeracao | */v2-indicadores-vazios | */v3-consolidado-qod | \
     */v4-instancias | */v5-acao-traduzida | */v6-vulns-unicas | \
     */v7a-faixas | */v7b-lowconf | */v7c-todos-lowconf | \
-    */v8-ancora | */v9-nome-capa | */v10-navegacao) echo 0 ;;
+    */v8-ancora | */v9-nome-capa | */v10-navegacao | \
+    */v11-escopo-autenticado | */v12-escopo-nao-iniciado | */v13-escopo-cortes) echo 0 ;;
     *) return 1 ;;
   esac
 }
