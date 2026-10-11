@@ -141,7 +141,7 @@
       "properties": {
         "command_id": { "$ref": "fleet-command.schema.json#/$defs/uuid" },
         "type": { "$ref": "fleet-command.schema.json#/$defs/command_type_any" },
-        "reason": { "enum": ["tenant_unknown", "unsupported", "type_not_allowed", "rate_limited", "bad_payload", "scope_denied"] },
+        "reason": { "enum": ["tenant_unknown", "unsupported", "type_not_allowed", "rate_limited", "bad_payload", "unsupported_report_variant", "scope_denied"] },
         "detail": { "type": "string", "maxLength": 512, "allOf": [ { "$ref": "fleet-command.schema.json#/$defs/no_control" } ] }
       }
     }

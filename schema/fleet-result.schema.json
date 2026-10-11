@@ -79,7 +79,7 @@
     },
 
     "reject_reason": {
-      "description": "Why the node refused a command, in verification order. bad_envelope, payload_mismatch and bad_signature happen BEFORE authentication (nonce not recorded); not_yet_valid, expired, bad_window, wrong_node and replay are refused without recording; tenant_unknown, unsupported, type_not_allowed, rate_limited, bad_payload and scope_denied are recorded with the nonce (final for that command_id) and also emitted as a command.rejected_by_policy event; unavailable = a local dependency of the verifier (e.g. the anti-replay store) failed — fail-closed, not recorded.",
+      "description": "Why the node refused a command, in verification order. bad_envelope, payload_mismatch and bad_signature happen BEFORE authentication (nonce not recorded); not_yet_valid, expired, bad_window, wrong_node and replay are refused without recording; tenant_unknown, unsupported, type_not_allowed, rate_limited, bad_payload, unsupported_report_variant and scope_denied are recorded with the nonce (final for that command_id) and also emitted as a command.rejected_by_policy event; unsupported_report_variant = a schema-valid report.export whose (format, lang, variant) is not in the node's capabilities.report_formats; unavailable = a local dependency of the verifier (e.g. the anti-replay store) failed — fail-closed, not recorded.",
       "enum": [
         "bad_envelope",
         "payload_mismatch",
@@ -94,6 +94,7 @@
         "type_not_allowed",
         "rate_limited",
         "bad_payload",
+        "unsupported_report_variant",
         "scope_denied",
         "unavailable"
       ]
@@ -271,7 +272,8 @@
         "report_format_id": { "$ref": "fleet-command.schema.json#/$defs/uuid", "description": "the local gvmd report format actually used" },
         "format": { "$ref": "fleet-command.schema.json#/$defs/report_format" },
         "lang": { "$ref": "fleet-command.schema.json#/$defs/report_lang" },
-        "variant": { "enum": ["full", "delta"] },
+        "variant": { "$ref": "fleet-command.schema.json#/$defs/report_variant" },
+        "delta_report_id": { "$ref": "fleet-command.schema.json#/$defs/uuid", "description": "present only for a delta export (echo of the payload)" },
         "artifact_name": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-z0-9][a-z0-9._-]*$" }
       }
     },

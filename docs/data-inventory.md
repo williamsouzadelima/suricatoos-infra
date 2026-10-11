@@ -81,7 +81,7 @@ Coletamos apenas o mínimo necessário para **correlação de vulnerabilidade ba
 | Comando assinado (tipo, tenant, payload, `issued_by`, janela, nonce, assinatura) | `fleet-command.schema.json` | hub→nó | executar UMA ação do catálogo | baixa/média (`issued_by` identifica o operador do hub) |
 | Ack e resultado (decisão e motivo, status, ids, valores anteriores dos campos alterados, contagens) | `fleet-result.schema.json` | nó→hub | estado do comando e rollback manual | baixa |
 | Resumo de report (`report.summary`: contagens por severidade/QoD, top achados por NVT, contagens por IP) | `fleet-result.schema.json#/$defs/output_report_summary` | nó→hub, **sob comando** | priorização | média (agregado de vulnerabilidade por IP) |
-| Relatório completo (`report.export`) | artefato gzip + `fleet-result.schema.json#/$defs/artifact` | nó→hub, **só sob comando explícito** | entregar o relatório | **alta** (vulnerabilidades detalhadas por host do cliente) |
+| Relatório (`report.export`: edição `technical`, `client` ou `executive`; completo, ou delta quando há `delta_report_id`) | artefato gzip + `fleet-result.schema.json#/$defs/artifact` | nó→hub, **só sob comando explícito** | entregar o relatório | **alta** (vulnerabilidades detalhadas por host do cliente; a edição `executive` é sumário, mas segue sob a mesma regra) |
 | Segredo de token do scanner (`enroll_token.create`) | `fleet-result.schema.json#/$defs/output_enroll_token_create` (`token`) | nó→hub, uma vez, `contains_secret: true` | instalar um agente/sensor | **alta** (segredo) |
 
 **O que NÃO sai do nó por este canal:**

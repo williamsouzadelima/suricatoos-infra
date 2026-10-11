@@ -98,21 +98,23 @@
         },
         "capabilities": {
           "type": "object",
-          "required": ["supported_types", "state_kinds", "report_exports"],
+          "required": ["supported_types", "state_kinds", "report_formats"],
           "additionalProperties": false,
           "properties": {
             "supported_types": { "type": "array", "uniqueItems": true, "items": { "$ref": "fleet-command.schema.json#/$defs/command_type" }, "description": "catalog types this node KIND can execute" },
             "state_kinds": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/state_kind" } },
-            "report_exports": {
+            "report_formats": {
+              "description": "the (format, lang, variant) combinations this node can render for report.export — only report-format objects present and trusted in its gvmd. A report.export for a combination not listed here is rejected with unsupported_report_variant. Until slice R5 ships the client/executive editions, nodes advertise only technical.",
               "type": "array",
               "uniqueItems": true,
               "items": {
                 "type": "object",
-                "required": ["format", "lang"],
+                "required": ["format", "lang", "variants"],
                 "additionalProperties": false,
                 "properties": {
                   "format": { "$ref": "fleet-command.schema.json#/$defs/report_format" },
-                  "lang": { "$ref": "fleet-command.schema.json#/$defs/report_lang" }
+                  "lang": { "$ref": "fleet-command.schema.json#/$defs/report_lang" },
+                  "variants": { "type": "array", "minItems": 1, "maxItems": 3, "uniqueItems": true, "items": { "$ref": "fleet-command.schema.json#/$defs/report_variant" } }
                 }
               }
             }

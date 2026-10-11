@@ -108,6 +108,7 @@
     "command_type_any": { "type": "string", "minLength": 3, "maxLength": 64, "pattern": "^[a-z][a-z_]*\\.[a-z][a-z_]*$", "description": "a command type AS RECEIVED (used where a rejection must echo a type outside the v1 catalog, reason=unsupported); v1 values are command_type" },
     "report_format": { "enum": ["suricatoos-pdf", "gvm-xml", "gvm-csv-results", "gvm-pdf"], "description": "symbolic export format; the node maps (format, lang) to a local report_format id" },
     "report_lang": { "enum": ["en", "pt_BR", "es"] },
+    "report_variant": { "enum": ["technical", "client", "executive"], "description": "report EDITION (plan decision D10): technical = today's Suricatoos Premium PDF; client = no false positives, Log only as a count, low QoD shown as 'to validate'; executive = summary. Each (edition, language) is its own report-format object (slice R5); gvm-* formats only exist as technical. Full vs delta is NOT a variant (see delta_report_id)" },
     "iana_timezone": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[A-Za-z][A-Za-z0-9_+-]*(/[A-Za-z0-9_+-]+)*$", "allOf": [ { "$ref": "#/$defs/no_control" } ], "description": "IANA tz name, e.g. America/Sao_Paulo or UTC" },
     "icalendar": { "type": "string", "minLength": 15, "maxLength": 8192, "pattern": "^BEGIN:VCALENDAR", "not": { "pattern": "[\\x00-\\x08\\x0b\\x0c\\x0e-\\x1f\\x7f]" }, "description": "RFC 5545 VCALENDAR text (CR/LF allowed) as gvmd's create_schedule expects" },
 
@@ -237,7 +238,7 @@
       "properties": { "schedule_id": { "$ref": "#/$defs/uuid" } }
     },
     "payload_report_export": {
-      "description": "Detailed findings leave the node ONLY through this explicit command, as one gzip artifact (PUT /fleet/v1/artifacts/{command_id}/{name}). Every input is explicit: format, lang, variant and the GMP filter. gvm-* formats are English-only (lang must be 'en'); variant 'delta' requires delta_report_id.",
+      "description": "Detailed findings leave the node ONLY through this explicit command, as one gzip artifact (PUT /fleet/v1/artifacts/{command_id}/{name}). Every input is explicit: format, lang, variant (the report EDITION — technical | client | executive) and the GMP filter. gvm-* formats only exist as lang 'en' + variant 'technical'. Full vs delta is expressed ONLY by the optional delta_report_id: present = delta against that older report of the SAME task, absent = full. A schema-valid (format, lang, variant) the node does not advertise in its state capabilities.report_formats is rejected at runtime with reason unsupported_report_variant (until slice R5 ships, nodes advertise only technical).",
       "type": "object",
       "required": ["report_id", "format", "lang", "variant", "filter"],
       "additionalProperties": false,
@@ -245,13 +246,12 @@
         "report_id": { "$ref": "#/$defs/uuid" },
         "format": { "$ref": "#/$defs/report_format" },
         "lang": { "$ref": "#/$defs/report_lang" },
-        "variant": { "enum": ["full", "delta"] },
-        "delta_report_id": { "$ref": "#/$defs/uuid", "description": "older report of the SAME task to diff against (variant=delta only)" },
+        "variant": { "$ref": "#/$defs/report_variant" },
+        "delta_report_id": { "$ref": "#/$defs/uuid", "description": "optional: older report of the SAME task to diff against; present = delta export, absent = full export (independent of variant)" },
         "filter": { "$ref": "#/$defs/gmp_filter" }
       },
       "allOf": [
-        { "if": { "properties": { "variant": { "const": "delta" } }, "required": ["variant"] }, "then": { "required": ["delta_report_id"] }, "else": { "not": { "required": ["delta_report_id"] } } },
-        { "if": { "properties": { "format": { "const": "suricatoos-pdf" } }, "required": ["format"] }, "else": { "properties": { "lang": { "const": "en" } } } }
+        { "if": { "properties": { "format": { "const": "suricatoos-pdf" } }, "required": ["format"] }, "else": { "properties": { "lang": { "const": "en" }, "variant": { "const": "technical" } } } }
       ]
     },
     "payload_report_summary": {

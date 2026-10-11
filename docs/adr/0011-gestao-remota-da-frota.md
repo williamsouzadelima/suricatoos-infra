@@ -362,6 +362,7 @@ O nó para na **primeira** falha. Os motivos são `fleet-result.schema.json#/$de
 | 7 | tipo presente em `allow` da política local | `type_not_allowed` | sim |
 | 7 | orçamento local de comandos sensíveis (opt-in + `report.export`) não estourado | `rate_limited` | sim |
 | 8 | payload válido para o tipo (schema estrito + regras semânticas) | `bad_payload` | sim |
+| 8 | `report.export`: a combinação (`format`, `lang`, `variant`) está em `capabilities.report_formats` do estado `node` | `unsupported_report_variant` | sim |
 | 9 | hosts/targets ⊆ escopo do tenant e fora do deny absoluto | `scope_denied` | sim |
 | — | o store anti-replay/journal não pôde ser gravado | `unavailable` | não (fail-closed) |
 
@@ -524,7 +525,7 @@ do tenant (o objeto nasce na partição dele).
 | `schedule.create` | `payload_schedule_create` | opt-in (com `task_ids`, também exige `task.modify` permitido) | todos | `create_schedule` + `modify_task(schedule_id)` p/ cada `task_ids` | tenant | `output_schedule_create` |
 | `schedule.modify` | `payload_schedule_modify` | opt-in | todos | `modify_schedule` | tenant | `output_schedule_modify` |
 | `schedule.delete` | `payload_schedule_ref` | opt-in | todos | `delete_schedule(ultimate=false)` → **lixeira** | tenant | `output_trash` |
-| `report.export` | `payload_report_export` | permitido (conta no orçamento) | todos | `get_report` com formato/idioma/variante/filtro **explícitos** → gzip → `PUT` artefato | atual | `output_report_export` + `artifacts[1]` |
+| `report.export` | `payload_report_export` | permitido (conta no orçamento) | todos | `get_report` com formato/idioma/variante (edição)/filtro **explícitos** e, se houver `delta_report_id`, em modo delta → gzip → `PUT` artefato; combinação não anunciada ⇒ `unsupported_report_variant` | atual | `output_report_export` + `artifacts[1]` |
 | `report.summary` | `payload_report_summary` | permitido | todos | `get_report` com filtro explícito → contagens por severidade/QoD, top achados por NVT, hosts por IP | atual | `output_report_summary` |
 | `agent.scan_now` | `payload_agent_ref` | permitido | central | API admin local `POST /api/v1/agents/{id}/commands` (`scan_now` = re-coleta de inventário, **não** varredura) | — | `output_agent_scan_now` |
 | `agent.revoke` | `payload_agent_revoke` | opt-in | central | API admin local `POST /api/v1/agents/{id}/revoke` (nova, F2.2): revoga **só** os serials desse agente | — | `output_agent_revoke` |
@@ -554,19 +555,27 @@ Regras transversais:
   mais próxima suportada) e reporta o valor aplicado em `alive_test_effective`; **nunca** cai em silêncio para
   `Consider Alive` (varre host morto: lento e barulhento) nem para `Scan Config Default`. Se o gvmd 26.x aceita
   o padrão é confirmado na F2.3, em LAB.
-- **`report.export`.** `lang` explícito sempre; formatos `gvm-*` só em `en`; `variant` = `full` | `delta` (com
-  `delta_report_id` de um report anterior da **mesma** tarefa). Mapeamento local `(format, lang) →
-  report_format_id`:
+- **`report.export`.** `format`, `lang` e `variant` são sempre explícitos. `variant` é a **edição** do
+  relatório (decisão D10 do plano): `technical` (o Premium PDF de hoje), `client` (sem falsos positivos; Log só
+  como contagem; QoD baixo como "a validar") e `executive` (sumário). Cada edição × idioma é um objeto de report
+  format próprio (fatia R5: 3 edições × 3 idiomas). Formatos `gvm-*` só existem em `en` + `technical`.
+  **Completo × delta não é variante:** é só o `delta_report_id` opcional — presente ⇒ export delta contra esse
+  report anterior da **mesma** tarefa; ausente ⇒ export completo. Um `delta_report_id` inexistente, de outra
+  tarefa ou de outro tenant falha na execução com `not_found` (exige consulta GMP). Mapeamento local
+  `(format, lang, variant) → report_format_id`:
 
-  | `format` | `lang` | `report_format_id` | Fonte |
-  |---|---|---|---|
-  | `suricatoos-pdf` | `en` / `pt_BR` / `es` | `c6482c1b-57bb-406b-a501-c97eed86ad05` / `e43a4f20-d845-4916-83f0-851ac6dc5e57` / `91afce49-21fd-4ea0-ba16-7ba2bc51a03a` | `report-formats/build-feed-xml.py` |
-  | `gvm-xml` | `en` | `a994b278-1f62-11e1-96ac-406186ea4fc5` | python-gvm `ReportFormatType.XML` |
-  | `gvm-csv-results` | `en` | `c1645568-627a-11e3-a660-406186ea4fc5` | `ReportFormatType.CSV_RESULTS` |
-  | `gvm-pdf` | `en` | `c402cc3e-b531-11e1-9163-406186ea4fc5` | `ReportFormatType.PDF` |
+  | `format` | `lang` | `variant` | `report_format_id` | Fonte |
+  |---|---|---|---|---|
+  | `suricatoos-pdf` | `en` / `pt_BR` / `es` | `technical` | `c6482c1b-57bb-406b-a501-c97eed86ad05` / `e43a4f20-d845-4916-83f0-851ac6dc5e57` / `91afce49-21fd-4ea0-ba16-7ba2bc51a03a` | `report-formats/build-feed-xml.py` |
+  | `suricatoos-pdf` | `en` / `pt_BR` / `es` | `client`, `executive` | objetos novos da fatia R5 (ainda não existem) | R5 |
+  | `gvm-xml` | `en` | `technical` | `a994b278-1f62-11e1-96ac-406186ea4fc5` | python-gvm `ReportFormatType.XML` |
+  | `gvm-csv-results` | `en` | `technical` | `c1645568-627a-11e3-a660-406186ea4fc5` | `ReportFormatType.CSV_RESULTS` |
+  | `gvm-pdf` | `en` | `technical` | `c402cc3e-b531-11e1-9163-406186ea4fc5` | `ReportFormatType.PDF` |
 
-  O nó só anuncia (`capabilities.report_exports` no estado `node`) os formatos presentes e confiáveis no seu
-  gvmd.
+  O nó anuncia em `capabilities.report_formats` do estado `node` (`[{format, lang, variants:[…]}]`) só as
+  combinações cujos objetos estão presentes e confiáveis no seu gvmd; até a R5 entrar, anuncia só `technical`.
+  Um pedido válido no schema mas para combinação não anunciada é rejeitado (ack) com
+  `unsupported_report_variant` — nunca cai em silêncio para outra edição.
 - **Escopo em `sensor_job.enqueue`:** **todos** os alvos passam pelo portão local; um fora do escopo rejeita o
   comando inteiro (`scope_denied`) — nada é descartado em silêncio. A `sensorjobs` ainda aplica o seu próprio
   portão (defesa em profundidade).
@@ -587,7 +596,7 @@ ou comando `state.resync`) quando os dele divergem. Todo kind de lista leva `ite
 
 | `kind` | Nós | Conteúdo | Fonte local | O que **não** vai |
 |---|---|---|---|---|
-| `node` | todos | versões, feeds NVT/SCAP/CERT/GVMD_DATA com versão e idade, saúde, capacidades (tipos suportados, exports), política local + `policy_sha256` | gvmd (`get_version`, `get_feeds`), conector | — |
+| `node` | todos | versões, feeds NVT/SCAP/CERT/GVMD_DATA com versão e idade, saúde, capacidades (tipos suportados, `report_formats` = combinações format/lang/variants que o nó renderiza), política local + `policy_sha256` | gvmd (`get_version`, `get_feeds`, `get_report_formats`), conector | — |
 | `tasks` | todos | id, tenant, nome, status, progresso, ids de alvo/config/scanner/agenda, último report, nº de reports | `get_tasks` (filtro explícito) | `comment` |
 | `targets` | todos | id, tenant, nome, entradas IP/CIDR **literais** (≤ 256) + contagens, alive test, em uso | `get_targets` | hostnames (só contados), credenciais, `comment` |
 | `schedules` | todos | id, tenant, nome, fuso, iCalendar, próxima execução, tarefas ligadas | `get_schedules` | `comment` |
@@ -720,7 +729,9 @@ sensibilidade por dado: [docs/data-inventory.md — Canal de gestão da frota (A
   ação e critério de saída:
   1. **só-leitura por 24 h** (`allow = [state.resync]`): estado no hub == GSA; cadeia de auditoria íntegra;
      nenhum dado fora do D4 no hub; nenhuma rejeição inesperada;
-  2. **`report.export`** de um report de LAB: sha256 do artefato confere; auditoria e orçamento registram;
+  2. **`report.export`** de um report de LAB (`variant: technical`, a única anunciada antes da R5; um pedido
+     `client`/`executive` tem de voltar `unsupported_report_variant`): sha256 do artefato confere; auditoria e
+     orçamento registram;
   3. **`task.start`/`task.stop` em tarefa de LAB**: estados e eventos coerentes; reentrega idempotente;
      comando endereçado a outro nó rejeitado (`wrong_node`);
   4. **`target.create` em tenant de TESTE** (opt-in só desse tipo): alvo dentro do escopo aceito; fora dele
