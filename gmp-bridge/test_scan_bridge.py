@@ -1,6 +1,8 @@
 """Unit tests for the reNgine→OpenVAS scan bridge — no live gvmd required."""
 
+import argparse
 import unittest
+from xml.etree import ElementTree as ET
 
 from scan_bridge import (
     sanitize_ips,
@@ -8,6 +10,7 @@ from scan_bridge import (
     resolve_port_range,
     build_port_range,
     parse_report_results,
+    cmd_fetch,
     _tag_value,
     _alive_test,
     _scan_id,
@@ -48,6 +51,43 @@ SAMPLE_REPORT_XML = """
   </report>
 </get_reports_response>
 """
+
+# Resultados sintéticos (IPs RFC 5737) — um por classe de severidade do gvmd 26.
+# O Crítico (CVSS >= 9.0) é classe PRÓPRIA, separada de Alto.
+RES_CRITICAL = {"threat": "Critical", "severity": "9.8", "host": "192.0.2.10",
+                "oid": "1.3.6.1.4.1.25623.1.0.990001", "name": "Remote code execution in demo service"}
+RES_HIGH = {"threat": "High", "severity": "7.5", "host": "192.0.2.10",
+            "oid": "1.3.6.1.4.1.25623.1.0.990002", "name": "Weak TLS configuration"}
+# Resultado que um override marcou como falso positivo: classe `f`, severidade -1.
+RES_FALSE_POSITIVE = {"threat": "False Positive", "severity": "-1.0", "host": "192.0.2.11",
+                      "oid": "1.3.6.1.4.1.25623.1.0.990003", "name": "Overridden demo finding"}
+
+# Classe de severidade -> letra do termo `levels=` do filtro do gvmd.
+THREAT_LEVEL_LETTER = {"Critical": "c", "High": "h", "Medium": "m", "Low": "l",
+                       "Log": "g", "False Positive": "f"}
+
+
+def report_xml(results) -> str:
+    """get_reports_response sintético (mesmo aninhamento do SAMPLE_REPORT_XML)."""
+    body = "".join(
+        f'<result id="r{i}"><host>{r["host"]}</host><port>443/tcp</port>'
+        f'<nvt oid="{r["oid"]}"><name>{r["name"]}</name>'
+        f'<cvss_base>{max(float(r["severity"]), 0.0)}</cvss_base><tags></tags></nvt>'
+        f'<threat>{r["threat"]}</threat><severity>{r["severity"]}</severity>'
+        "<qod><value>80</value></qod></result>"
+        for i, r in enumerate(results, 1)
+    )
+    return (
+        '<get_reports_response status="200" status_text="OK">'
+        '<report id="outer"><report id="inner">'
+        f'<results start="1" max="-1">{body}</results>'
+        "</report></report></get_reports_response>"
+    )
+
+
+def filter_terms(filter_string: str) -> dict:
+    """'a=1 b=2' -> {'a': '1', 'b': '2'} (termos chave=valor de um filtro GMP)."""
+    return dict(t.split("=", 1) for t in filter_string.split() if "=" in t)
 
 
 class TestSanitizeIPs(unittest.TestCase):
@@ -138,6 +178,83 @@ class TestParseReport(unittest.TestCase):
 
     def test_empty_report(self):
         self.assertEqual(parse_report_results("<get_reports_response><report/></get_reports_response>"), [])
+
+    def test_critical_severity_preserved(self):
+        # Severidade >= 9.0 (classe Crítico) passa intacta: sem clamp em 7.5/8.9 e sem descarte.
+        fs = parse_report_results(report_xml([RES_CRITICAL, RES_HIGH]))
+        self.assertEqual([f["cvss_base"] for f in fs], [9.8, 7.5])
+        self.assertEqual([f["threat"] for f in fs], ["Critical", "High"])
+        self.assertEqual(fs[0]["host"], "192.0.2.10")
+
+
+class FakeGvmd:
+    """Gmp falso para cmd_fetch (mesmo papel dos FakeGmp/ScriptedGmp do test_bridge).
+    get_tasks devolve a tarefa concluída com last_report; send_command registra o
+    <get_reports> enviado e responde como o gvmd 26: só devolve os resultados das
+    classes listadas em `levels=` do filtro."""
+
+    REPORT_ID = "11111111-2222-3333-4444-555555555555"
+
+    def __init__(self, results, task_name):
+        self.results = results
+        self.task_name = task_name
+        self.sent = []  # comandos GMP (XML) enviados via send_command
+
+    def get_tasks(self, filter_string=""):
+        return (
+            '<get_tasks_response status="200" status_text="OK">'
+            f'<task id="task-1"><name>{self.task_name}</name><status>Done</status>'
+            f'<progress>100</progress><last_report><report id="{self.REPORT_ID}"/></last_report>'
+            "</task></get_tasks_response>"
+        )
+
+    def send_command(self, cmd):
+        self.sent.append(cmd)
+        levels = filter_terms(ET.fromstring(cmd).get("filter", "")).get("levels", "")
+        kept = [r for r in self.results if THREAT_LEVEL_LETTER[r["threat"]] in levels]
+        return report_xml(kept)
+
+
+class TestFetchIncluiClasseCritico(unittest.TestCase):
+    """Regressão: no gvmd 26 o Crítico (CVSS >= 9.0) é classe própria; com `levels=hmlg`
+    os achados mais graves ficavam FORA do fetch (e do loop reNgine/Score)."""
+
+    def _fetch(self, results):
+        gmp = FakeGvmd(results, task_name="suricatoos-sensor-scan-1")
+        args = argparse.Namespace(task_prefix="suricatoos-sensor")
+        return gmp, cmd_fetch(gmp, {"scan_id": "scan-1"}, args)
+
+    def test_get_report_enviado_pede_a_classe_critico(self):
+        gmp, _ = self._fetch([RES_HIGH])
+        self.assertEqual(len(gmp.sent), 1)
+        cmd = ET.fromstring(gmp.sent[0])
+        self.assertEqual(cmd.tag, "get_reports")
+        self.assertEqual(cmd.get("report_id"), FakeGvmd.REPORT_ID)
+        terms = filter_terms(cmd.get("filter", ""))
+        levels = terms.get("levels", "")
+        self.assertIn("c", levels, "sem 'c' os achados Críticos ficam fora do fetch")
+        self.assertNotIn("f", levels, "com 'f' o falso positivo (override) seria importado")
+        self.assertEqual(set(levels), set("chmlg"))  # Crítico, Alto, Médio, Baixo, Log
+        self.assertEqual(terms.get("apply_overrides"), "1")
+        self.assertEqual(terms.get("rows"), "-1")
+        self.assertEqual(terms.get("min_qod"), "0")
+
+    def test_achado_critico_volta_em_findings_com_severidade_preservada(self):
+        _, out = self._fetch([RES_CRITICAL, RES_HIGH])
+        por_oid = {f["oid"]: f for f in out["findings"]}
+        self.assertIn(RES_CRITICAL["oid"], por_oid, "achado Crítico (9.8) ficou fora do fetch")
+        crit = por_oid[RES_CRITICAL["oid"]]
+        self.assertEqual(crit["cvss_base"], 9.8)
+        self.assertEqual(crit["threat"], "Critical")
+        self.assertEqual(crit["host"], "192.0.2.10")
+        self.assertEqual(por_oid[RES_HIGH["oid"]]["cvss_base"], 7.5)  # Alto continua vindo
+        self.assertEqual(len(out["findings"]), 2)
+
+    def test_falso_positivo_por_override_nao_e_importado(self):
+        # Guarda contra a correção "óbvia demais" (levels=chmlgf): o resultado que um
+        # override marcou como falso positivo NÃO pode entrar no fetch.
+        _, out = self._fetch([RES_HIGH, RES_FALSE_POSITIVE])
+        self.assertEqual([f["oid"] for f in out["findings"]], [RES_HIGH["oid"]])
 
 
 class TestHelpers(unittest.TestCase):

@@ -47,6 +47,15 @@ from bridge import _assert_ok, _extract_id, _esc_filter, _find_task_id
 CONFIG_FULL_AND_FAST = "daba56c8-73ec-11df-a475-002264764cea"
 SCANNER_OPENVAS_DEFAULT = "08b69003-5fc2-4037-a479-93b440211c73"
 
+# Filtro do get_report do fetch (alimenta o loop reNgine/Score e o import dos sensores).
+#   apply_overrides=1  aplica os overrides do gvmd (é o que manda o falso positivo p/ a classe `f`)
+#   levels=chmlg       c=Crítico (CVSS >= 9.0 é classe PRÓPRIA no gvmd 26, separada de Alto),
+#                      h=Alto, m=Médio, l=Baixo, g=Log. SEM `f` de propósito: resultado marcado
+#                      como falso positivo por override NÃO deve ser importado
+#   rows=-1            sem paginação (todos os resultados do relatório)
+#   min_qod=0          sem corte de QoD aqui: o `qod` segue em cada achado e a triagem é do consumidor
+FETCH_FILTER = "apply_overrides=1 levels=chmlg rows=-1 min_qod=0"
+
 # GVM task statuses that mean "safe to (re)start" — idle. Running/Requested/
 # Queued/Done are left untouched so a retried launch never double-starts.
 _STARTABLE = {"New", "Stopped", "Interrupted", ""}
@@ -288,8 +297,7 @@ def cmd_fetch(gmp: Gmp, req: dict, args) -> dict:
     if not report_id:
         return {"findings": []}
     resp = gmp.send_command(str(Reports.get_report(
-        report_id, details=True,
-        filter_string="apply_overrides=1 levels=hmlg rows=-1 min_qod=0")))
+        report_id, details=True, filter_string=FETCH_FILTER)))
     _assert_ok(resp, "get_report")
     return {"findings": parse_report_results(resp)}
 
