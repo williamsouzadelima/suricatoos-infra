@@ -67,6 +67,18 @@ func TestCIDRContainingSelfIPPassesAndWarnsInLogMode(t *testing.T) {
 	}
 }
 
+// TestLogSelfDenyCIDRWithNilWarnStaysEnforced: modo log sem quem avise não pode
+// deixar o CIDR passar em silêncio (fail-closed).
+func TestLogSelfDenyCIDRWithNilWarnStaysEnforced(t *testing.T) {
+	s, err := New(lanAllow, nodeIPs, LogSelfDenyCIDR(nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, err := s.CheckHost("192.0.2.0/24"); err == nil {
+		t.Fatalf("LogSelfDenyCIDR(nil) deveria manter a regra imposta, passou como %q", got)
+	}
+}
+
 // TestSelfIPAsSingleAddressCIDRAlwaysDenied: um /32 ou /128 É o próprio IP do
 // self-deny, que é negado isolado em qualquer modo (antes passava como CIDR).
 func TestSelfIPAsSingleAddressCIDRAlwaysDenied(t *testing.T) {
