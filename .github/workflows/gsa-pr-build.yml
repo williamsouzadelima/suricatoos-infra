@@ -5,8 +5,9 @@ name: gsa-pr-build
 # build de produção (Vite) da UI, confere os catálogos de idioma e as chaves
 # das telas da Suricatoos neles, confere que o bundle traz as fontes sem chamar
 # um serviço de terceiros e roda a suíte vitest INTEIRA do GSA (os testes do
-# upstream e os que o patch traz): falha de qualquer teste reprova o PR (um
-# teste só vale como falha depois de 3 tentativas: --retry=2).
+# upstream e os que o patch traz): falha de qualquer teste reprova o PR, na
+# primeira falha, e erro não tratado também (o vitest sai com 1 mesmo com todos
+# os testes passando).
 # Não publica nada, não usa secrets e não faz login em registry: a publicação
 # continua só no build-publish.yml (push na main).
 on:
@@ -27,8 +28,9 @@ jobs:
   validate:
     name: aplica patches + type-check + build (GSA)
     runs-on: ubuntu-latest
-    # A suíte inteira do GSA (~7.500 testes, 787 arquivos) leva de 9 a 11 min
-    # numa máquina rápida (3 a 4 workers); o runner de 4 vCPU leva mais.
+    # A suíte inteira do GSA (~7.500 testes, 787 arquivos) leva ~11 min no runner
+    # de 4 vCPU (10 min 40 s só o vitest, na run da PR #155) e de 7 a 11 min numa
+    # máquina de desenvolvimento rápida.
     timeout-minutes: 60
     env:
       # Folga de heap para o tsc e o Vite (runner com 16 GB).
@@ -545,12 +547,18 @@ jobs:
       # equivalente (axe etc.) e este workflow não acrescenta dependência só
       # para isso; quem confere nome acessível, rótulo, aviso de erro e uso
       # pelo teclado das telas do patch são os testes de suricatoosA11y.
-      # --retry=2: um teste que falha é repetido até 2 vezes antes de valer
-      # como falha. Uma falha de verdade falha nas 3 tentativas e reprova o PR;
-      # o que isto absorve são os testes do upstream que dependem de tempo (ex.:
-      # ScanConfigComponent.test.tsx abre o diálogo e procura o botão da família
-      # sem esperar o corpo dele: falhou 1 vez em 6 execuções completas e passa
-      # sozinho 14 de 14), que sem isto reprovariam PR à toa.
+      # Sem tentativa extra: um teste que falha reprova o PR na primeira falha, os
+      # do patch inclusive. A única tolerância fica no patch, num arquivo só, e
+      # declarada no próprio teste: ScanConfigComponent.test.tsx (`{retry: 2}`)
+      # procura o botão do corpo do diálogo sem esperar por ele, falhou 1 vez em 6
+      # execuções completas e passa sozinho 14 de 14.
+      # Erro não tratado também reprova, menos um: o timer que o Transition do
+      # Mantine deixa para trás quando fecha no quadro em que abriu, e que dispara
+      # depois do fim do arquivo, com a janela do jsdom já desmontada ("window is
+      # not defined" em use-transition.mjs; a run da PR #155 caiu nisso com todos
+      # os testes verdes). O vitest.config.ts do patch (onUnhandledError) deixa
+      # passar exatamente esse e mais nenhum; o porquê e o que continua reportado
+      # estão em src/web/testing/__tests__/unhandledErrors.test.ts.
       # É o último passo de conferência: os outros são rápidos e respondem
       # antes; todos rodam mesmo se um falhar.
       - name: Testes (vitest, suíte inteira do GSA)
@@ -561,7 +569,7 @@ jobs:
         working-directory: gsa-src
         run: |
           set -eu
-          npx vitest run --retry=2
+          npx vitest run
 
       - name: Resumo
         if: always()
