@@ -438,9 +438,14 @@ func (s *Store) rewriteLocked(t time.Time) error {
 	}
 	s.applyLayoutLocked(keep, results)
 	s.size, s.floorDurable, s.needRewrite = written, true, nil
+	// the identity comes from an open handle: on Windows a FileInfo from a path (os.Stat, os.Lstat) loads its file id
+	// only when compared, from whatever is at the path by then — a file swapped in later would look like this one
 	s.ident = nil
-	if fi, serr := os.Lstat(s.path); serr == nil {
-		s.ident = fi
+	if f, oerr := s.cfg.ops.openRead(s.path); oerr == nil {
+		if fi, serr := f.Stat(); serr == nil {
+			s.ident = fi
+		}
+		f.Close()
 	}
 	s.needDirSync = err != nil
 	if err != nil {

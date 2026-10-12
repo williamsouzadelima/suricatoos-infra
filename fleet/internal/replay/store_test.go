@@ -362,3 +362,70 @@ func TestStoreAbreORelogioDoDiretorio(t *testing.T) {
 		t.Fatalf("clock.json %v, %v", c.Mark(), err)
 	}
 }
+
+// O arquivo que o próprio store reescreveu (criação, compactação) não parece "mudado por fora" no acréscimo
+// seguinte: a identidade guardada depois da reescrita confere com a do arquivo aberto para acrescentar, e nenhuma
+// reescrita espúria acontece (nem o WARN dela).
+func TestReescritaPropriaNaoPareceMudancaPorFora(t *testing.T) {
+	s, dir := firstBoot(t) // o arquivo nasceu por reescrita
+	for i := range 3 {
+		mustRecord(t, s.Store, env(t, "a"+string(rune('0'+i))), accepted, t0)
+	}
+	later := t0.Add(30 * 24 * time.Hour)
+	if err := s.Compact(later); err != nil {
+		t.Fatal(err)
+	}
+	mustRecord(t, s.Store, env(t, "depois da compactação"), accepted, later)
+	for _, l := range s.sink.lines() {
+		if strings.Contains(l, "mudou por fora") {
+			t.Fatalf("reescrita espúria: %s", l)
+		}
+	}
+	if got := kinds(t, dir); !slices.Equal(got, []string{kindHead, kindEntry}) {
+		t.Fatalf("registros %v", got)
+	}
+}
+
+// Logo depois de uma reescrita, outro arquivo do MESMO tamanho no lugar (uma cópia com um byte trocado) também é
+// "mudado por fora": a identidade do arquivo, não só o tamanho, decide, e o store o reescreve da memória antes de
+// acrescentar.
+func TestArquivoTrocadoPorOutroDoMesmoTamanhoDepoisDaReescrita(t *testing.T) {
+	s, dir := firstBoot(t)
+	mustRecord(t, s.Store, expiringEnv(t, "vence", "2026-10-11T12:30:00Z"), accepted, t0)
+	mustRecord(t, s.Store, env(t, "fica"), accepted, t0)
+	later := time.Date(2026, 10, 18, 12, 30, 1, 0, time.UTC)
+	if err := s.Compact(later); err != nil { // reescrita: a vencida sai
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, FileName)
+	b := storeBytes(t, dir)
+	other := []byte(strings.Replace(string(b), `"version":1`, `"version":2`, 1)) // mesmo tamanho, outro conteúdo
+	if len(other) != len(b) || string(other) == string(b) {
+		t.Fatal("a cópia precisa ter o mesmo tamanho e outro conteúdo")
+	}
+	tmp := path + ".outro"
+	if err := os.WriteFile(tmp, other, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		t.Fatal(err)
+	}
+	mustRecord(t, s.Store, env(t, "depois"), accepted, later)
+	if got := kinds(t, dir); !slices.Equal(got, []string{kindHead, kindEntry, kindEntry}) { // kinds falha em linha ruim
+		t.Fatalf("registros %v", got)
+	}
+	warned := false
+	for _, l := range s.sink.lines() {
+		warned = warned || strings.Contains(l, "mudou por fora")
+	}
+	if !warned {
+		t.Fatal("a troca devia ser vista e o arquivo reescrito da memória")
+	}
+}
+
+func expiringEnv(t *testing.T, name, notAfter string) *contract.Verified {
+	t.Helper()
+	c := command(name)
+	c.NotAfter = notAfter
+	return verified(t, c, taskPayload)
+}
