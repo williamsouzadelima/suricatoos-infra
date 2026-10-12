@@ -25,7 +25,8 @@
 //
 // Every failure is an *Error whose Code is a contract.ErrorCode: the child's own code when it answered with a valid
 // error; timeout when Runner.Timeout ran out (the process is killed); interrupted when the caller's context ended
-// first; unavailable when the process could not be started; internal_error for everything else — output over the
+// first — before the exec or during it —; unavailable when the process could not be started; internal_error for
+// everything else — output over the
 // cap (the process is killed at once), output outside the protocol, an error code outside the contract, a request
 // the connector should never build (too big, no user or password, a NUL).
 package fleetops
@@ -163,7 +164,13 @@ func (r *Runner) Run(ctx context.Context, request any, user, password string) (R
 	cmd.Stdout = out
 	cmd.Stderr = nil // the null device: never read, never logged
 	cmd.WaitDelay = waitDelay
+	if ctx.Err() != nil { // the caller gave up before the exec: nothing ran, and the cause is not fleet_ops
+		return Result{}, fail(contract.ErrorInterrupted, "execução do fleet_ops interrompida antes de começar")
+	}
 	if err := cmd.Start(); err != nil {
+		if ctx.Err() != nil {
+			return Result{}, fail(contract.ErrorInterrupted, "execução do fleet_ops interrompida antes de começar")
+		}
 		return Result{}, fail(contract.ErrorUnavailable, "não foi possível executar o fleet_ops: %v", err)
 	}
 	waitErr := cmd.Wait()

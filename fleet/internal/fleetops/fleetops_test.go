@@ -181,6 +181,22 @@ func TestCancelamentoDoChamadorEInterrupted(t *testing.T) {
 	wantCode(t, err, contract.ErrorInterrupted)
 }
 
+// Um contexto do chamador que já acabou antes do exec também é interrupted (não unavailable): nada foi executado
+// porque quem chamou desistiu, não porque o fleet_ops não sobe.
+func TestContextoJaEncerradoAntesDoExecEInterrupted(t *testing.T) {
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	expired, cancel2 := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
+	defer cancel2()
+	for name, ctx := range map[string]context.Context{"cancelado": canceled, "prazo vencido": expired} {
+		_, err := fakeRunner(t, "echo").Run(ctx, stateRequest(), testUser, testPassword)
+		var fe *Error
+		if !errors.As(err, &fe) || fe.Code != contract.ErrorInterrupted {
+			t.Errorf("%s: esperava interrupted, veio %v", name, err)
+		}
+	}
+}
+
 func TestSaidaAcimaDoTetoMataOProcesso(t *testing.T) {
 	r := fakeRunner(t, "big", strconv.Itoa(1<<20))
 	r.MaxOutput = 64 << 10
