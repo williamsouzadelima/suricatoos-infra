@@ -40,6 +40,52 @@ func TestReadBoundedFIFONaoTravaOChamador(t *testing.T) {
 	}
 }
 
+// Uma FIFO no lugar do arquivo de auditoria não trava o acréscimo nem o corte: sem leitor o open falha na hora
+// (ENXIO, graças ao O_NONBLOCK), e com leitor o descritor aberto não é arquivo regular.
+func TestAcrescimoECorteNumaFIFONaoTravam(t *testing.T) {
+	fifo := filepath.Join(t.TempDir(), "audit.jsonl")
+	if err := syscall.Mkfifo(fifo, 0o600); err != nil {
+		t.Skipf("mkfifo indisponível neste host: %v", err)
+	}
+	within := func(name string, fn func() error) error {
+		t.Helper()
+		done := make(chan error, 1)
+		go func() { done <- fn() }()
+		select {
+		case err := <-done:
+			return err
+		case <-time.After(10 * time.Second):
+			t.Fatalf("%s: travou numa FIFO", name)
+			return nil
+		}
+	}
+	openAppend := func() error {
+		f, err := OpenAppend(fifo)
+		if err == nil {
+			f.Close()
+		}
+		return err
+	}
+	truncate := func() error { return TruncateDurable(fifo, 0) }
+	if err := within("OpenAppend sem leitor", openAppend); err == nil {
+		t.Error("OpenAppend numa FIFO sem leitor deveria falhar")
+	}
+	if err := within("TruncateDurable sem leitor", truncate); err == nil {
+		t.Error("TruncateDurable numa FIFO sem leitor deveria falhar")
+	}
+	r, err := os.OpenFile(fifo, os.O_RDONLY|syscall.O_NONBLOCK, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	if err := within("OpenAppend com leitor", openAppend); !errors.Is(err, ErrNotRegular) {
+		t.Errorf("OpenAppend numa FIFO com leitor: esperava ErrNotRegular, deu %v", err)
+	}
+	if err := within("TruncateDurable com leitor", truncate); !errors.Is(err, ErrNotRegular) {
+		t.Errorf("TruncateDurable numa FIFO com leitor: esperava ErrNotRegular, deu %v", err)
+	}
+}
+
 // Fora do Windows o diretório é aberto e sincronizado de verdade, e a falha de abrir não é engolida.
 func TestSyncDirDeVerdadeNoLinux(t *testing.T) {
 	if err := syncDir(t.TempDir()); err != nil {
