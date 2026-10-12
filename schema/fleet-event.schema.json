@@ -1,0 +1,149 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://suricatoos.dev/schema/fleet-event.schema.json",
+  "title": "Suricatoos — Fleet Event Batch",
+  "description": "Body of POST /fleet/v1/events (ADR-0011): 1..100 events from the node's durable outbox. Delivery is AT-LEAST-ONCE: the node retries the whole batch until a 2xx, and the hub deduplicates by event_id (a repeated event_id is accepted and ignored). node_id must equal the CN of the client certificate. Events derived from state diffs are only as fine-grained as the collection interval. Tenant-scoped events carry 'tenant'; node-scoped ones (connector.*, feed.*) must not. Minimization (ADR-0011 D4): ids, statuses and counts — never findings or secrets.",
+  "type": "object",
+  "required": ["schema_version", "node_id", "events"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "$ref": "fleet-command.schema.json#/$defs/schema_version_wire", "const": "1.0.0" },
+    "node_id": { "$ref": "fleet-command.schema.json#/$defs/node_id" },
+    "events": { "type": "array", "minItems": 1, "maxItems": 100, "items": { "$ref": "#/$defs/event" } }
+  },
+  "$defs": {
+    "event_type": {
+      "enum": [
+        "connector.started",
+        "task.status_changed",
+        "report.completed",
+        "agent.online",
+        "agent.offline",
+        "feed.stale",
+        "feed.updated",
+        "remediation.pending_approval",
+        "command.rejected_by_policy"
+      ]
+    },
+    "event": {
+      "type": "object",
+      "required": ["event_id", "type", "occurred_at", "data"],
+      "additionalProperties": false,
+      "properties": {
+        "event_id": { "$ref": "fleet-command.schema.json#/$defs/uuid", "description": "node-assigned (UUIDv4); the hub's dedup key" },
+        "type": { "$ref": "#/$defs/event_type" },
+        "occurred_at": { "$ref": "fleet-command.schema.json#/$defs/utc_time" },
+        "tenant": { "$ref": "fleet-command.schema.json#/$defs/tenant" },
+        "data": { "type": "object" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "type": { "enum": ["connector.started", "feed.stale", "feed.updated"] } }, "required": ["type"] },
+          "then": { "not": { "required": ["tenant"] } },
+          "else": { "required": ["tenant"] }
+        },
+        { "if": { "properties": { "type": { "const": "connector.started" } }, "required": ["type"] }, "then": { "properties": { "data": { "$ref": "#/$defs/data_connector_started" } } } },
+        { "if": { "properties": { "type": { "const": "task.status_changed" } }, "required": ["type"] }, "then": { "properties": { "data": { "$ref": "#/$defs/data_task_status_changed" } } } },
+        { "if": { "properties": { "type": { "const": "report.completed" } }, "required": ["type"] }, "then": { "properties": { "data": { "$ref": "#/$defs/data_report_completed" } } } },
+        { "if": { "properties": { "type": { "enum": ["agent.online", "agent.offline"] } }, "required": ["type"] }, "then": { "properties": { "data": { "$ref": "#/$defs/data_agent_presence" } } } },
+        { "if": { "properties": { "type": { "const": "feed.stale" } }, "required": ["type"] }, "then": { "properties": { "data": { "$ref": "#/$defs/data_feed_stale" } } } },
+        { "if": { "properties": { "type": { "const": "feed.updated" } }, "required": ["type"] }, "then": { "properties": { "data": { "$ref": "#/$defs/data_feed_updated" } } } },
+        { "if": { "properties": { "type": { "const": "remediation.pending_approval" } }, "required": ["type"] }, "then": { "properties": { "data": { "$ref": "#/$defs/data_remediation_pending" } } } },
+        { "if": { "properties": { "type": { "const": "command.rejected_by_policy" } }, "required": ["type"] }, "then": { "properties": { "data": { "$ref": "#/$defs/data_command_rejected" } } } }
+      ]
+    },
+
+    "data_connector_started": {
+      "type": "object",
+      "required": ["connector_version", "node_kind", "policy_sha256"],
+      "additionalProperties": false,
+      "properties": {
+        "connector_version": { "$ref": "fleet-command.schema.json#/$defs/version_string" },
+        "node_kind": { "enum": ["central", "standalone", "sensor"] },
+        "policy_sha256": { "$ref": "fleet-command.schema.json#/$defs/sha256_hex" }
+      }
+    },
+    "data_task_status_changed": {
+      "type": "object",
+      "required": ["task_id", "from", "to"],
+      "additionalProperties": false,
+      "properties": {
+        "task_id": { "$ref": "fleet-command.schema.json#/$defs/uuid" },
+        "from": { "anyOf": [ { "$ref": "fleet-state.schema.json#/$defs/gvm_status" }, { "const": "" } ], "description": "\"\" when the task was not seen before" },
+        "to": { "$ref": "fleet-state.schema.json#/$defs/gvm_status" },
+        "report_id": { "$ref": "fleet-command.schema.json#/$defs/uuid" },
+        "progress": { "type": "integer", "minimum": -1, "maximum": 100 }
+      }
+    },
+    "data_report_completed": {
+      "description": "summary = counts only; detailed findings leave the node ONLY through an explicit report.export command (report.summary returns counts too)",
+      "type": "object",
+      "required": ["report_id", "task_id", "scan_start", "scan_end", "counts", "hosts_count"],
+      "additionalProperties": false,
+      "properties": {
+        "report_id": { "$ref": "fleet-command.schema.json#/$defs/uuid" },
+        "task_id": { "$ref": "fleet-command.schema.json#/$defs/uuid" },
+        "scan_start": { "$ref": "fleet-command.schema.json#/$defs/utc_time" },
+        "scan_end": { "$ref": "fleet-command.schema.json#/$defs/utc_time" },
+        "counts": { "$ref": "fleet-state.schema.json#/$defs/severity_counts" },
+        "hosts_count": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "data_agent_presence": {
+      "description": "agent.online | agent.offline (central only), on a transition of the ingest's online flag (35 min window)",
+      "type": "object",
+      "required": ["agent_id"],
+      "additionalProperties": false,
+      "properties": {
+        "agent_id": { "$ref": "fleet-command.schema.json#/$defs/agent_id" },
+        "last_seen": { "$ref": "fleet-command.schema.json#/$defs/utc_time" }
+      }
+    },
+    "data_feed_stale": {
+      "type": "object",
+      "required": ["feed", "version", "age_hours", "stale_after_hours"],
+      "additionalProperties": false,
+      "properties": {
+        "feed": { "$ref": "fleet-state.schema.json#/$defs/feed_type" },
+        "version": { "$ref": "fleet-command.schema.json#/$defs/version_string" },
+        "age_hours": { "type": "number", "minimum": 0 },
+        "stale_after_hours": { "type": "integer", "minimum": 1, "description": "the node's threshold (FLEET_FEED_STALE_HOURS, default 72)" }
+      }
+    },
+    "data_feed_updated": {
+      "type": "object",
+      "required": ["feed", "version"],
+      "additionalProperties": false,
+      "properties": {
+        "feed": { "$ref": "fleet-state.schema.json#/$defs/feed_type" },
+        "version": { "$ref": "fleet-command.schema.json#/$defs/version_string" },
+        "previous_version": { "$ref": "fleet-command.schema.json#/$defs/version_string" }
+      }
+    },
+    "data_remediation_pending": {
+      "description": "central only: a new ADR-0010 job waiting for LOCAL human approval (remote approval is v2)",
+      "type": "object",
+      "required": ["job_id", "agent_id", "type", "created_at"],
+      "additionalProperties": false,
+      "properties": {
+        "job_id": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[A-Za-z0-9_-]+$" },
+        "agent_id": { "$ref": "fleet-command.schema.json#/$defs/agent_id" },
+        "type": { "enum": ["package_patch", "config_hardening"] },
+        "created_at": { "$ref": "fleet-command.schema.json#/$defs/utc_time" },
+        "expires_at": { "$ref": "fleet-command.schema.json#/$defs/utc_time" }
+      }
+    },
+    "data_command_rejected": {
+      "description": "an AUTHENTIC command (signature, window, node and nonce all valid) that the node refused locally (verification lines 6-9); the same reason goes in the command's ack. Unauthenticated envelopes (lines 0-2) are only counted; window, node and replay rejections (lines 3-5) appear only in the ack and the local audit.",
+      "type": "object",
+      "required": ["command_id", "type", "reason"],
+      "additionalProperties": false,
+      "properties": {
+        "command_id": { "$ref": "fleet-command.schema.json#/$defs/uuid" },
+        "type": { "$ref": "fleet-command.schema.json#/$defs/command_type_any" },
+        "reason": { "enum": ["tenant_unknown", "unsupported", "type_not_allowed", "rate_limited", "bad_payload", "unsupported_report_variant", "scope_denied"] },
+        "detail": { "type": "string", "maxLength": 512, "allOf": [ { "$ref": "fleet-command.schema.json#/$defs/no_control" } ], "description": "short, connector-generated; never finding data" }
+      }
+    }
+  }
+}

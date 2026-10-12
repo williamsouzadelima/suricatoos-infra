@@ -1,0 +1,19 @@
+{
+  "schema_version": "1.0.0",
+  "node_id": "node-lab-0001",
+  "events": [
+    {
+      "type": "task.status_changed",
+      "tenant": "acme",
+      "data": {
+        "task_id": "2d5b8f0e-1c4a-4e6b-9a3d-7f0c5e1b2a49",
+        "from": "Running",
+        "to": "Done",
+        "report_id": "4b8d0f2a-6c1e-4a3b-8d5f-7e9a1c3b5d04",
+        "progress": 100
+      },
+      "event_id": "6f1c2a9e-3b7d-4c8a-9e21-5d4f0a7b3c18",
+      "occurred_at": "2026-10-11T12:00:00Z"
+    }
+  ]
+}

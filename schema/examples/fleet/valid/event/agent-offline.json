@@ -1,0 +1,16 @@
+{
+  "schema_version": "1.0.0",
+  "node_id": "node-lab-0001",
+  "events": [
+    {
+      "type": "agent.offline",
+      "tenant": "acme",
+      "data": {
+        "agent_id": "win-exemplo-02",
+        "last_seen": "2026-10-11T10:00:00Z"
+      },
+      "event_id": "6f1c2a9e-3b7d-4c8a-9e21-5d4f0a7b3c18",
+      "occurred_at": "2026-10-11T12:00:00Z"
+    }
+  ]
+}

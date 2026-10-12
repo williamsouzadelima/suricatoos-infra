@@ -1,0 +1,18 @@
+{
+  "schema_version": "1.0.0",
+  "node_id": "node-lab-0001",
+  "sent_at": "2026-10-11T12:00:00Z",
+  "connector_version": "1.0.0",
+  "schema_versions": [
+    "1.0"
+  ],
+  "replay_floor": "2026-10-11T09:00:00Z",
+  "state_hashes": {
+    "passwords": "202e584626515573d531f5508c9094f8d6b705e0fc0fe6fbf29c76969fef313f"
+  },
+  "outbox_events": 0,
+  "outbox_dropped": 0,
+  "pending_results": 0,
+  "unauthenticated_rejections": 3,
+  "redeliveries": 2
+}

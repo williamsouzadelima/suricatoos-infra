@@ -1,0 +1,13 @@
+{
+  "schema_version": "1.0.0",
+  "command_id": "6f1c2a9e-3b7d-4c8a-9e21-5d4f0a7b3c18",
+  "node_id": "node-lab-0001",
+  "type": "task.create",
+  "status": "succeeded",
+  "started_at": "2026-10-11T12:00:01Z",
+  "finished_at": "2026-10-11T12:00:03Z",
+  "contains_secret": false,
+  "output": {
+    "task_id": "7c9e1a3b-5d7f-4b2c-8e4a-6c8e0a2b4d08"
+  }
+}

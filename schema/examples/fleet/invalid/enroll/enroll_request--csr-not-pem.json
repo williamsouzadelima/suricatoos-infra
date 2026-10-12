@@ -1,0 +1,11 @@
+{
+  "schema_version": "1.0.0",
+  "token": "ft_AbCdEfGhIjKl.Zm9vYmFyZm9vYmFyZm9vYmFyZm9vYmFyZm9vYmFyZm9vYmE",
+  "node_id": "node-lab-0001",
+  "node_kind": "standalone",
+  "csr": "not a pem",
+  "connector_version": "1.0.0",
+  "schema_versions": [
+    "1.0"
+  ]
+}

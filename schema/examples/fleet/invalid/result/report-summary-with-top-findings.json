@@ -1,0 +1,63 @@
+{
+  "schema_version": "1.0.0",
+  "command_id": "6f1c2a9e-3b7d-4c8a-9e21-5d4f0a7b3c18",
+  "node_id": "node-lab-0001",
+  "type": "report.summary",
+  "status": "succeeded",
+  "started_at": "2026-10-11T12:00:01Z",
+  "finished_at": "2026-10-11T12:00:03Z",
+  "contains_secret": false,
+  "output": {
+    "report_id": "4b8d0f2a-6c1e-4a3b-8d5f-7e9a1c3b5d04",
+    "task_id": "2d5b8f0e-1c4a-4e6b-9a3d-7f0c5e1b2a49",
+    "scan_status": "Done",
+    "scan_start": "2026-10-11T10:00:00Z",
+    "scan_end": "2026-10-11T11:00:00Z",
+    "filter_applied": "apply_overrides=1 min_qod=70 levels=chml rows=-1",
+    "counts": {
+      "critical": 1,
+      "high": 4,
+      "medium": 9,
+      "low": 2,
+      "log": 30,
+      "false_positive": 0
+    },
+    "qod_histogram": {
+      "q0_29": 0,
+      "q30_69": 3,
+      "q70_100": 43
+    },
+    "hosts_count": 2,
+    "hosts": [
+      {
+        "ip": "192.0.2.10",
+        "critical": 1,
+        "high": 2,
+        "medium": 3,
+        "low": 0,
+        "log": 5
+      },
+      {
+        "ip": "192.0.2.11",
+        "critical": 0,
+        "high": 2,
+        "medium": 6,
+        "low": 2,
+        "log": 25
+      }
+    ],
+    "hosts_truncated": false,
+    "top_findings": [
+      {
+        "oid": "1.3.6.1.4.1.25623.1.0.100000",
+        "name": "Exemplo de NVT",
+        "severity": 9.8,
+        "qod": 97,
+        "hosts_affected": 2,
+        "cves": [
+          "CVE-2099-0001"
+        ]
+      }
+    ]
+  }
+}

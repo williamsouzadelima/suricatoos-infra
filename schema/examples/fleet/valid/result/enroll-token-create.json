@@ -1,0 +1,19 @@
+{
+  "schema_version": "1.0.0",
+  "command_id": "6f1c2a9e-3b7d-4c8a-9e21-5d4f0a7b3c18",
+  "node_id": "node-lab-0001",
+  "type": "enroll_token.create",
+  "status": "succeeded",
+  "started_at": "2026-10-11T12:00:01Z",
+  "finished_at": "2026-10-11T12:00:03Z",
+  "contains_secret": true,
+  "output": {
+    "token_id": "AbCdEfGhIjKl",
+    "token": "st_AbCdEfGhIjKl.Zm9vYmFyZm9vYmFyZm9vYmFyZm9vYmFyZm9vYmFyZm9vYmE",
+    "token_type": "deployment",
+    "policy": "agent-endpoint",
+    "max_uses": 50,
+    "expires_at": "2026-10-14T12:00:00Z",
+    "ca_pin": "sha256:202e584626515573d531f5508c9094f8d6b705e0fc0fe6fbf29c76969fef313f"
+  }
+}

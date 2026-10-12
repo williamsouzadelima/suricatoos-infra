@@ -3,9 +3,9 @@ name: agent-ci
 on:
   push:
     branches: [main, "feat/**"]
-    paths: ["agent/**", "schema/**", ".github/workflows/agent-ci.yml"]
+    paths: ["agent/**", "schema/**", "docs/adr/0011-gestao-remota-da-frota.md", ".github/workflows/agent-ci.yml"]
   pull_request:
-    paths: ["agent/**", "schema/**", ".github/workflows/agent-ci.yml"]
+    paths: ["agent/**", "schema/**", "docs/adr/0011-gestao-remota-da-frota.md", ".github/workflows/agent-ci.yml"]
 
 permissions:
   contents: read
@@ -53,7 +53,9 @@ jobs:
           python-version: "3.x"
       - name: schemas are valid JSON Schema (Draft 2020-12)
         run: |
-          python3 -m pip install --quiet jsonschema
+          # Versões fixadas: as mesmas com que o contrato da frota (ADR-0011) foi validado
+          # (cryptography = Ed25519 dos envelopes de exemplo assinados com a chave de teste).
+          python3 -m pip install --quiet "jsonschema==4.26.0" "cryptography==48.0.1"
           python3 - <<'PY'
           import json, glob, sys
           from jsonschema import Draft202012Validator
@@ -67,3 +69,8 @@ jobs:
                   print("FAIL", f, e)
           sys.exit(0 if ok else 1)
           PY
+      # Teste de contrato da frota (ADR-0011): exemplos válidos/inválidos de
+      # schema/examples/fleet contra os 6 schemas fleet-*, $ref resolvido OFFLINE; confere
+      # hash do payload + assinatura dos envelopes e reproduz o exemplo do ADR byte a byte.
+      - name: fleet contract examples (ADR-0011)
+        run: python3 schema/examples/validate_fleet_examples.py

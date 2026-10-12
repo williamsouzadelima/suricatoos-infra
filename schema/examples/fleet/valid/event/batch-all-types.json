@@ -1,0 +1,114 @@
+{
+  "schema_version": "1.0.0",
+  "node_id": "node-lab-0001",
+  "events": [
+    {
+      "type": "connector.started",
+      "data": {
+        "connector_version": "1.0.0",
+        "node_kind": "central",
+        "policy_sha256": "202e584626515573d531f5508c9094f8d6b705e0fc0fe6fbf29c76969fef313f"
+      },
+      "event_id": "6f1c2a9e-3b7d-4c8a-9e21-5d4f0a7b3c18",
+      "occurred_at": "2026-10-11T12:00:00Z"
+    },
+    {
+      "type": "task.status_changed",
+      "tenant": "acme",
+      "data": {
+        "task_id": "2d5b8f0e-1c4a-4e6b-9a3d-7f0c5e1b2a49",
+        "from": "Running",
+        "to": "Done",
+        "report_id": "4b8d0f2a-6c1e-4a3b-8d5f-7e9a1c3b5d04",
+        "progress": 100
+      },
+      "event_id": "2d5b8f0e-1c4a-4e6b-9a3d-7f0c5e1b2a49",
+      "occurred_at": "2026-10-11T12:00:00Z"
+    },
+    {
+      "type": "report.completed",
+      "tenant": "acme",
+      "data": {
+        "report_id": "4b8d0f2a-6c1e-4a3b-8d5f-7e9a1c3b5d04",
+        "task_id": "2d5b8f0e-1c4a-4e6b-9a3d-7f0c5e1b2a49",
+        "scan_start": "2026-10-11T10:00:00Z",
+        "scan_end": "2026-10-11T11:00:00Z",
+        "counts": {
+          "critical": 1,
+          "high": 4,
+          "medium": 9,
+          "low": 2,
+          "log": 30,
+          "false_positive": 0
+        },
+        "hosts_count": 12
+      },
+      "event_id": "9a7e3c21-5b0d-4f8e-a1c6-2e4d7b9f0a35",
+      "occurred_at": "2026-10-11T12:00:00Z"
+    },
+    {
+      "type": "agent.online",
+      "tenant": "acme",
+      "data": {
+        "agent_id": "win-exemplo-01",
+        "last_seen": "2026-10-11T11:55:00Z"
+      },
+      "event_id": "c3e1f5a7-8d2b-4c09-b6e4-1a3f5d7c9e02",
+      "occurred_at": "2026-10-11T12:00:00Z"
+    },
+    {
+      "type": "agent.offline",
+      "tenant": "acme",
+      "data": {
+        "agent_id": "win-exemplo-02",
+        "last_seen": "2026-10-11T10:00:00Z"
+      },
+      "event_id": "4b8d0f2a-6c1e-4a3b-8d5f-7e9a1c3b5d04",
+      "occurred_at": "2026-10-11T12:00:00Z"
+    },
+    {
+      "type": "feed.stale",
+      "data": {
+        "feed": "scap",
+        "version": "202610060000",
+        "age_hours": 120,
+        "stale_after_hours": 72
+      },
+      "event_id": "e2a4c6e8-0b1d-4f3a-9c5e-7a9b1d3f5e06",
+      "occurred_at": "2026-10-11T12:00:00Z"
+    },
+    {
+      "type": "feed.updated",
+      "data": {
+        "feed": "nvt",
+        "version": "202610110542",
+        "previous_version": "202610100541"
+      },
+      "event_id": "7c9e1a3b-5d7f-4b2c-8e4a-6c8e0a2b4d08",
+      "occurred_at": "2026-10-11T12:00:00Z"
+    },
+    {
+      "type": "remediation.pending_approval",
+      "tenant": "acme",
+      "data": {
+        "job_id": "a1b2c3d4e5f60718",
+        "agent_id": "win-exemplo-01",
+        "type": "package_patch",
+        "created_at": "2026-10-11T09:00:00Z"
+      },
+      "event_id": "1e3a5c7e-9b0d-4c2e-a4f6-8b0d2f4a6c10",
+      "occurred_at": "2026-10-11T12:00:00Z"
+    },
+    {
+      "type": "command.rejected_by_policy",
+      "tenant": "acme",
+      "data": {
+        "command_id": "6f1c2a9e-3b7d-4c8a-9e21-5d4f0a7b3c18",
+        "type": "target.create",
+        "reason": "type_not_allowed"
+      },
+      "event_id": "6f1c2a9e-3b7d-4c8a-9e21-5d4f0a7b3c18",
+      "occurred_at": "2026-10-11T12:00:00Z"
+    }
+  ]
+}

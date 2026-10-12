@@ -1,0 +1,1 @@
+{"schema_version":"1.0.0","node_id":"node-lab-0001","kind":"scope","collected_at":"2026-10-11T12:00:00Z","content_sha256":"a2871c78c5fe5434abd711e06189f6ee5f96ebb6d6ad9a2e35e6a0490b99f363","data":{"items":[{"tenant":"acme","enabled":true,"scope":["192.0.2.0/24","198.51.100.0/24"],"gmp_user_configured":true,"source":"tenants_registry"}],"truncated":false,"unattributed_count":0}}
