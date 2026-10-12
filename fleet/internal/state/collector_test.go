@@ -50,15 +50,15 @@ func TestOpenValidaAConfiguracao(t *testing.T) {
 		}
 	}
 	bad := map[string]func(*Config){
-		"node_kind":            func(c *Config) { c.NodeKind = "hub" },
-		"connector_version":    func(c *Config) { c.ConnectorVersion = "1.0 beta" },
-		"sem FLEET_STATE_DIR":  func(c *Config) { c.StateDir = "" },
-		"sem GVM":              func(c *Config) { c.GVM = nil },
-		"sem tenants":          func(c *Config) { c.Tenants = nil },
-		"sem auditoria":        func(c *Config) { c.Audit = nil },
-		"sem piso":             func(c *Config) { c.Floor = nil },
-		"intervalo de 29 s":    func(c *Config) { c.Interval = 29 * time.Second },
-		"intervalo com fração": func(c *Config) { c.Interval = 30*time.Second + time.Millisecond },
+		"node_kind":               func(c *Config) { c.NodeKind = "hub" },
+		"connector_version":       func(c *Config) { c.ConnectorVersion = "1.0 beta" },
+		"sem FLEET_STATE_DIR":     func(c *Config) { c.StateDir = "" },
+		"sem GVM":                 func(c *Config) { c.GVM = nil },
+		"sem tenants":             func(c *Config) { c.Tenants = nil },
+		"sem auditoria":           func(c *Config) { c.Audit = nil },
+		"sem piso":                func(c *Config) { c.Floor = nil },
+		"intervalo de 29 s":       func(c *Config) { c.Interval = 29 * time.Second },
+		"intervalo com fração":    func(c *Config) { c.Interval = 30*time.Second + time.Millisecond },
 		"intervalo de 10 min 1 s": func(c *Config) { c.Interval = 10*time.Minute + time.Second },
 	}
 	for name, mutate := range bad {
