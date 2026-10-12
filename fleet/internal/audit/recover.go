@@ -38,6 +38,12 @@ type Recovery struct {
 	// not resume the limits from such a line — one line could otherwise silence its kind until that date — and logs
 	// a WARN.
 	FutureAt []FutureLine
+	// TailCut counts the lines the boot kept out of the audit_tail because the last of them is no audit_entry for
+	// contract.DecodeStrict — JSON that carries valid chain fields but also a member the contract does not have, a
+	// duplicate key, a wrong type —: the tail restarts after that line, so it and every line kept before it are
+	// cut. Such a line chains like any other, so it may leave no break at all (as the last line of the stream);
+	// TailCut, and one WARN with its seq, are what tell. 0 = nothing was cut.
+	TailCut int
 }
 
 // FutureLine is an anti-flood line found at boot with an at in the future of the boot.
@@ -146,15 +152,15 @@ func parseChain(text []byte) (chainFields, bool) {
 // wrong type. The boot follows the chain with a lenient decode (~1 µs a line); the strict one costs ~9 µs, so it runs
 // only on the at most TailLines lines that can reach the hub. So every line of Tail() decodes as a
 // contract.AuditEntry: the lines this Log writes passed DecodeStrict before they were written, and those read at
-// boot pass it here.
-func strictTail(tail []tailLine) []tailLine {
+// boot pass it here. It also returns how many lines it cut and the seq of the line that failed (0 when none did).
+func strictTail(tail []tailLine) (kept []tailLine, cut int, badSeq int64) {
 	for i := len(tail) - 1; i >= 0; i-- {
 		var e contract.AuditEntry
 		if contract.DecodeStrict([]byte(tail[i].text), &e) != nil {
-			return slices.Clone(tail[i+1:])
+			return slices.Clone(tail[i+1:]), i + 1, tail[i].seq
 		}
 	}
-	return tail
+	return tail, 0, 0
 }
 
 // tailable reports whether a line can go into the audit_tail state as it is: the tail item's schema (2 to 8192
@@ -283,12 +289,17 @@ func (s *stream) recover(boot time.Time) (*chainScan, error) {
 	if err := s.recoverFile(sc, 0, boot); err != nil {
 		return nil, err
 	}
-	s.seq, s.head, s.tail = sc.seq, sc.head, strictTail(sc.tail)
-	s.recovery.Breaks, s.recovery.FirstBreak = sc.breaks, sc.first
+	tail, cut, badSeq := strictTail(sc.tail)
+	s.seq, s.head, s.tail = sc.seq, sc.head, tail
+	s.recovery.Breaks, s.recovery.FirstBreak, s.recovery.TailCut = sc.breaks, sc.first, cut
 	if sc.first != nil {
 		s.log.Warn("auditoria: cadeia quebrada no boot; nada é consertado e o fluxo segue da última linha",
 			"fluxo", string(s.spec.name), "quebras", sc.breaks, "arquivo", sc.first.File, "linha", sc.first.Line,
 			"seq", sc.first.Seq, "motivo", sc.first.Reason)
+	}
+	if cut > 0 {
+		s.log.Warn("auditoria: linha que não decodifica estritamente como audit_entry; a cauda recomeça depois dela",
+			"fluxo", string(s.spec.name), "seq", badSeq, "linhas_cortadas", cut)
 	}
 	return sc, nil
 }

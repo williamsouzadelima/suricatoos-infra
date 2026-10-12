@@ -59,7 +59,8 @@
 // Tail returns, for the audit_tail state, the last TailLines lines of each stream verbatim with first_seq,
 // last_seq and head_sha256. It comes from memory — the lines this Log confirmed plus those Open read — never from
 // re-reading a file after a write that was not confirmed. Only audit lines of the stream get there: a line Open
-// found that is not one (another file's content, say) makes the tail restart after it.
+// found that is not one (another file's content, say) makes the tail restart after it — and when the line is cut
+// only because it does not decode strictly as an audit_entry, the cut is counted in Recovery.TailCut and logged.
 //
 // # No secret
 //

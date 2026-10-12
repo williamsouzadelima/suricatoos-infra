@@ -456,6 +456,64 @@ func TestCaudaNuncaLevaLinhaQueNaoEAuditoriaDoFluxo(t *testing.T) {
 	}
 }
 
+// O filtro estrito do boot não corta a cauda em silêncio: uma linha que encadeia mas não decodifica como
+// audit_entry (aqui, com um membro que o contrato não tem) tira da cauda ela e as anteriores, e o corte vai para o
+// Recovery (TailCut, quantas linhas saíram) e para um WARN com o seq da linha — que não repete o conteúdo dela.
+func TestCorteDoFiltroEstritoContaNoRecoveryELogaWarn(t *testing.T) {
+	forge := func(t *testing.T, i int) (*Log, *logSink) {
+		t.Helper()
+		dir := t.TempDir()
+		l, _ := openAt(t, dir, defaultConfig())
+		for n := 1; n <= 3; n++ {
+			policyChanged(t, l, n)
+		}
+		path := filepath.Join(dir, ExecFileName)
+		line := fileLines(t, path)[i]
+		rewriteLine(t, path, i, strings.Replace(line, `"event":"policy_changed"`, `"event":"policy_changed","estranho":"membro-fora-do-contrato"`, 1))
+		return openAt(t, dir, defaultConfig())
+	}
+
+	// a última linha: encadeia bem (nada vem depois dela), então só o filtro estrito a pega
+	l, sink := forge(t, 2)
+	st := l.Status().Exec
+	if st.Recovery.Breaks != 0 || st.Recovery.TailCut != 3 {
+		t.Fatalf("recovery %+v: esperava Breaks 0 e TailCut 3", st.Recovery)
+	}
+	if tail := l.Tail().Exec; len(tail.Lines) != 0 {
+		t.Fatalf("a cauda levou %d linhas", len(tail.Lines))
+	}
+	logs := sink.lines()
+	if len(logs) != 1 || !strings.Contains(logs[0], "level=WARN") || !strings.Contains(logs[0], "seq=3") || strings.Contains(logs[0], "membro-fora-do-contrato") {
+		t.Fatalf("esperava um WARN com o seq da linha e sem o conteúdo dela: %v", logs)
+	}
+
+	// uma linha do meio: a cadeia quebra na seguinte (que fica na cauda) e o corte leva as duas primeiras
+	l, sink = forge(t, 1)
+	st = l.Status().Exec
+	if st.Recovery.Breaks != 1 || st.Recovery.TailCut != 2 {
+		t.Fatalf("recovery %+v: esperava Breaks 1 e TailCut 2", st.Recovery)
+	}
+	if tail := l.Tail().Exec; len(tail.Lines) != 1 || *tail.FirstSeq != 3 {
+		t.Fatalf("cauda %d linhas, first_seq %v", len(tail.Lines), tail.FirstSeq)
+	}
+	var warned bool
+	for _, line := range sink.lines() {
+		warned = warned || strings.Contains(line, "seq=2") && strings.Contains(line, "estrit")
+	}
+	if !warned {
+		t.Fatalf("esperava o WARN do corte com seq=2: %v", sink.lines())
+	}
+
+	// sem linha fora do contrato, nada cortado e nenhum log
+	dir := t.TempDir()
+	l, _ = openAt(t, dir, defaultConfig())
+	policyChanged(t, l, 1)
+	l, sink = openAt(t, dir, defaultConfig())
+	if rec := l.Status().Exec.Recovery; rec.TailCut != 0 || len(sink.lines()) != 0 {
+		t.Fatalf("nada a cortar: %+v, logs %v", rec, sink.lines())
+	}
+}
+
 // Uma linha que a cauda não pode carregar como é (aqui, com um caractere que o no_control recusa) faz a cauda
 // recomeçar depois dela: o hub vê a lacuna de seq e alerta, em vez de receber um estado inválido inteiro.
 func TestCaudaRecomecaDepoisDeLinhaQueNaoCabe(t *testing.T) {
