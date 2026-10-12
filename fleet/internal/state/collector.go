@@ -12,10 +12,13 @@ import (
 	"github.com/williamsouzadelima/suricatoos-infra/fleet/internal/tenant"
 )
 
-// DefaultInterval and MinInterval are FLEET_STATE_INTERVAL's default and floor (ADR-0011 "Configuração do nó").
+// DefaultInterval and MinInterval are FLEET_STATE_INTERVAL's default and floor (ADR-0011 "Configuração do nó");
+// MaxInterval is its ceiling (a controller decision: the ADR sets none), so that a typo such as "60m" for "60s" does not
+// leave the state — and the replay_floor it carries — stale in silence: outside the range the connector does not start.
 const (
 	DefaultInterval = 60 * time.Second
 	MinInterval     = 30 * time.Second
+	MaxInterval     = 10 * time.Minute
 )
 
 // ErrInvalidInterval: FLEET_STATE_INTERVAL is not a duration the connector accepts. The connector does not start
@@ -23,19 +26,21 @@ const (
 var ErrInvalidInterval = errors.New("state: FLEET_STATE_INTERVAL inválido")
 
 // ParseInterval parses FLEET_STATE_INTERVAL: empty (unset) is DefaultInterval; anything else is a Go duration
-// ("60s", "1m", "1m30s") of whole seconds, at least MinInterval, or ErrInvalidInterval.
+// ("60s", "1m", "1m30s") of whole seconds from MinInterval to MaxInterval, or ErrInvalidInterval.
 func ParseInterval(s string) (time.Duration, error) {
 	if s == "" {
 		return DefaultInterval, nil
 	}
 	d, err := time.ParseDuration(s)
 	if err != nil || !validInterval(d) {
-		return 0, fmt.Errorf("%w: %.32q (mínimo %s, em segundos inteiros)", ErrInvalidInterval, s, MinInterval)
+		return 0, fmt.Errorf("%w: %.32q (de %s a %s, em segundos inteiros)", ErrInvalidInterval, s, MinInterval, MaxInterval)
 	}
 	return d, nil
 }
 
-func validInterval(d time.Duration) bool { return d >= MinInterval && d%time.Second == 0 }
+func validInterval(d time.Duration) bool {
+	return d >= MinInterval && d <= MaxInterval && d%time.Second == 0
+}
 
 // Tenants is what the state reads of the node's tenants (tenant.Source has it).
 type Tenants interface {
@@ -60,7 +65,7 @@ type Config struct {
 	ConnectorVersion string // the connector's version_string
 	StateDir         string // FLEET_STATE_DIR: policy.json is read there, state-sent.json written there
 	// Interval is the collection period (FLEET_STATE_INTERVAL, ParseInterval): zero means DefaultInterval, and
-	// below MinInterval — or with a fraction of a second — Open refuses it.
+	// outside MinInterval–MaxInterval — or with a fraction of a second — Open refuses it.
 	Interval time.Duration
 	// GVM is the gvmd side (Bridge over fleet_ops.py): node in part, tasks, targets, schedules, reports.
 	GVM GVM
@@ -129,7 +134,8 @@ func Open(cfg Config) (*Collector, error) {
 		interval = DefaultInterval
 	}
 	if !validInterval(interval) {
-		return nil, fmt.Errorf("%w: %s (mínimo %s, em segundos inteiros)", ErrInvalidInterval, interval, MinInterval)
+		return nil, fmt.Errorf("%w: %s (de %s a %s, em segundos inteiros)", ErrInvalidInterval, interval, MinInterval,
+			MaxInterval)
 	}
 	tr, rec, err := openTracker(cfg.StateDir, kinds)
 	if err != nil {

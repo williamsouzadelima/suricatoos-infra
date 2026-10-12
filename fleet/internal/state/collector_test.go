@@ -19,19 +19,20 @@ import (
 
 func TestParseInterval(t *testing.T) {
 	ok := map[string]time.Duration{"": DefaultInterval, "60s": time.Minute, "30s": 30 * time.Second, "1m": time.Minute,
-		"1m30s": 90 * time.Second, "1.5m": 90 * time.Second, "1h": time.Hour}
+		"1m30s": 90 * time.Second, "1.5m": 90 * time.Second, "10m": 10 * time.Minute, "600s": 10 * time.Minute}
 	for in, want := range ok {
 		if got, err := ParseInterval(in); err != nil || got != want {
 			t.Errorf("ParseInterval(%q) = %v, %v", in, got, err)
 		}
 	}
-	for _, in := range []string{"29s", "29999ms", "30500ms", "0", "-60s", "60", "um minuto", " 60s"} {
+	for _, in := range []string{"29s", "29999ms", "30500ms", "0", "-60s", "60", "um minuto", " 60s", "601s", "10m1s",
+		"60m", "1h", "2000000h"} {
 		if got, err := ParseInterval(in); err == nil || !errors.Is(err, ErrInvalidInterval) {
 			t.Errorf("ParseInterval(%q) = %v, %v", in, got, err)
 		}
 	}
-	if DefaultInterval != 60*time.Second || MinInterval != 30*time.Second {
-		t.Fatal("o ADR fixa 60 s de padrão e 30 s de mínimo")
+	if DefaultInterval != 60*time.Second || MinInterval != 30*time.Second || MaxInterval != 10*time.Minute {
+		t.Fatal("60 s de padrão e 30 s de mínimo (ADR), 10 min de máximo (decisão do controlador)")
 	}
 }
 
@@ -40,6 +41,13 @@ func TestOpenValidaAConfiguracao(t *testing.T) {
 	base := f.config(t, contract.NodeStandalone)
 	if c := openCollector(t, base); c.interval != DefaultInterval {
 		t.Fatalf("intervalo padrão %v", c.interval)
+	}
+	for _, d := range []time.Duration{MinInterval, MaxInterval} {
+		cfg := base
+		cfg.Interval = d
+		if c := openCollector(t, cfg); c.interval != d {
+			t.Fatalf("intervalo %v virou %v", d, c.interval)
+		}
 	}
 	bad := map[string]func(*Config){
 		"node_kind":            func(c *Config) { c.NodeKind = "hub" },
@@ -51,6 +59,7 @@ func TestOpenValidaAConfiguracao(t *testing.T) {
 		"sem piso":             func(c *Config) { c.Floor = nil },
 		"intervalo de 29 s":    func(c *Config) { c.Interval = 29 * time.Second },
 		"intervalo com fração": func(c *Config) { c.Interval = 30*time.Second + time.Millisecond },
+		"intervalo de 10 min 1 s": func(c *Config) { c.Interval = 10*time.Minute + time.Second },
 	}
 	for name, mutate := range bad {
 		cfg := base
