@@ -28,6 +28,26 @@ import (
 type Scope struct {
 	allow []netip.Prefix // masked
 	deny  []netip.Addr   // self-deny; IPv4-mapped forms kept as IPv4
+	// warnSelfDenyCIDR, when set, puts the rule "a CIDR that contains a
+	// self-deny IP" in log mode for CheckHost/Filter; nil enforces it.
+	warnSelfDenyCIDR func(cidr, reason string)
+}
+
+// reasonSelfDenyCIDR names the rule without the self-deny IP itself.
+const reasonSelfDenyCIDR = "contém IP do self-deny"
+
+// Option configures a Scope built by New.
+type Option func(*Scope)
+
+// LogSelfDenyCIDR puts the rule "a CIDR that CONTAINS a self-deny IP" (e.g. the
+// /24 of the LAN where the node lives) in LOG mode for CheckHost and Filter: the
+// CIDR passes and warn is called once per check with the canonical CIDR and the
+// reason — never the self-deny IP — so the caller logs one line. It is how the
+// sensor rolls the rule out (ADR-0011 D7); without it, or with a nil warn, the
+// rule is enforced. A self-deny IP on its own — bare, /32 or /128 — is always
+// denied.
+func LogSelfDenyCIDR(warn func(cidr, reason string)) Option {
+	return func(s *Scope) { s.warnSelfDenyCIDR = warn }
 }
 
 // New builds a Scope from an allow spec (comma/space CIDRs or bare IPs; the
@@ -35,7 +55,7 @@ type Scope struct {
 // addresses + the cloud endpoints — never scan targets). Both may be empty; an
 // empty allow spec denies everything (deny-all). A self-deny token that is not a
 // bare IP is ignored.
-func New(allowSpec, selfDenySpec string) (*Scope, error) {
+func New(allowSpec, selfDenySpec string, opts ...Option) (*Scope, error) {
 	s := &Scope{}
 	for _, tok := range fields(allowSpec) {
 		p, _, ok := literal(tok)
@@ -49,6 +69,9 @@ func New(allowSpec, selfDenySpec string) (*Scope, error) {
 			s.deny = append(s.deny, p.Addr())
 		}
 	}
+	for _, opt := range opts {
+		opt(s)
+	}
 	return s, nil
 }
 
@@ -57,7 +80,8 @@ func (s *Scope) Empty() bool { return len(s.allow) == 0 }
 
 // CheckHost validates one target (an IP or CIDR literal) and returns its canonical
 // form, or an error. A hostname, a self/cloud address, a degenerate address, an
-// off-scope IP, or a CIDR not fully within the allow-set all fail.
+// off-scope IP, or a CIDR not fully within the allow-set all fail, and so does a
+// CIDR that contains a self/cloud address unless LogSelfDenyCIDR is set.
 func (s *Scope) CheckHost(host string) (string, error) {
 	p, bare, ok := literal(strings.TrimSpace(host))
 	if !ok {
@@ -77,13 +101,20 @@ func (s *Scope) CheckHost(host string) (string, error) {
 		}
 		return ip.String(), nil
 	}
-	// CIDR subnet: must not overlap degenerate space and must be FULLY within one
-	// allow CIDR.
+	// CIDR subnet: must not overlap degenerate space, must be FULLY within one
+	// allow CIDR and must not contain a self-deny IP.
 	if reason := degenerate(p); reason != "" {
 		return "", fmt.Errorf("CIDR %s negado: sobrepõe %s", p, reason)
 	}
 	if !s.allowed(p) {
 		return "", fmt.Errorf("CIDR %s fora do escopo autorizado", p)
+	}
+	if s.containsDenied(p) {
+		// A /32 or /128 IS the self-deny address: denied in any mode.
+		if p.IsSingleIP() || s.warnSelfDenyCIDR == nil {
+			return "", fmt.Errorf("CIDR %s negado: %s", p, reasonSelfDenyCIDR)
+		}
+		s.warnSelfDenyCIDR(p.String(), reasonSelfDenyCIDR)
 	}
 	return p.String(), nil
 }
@@ -104,6 +135,16 @@ func (s *Scope) Filter(targets []string) (kept, dropped []string) {
 func (s *Scope) allowed(p netip.Prefix) bool {
 	for _, a := range s.allow {
 		if a.Bits() <= p.Bits() && a.Contains(p.Addr()) {
+			return true
+		}
+	}
+	return false
+}
+
+// containsDenied reports whether the CIDR p contains a self-deny address.
+func (s *Scope) containsDenied(p netip.Prefix) bool {
+	for _, d := range s.deny {
+		if p.Contains(d) {
 			return true
 		}
 	}

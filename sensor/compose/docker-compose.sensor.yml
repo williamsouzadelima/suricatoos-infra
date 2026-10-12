@@ -30,6 +30,9 @@ services:
     # Config comes from the host env_file written by sensor-install.sh. Holds the
     # bootstrap ENROLL_TOKEN (first boot only), CLOUD_BASE_URL, SCAN_SCOPE,
     # SCAN_SELF_DENY_IPS, SENSOR_GMP_USER/SENSOR_GVM_PASSWORD (LOCAL gvmd).
+    # Optional, added by hand: SCAN_SELF_DENY_CIDR_MODE=log|enforce (default log)
+    # — a target CIDR containing a self-deny IP (e.g. the sensor's LAN /24) is
+    # scanned with one warning line (log) or denied (enforce).
     env_file:
       - path: /var/lib/suricatoos-sensor/sensor.env
         required: false
