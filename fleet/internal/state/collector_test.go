@@ -32,7 +32,7 @@ func TestParseInterval(t *testing.T) {
 		}
 	}
 	if DefaultInterval != 60*time.Second || MinInterval != 30*time.Second || MaxInterval != 10*time.Minute {
-		t.Fatal("60 s de padrão e 30 s de mínimo (ADR), 10 min de máximo (decisão do controlador)")
+		t.Fatal("o FLEET_STATE_INTERVAL tem padrão 60 s, mínimo 30 s e máximo 10 min")
 	}
 }
 

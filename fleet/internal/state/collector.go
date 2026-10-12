@@ -12,10 +12,9 @@ import (
 	"github.com/williamsouzadelima/suricatoos-infra/fleet/internal/tenant"
 )
 
-// DefaultInterval and MinInterval are FLEET_STATE_INTERVAL's default and floor (ADR-0011 "Configuração do nó");
-// MaxInterval is its ceiling (a controller decision: the ADR sets none), so that a typo such as "60m" for "60s" does
-// not leave the state — and the replay_floor it carries — stale in silence: outside the range the connector does not
-// start.
+// DefaultInterval and MinInterval are FLEET_STATE_INTERVAL's default and floor (ADR-0011 "Configuração do nó"), and
+// MaxInterval its ceiling: a typo such as "60m" for "60s" must not leave the state — and the replay_floor it carries
+// — stale in silence, so outside the range the connector does not start.
 const (
 	DefaultInterval = 60 * time.Second
 	MinInterval     = 30 * time.Second

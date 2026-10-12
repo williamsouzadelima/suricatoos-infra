@@ -9,8 +9,8 @@ import (
 )
 
 // GVM is the gvmd side of the state: fleet_ops.py's state.* reads (Bridge in production, a fake in the tests). The
-// list reads take owners, the gvmd user of each known tenant mapped to its name (fleet_ops attributes every
-// object by its owner and only counts the rest), and return the kind's data as fleet_ops built it; the state
+// list reads take owners, the gvmd user of each enabled tenant mapped to its name (gvmOwners; fleet_ops attributes
+// every object by its owner and only counts the rest), and return the kind's data as fleet_ops built it; the state
 // checks it all again before anything leaves.
 type GVM interface {
 	Node(ctx context.Context, req NodeRequest) (contract.DataNode, error)

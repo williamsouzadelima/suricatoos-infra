@@ -25,10 +25,10 @@ type listSpec[T any] struct {
 // finishList turns what a source returned into the bytes of data_<kind>, under the rules of ADR-0011 "Estado" and
 // "Multi-tenant":
 //
-//   - an item whose tenant is not known (known) — no owner mapped to it, a name outside the tenant pattern — is
-//     never listed, only counted in unattributed_count; so is an item the schema would refuse (an id that is no
-//     UUID, a hostname among the literal hosts, a control character in a name...): the source got it wrong, and
-//     one bad item never takes the snapshot with it;
+//   - an item whose tenant is not known (known) — no owner mapped to it, a disabled tenant, a name outside the
+//     tenant pattern — is never listed, only counted in unattributed_count; so is an item the schema would refuse
+//     (an id that is no UUID, a hostname among the literal hosts, a control character in a name...): the source got
+//     it wrong, and one bad item never takes the snapshot with it;
 //   - the rest is sorted by key, with the item's own bytes as the tie-break, so the same state gives the same bytes
 //     whatever order the source used;
 //   - the list is cut at the schema's maxItems, then at limit bytes for the whole data, and a cut sets truncated: a
