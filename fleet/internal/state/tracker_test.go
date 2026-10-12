@@ -339,6 +339,66 @@ func TestBeginSendFechaOABAAtravesDeUmaQueda(t *testing.T) {
 	}
 }
 
+// Uma leitura do state-sent.json que falha no Open (Lost) não pode deixar o arquivo velho valendo: o arquivo segue
+// dizendo que o hub tem A, e um BeginSend que não regravasse liberaria o PUT de B sem tirar A do disco — com a marca
+// de B perdida numa queda e o estado de volta a A, um reinício que lesse o arquivo de novo tomaria A por enviado. A
+// memória (nada enviado) vence: o primeiro BeginSend (ou flush) troca o arquivo por ela.
+func TestLeituraQueFalhaNoOpenNaoDeixaOArquivoVelhoValendo(t *testing.T) {
+	dir := t.TempDir()
+	tr := openTestTracker(t, dir, localKinds)
+	a, b := snap(t, contract.KindTasks, "a"), snap(t, contract.KindTasks, "b")
+	tr.update(a)
+	if err := tr.beginSend(contract.KindTasks); err != nil {
+		t.Fatal(err)
+	}
+	if err := tr.markSent(contract.KindTasks, a.SHA256); err != nil {
+		t.Fatal(err)
+	}
+
+	// reinício com uma falha passageira de leitura do arquivo (que continua lá, dizendo A)
+	failing := func(string, int64) ([]byte, error) { return nil, errors.New("EIO passageiro") }
+	tr2, rec, err := openTrackerWith(dir, localKinds, failing)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rec.Lost == nil {
+		t.Fatal("a leitura que falhou tem de aparecer em Recovery.Lost")
+	}
+	tr2.update(b)
+	if err := tr2.beginSend(contract.KindTasks); err != nil { // antes do PUT de B
+		t.Fatal(err)
+	}
+	// o hub aceita B; o processo cai antes da marca; o estado volta para A
+
+	again := openTestTracker(t, dir, localKinds) // agora a leitura funciona
+	again.update(a)
+	if p := again.pending(); !slices.Equal(p, []contract.StateKind{contract.KindTasks}) {
+		t.Fatalf("A de volta não ficou pendente (%v): o arquivo velho valeu, e o hub tem B", p)
+	}
+}
+
+// A metade em memória do BeginSend: no mesmo processo, sem reinício — o PUT de B foi, a resposta se perdeu (sem
+// marca), o estado voltou para A: A tem de estar pendente, porque nada diz que o hub ficou com A.
+func TestBeginSendEsqueceNaMemoriaAntesDoPUT(t *testing.T) {
+	tr := openTestTracker(t, t.TempDir(), localKinds)
+	a, b := snap(t, contract.KindTasks, "a"), snap(t, contract.KindTasks, "b")
+	tr.update(a)
+	if err := tr.beginSend(contract.KindTasks); err != nil {
+		t.Fatal(err)
+	}
+	if err := tr.markSent(contract.KindTasks, a.SHA256); err != nil {
+		t.Fatal(err)
+	}
+	tr.update(b)
+	if err := tr.beginSend(contract.KindTasks); err != nil { // PUT de B; resposta perdida, nenhuma marca
+		t.Fatal(err)
+	}
+	tr.update(a)
+	if p := tr.pending(); !slices.Equal(p, []contract.StateKind{contract.KindTasks}) {
+		t.Fatalf("pendentes %v: o hub pode ter B", p)
+	}
+}
+
 // Um BeginSend cuja gravação falha (inclusive sem confirmação, ErrNotDurable) é erro: o PUT não vai, e o kind
 // continua pendente. O próximo BeginSend regrava o arquivo — mesmo sem entrada nova para tirar — antes de dizer sim.
 func TestBeginSendQueNaoGravaNaoLiberaOEnvio(t *testing.T) {

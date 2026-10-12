@@ -81,9 +81,18 @@ type tracker struct {
 }
 
 // openTracker reads stateDir/state-sent.json for a node with the given kinds. A file that cannot be used is no
-// error (Recovery.Lost, everything is sent again); only an empty stateDir is. It also removes the temporaries an
-// interrupted write of this file left behind (only those: the directory holds the other state files too).
+// error (Recovery.Lost, everything is sent again); only an empty stateDir is. Such a file — even one a transient
+// error kept from being read, which a later read could still find saying that the hub has a snapshot — is then
+// behind the memory (nothing sent): the first flush or beginSend replaces it, so it can never again be taken for the
+// truth. It also removes the temporaries an interrupted write of this file left behind (only those: the directory
+// holds the other state files too).
 func openTracker(stateDir string, kinds []contract.StateKind) (*tracker, Recovery, error) {
+	return openTrackerWith(stateDir, kinds, fsutil.ReadBounded)
+}
+
+// openTrackerWith is openTracker with the read of the file as a parameter (a test makes it fail).
+func openTrackerWith(stateDir string, kinds []contract.StateKind, readFile func(string, int64) ([]byte, error)) (
+	*tracker, Recovery, error) {
 	if stateDir == "" {
 		return nil, Recovery{}, errors.New("state: FLEET_STATE_DIR vazio")
 	}
@@ -97,9 +106,10 @@ func openTracker(stateDir string, kinds []contract.StateKind) (*tracker, Recover
 	}
 	_, _ = fsutil.RemoveOrphanTemps(t.path) // best effort: a leftover only takes space
 	var rec Recovery
-	sent, err := t.read()
+	sent, err := t.read(readFile)
 	if err != nil {
 		rec.Lost = err
+		t.dirty = true
 		return t, rec, nil
 	}
 	for kind, hash := range sent {
@@ -111,8 +121,8 @@ func openTracker(stateDir string, kinds []contract.StateKind) (*tracker, Recover
 }
 
 // read loads the accepted hashes of the file; a file that does not exist is an empty map.
-func (t *tracker) read() (map[contract.StateKind]string, error) {
-	data, err := fsutil.ReadBounded(t.path, maxSentFileBytes)
+func (t *tracker) read(readFile func(string, int64) ([]byte, error)) (map[contract.StateKind]string, error) {
+	data, err := readFile(t.path, maxSentFileBytes)
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, nil
 	}

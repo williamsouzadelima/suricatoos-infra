@@ -59,8 +59,8 @@
 // (fsutil.WriteAtomic) whenever they change, so a restart does not send again what the hub already has. The memory
 // is the truth: MarkSent counts at once — the hub has it, whatever the disk says — and a failed write (ErrNotDurable
 // included) only leaves the file behind until the next write, which every cycle retries. The failure modes all lean
-// to sending again: an unusable file at Open is ignored (Recovery.Lost, everything goes again), and a file behind
-// the memory can only make a restart send a kind the hub has. And no resend is ever missed: BeginSend durably drops
+// to sending again: an unusable file at Open is ignored (Recovery.Lost, everything goes again) and replaced by the
+// memory at the first write, and a file behind the memory can only make a restart send a kind the hub has. And no resend is ever missed: BeginSend durably drops
 // the kind's entry BEFORE the PUT (one atomic write; an unconfirmed one means the PUT does not go), so whatever
 // happens between the hub's 2xx and MarkSent — a crash, a lost write —, the file never claims that the hub has an
 // older snapshot than the one it was sent (the A→B→A case: the file says A, B is accepted, its mark is lost, the
