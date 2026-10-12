@@ -444,18 +444,14 @@ func (s *Store) Lookup(v *contract.Verified, t time.Time) Lookup {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	var out Lookup
+	// linear in the chains: an entry is in both only when it carries the nonce AND the command_id, so the walk of the
+	// command_id chain skips the entries of the nonce just walked — no entry is added twice and nothing is searched
 	add := func(i int32) {
 		e := &s.entries[i]
 		if !alive(e, t) {
 			return
 		}
-		h := hex.EncodeToString(e.canon[:])
-		for _, r := range out.Recorded {
-			if r == h {
-				return
-			}
-		}
-		out.Recorded = append(out.Recorded, h)
+		out.Recorded = append(out.Recorded, hex.EncodeToString(e.canon[:]))
 		if e.canon == canon && out.Same == nil {
 			view := s.viewLocked(i)
 			out.Same = &view
@@ -468,7 +464,9 @@ func (s *Store) Lookup(v *contract.Verified, t time.Time) Lookup {
 	}
 	if i, ok := s.byCmd[cmd]; ok {
 		for ; i >= 0; i = s.entries[i].nextCmd {
-			add(i)
+			if s.entries[i].nonce != nonce {
+				add(i)
+			}
 		}
 	}
 	return out
