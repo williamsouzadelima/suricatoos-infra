@@ -128,7 +128,9 @@ type Options struct {
 // the file.
 //
 // Open also removes the budget.json.tmp-* files that a crash left between a temporary file and its rename (only
-// those, since the directory is shared with the other state files; it assumes no other Ledger is writing there).
+// those, since the directory is shared with the other state files; it assumes no other Ledger is writing there). A
+// state read from the file is trusted only once it is confirmed on disk (fsync of the file and of the directory) or,
+// failing that, written again; if neither works, it counts as lost.
 //
 // The only errors are therefore programming ones (an empty stateDir, an invalid boot) and the failure of the first
 // boot's write; see the package comment for what an unreadable or corrupt file does.
@@ -142,7 +144,7 @@ func Open(stateDir string, boot time.Time, opts Options) (*Ledger, error) {
 	path := filepath.Join(stateDir, FileName)
 	// leftovers of a Consume that a crash interrupted; best effort: a file that will not go does not stop the boot
 	_, _ = fsutil.RemoveOrphanTemps(path)
-	l := &Ledger{path: path, writeFile: fsutil.WriteAtomic}
+	l := &Ledger{path: path, writeFile: openWrite}
 	data, err := fsutil.ReadBounded(path, maxFileBytes)
 	switch {
 	case errors.Is(err, fs.ErrNotExist) && opts.FirstBoot:
@@ -153,7 +155,9 @@ func Open(stateDir string, boot time.Time, opts Options) (*Ledger, error) {
 	case errors.Is(err, fs.ErrNotExist):
 		err = errors.New("budget.json ausente num nó que já tem identidade (apagado ou volume revertido)")
 	case err == nil:
-		err = l.load(data)
+		if err = l.load(data); err == nil {
+			err = l.confirm()
+		}
 	}
 	if err != nil {
 		l.total, l.sensitive = nil, nil
@@ -161,6 +165,33 @@ func Open(stateDir string, boot time.Time, opts Options) (*Ledger, error) {
 		l.lost = fmt.Errorf("budget: estado %s inutilizável, janela cheia até boot+%v: %w", path, Window, err)
 	}
 	return l, nil
+}
+
+// openWrite is the write a ledger opened by Open uses (fsutil.WriteAtomic); a variable only so that a test can make
+// the write of Open fail.
+var openWrite = fsutil.WriteAtomic
+
+// confirmState makes the state file read at Open durable: one fsync of the file and one of its directory. A variable
+// only so that a test can make it fail.
+var confirmState = func(path string) error {
+	if _, err := fsutil.SyncFile(path); err != nil {
+		return err
+	}
+	return fsutil.SyncDir(filepath.Dir(path))
+}
+
+// confirm makes the state just loaded durable before the ledger trusts it: after a crash of the process the page
+// cache can still show a Consume whose rename or directory sync never completed. If the file cannot be confirmed,
+// the state is written again (temp + rename, which confirms it); if that fails too, the error makes the state lost.
+func (l *Ledger) confirm() error {
+	cerr := confirmState(l.path)
+	if cerr == nil {
+		return nil
+	}
+	if werr := l.write(l.total, l.sensitive); werr != nil {
+		return fmt.Errorf("o estado lido não pôde ser confirmado no disco (%v) nem regravado: %w", cerr, werr)
+	}
+	return nil
 }
 
 // validInstant reports whether t can be held as Unix nanoseconds, which is how the ledger stores time (years 1678

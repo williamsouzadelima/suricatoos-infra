@@ -908,3 +908,72 @@ func TestInstantesForaDeOrdemSaoGuardadosTodos(t *testing.T) {
 		t.Fatalf("usageAt(later) = %+v", u)
 	}
 }
+
+// swapConfirm and swapOpenWrite replace, for one test, the confirmation of the state read at Open and the write Open
+// uses; both count their calls.
+func swapConfirm(t *testing.T, fail error) *int {
+	t.Helper()
+	n, old := new(int), confirmState
+	confirmState = func(path string) error {
+		*n++
+		if fail != nil {
+			return fail
+		}
+		return old(path)
+	}
+	t.Cleanup(func() { confirmState = old })
+	return n
+}
+
+func swapOpenWrite(t *testing.T, fail error) *int {
+	t.Helper()
+	n, old := new(int), openWrite
+	openWrite = func(path string, data []byte) error {
+		*n++
+		if fail != nil {
+			return fail
+		}
+		return old(path, data)
+	}
+	t.Cleanup(func() { openWrite = old })
+	return n
+}
+
+// O estado lido no Open só vale depois de confirmado no disco (fsync do arquivo e do diretório): depois de uma queda
+// do processo, um Consume cujo rename ou sync do diretório não terminou ainda está visível no page cache. O primeiro
+// boot (que grava, e a gravação confirma) e o estado inutilizável (que não é usado) não precisam disso.
+func TestOpenConfirmaNoDiscoOEstadoLido(t *testing.T) {
+	dir := seedDir(t, stateJSON([]int64{t0.UnixNano()}, nil))
+	confirms := swapConfirm(t, nil)
+	l, err := Open(dir, t0, Options{})
+	if err != nil || l.Lost() != nil || *confirms != 1 {
+		t.Fatalf("Open: %v, lost %v, confirmações %d", err, l.Lost(), *confirms)
+	}
+	if _, err := Open(t.TempDir(), t0, Options{FirstBoot: true}); err != nil || *confirms != 1 {
+		t.Fatalf("primeiro boot: %v, confirmações %d", err, *confirms)
+	}
+	if l, _ := Open(seedDir(t, "{"), t0, Options{}); l.Lost() == nil || *confirms != 1 {
+		t.Fatalf("estado corrompido: lost %v, confirmações %d", l.Lost(), *confirms)
+	}
+}
+
+// Se o estado lido não se confirma, o Open o regrava (temp + rename, que confirma) e segue com ele; se nem isso der,
+// o estado conta como perdido (janela cheia por 1 h), como o arquivo corrompido.
+func TestOpenQueNaoConfirmaRegravaOuPerde(t *testing.T) {
+	boom := errors.New("EIO simulado")
+	swapConfirm(t, boom)
+	writes := swapOpenWrite(t, nil)
+	dir := seedDir(t, stateJSON([]int64{t0.UnixNano()}, nil))
+	l, err := Open(dir, t0, Options{})
+	if err != nil || l.Lost() != nil || *writes != 1 {
+		t.Fatalf("regravação: %v, lost %v, gravações %d", err, l.Lost(), *writes)
+	}
+	if u := l.usageAt(t0); u.Total != 1 {
+		t.Fatalf("o estado regravado perdeu o consumo: %+v", u)
+	}
+	swapOpenWrite(t, boom)
+	l, err = Open(dir, t0, Options{})
+	if err != nil || l.Lost() == nil || !l.BlockedUntil().Equal(t0.Add(Window)) {
+		t.Fatalf("sem confirmar nem regravar: %v, lost %v, até %v", err, l.Lost(), l.BlockedUntil())
+	}
+}
