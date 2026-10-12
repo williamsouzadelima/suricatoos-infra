@@ -168,7 +168,8 @@ type chainScan struct {
 	tail   []tailLine
 	breaks int
 	first  *Break
-	// last holds, for each event, the chain fields of its latest line (the anti-flood resumes from them)
+	// last holds, for each of the three anti-flood events of the reject stream (and nothing else, so it stays
+	// bounded), the chain fields of its latest line: the anti-flood resumes from them
 	last map[contract.AuditEvent]chainFields
 }
 
@@ -210,8 +211,11 @@ func (sc *chainScan) add(seg segment, file string, line int) {
 		sc.brk(file, line, seq, reason)
 	}
 	sc.have, sc.seq, sc.head = true, seq, hex.EncodeToString(seg.sum[:])
-	if ok && p.Stream == sc.stream {
-		sc.last[p.Event] = p
+	if ok && p.Stream == sc.stream && sc.stream == contract.StreamReject {
+		switch p.Event { // only what the anti-flood resumes from: the memory stays bounded, whatever the file holds
+		case contract.AuditEventUnauthenticated, contract.AuditEventRedelivered, contract.AuditEventVersionMismatch:
+			sc.last[p.Event] = p
+		}
 	}
 	if !ok || p.Stream != sc.stream || !tailable(seg.text) {
 		// the tail restarts after a line that is no audit line of this stream, or that it cannot carry as it is: such

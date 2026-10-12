@@ -3,6 +3,8 @@ package audit
 import (
 	"errors"
 	"math/rand/v2"
+	"os"
+	"path/filepath"
 	"strconv"
 	"sync"
 	"testing"
@@ -239,6 +241,65 @@ func TestUnauthenticatedSoComMotivoDasLinhas0a2(t *testing.T) {
 	es := rejectEntries(t, dir)
 	if len(es) != 1 || *es[0].Unauthenticated != (contract.AuditUnauthenticated{Since: utcAt(0), BadEnvelope: 1, PayloadMismatch: 1, BadSignature: 1}) {
 		t.Fatalf("só os três motivos das linhas 0–2 contam: %+v", es)
+	}
+}
+
+// appendChained appends to the stream file of dir a line made from e, chained right after the file's last line (a
+// forged line the chain does not tell apart).
+func appendChained(t *testing.T, dir string, spec streamSpec, e *entry) {
+	t.Helper()
+	path := filepath.Join(dir, spec.file)
+	e.Stream, e.Seq, e.PrevSHA256 = spec.name, 1, zeroSHA256
+	if lines := fileLines(t, path); len(lines) > 0 {
+		var last contract.AuditEntry
+		if err := contract.DecodeStrict([]byte(lines[len(lines)-1]), &last); err != nil {
+			t.Fatal(err)
+		}
+		e.Seq, e.PrevSHA256 = last.Seq+1, sha(lines[len(lines)-1])
+	}
+	b, err := encode(e)
+	if err != nil {
+		t.Fatal(err)
+	}
+	appendRaw(t, path, append(b, '\n'))
+}
+
+// O boot guarda, das linhas que leu, só o que o anti-enchente usa: os três eventos dele, do fluxo reject. Um
+// fluxo adulterado com cem nomes de evento diferentes não faz essa memória crescer.
+func TestBootGuardaSoOsTresEventosDoAntiEnchente(t *testing.T) {
+	dir := t.TempDir()
+	cfg := defaultConfig()
+	if err := os.WriteFile(filepath.Join(dir, RejectFileName), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, ExecFileName), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for i := range 100 {
+		appendChained(t, dir, cfg.reject, &entry{At: testAt, Event: contract.AuditEvent("evento_" + strconv.Itoa(i))})
+	}
+	appendChained(t, dir, cfg.reject, newUnauthenticated(testAt, contract.AuditUnauthenticated{Since: testAt, BadSignature: 1}))
+	appendChained(t, dir, cfg.reject, newRedelivered(testAt, contract.AuditRedelivered{Since: testAt, Count: 1}))
+	vm, err := newVersionMismatch(testAt, []string{"1.0"}, []string{"2.0"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	appendChained(t, dir, cfg.reject, vm)
+	// no exec, os mesmos eventos não são do anti-enchente
+	appendChained(t, dir, cfg.exec, &entry{At: testAt, Event: contract.AuditEventVersionMismatch})
+	sink := &logSink{}
+	for _, c := range []struct {
+		spec streamSpec
+		want int
+	}{{cfg.reject, 3}, {cfg.exec, 0}} {
+		s := newStream(dir, c.spec, cfg.ops, sink.logger())
+		sc, err := s.recover(testBoot)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(sc.last) != c.want {
+			t.Fatalf("%s: o boot guardou %d eventos, esperava %d", c.spec.name, len(sc.last), c.want)
+		}
 	}
 }
 
