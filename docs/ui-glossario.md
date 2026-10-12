@@ -3,9 +3,27 @@
 > Vale para os catálogos `public/locales/gsa-pt_BR.json` e `gsa-es.json` que o
 > `patches/gsa-v27.4.1.patch` controla e para toda string nova das telas da
 > Suricatoos. A chave é sempre o texto em **inglês** (padrão do GSA); pt-BR e es
-> são os valores. O CI (`gsa-pr-build`, passo "Chaves das telas da Suricatoos")
-> falha se uma chave das telas da Suricatoos faltar em pt_BR ou es, tiver valor
-> vazio ou não estiver em inglês, e se um catálogo guardar chave órfã.
+> são os valores.
+
+## O que o CI confere
+
+O passo "Chaves das telas da Suricatoos nos catálogos (pt_BR e es)" do
+`gsa-pr-build` falha quando:
+
+- uma chave de `_()`/`_l()` das telas da Suricatoos — os arquivos de código que
+  o patch cria, inteiros, e as chamadas que tocam linha que o patch acrescenta
+  nos arquivos do upstream — falta em pt_BR ou em es, tem valor vazio ou não
+  está em inglês (acento, cedilha, ñ, ¡ ou ¿ na chave; × e ÷ podem);
+- em qualquer chave dos dois catálogos, o valor não tem exatamente os mesmos
+  placeholders da chave: cada `{{x}}` e `{{- x}}`, nem mais nem menos
+  (`{{- x}}` e `{{x}}` são diferentes);
+- um catálogo guarda **tradução sem uso**: chave que não está no `gsa-en.json`
+  do upstream e que nenhum `_()` de `src/` chama. Numa atualização do GSA, as
+  traduções das chaves que o upstream removeu aparecem aqui e devem ser
+  apagadas dos catálogos: a lista do CI é o roteiro dessa limpeza.
+
+`_()` dentro de comentário não conta. Acentuação e glossário o passo não
+confere: são revisão.
 
 ## Idioma padrão
 

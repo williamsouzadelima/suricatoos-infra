@@ -176,9 +176,13 @@ jobs:
 
       # Toda chave de _()/_l() das telas da Suricatoos (os arquivos de código
       # que o patch cria, inteiros, e as chamadas que tocam linha acrescentada
-      # nos arquivos que o patch altera) existe em pt_BR e em es, com valor
-      # não vazio, e está em inglês (o padrão do GSA). E nenhum dos dois
-      # catálogos guarda chave órfã: chave que nenhum _() de src/ usa.
+      # nos arquivos que o patch altera; _() em comentário não conta) existe
+      # em pt_BR e em es, com valor não vazio, e está em inglês (o padrão do
+      # GSA). Em todas as chaves dos dois catálogos o valor tem os mesmos
+      # {{x}} e {{- x}} da chave. E nenhum catálogo guarda tradução sem uso:
+      # chave fora do gsa-en.json do upstream que nenhum _() de src/ chama.
+      # Numa atualização do GSA, as traduções das chaves que o upstream
+      # removeu aparecem aqui e devem ser apagadas dos catálogos.
       - name: Chaves das telas da Suricatoos nos catálogos (pt_BR e es)
         id: keys
         if: ${{ !cancelled() && steps.gsa.outcome == 'success' }}
@@ -187,6 +191,7 @@ jobs:
           GSA_REF: ${{ steps.refs.outputs.gsa_ref }}
         run: |
           python3 - "$GITHUB_WORKSPACE/patches/gsa-${GSA_REF}.patch" <<'PY'
+          import collections
           import json
           import os
           import re
@@ -194,30 +199,126 @@ jobs:
 
           SRC = ('.ts', '.tsx', '.js', '.jsx')
           CALL = re.compile(r'(?<![\w$.])_l?\(')
-          NOT_ENGLISH = re.compile('[À-ÿ¡¿]')
-          ESC = {'n': '\n', 't': '\t', 'r': '\r', 'b': '\b', 'f': '\f',
-                 'v': '\v', '0': '\0'}
+          # acento, cedilha, ñ, ¡, ¿ (× e ÷ não contam)
+          NOT_ENGLISH = re.compile('[\xc0-\xd6\xd8-\xf6\xf8-\xff\xa1\xbf]')
+          TOKEN = re.compile(r'\{\{(-?)\s*([^{}]*?)\s*\}\}')
+          ESC = {'n': '\n', 't': '\t', 'r': '\r', 'b': '\b', 'f': '\f', 'v': '\v',
+                 '0': '\0'}
+          # Depois destes, "/" abre regex. Não abre depois de "<" nem de "}" (tag do
+          # JSX: "</b>", "{x} />"), nem quando vem ">" em seguida ("/>").
+          REGEX_PREV = set('(,=:[!&|?{;+-*%>~^')
+          REGEX_WORDS = {'return', 'typeof', 'case', 'delete', 'void', 'in', 'of',
+                         'new', 'throw', 'else', 'do', 'yield', 'await', 'instanceof'}
+
+
+          def code_mask(text):
+              """1 em cada caractere de código: fora de comentário, string, texto de
+              template e regex. Aspas simples/duplas param no fim da linha."""
+              n = len(text)
+              code = bytearray(b'\x01') * n
+              i, prev, word, depth, tpl = 0, '', '', 0, []
+
+              def blank(a, b):
+                  b = min(b, n)
+                  if a < b:
+                      code[a:b] = bytes(b - a)
+
+              def template(j):
+                  start = j
+                  while j < n:
+                      if text[j] == '\\':
+                          j += 2
+                      elif text[j] == '`':
+                          blank(start, j)
+                          return j + 1, False
+                      elif text.startswith('${', j):
+                          blank(start, j)
+                          return j + 2, True
+                      else:
+                          j += 1
+                  blank(start, n)
+                  return n, False
+
+              while i < n:
+                  c = text[i]
+                  if c in '\'"':
+                      j = i + 1
+                      while j < n and text[j] != c and text[j] != '\n':
+                          j += 2 if text[j] == '\\' else 1
+                      blank(i + 1, j)
+                      i, prev, word = j + 1, c, ''
+                      continue
+                  if c == '`' or (c == '}' and tpl and tpl[-1] == depth - 1):
+                      if c == '}':
+                          tpl.pop()
+                          depth -= 1
+                      i, opened = template(i + 1)
+                      if opened:
+                          tpl.append(depth)
+                          depth += 1
+                      prev, word = ('{' if opened else '`'), ''
+                      continue
+                  if text.startswith('//', i):
+                      j = text.find('\n', i)
+                      j = n if j < 0 else j
+                      blank(i, j)
+                      i = j
+                      continue
+                  if text.startswith('/*', i):
+                      j = text.find('*/', i + 2)
+                      j = n if j < 0 else j + 2
+                      blank(i, j)
+                      i = j
+                      continue
+                  if (c == '/' and not text.startswith('/>', i)
+                          and (prev == '' or prev in REGEX_PREV or word in REGEX_WORDS)):
+                      j, in_class = i + 1, False
+                      while j < n and text[j] != '\n':
+                          if text[j] == '\\':
+                              j += 2
+                              continue
+                          if text[j] == '[':
+                              in_class = True
+                          elif text[j] == ']':
+                              in_class = False
+                          elif text[j] == '/' and not in_class:
+                              break
+                          j += 1
+                      blank(i, j + 1)
+                      i, prev, word = j + 1, ')', ''
+                      continue
+                  if c == '{':
+                      depth += 1
+                  elif c == '}':
+                      depth -= 1
+                  if c.isalnum() or c in '_$':
+                      word = word + c if prev and (prev.isalnum() or prev in '_$') else c
+                      prev = c
+                  elif not c.isspace():
+                      prev, word = c, ''
+                  i += 1
+              return code
 
 
           def literal(text, i):
-              """String literal at text[i] -> (value, end); None if dynamic."""
+              """Literal de string em text[i] -> (valor, fim); None se dinâmico."""
               quote, out, j = text[i], [], i + 1
               while j < len(text):
                   c = text[j]
                   if c == '\\':
-                      n = text[j + 1]
-                      if n == 'u' and text[j + 2] == '{':
+                      nx = text[j + 1]
+                      if nx == 'u' and text[j + 2] == '{':
                           k = text.index('}', j)
                           out.append(chr(int(text[j + 3:k], 16)))
                           j = k + 1
-                      elif n == 'u':
+                      elif nx == 'u':
                           out.append(chr(int(text[j + 2:j + 6], 16)))
                           j += 6
-                      elif n == 'x':
+                      elif nx == 'x':
                           out.append(chr(int(text[j + 2:j + 4], 16)))
                           j += 4
                       else:
-                          out.append('' if n == '\n' else ESC.get(n, n))
+                          out.append('' if nx == '\n' else ESC.get(nx, nx))
                           j += 2
                       continue
                   if c == quote:
@@ -230,8 +331,12 @@ jobs:
 
 
           def calls(text):
-              """(key, first line, last line) of each _('...') or _l('...')."""
+              """(chave, primeira linha, última linha) de cada _('...') ou _l('...')
+              que esteja em código (não em comentário nem dentro de string)."""
+              mask = code_mask(text)
               for m in CALL.finditer(text):
+                  if not mask[m.start()]:
+                      continue
                   i, parts = m.end(), []
                   while True:
                       while i < len(text) and text[i].isspace():
@@ -260,35 +365,46 @@ jobs:
                       or re.search(r'\.(test|spec)\.[jt]sx?$', path))
 
 
-          # Arquivos do patch: criado ou não, e as linhas que ele acrescenta
+          def placeholders(s):
+              return collections.Counter(f'{{{{{dash}{name}}}}}'
+                                         for dash, name in TOKEN.findall(s))
+
+
+          # Arquivos do patch: criado, apagado, e as linhas que ele acrescenta
           # (numeração do arquivo novo).
           files, cur, in_hunk, n = {}, None, False, 0
           for line in open(sys.argv[1], encoding='utf-8'):
               line = line.rstrip('\n')
               m = re.match(r'diff --git a/\S+ b/(\S+)$', line)
               if m:
-                  cur, in_hunk = files.setdefault(m.group(1), [False, set()]), False
+                  cur = files.setdefault(m.group(1), {'new': False, 'gone': False,
+                                                      'added': set()})
+                  in_hunk = False
               elif cur is None:
                   continue
               elif not in_hunk and line.startswith('new file mode'):
-                  cur[0] = True
+                  cur['new'] = True
+              elif not in_hunk and line.startswith('deleted file mode'):
+                  cur['gone'] = True
               elif line.startswith('@@ '):
                   in_hunk = True
                   n = int(re.match(r'@@ -\S+ \+(\d+)', line).group(1))
               elif in_hunk and line.startswith('+'):
-                  cur[1].add(n)
+                  cur['added'].add(n)
                   n += 1
               elif in_hunk and line.startswith(' '):
                   n += 1
 
           used = {}
-          for path, (created, added) in sorted(files.items()):
-              if not path.endswith(SRC) or is_test(path):
+          for path, info in sorted(files.items()):
+              if (info['gone'] or not path.endswith(SRC) or is_test(path)
+                      or not os.path.isfile(path)):
                   continue
               for key, first, last in calls(open(path, encoding='utf-8').read()):
-                  if created or added.intersection(range(first, last + 1)):
+                  if info['new'] or info['added'].intersection(range(first, last + 1)):
                       used.setdefault(key, (path, first))
 
+          upstream = json.load(open('public/locales/gsa-en.json', encoding='utf-8'))
           cats = {lang: json.load(open(f'public/locales/gsa-{lang}.json',
                                        encoding='utf-8'))
                   for lang in ('pt_BR', 'es')}
@@ -304,6 +420,20 @@ jobs:
               if NOT_ENGLISH.search(key):
                   errors.append((path, line, f'chave fora do inglês: {shown}'))
 
+          # Placeholders: o valor tem os mesmos {{x}} / {{- x}} da chave, nem mais nem
+          # menos (todas as chaves dos dois catálogos).
+          for lang, cat in cats.items():
+              for key, value in cat.items():
+                  if isinstance(value, str) and placeholders(key) != placeholders(value):
+                      errors.append((f'public/locales/gsa-{lang}.json', 1,
+                                     f'placeholders diferentes da chave em {lang}: '
+                                     f'{json.dumps(key, ensure_ascii=False)} -> '
+                                     f'{json.dumps(value, ensure_ascii=False)}'))
+
+          # Tradução sem uso: chave dos catálogos que não está no gsa-en.json do
+          # upstream e que nenhum _() de src/ chama. Numa atualização do GSA, as
+          # traduções das chaves que o upstream removeu aparecem aqui e devem ser
+          # apagadas dos catálogos.
           in_src = set()
           for dirpath, _dirs, names in os.walk('src'):
               for name in names:
@@ -313,10 +443,12 @@ jobs:
                       in_src.update(key for key, _a, _b in calls(text))
           for lang, cat in cats.items():
               for key in cat:
-                  if key not in in_src:
+                  if key not in upstream and key not in in_src:
                       shown = json.dumps(key, ensure_ascii=False)
                       errors.append((f'public/locales/gsa-{lang}.json', 1,
-                                     f'chave órfã (nenhum _() de src/ usa): {shown}'))
+                                     f'tradução sem uso: {shown} (fora do gsa-en.json '
+                                     f'do upstream e nenhum _() de src/ a chama; '
+                                     f'apague a chave deste catálogo)'))
 
           for path, line, msg in errors:
               msg = msg.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
