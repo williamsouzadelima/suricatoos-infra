@@ -35,6 +35,19 @@ porque sao invariantes do documento, nao casos especiais.
   nome           o nome do projeto, quando cortado (capa, contracapa, narrativa,
                  titulo do mapa de portas), e' cortado em fronteira de palavra e
                  o corte declarado bate;
+  prioridades    a secao 2 (prioridades e proximos passos), recalculada do XML:
+                 as acoes -- um NVT confirmado de severidade maxima >= 0.1 cada,
+                 o mesmo conjunto dos cards, sem Log, sem falso positivo e sem
+                 indicador -- na ordem documentada (classe de severidade, hosts
+                 afetados, EPSS, maior CVSS, nome do NVT, OID), linha a linha ate'
+                 o teto $prio-rows-max: a acao (primeira frase da solucao, com o
+                 teto $prio-action-max e o corte declarado), o nome, o tipo de
+                 solucao traduzido, os hosts distintos, a severidade, o EPSS e o
+                 link para o card certo, com o numero que o card tem; o "+ N"
+                 so' acima do teto; a frase "as N primeiras acoes tratam X de Y
+                 achados criticos e altos" (e as formas sem nenhum, com um so',
+                 com uma acao so' e sem host medido); as notas de EPSS, de
+                 indicadores fora do plano e de export parcial;
   escopo         a secao 7 (escopo, metodologia e limitacoes), recalculada do
                  XML bloco a bloco: cada \\scopefact com o rotulo e o valor
                  certos -- tarefa, alvo, hosts (e a contagem declarada pelo
@@ -58,11 +71,13 @@ porque sao invariantes do documento, nao casos especiais.
                  da secao 7) ou scan que iniciou e nao achou host (alive test).
 
 Os limiares (qod-min, group-min, adv-max, cortes do nome, scope-rows-max e os
-tetos de texto da secao 7), as listas de meses e dias e as frases do i18n sao
-LIDOS do proprio latex.xsl, para a regua nunca divergir do relatorio; um nome
-lido que esteja definido mais de uma vez la' e' erro (exit 2). As regras de
-estado do scan (ScanState) e os dois sinais do inventario do agente sao os do
-latex.xsl, escritos de novo aqui -- regua independente, como as outras.
+tetos de texto da secao 7, prio-rows-max e prio-action-max da secao 2), as
+listas de meses e dias e as frases do i18n sao LIDOS do proprio latex.xsl, para
+a regua nunca divergir do relatorio; um nome lido que esteja definido mais de
+uma vez la' e' erro (exit 2). As regras de estado do scan (ScanState), os dois
+sinais do inventario do agente e a ordem e as regras da secao 2 (PrioOracle)
+sao as do latex.xsl, escritas de novo aqui -- regua independente, como as
+outras.
 
 Uso:
     check-veracity.py --lang <en|pt_BR|es> --xml <fixture.xml> --tex <report.tex>
@@ -224,6 +239,11 @@ class Result:
         self.qod_raw = (q.text or "") if q is not None else ""
         self.qod = xnum(self.qod_raw)
         self.desc = el.findtext("description") or ""
+        # O host da instancia (o 1o texto do <host>, normalizado) e o EPSS do
+        # NVT como o gvmd o escreve no resultado: nvt/epss/max_epss/score (o
+        # CVE do NVT de maior EPSS; gmp.c, results_xml_append_epss).
+        self.host = norm_space(xp_first_text(el.find("host")))
+        self.epss = [xp_text(s) for s in el.findall("nvt/epss/max_epss/score")]
 
     def low(self, floor):
         """Instancia abaixo do piso: tem QoD e ela e' < piso (sem QoD = nao)."""
@@ -1458,12 +1478,274 @@ def check_alerta(m, tex, sheet, lang):
     return []
 
 
+# ---------------------------------------------------------------------------
+# Secao 2: prioridades e proximos passos
+# ---------------------------------------------------------------------------
+# Palavras que, terminadas em ponto, NAO fecham a primeira frase da solucao:
+# abreviacoes, comparadas pelo radical (a palavra sem o ponto) em minusculas,
+# so' A-Z rebaixado, como o translate do latex.xsl. Item numerado ("1.") e
+# palavra de uma letra ("p.") tambem nao fecham, pela regra do radical.
+PRIO_ABBREV = ("e.g", "i.e", "p.ex", "p.ej", "ex", "ej", "vs", "cf", "approx", "incl")
+ASCII_LOWER = str.maketrans("ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz")
+NOSOL = "\\prionosol"    # a acao de um NVT cuja solucao o relatorio nao traz
+
+
+def prio_stop(word):
+    """A palavra fecha a primeira frase: termina em ponto, e o radical tem mais
+    de um caractere, nao e' so' digito (item numerado) e nao e' abreviacao."""
+    if not word.endswith("."):
+        return False
+    stem = word[:-1]
+    return (len(stem) > 1 and any(c not in "0123456789" for c in stem)
+            and stem.translate(ASCII_LOWER) not in PRIO_ABBREV)
+
+
+def first_sentence(s):
+    """A primeira frase de um texto ja' normalizado (espaco simples): as
+    palavras ate' a primeira que fecha frase (prio_stop), inclusive; sem
+    nenhuma, o texto inteiro."""
+    words = s.split(" ")
+    for i, w in enumerate(words):
+        if prio_stop(w):
+            return " ".join(words[:i + 1])
+    return s
+
+
+def epss_cell(score, lang):
+    """O EPSS em porcentagem, como o format-number(x * 100, '0.0##') do
+    latex.xsl: 3 casas no maximo, 1 no minimo, virgula decimal em pt/es. O
+    arredondamento e' o do libxslt na faixa que o gvmd escreve (score com 5
+    casas, %0.5f: x * 100 tem no maximo 3), medido valor a valor de 0.00000 a
+    1.00000."""
+    n = math.floor(score * 100 * 1000 + 0.5)
+    ip, fr = divmod(n, 1000)
+    frs = ("%03d" % fr).rstrip("0") or "0"
+    return "%d%s%s\\%%" % (ip, "." if bucket(lang) == "en" else ",", frs)
+
+
+class PrioOracle:
+    """O que a secao 2 deveria dizer, recalculado do XML.
+
+    Uma ACAO por NVT confirmado (o mesmo conjunto dos cards: QoD pelo NVT, com
+    todas as instancias) de severidade maxima >= 0.1 -- sem Log, sem falso
+    positivo; o indicador (todas as instancias abaixo do piso de QoD) fica
+    fora do plano e e' contado numa nota. Ordem: classe de severidade
+    (decrescente), hosts afetados (distintos, entre as instancias com
+    severidade >= 0.1; decrescente), EPSS (max_epss/score, o maior entre as
+    instancias; decrescente, sem EPSS por ultimo), maior CVSS (decrescente),
+    nome do NVT (o do feed, normalizado; crescente) e OID (crescente) -- texto
+    comparado ponto de codigo a ponto de codigo, como o xsl:sort do libxslt sem
+    @lang. Ate' $prio-rows-max linhas; X e Y contam as instancias com
+    severidade >= 7.0 das N primeiras acoes e de todas."""
+
+    def __init__(self, m, sheet, lang, bundle, tex):
+        self.sheet, self.lang = sheet, lang
+        t = self.t
+        self.cap = sheet.num("prio-rows-max")
+        self.act_max = sheet.num("prio-action-max")
+        # O numero que cada card de achado CONFIRMADO tem no .tex (secao 6): o
+        # card normal pelo "#N" dele, o consolidado pela ordem (o N da linha do
+        # grupo no sumario e do marcador). A numeracao em si e' a regua do
+        # check_numeracao; aqui ela so' diz que numero o link tem de mostrar.
+        self.cards = {}
+        ncons = 0
+        for mode, block in tex.blocks(SEC_DETAIL):
+            if mode != "confirmados":
+                continue
+            for c in consolidated_cards(block):
+                ncons += 1
+                self.cards[c["anchor"]] = str(ncons)
+            for c in finding_cards(block):
+                self.cards[c["anchor"]] = c["num"]
+        acts = []
+        for n in m.nvts:
+            if n.low or not (isnum(n.maxsev) and n.maxsev >= 0.1):
+                continue
+            hits = [r for r in n.inst if isnum(r.sev) and r.sev >= 0.1]
+            scores = [v for v in (xnum(s) for r in n.inst for s in r.epss) if isnum(v)]
+            acts.append({"nvt": n,
+                         "rank": 1 + (n.maxsev >= 4.0) + (n.maxsev >= 7.0) + (n.maxsev >= 9.0),
+                         "hosts": len({r.host for r in hits if r.host}),
+                         "epss": max(scores) if scores else None,
+                         "x": sum(1 for r in n.inst if isnum(r.sev) and r.sev >= 7.0),
+                         "name": norm_space(n.rep.name)})
+        acts.sort(key=lambda a: (-a["rank"], -a["hosts"],
+                                 (0, -a["epss"]) if a["epss"] is not None else (1, 0),
+                                 -a["nvt"].maxsev, a["name"], a["nvt"].oid))
+        self.acts = acts
+        shown = acts[:self.cap]
+        cat = catalog(bundle, lang)
+        self.rows = []
+        for i, a in enumerate(shown, 1):
+            n = a["nvt"]
+            rep = n.rep
+            tr = cat.get(n.oid)
+            # A solucao do card (finding-cards): o catalogo do idioma, senao
+            # nvt/solution, senao a tag solution.
+            orig = rep.solution if norm_space(rep.solution) else rep.tag("solution")
+            tr_sol = (tr.findtext("solution") or "") if tr is not None else ""
+            sol = norm_space(tr_sol if norm_space(tr_sol) else orig)
+            tr_name = (tr.findtext("name") or "") if tr is not None else ""
+            stype = rep.soltype or ""
+            if n.oid in m.absorbed:
+                anchor = "grp-" + m.groups[n.group][0].oid.replace(".", "-")
+            else:
+                anchor = fnd(n.oid)
+            self.rows.append({
+                "num": str(i),
+                "action": ("corte", first_sentence(sol), self.act_max) if sol else NOSOL,
+                "name": norm_space(tr_name if norm_space(tr_name) else rep.name),
+                "type": ((t("st_" + stype) if "st_" + stype in sheet.i18n else stype)
+                         if stype else "---"),
+                "hosts": str(a["hosts"]),
+                "sev": sev_key_row(n.maxsev),
+                "cvss": n.maxsev_raw.strip(),
+                "epss": epss_cell(a["epss"], lang) if a["epss"] is not None else "---",
+                "anchor": anchor})
+        N = len(shown)
+        X = sum(a["x"] for a in shown)
+        Y = sum(a["x"] for a in acts)
+        self.N, self.X, self.Y = N, X, Y
+        if not acts and m.hosts == 0:
+            self.summary = t("prio_sum_nohost")
+        elif Y == 0:
+            self.summary = t("prio_sum_none")
+        elif Y == 1:
+            self.summary = t("prio_sum_one")
+        elif N == 1:
+            self.summary = "%s%d%s%d%s" % (t("prio_sum_1"), X, t("prio_sum_of"), Y,
+                                           t("prio_sum_tail"))
+        else:
+            self.summary = "%s%d%s%d%s%d%s" % (t("prio_sum_n_a"), N, t("prio_sum_n_b"), X,
+                                               t("prio_sum_of"), Y, t("prio_sum_tail"))
+        self.paras = [t("prio_intro_a") + str(m.floor) + t("prio_intro_b")]
+        if acts:
+            self.paras.append(t("prio_order"))
+        self.trunc = (["\\suriEllip\\ + " + gvm_num(len(acts) - self.cap, lang)
+                       + t("prio_trunc_a") + t("sec_detailed") + t("prio_trunc_b")]
+                      if len(acts) > self.cap else [])
+        notes = []
+        if not acts and m.hosts > 0:
+            notes.append(t("prio_none"))
+        epss_any = any(isnum(xnum(s)) for r in m.results for s in r.epss)
+        if acts and not epss_any:
+            notes.append(t("prio_epss_none"))
+        elif acts and any(a["epss"] is None for a in shown):
+            notes.append(t("prio_epss_some"))
+        nind = sum(1 for n in m.nvts if n.low and isnum(n.maxsev) and n.maxsev >= 0.1)
+        if nind:
+            notes.append("%s%d%s%d%s" % (t("prio_ind_a"), nind, t("prio_ind_b"), m.floor,
+                                         t("prio_ind_c")))
+        # Export parcial: a regra unica do latex.xsl ($export-partial), a mesma
+        # do aviso do resumo executivo e da secao 7.
+        total = len(m.results)
+        rcs = norm_space(xp_first_text(m.report.find("result_count")))
+        rcn = xnum(rcs)
+        if rcs and isnum(rcn) and math.floor(rcn) == rcn and rcn > total:
+            notes.append("%s%d%s%d%s" % (t("prio_partial_a"), total, t("prio_partial_b"),
+                                         int(rcn), t("prio_partial_c")))
+        self.notes = notes
+
+    def t(self, key):
+        return self.sheet.t(key, self.lang)
+
+
+def check_prioridades(m, tex, sheet, lang, bundle):
+    """A secao 2 (prioridades e proximos passos) diz a verdade sobre o XML: as
+    acoes na ordem documentada, cada uma com a posicao, a acao (primeira frase
+    da solucao, teto e corte declarado; \\prionosol so' sem solucao), o nome,
+    o tipo de solucao traduzido, os hosts distintos, a severidade, o EPSS e o
+    link para o card do achado com o numero que esse card tem; o "+ N" so'
+    acima do teto; a frase calculada; as notas (EPSS, indicadores fora do
+    plano, export parcial); e os blocos na ordem introducao, frase, tabela,
+    corte, notas."""
+    if SEC_PRIO not in tex.sections:
+        return ["secao %d ausente" % SEC_PRIO]
+    text, _ = tex.section(SEC_PRIO)
+    want = PrioOracle(m, sheet, lang, bundle, tex)
+    where = "secao %d" % SEC_PRIO
+    fails = []
+    paras = macros(text, "suriPara", 1)
+    if [a[0] for _, a in paras] != want.paras:
+        fails.append("%s: introducao %s, esperado %s"
+                     % (where, [a[0][:50] for _, a in paras], [x[:50] for x in want.paras]))
+    sums = macros(text, "priosummary", 1)
+    if [a[0] for _, a in sums] != [want.summary]:
+        fails.append("%s: frase %s, esperado '%s' (N=%d, X=%d, Y=%d)"
+                     % (where, [a[0] for _, a in sums], want.summary, want.N, want.X, want.Y))
+    rows = macros(text, "priorow", 9)
+    if len(rows) != len(want.rows):
+        fails.append("%s: %d \\priorow, esperado %d (%d acao(oes), teto %d)"
+                     % (where, len(rows), len(want.rows), len(want.acts), want.cap))
+    if ("\\begin{prioritytable}" in text) != bool(want.rows):
+        fails.append("%s: tabela %s, e o plano tem %d acao(oes)"
+                     % (where, "presente" if want.rows == [] else "ausente", len(want.acts)))
+    for (_, a), w in zip(rows, want.rows):
+        cell = "%s / acao #%s" % (where, w["num"])
+        if a[0].strip() != w["num"]:
+            fails.append("%s: numerada '%s'" % (cell, a[0].strip()))
+        act = a[1].strip()
+        if w["action"] == NOSOL:
+            if act != NOSOL:
+                fails.append("%s: acao '%s', esperado \\prionosol (o NVT nao traz solucao)"
+                             % (cell, flat(act)[:60]))
+        elif act == NOSOL:
+            fails.append("%s: \\prionosol, e o NVT traz a solucao '%s'"
+                         % (cell, w["action"][1][:60]))
+        else:
+            fails += cut_fails("%s: acao" % cell, w["action"][2], w["action"][1],
+                               plain(act), trunc_count(act))
+        for k, label in ((2, "name"), (3, "type")):
+            if flat(a[k]) != norm_space(w[label]):
+                fails.append("%s: %s '%s', esperado '%s'"
+                             % (cell, "nome" if label == "name" else "tipo de solucao",
+                                flat(a[k])[:60], norm_space(w[label])[:60]))
+        for k, label, what in ((4, "hosts", "hosts"), (5, "sev", "severidade"),
+                               (6, "cvss", "CVSS"), (7, "epss", "EPSS")):
+            if a[k].strip() != w[label]:
+                fails.append("%s: %s '%s', esperado '%s'" % (cell, what, a[k].strip(), w[label]))
+        links = macros(a[8], "priolink", 2)
+        if len(links) != 1:
+            fails.append("%s: %d \\priolink na celula do achado, esperado 1" % (cell, len(links)))
+            continue
+        anchor, label = links[0][1][0].strip(), links[0][1][1].strip()
+        num = want.cards.get(w["anchor"])
+        if anchor != w["anchor"]:
+            fails.append("%s: o link leva a %s, esperado %s" % (cell, anchor, w["anchor"]))
+        elif num is None:
+            fails.append("%s: o card %s nao existe entre os confirmados da secao %d"
+                         % (cell, w["anchor"], SEC_DETAIL))
+        elif label != "\\#" + num:
+            fails.append("%s: o link mostra '%s', e o card %s e' o #%s" % (cell, label, anchor, num))
+    trunc = macros(text, "priotrunc", 1)
+    if [a[0] for _, a in trunc] != want.trunc:
+        fails.append("%s: corte declarado %s, esperado %s (%d acao(oes), teto %d)"
+                     % (where, [a[0] for _, a in trunc], want.trunc, len(want.acts), want.cap))
+    notes = macros(text, "blocknote", 1)
+    if [a[0] for _, a in notes] != want.notes:
+        fails.append("%s: notas %s, esperado %s"
+                     % (where, [a[0][:50] for _, a in notes], [x[:50] for x in want.notes]))
+    # Os blocos na ordem: introducao, frase, tabela, corte, notas.
+    seq = sorted([(p, "p") for p, _ in paras] + [(p, "s") for p, _ in sums]
+                 + [(p, "r") for p, _ in rows] + [(p, "t") for p, _ in trunc]
+                 + [(p, "n") for p, _ in notes])
+    kinds = "".join(k for _, k in seq)
+    if not re.fullmatch(r"p+sr*t?n*", kinds):
+        fails.append("%s: blocos fora de ordem (%s; esperado introducao, frase, tabela,"
+                     " corte, notas)" % (where, kinds))
+    # Os links da tabela sao \priolink: um \hyperlink aqui entraria na conta
+    # exata alvos == links + cortes do gates.sh, que e' a do sumario de achados.
+    if ANCHOR_LINK.search(text):
+        fails.append("%s: \\hyperlink na secao; o link da tabela e' \\priolink" % where)
+    return fails
+
+
 CHECKS = [
     ("numeracao", check_numeracao), ("secoes", check_secoes),
     ("consolidado", check_consolidado), ("instancias", check_instancias),
     ("acao", None), ("vulns-unicas", check_vulns_unicas), ("faixas", check_faixas),
-    ("ancoras", check_ancoras), ("nome", check_nome), ("escopo", check_escopo),
-    ("alerta", check_alerta),
+    ("ancoras", check_ancoras), ("nome", check_nome), ("prioridades", None),
+    ("escopo", check_escopo), ("alerta", check_alerta),
 ]
 
 
@@ -1489,6 +1771,8 @@ def main():
         try:
             if name == "acao":
                 fails = check_acao(model, tex, sheet, args.lang, args.bundle)
+            elif name == "prioridades":
+                fails = check_prioridades(model, tex, sheet, args.lang, args.bundle)
             else:
                 fails = fn(model, tex, sheet, args.lang)
         except TexError as e:

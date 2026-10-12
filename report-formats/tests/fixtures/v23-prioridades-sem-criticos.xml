@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+Fixture SINTETICA do CI de veracidade do Suricatoos Premium PDF
+(report-formats/ci/check-veracity.py roda sobre o .tex desta fixture nos 3
+idiomas). Enderecos RFC 5737, nomes genericos sob .example, OIDs da faixa
+sintetica 1.3.6.1.4.1.25623.1.0.99xxxx (nao existem no feed), CVEs do ano 2099
+e EPSS inventado no formato do gvmd 26 (gmp.c, results_xml_append_epss: score
+e percentile com 5 casas); nenhum dado de scan real.
+
+Secao 2 (prioridades e proximos passos), relatorio SEM achado critico ou alto
+e SEM EPSS:
+- a frase calculada nao diz "0 de 0": diz que nao ha achados criticos nem
+  altos confirmados;
+- a coluna EPSS sai inteira com travessao e a nota "EPSS nao informado no
+  relatorio";
+- tres acoes (Medio em 2 hosts, Medio, Baixo); o Log fica fora; o indicador
+  Baixo de QoD 30 tambem, na nota "fora deste plano: 1 indicador".
+-->
+<report extension="pdf" content_type="application/pdf" id="00000000-0000-4000-8000-000000000231">
+  <task id="00000000-0000-4000-8000-000000000001">
+    <name>Example Priorities Without Criticals</name>
+  </task>
+  <scan_run_status>Done</scan_run_status>
+  <timezone>Coordinated Universal Time</timezone>
+  <timezone_abbrev>UTC</timezone_abbrev>
+  <scan_start>2026-09-01T09:00:00Z</scan_start>
+  <scan_end>2026-09-01T10:12:00Z</scan_end>
+  <hosts><count>2</count></hosts>
+  <result_count>6<full>6</full><filtered>6</filtered><critical><full>0</full><filtered>0</filtered></critical><high><full>0</full><filtered>0</filtered></high><medium><full>3</full><filtered>3</filtered></medium><low><full>2</full><filtered>2</filtered></low><log><full>1</full><filtered>1</filtered></log><false_positive><full>0</full><filtered>0</filtered></false_positive></result_count>
+  <filters id="00000000-0000-4000-8000-000000000002">
+    <term>apply_overrides=1 levels=chmlgf rows=-1 min_qod=1 first=1 sort-reverse=severity</term>
+  </filters>
+  <host>
+    <ip>192.0.2.41</ip>
+    <start>2026-09-01T09:01:00Z</start>
+    <end>2026-09-01T10:10:00Z</end>
+    <detail><name>hostname</name><value>host41.example.com</value></detail>
+  </host>
+  <host>
+    <ip>198.51.100.41</ip>
+    <start>2026-09-01T09:01:00Z</start>
+    <end>2026-09-01T10:10:00Z</end>
+    <detail><name>hostname</name><value>host42.example.com</value></detail>
+  </host>
+  <results start="1" max="-1">
+    <result id="p-0001">
+      <host>192.0.2.41<hostname>host41.example.com</hostname></host>
+      <port>22/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992301"><type>nvt</type><name>Example Remote Access Weak Cipher Suites</name><family>Synthetic</family><cvss_base>6.1</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">Disable the weak cipher suites in the remote access service.</solution><refs></refs></nvt>
+      <threat>Medium</threat>
+      <severity>6.1</severity>
+      <qod><value>98</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Remote Access Weak Cipher Suites.</description>
+    </result>
+    <result id="p-0002">
+      <host>198.51.100.41<hostname>host42.example.com</hostname></host>
+      <port>22/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992301"><type>nvt</type><name>Example Remote Access Weak Cipher Suites</name><family>Synthetic</family><cvss_base>6.1</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">Disable the weak cipher suites in the remote access service.</solution><refs></refs></nvt>
+      <threat>Medium</threat>
+      <severity>6.1</severity>
+      <qod><value>98</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Remote Access Weak Cipher Suites.</description>
+    </result>
+    <result id="p-0003">
+      <host>192.0.2.41<hostname>host41.example.com</hostname></host>
+      <port>443/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992302"><type>nvt</type><name>Example Web Framework Outdated Minor Release</name><family>Synthetic</family><cvss_base>4.3</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=VendorFix</tags><solution type="VendorFix">Update the web framework to the latest minor release.</solution><refs></refs></nvt>
+      <threat>Medium</threat>
+      <severity>4.3</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Web Framework Outdated Minor Release.</description>
+    </result>
+    <result id="p-0004">
+      <host>198.51.100.41<hostname>host42.example.com</hostname></host>
+      <port>80/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992303"><type>nvt</type><name>Example Directory Listing Enabled</name><family>Synthetic</family><cvss_base>3.1</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Workaround</tags><solution type="Workaround">Disable directory listing in the web server configuration.</solution><refs></refs></nvt>
+      <threat>Low</threat>
+      <severity>3.1</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Directory Listing Enabled.</description>
+    </result>
+    <result id="p-0005">
+      <host>192.0.2.41<hostname>host41.example.com</hostname></host>
+      <port>general/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992304"><type>nvt</type><name>Example Operating System Detection</name><family>Synthetic</family><cvss_base>0.0</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.</tags><solution></solution><refs></refs></nvt>
+      <threat>Log</threat>
+      <severity>0.0</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Operating System Detection.</description>
+    </result>
+    <result id="p-0006">
+      <host>198.51.100.41<hostname>host42.example.com</hostname></host>
+      <port>443/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992305"><type>nvt</type><name>Example Unconfirmed Header Weakness</name><family>Synthetic</family><cvss_base>2.0</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">Add the missing security header.</solution><refs></refs></nvt>
+      <threat>Low</threat>
+      <severity>2.0</severity>
+      <qod><value>30</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Unconfirmed Header Weakness.</description>
+    </result>
+  </results>
+</report>

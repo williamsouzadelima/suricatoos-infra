@@ -110,12 +110,15 @@ overfull_baseline() {
     es/tortura)    echo 0 ;;
     # Fixtures de veracidade (report-formats/tests/fixtures/), nos 3 idiomas:
     # nascem com 0, a mesma regua das outras. v10-navegacao (secao 4 em varias
-    # paginas, host em dois cards, marcador acima do teto) tambem, e as da
+    # paginas, host em dois cards, marcador acima do teto) tambem, as da
     # secao 7 (v11 autenticacao, erros e feed; v12 tarefa que nao iniciou; v13
     # tabelas acima do teto, celulas que quebram e cortes declarados; v14 scan
     # interrompido; v15/v16 inventario do agente; v17 concluido sem host; v18
     # import do sensor; v19a/v19b o veto do comentario do bridge; v20a..v20i a
-    # tabela de estados).
+    # tabela de estados) e as da secao 2 (v21 a ordem do plano com EPSS; v22
+    # mais de 20 acoes, grupos consolidados, textos de solucao e cortes; v23 sem
+    # critico nem alto e sem EPSS; v24 exatamente 20 acoes e um so' alto; v25
+    # uma acao so').
     */v1-numeracao | */v2-indicadores-vazios | */v3-consolidado-qod | \
     */v4-instancias | */v5-acao-traduzida | */v6-vulns-unicas | \
     */v7a-faixas | */v7b-lowconf | */v7c-todos-lowconf | \
@@ -127,7 +130,9 @@ overfull_baseline() {
     */v20a-estado-em-execucao | */v20b-estado-parada-solicitada | */v20c-estado-parado | \
     */v20d-estado-novo | */v20e-estado-solicitado | */v20f-estado-na-fila | \
     */v20g-estado-parada-solicitada-sem-inicio | */v20h-estado-parado-sem-inicio | \
-    */v20i-estado-interrompido-sem-inicio) echo 0 ;;
+    */v20i-estado-interrompido-sem-inicio | \
+    */v21-prioridades-ordem | */v22-prioridades-cortes | */v23-prioridades-sem-criticos | \
+    */v24-prioridades-vinte-acoes | */v25-prioridades-acao-unica) echo 0 ;;
     *) return 1 ;;
   esac
 }
