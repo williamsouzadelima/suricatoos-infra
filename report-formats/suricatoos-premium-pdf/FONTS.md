@@ -61,11 +61,15 @@ Regras para quem escreve `.sty` ou `latex.xsl`:
   `\suriTruncMark` e o aparte da lista de IPs).
 - `\fontseries{b}` (Bold de verdade) só em Sans e sem itálico (título da capa).
 
-Auditoria desta tabela contra o design (out/2026): o itálico aparece em três
+Auditoria desta tabela contra o design (out/2026): o itálico aparece em cinco
 lugares — `\suriTruncMark`, o aparte `{\suriSans\itshape ...}` da lista de IPs
-(célula Mono regular) e o `\textit` da nota de nível de host (`\blocknote`, Sans
-regular); só o primeiro podia cair dentro de negrito (o nome do projeto na
-narrativa executiva, quando passa de `$task-name-max`).
+(célula Mono regular), o `\textit` da nota de nível de host (`\blocknote`, Sans
+regular), o `\scopena` ("não informado no relatório", seção 7) e o `\prionosol`
+("sem solução informada", tabela de prioridades da seção 2); só o primeiro podia
+cair dentro de negrito (o nome do projeto na narrativa executiva, quando passa
+de `$task-name-max`), e os dois últimos fixam a série como o `\suriTruncMark`
+(`\suriSans\mdseries\itshape`). A frase calculada das prioridades
+(`\priosummary`) é Sans `sb/n` e não leva itálico nenhum.
 
 ## Proveniência e licença
 

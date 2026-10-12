@@ -7,11 +7,11 @@ idiomas). Nomes genericos, nenhum endereco e nenhum dado de scan real.
 Tabela de estados (v20a..v20i; a tabela inteira esta' no compile.sh):
 um relatorio sem host e sem resultado para cada scan_run_status das listas de
 $scan-never-started e $scan-unfinished do latex.xsl. Tirar um estado de uma
-lista muda o alerta da secao 1 e a nota da secao 6, e o check-veracity.py, que
+lista muda o alerta da secao 1 e a nota da secao 7, e o check-veracity.py, que
 tem as listas dele, reprova.
 
 Esta linha: scan_run_status Stopped, SEM scan_start: a tarefa parou antes de o
-scanner comecar. A tarefa nao chegou a iniciar. Secao 6: a situacao "Parado",
+scanner comecar. A tarefa nao chegou a iniciar. Secao 7: a situacao "Parado",
 a nota "nao chegou a iniciar", e inicio, fim e duracao "nao informado".
 Secao 1: o alerta "Este scan nao chegou a rodar", sem o conselho do alive
 test.

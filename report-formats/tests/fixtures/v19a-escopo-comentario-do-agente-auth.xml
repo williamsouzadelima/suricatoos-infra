@@ -6,7 +6,7 @@ idiomas). Enderecos RFC 5737, nomes genericos sob .example, OIDs da faixa
 sintetica 1.3.6.1.4.1.25623.1.0.99xxxx (nao existem no feed); nenhum dado de
 scan real.
 
-Secao 6, o VETO da leitura de inventario do agente: um scan de rede REAL cujo
+Secao 7, o VETO da leitura de inventario do agente: um scan de rede REAL cujo
 comentario de tarefa comeca com o prefixo que o gmp-bridge grava no modo agent
 ("Suricatoos Agent findings for host"). O comentario e' editavel pelo operador
 (aqui, copiado da tarefa importada); o host traz o detalhe Auth-SSH-Success que

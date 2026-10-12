@@ -8,7 +8,7 @@ O outro lado da regra "a tarefa nao chegou a iniciar": um export sem
 scan_start, sem host e sem resultado, mas com scan_run_status Done. Um scan
 concluido sem host e' o do alive test que nao achou ninguem (o gvmd marca
 Done), nao uma tarefa que nunca rodou: o estado veta a nota "nao chegou a
-iniciar" na secao 6, e o resumo executivo da' a causa do alive test, como num
+iniciar" na secao 7, e o resumo executivo da' a causa do alive test, como num
 scan que iniciou e nao achou host. Inicio, fim e duracao saem "nao
 informado"; a situacao, "Concluido".
 -->

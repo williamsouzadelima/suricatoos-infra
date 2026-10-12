@@ -148,7 +148,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
 
   <!-- ===================================================================
        O CONJUNTO DE ACHADOS, definido UMA vez para o Sumario de Achados
-       (secao 4) e para os cards (secao 5).
+       (secao 5) e para os cards (secao 6).
 
        Cada secao montava o proprio conjunto com a sua copia de um predicado
        de uma linha so', e as copias divergiram: a contagem que abria a secao
@@ -254,7 +254,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
   <xsl:variable name="rows-conf"
     select="$nvt-conf[not(nvt/solution/@type='VendorFix' and gvm:grp(nvt/name) = $grp-keys)]"/>
 
-  <!-- Teto de LINHAS de cada tabela do sumario de achados (secao 4).
+  <!-- Teto de LINHAS de cada tabela do sumario de achados (secao 5).
        O sumario existe para ser lido de uma olhada; um scan real produz dezenas
        de deteccoes informativas (Log) que enchem paginas sem orientar decisao
        nenhuma. A truncagem e' seletiva, nao um corte cego pelo fim da lista:
@@ -452,14 +452,14 @@ SPDX-License-Identifier: GPL-2.0-or-later
     <s k="nohost_body_b" en="The absence of findings in this report is not evidence of the absence of vulnerabilities" pt="A ausência de achados neste relatório não é evidência de ausência de vulnerabilidades" es="La ausencia de hallazgos en este informe no es evidencia de ausencia de vulnerabilidades"/>
     <s k="nohost_body_c" en=" --- it is the absence of a measurement. The usual cause is the target answering none of the probes selected in its Alive Test (a firewall dropping ICMP, for instance). Fix that setting and scan again before treating this result as a clean scan." pt=" --- é ausência de medição. A causa usual é o alvo não responder a nenhuma das sondas escolhidas no Alive Test dele (um firewall descartando ICMP, por exemplo). Corrija essa configuração e refaça o scan antes de tratar este resultado como um scan limpo." es=" --- es ausencia de medición. La causa habitual es que el objetivo no responda a ninguna de las sondas elegidas en su Alive Test (un firewall descartando ICMP, por ejemplo). Corrija esa configuración y repita el escaneo antes de tratar este resultado como un escaneo limpio."/>
     <!-- A mesma ausencia de medicao quando a tarefa NUNCA INICIOU (regra
-         $scan-never-started, a mesma da secao 6): ai' o alive test nao chegou
+         $scan-never-started, a mesma da secao 7): ai' o alive test nao chegou
          a rodar, e o conselho de corrigi-lo seria um diagnostico inventado. O
          miolo em negrito e' o nohost_body_b. -->
     <s k="never_title" en="This scan never ran" pt="Este scan não chegou a rodar" es="Este escaneo no llegó a ejecutarse"/>
     <s k="never_body_a" en="The report records no scan start, no host and no result: the task never began scanning, so nothing was measured. " pt="O relatório não registra início de scan, host nem resultado: a tarefa não chegou a iniciar a varredura, então nada foi medido. " es="El informe no registra inicio de escaneo, host ni resultado: la tarea no llegó a iniciar el análisis, así que nada fue medido. "/>
     <s k="never_body_c" en=" --- it is the absence of a measurement. Start the task, or find out why it did not start, before reading this report as a result." pt=" --- é ausência de medição. Inicie a tarefa, ou descubra por que ela não iniciou, antes de ler este relatório como um resultado." es=" --- es ausencia de medición. Inicie la tarea, o averigüe por qué no se inició, antes de leer este informe como un resultado."/>
     <!-- E quando o scan INICIOU E NAO TERMINOU sem registrar host (regra
-         $scan-unfinished, a mesma da secao 6: Running, Stop Requested,
+         $scan-unfinished, a mesma da secao 7: Running, Stop Requested,
          Stopped ou Interrupted): ainda nao ha' o que culpar. O alive test
          pode nem ter rodado, entao o corpo e' neutro — diz o que o dado
          sustenta, sem diagnostico. O miolo em negrito e' o nohost_body_b. -->
@@ -703,6 +703,52 @@ SPDX-License-Identifier: GPL-2.0-or-later
     <!-- O numero entre _a e _b e' o parametro $qod-min, nunca escrito aqui. -->
     <s k="scope_lim_qod_a" en="Confidence: findings with a QoD below " pt="Confiança: achados com QoD abaixo de " es="Confianza: los hallazgos con QoD por debajo de "/>
     <s k="scope_lim_qod_b" en=" are indicators to validate, not confirmed facts; results below the QoD floor of the export filter never reach this report." pt=" são indicadores a validar, não fatos confirmados; resultados abaixo do piso de QoD do filtro do export nem chegam a este relatório." es=" son indicadores a validar, no hechos confirmados; los resultados por debajo del piso de QoD del filtro de la exportación ni llegan a este informe."/>
+    <!-- Secao 2: prioridades e proximos passos. Tudo o que ela afirma sai do
+         proprio relatorio (veja priorities-section); estas sao so' as
+         palavras. Mesma regra de toda a tabela: sem caractere especial do
+         LaTeX fora de sequencia de controle intencional (\% e o travessao do
+         TeX). Os numeros — o piso de QoD entre prio_intro_a e _b, N, X e Y da
+         frase calculada, as contagens das notas — vem do XSLT, nunca daqui. -->
+    <s k="sec_prio" en="Priorities and Next Steps" pt="Prioridades e Próximos Passos" es="Prioridades y Próximos Pasos"/>
+    <s k="sec_prio_run" en="PRIORITIES" pt="PRIORIDADES" es="PRIORIDADES"/>
+    <s k="prio_intro_a" en="Where to start, from what this report records and nothing else. Each action is one confirmed NVT (detection quality of at least " pt="Por onde começar, a partir só do que este relatório registra. Cada ação é um NVT confirmado (qualidade de detecção de pelo menos " es="Por dónde empezar, a partir solo de lo que este informe registra. Cada acción es un NVT confirmado (calidad de detección de al menos "/>
+    <s k="prio_intro_b" en="\%) of Low severity or higher, with all of its instances; the action is the first sentence of the solution the NVT gives." pt="\%) de severidade Baixa ou maior, com todas as suas instâncias; a ação é a primeira frase da solução que o NVT indica." es="\%) de severidad Baja o mayor, con todas sus instancias; la acción es la primera frase de la solución que indica el NVT."/>
+    <!-- O nome do desempate e' o do feed (nvt/name), nao o traduzido: a ordem
+         do plano e' a mesma nas tres linguas. -->
+    <s k="prio_order" en="Order: severity class (Critical, High, Medium, Low); then number of affected hosts, EPSS (highest first; none last), highest CVSS, NVT name (as in the feed) and OID." pt="Ordem: classe de severidade (Crítico, Alto, Médio, Baixo); depois número de hosts afetados, EPSS (maior primeiro; sem EPSS por último), maior CVSS, nome do NVT (o do feed) e OID." es="Orden: clase de severidad (Crítico, Alto, Medio, Bajo); después número de hosts afectados, EPSS (mayor primero; sin EPSS al final), mayor CVSS, nombre del NVT (el del feed) y OID."/>
+    <!-- A frase calculada, nas suas formas: N acoes / uma acao tratam X de Y;
+         um so' achado critico ou alto (nada de "1 de 1"); nenhum (nada de
+         "0 de 0"); e nenhum host medido, que nao e' boa noticia. -->
+    <s k="prio_sum_n_a" en="The first " pt="As " es="Las "/>
+    <s k="prio_sum_n_b" en=" actions address " pt=" primeiras ações tratam " es=" primeras acciones tratan "/>
+    <s k="prio_sum_1" en="The first action addresses " pt="A primeira ação trata " es="La primera acción trata "/>
+    <s k="prio_sum_of" en=" of the " pt=" de " es=" de los "/>
+    <s k="prio_sum_tail" en=" confirmed critical and high findings." pt=" achados críticos e altos confirmados." es=" hallazgos críticos y altos confirmados."/>
+    <s k="prio_sum_one" en="The first action addresses the only confirmed critical or high finding." pt="A primeira ação trata o único achado crítico ou alto confirmado." es="La primera acción trata el único hallazgo crítico o alto confirmado."/>
+    <s k="prio_sum_none" en="This report has no confirmed critical or high findings." pt="Este relatório não tem achados críticos nem altos confirmados." es="Este informe no tiene hallazgos críticos ni altos confirmados."/>
+    <s k="prio_sum_nohost" en="No host was measured, so there is nothing to prioritise --- and that is not evidence that there is nothing to fix." pt="Nenhum host foi medido, então não há o que priorizar --- e isso não é evidência de que não haja o que corrigir." es="No se midió ningún host, así que no hay nada que priorizar --- y eso no es evidencia de que no haya nada que corregir."/>
+    <s k="prio_none" en="No action: the report has no confirmed finding of Low severity or higher." pt="Nenhuma ação: o relatório não tem achado confirmado de severidade Baixa ou maior." es="Ninguna acción: el informe no tiene hallazgos confirmados de severidad Baja o mayor."/>
+    <!-- Cauda do corte da tabela: o nome da secao de achados detalhados entra
+         entre _a e _b (sec_detailed), em texto corrido — a linha e' Mono, e
+         Mono nao tem italico (FONTS.md). -->
+    <s k="prio_trunc_a" en=" more action(s), not listed in this table; each one is described in the " pt=" ação(ões) a mais, não listada(s) nesta tabela; cada uma está descrita na seção " es=" acción(es) más, no listada(s) en esta tabla; cada una se describe en la sección "/>
+    <s k="prio_trunc_b" en=" section." pt="." es="."/>
+    <s k="prio_epss_none" en="EPSS not stated in the report: the EPSS column reads --- and the criterion plays no part in the order." pt="EPSS não informado no relatório: a coluna EPSS sai com --- e o critério não pesa na ordem." es="EPSS no informado en el informe: la columna EPSS sale con --- y el criterio no pesa en el orden."/>
+    <s k="prio_epss_some" en="In the EPSS column, --- means the report carries no EPSS for that NVT." pt="Na coluna EPSS, --- quer dizer que o relatório não traz EPSS para esse NVT." es="En la columna EPSS, --- significa que el informe no trae EPSS para ese NVT."/>
+    <!-- O numero entre _b e _c e' o parametro $qod-min. -->
+    <s k="prio_ind_a" en="Left out of this plan: " pt="Fora deste plano: " es="Fuera de este plan: "/>
+    <s k="prio_ind_b" en=" indicator(s) to validate, with a detection quality below " pt=" indicador(es) a validar, com qualidade de detecção abaixo de " es=" indicador(es) a validar, con calidad de detección por debajo de "/>
+    <s k="prio_ind_c" en="\%: validate them by hand before any remediation effort." pt="\%: valide-os manualmente antes de qualquer esforço de remediação." es="\%: valídelos manualmente antes de cualquier esfuerzo de remediación."/>
+    <s k="prio_partial_a" en="Partial export: this plan sees only the " pt="Export parcial: este plano vê só os " es="Exportación parcial: este plan solo ve los "/>
+    <s k="prio_partial_b" en=" results this export carries, out of " pt=" resultados que este export carrega, de " es=" resultados que lleva esta exportación, de "/>
+    <s k="prio_partial_c" en=" the scan produced; whatever the filter left out is not in it." pt=" que o scan produziu; o que o filtro deixou de fora não está nele." es=" que produjo el escaneo; lo que el filtro dejó fuera no está en él."/>
+    <!-- A acao de um NVT sem solucao (\prionosol / \suriLblNoSolution) e os
+         cabecalhos da tabela que ainda nao tinham chave. -->
+    <s k="prio_nosol" en="no solution stated" pt="sem solução informada" es="sin solución informada"/>
+    <s k="th_action" en="Action" pt="Ação" es="Acción"/>
+    <s k="th_soltype" en="Type" pt="Tipo" es="Tipo"/>
+    <s k="th_epss" en="EPSS" pt="EPSS" es="EPSS"/>
+    <s k="th_card" en="Finding" pt="Achado" es="Hallazgo"/>
   </xsl:variable>
   <xsl:variable name="i18n" select="exsl:node-set($i18n-rtf)/s"/>
 
@@ -1582,7 +1628,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
        quando as tabelas e os cards passaram a mandar a CHAVE de severidade para
        o design system (\sevbadge, \chipsev, \sevstate desenham a pilha agora).
        gvm:sev-word() continua vivo — quem o usa e' a nota da linha `geral' da
-       secao 3. -->
+       secao 4. -->
 
   <!-- ================================================================= -->
   <!-- LaTeX preamble                                                    -->
@@ -1640,7 +1686,13 @@ SPDX-License-Identifier: GPL-2.0-or-later
       <m c="suriLblFldTech"      k="f_insight"/>
       <m c="suriLblFldDetection" k="f_detection"/>
       <m c="suriLblFldRefs"      k="f_references"/>
-      <!-- secao 6, escopo e limitacoes (suricatoos-blocks.sty) -->
+      <!-- secao 2, prioridades e proximos passos (suricatoos-blocks.sty) -->
+      <m c="suriLblAction"       k="th_action"/>
+      <m c="suriLblSolType"      k="th_soltype"/>
+      <m c="suriLblEpss"         k="th_epss"/>
+      <m c="suriLblCard"         k="th_card"/>
+      <m c="suriLblNoSolution"   k="prio_nosol"/>
+      <!-- secao 7, escopo e limitacoes (suricatoos-blocks.sty) -->
       <m c="suriLblNotStated"    k="scope_na"/>
       <m c="suriLblHost"         k="th_host"/>
       <m c="suriLblProtocol"     k="th_protocol"/>
@@ -1801,10 +1853,10 @@ SPDX-License-Identifier: GPL-2.0-or-later
 % \href, que e' exatamente a moldura que o modelo nao tem.
 % A ARVORE DE MARCADORES. O documento nao usa \section, entao o hyperref nao
 % indexa nada sozinho: cada marcador e' um \pdfbookmark do design system
-% (nivel 0 = secao, posto pelo \suriSection; nivel 1 = host da secao 3 e card
-% da secao 5, anunciados abaixo com \suriBookmark -- suricatoos-page.sty).
-% O painel abre so' com as sete secoes, cada uma FECHADA, e o leitor expande a
-% que quiser (numa tortura de 180+ paginas a secao 5 sozinha tem centenas de
+% (nivel 0 = secao, posto pelo \suriSection; nivel 1 = host da secao 4 e card
+% da secao 6, anunciados abaixo com \suriBookmark -- suricatoos-page.sty).
+% O painel abre so' com as oito secoes, cada uma FECHADA, e o leitor expande a
+% que quiser (numa tortura de 180+ paginas a secao 6 sozinha tem centenas de
 % cards). `bookmarksopen=true,bookmarksopenlevel=0' NAO e' o que produz isso:
 % o hyperref abre o item de nivel L so' quando L e' MENOR que
 % bookmarksopenlevel, entao com 0 nada abre -- exatamente o padrao dele
@@ -1981,7 +2033,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
        The last case is not hypothetical: a scan whose High/Critical findings all
        come from version banners carries QoD 30 on every one of them.  The old
        wording told the reader to remediate immediately AND that every one of them
-       needed manual validation, in the same sentence.  Section 4 already
+       needed manual validation, in the same sentence.  Section 5 already
        segregates these two populations; the summary must not undo that work one
        page earlier.
 
@@ -2017,11 +2069,12 @@ SPDX-License-Identifier: GPL-2.0-or-later
   <!-- ===================================================================
        O EXPORT E O FILTRO DELE, definidos UMA vez.
 
-       Tres lugares dizem se o export e' parcial — o aviso de visao parcial do
-       resumo executivo, a nota do mapa de portas e a linha "Export parcial" da
-       secao 6 — e dois leem o piso de QoD do filtro (o mesmo aviso e a
-       secao 6). Cada um tinha a sua copia da regra; agora todos leem estas
-       variaveis, entao nao ha como um dizer "parcial" e o outro nao.
+       Quatro lugares dizem se o export e' parcial — o aviso de visao parcial
+       do resumo executivo, a nota de export parcial das prioridades (secao 2),
+       a nota do mapa de portas e a linha "Export parcial" da secao 7 — e dois
+       leem o piso de QoD do filtro (o mesmo aviso e a secao 7). Cada um tinha a
+       sua copia da regra; agora todos leem estas variaveis, entao nao ha como
+       um dizer "parcial" e o outro nao.
 
        Results actually carried by this XML: what the document can describe.
        Results the SCAN produced: gvmd reports it as the text node of
@@ -2042,7 +2095,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
        "compliance_levels=yniu" (o termo de auditoria da GSA) e o relatorio
        listava as letras de conformidade como niveis de severidade. Chave
        ausente da' string vazia, e quem le decide o que isso significa (o aviso
-       nao fala do piso; a secao 6 diz "nao informado"). -->
+       nao fala do piso; a secao 7 diz "nao informado"). -->
   <xsl:variable name="export-total" select="count(gvm:report()/results/result)"/>
   <xsl:variable name="export-rc-full" select="normalize-space(gvm:report()/result_count/text())"/>
   <xsl:variable name="export-rc-known"
@@ -2065,7 +2118,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
 
   <!-- ===================================================================
        O ESTADO DO SCAN, definido UMA vez para o resumo executivo (secao 1) e
-       para a secao 6, que nao podem se contradizer.
+       para a secao 7, que nao podem se contradizer.
 
        $scan-never-started  a tarefa nao chegou a iniciar a varredura: SEM
                             scan_start (o gvmd so' o grava quando o scanner
@@ -2079,7 +2132,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
                             ninguem).
        $scan-unfinished     comecou e nao terminou: scan_run_status Running,
                             Stop Requested, Stopped ou Interrupted. A cobertura
-                            do relatorio e' parcial, e a secao 6 diz isso; sem
+                            do relatorio e' parcial, e a secao 7 diz isso; sem
                             host, o alerta do resumo executivo diz que o scan
                             nao terminou, sem o conselho do alive test.
        $agent-import        o relatorio veio do INVENTARIO do agente instalado
@@ -2169,7 +2222,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
     <xsl:variable name="hosts" select="count(gvm:report()/host)"/>
     <!-- Results actually carried by this XML ($total), results the SCAN
          produced ($total-full) and whether the export is partial: the global
-         export-* variables above, shared with the port-map note and section 6. -->
+         export-* variables above, shared with the port-map note and section 7. -->
     <xsl:variable name="total" select="$export-total"/>
     <xsl:variable name="total-full" select="$export-total-full"/>
     <xsl:variable name="truncated" select="$export-partial"/>
@@ -2232,7 +2285,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
          result(s)... 0 findings are of High or Critical severity" — an absurd
          sentence that a reader still parses as good news.  Say what actually
          happened instead. -->
-    <!-- Three ways of measuring nothing, told apart by the rules section 6
+    <!-- Three ways of measuring nothing, told apart by the rules section 7
          uses: a task that never began scanning ($scan-never-started) has no
          alive test to blame, so its body says so instead of sending the reader
          to fix an Alive Test setting that never ran; a scan that started and
@@ -2344,7 +2397,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
       <xsl:value-of select="gvm:t('sample_c')"/>
       <!-- Name the QoD floor when the export carried one: "N of M" alone does
            not tell the reader that what was cut is precisely the low-confidence
-           population that section 4 segregates. gvmd echoes the applied filter
+           population that section 5 segregates. gvmd echoes the applied filter
            in <filters><term>; $filter-min-qod is empty without a min_qod=, and
            number('') is NaN, so that case says nothing. -->
       <xsl:if test="number($filter-min-qod) &gt; 1">
@@ -2394,6 +2447,345 @@ SPDX-License-Identifier: GPL-2.0-or-later
               {</xsl:text><xsl:value-of select="gvm:t('t_generated')"/><xsl:text>}{</xsl:text>
     <xsl:call-template name="emit-today-stacked"/><xsl:text>}
 </xsl:text>
+  </xsl:template>
+
+  <!-- ================================================================= -->
+  <!-- Prioridades e proximos passos (secao 2)                           -->
+  <!-- ================================================================= -->
+
+  <!-- A SECAO 2 diz POR ONDE COMECAR: um plano de acao ordenado, so' com dado
+       do proprio relatorio (nada consultado ao gvmd, nada de outra fonte).
+
+       UNIDADE DE ACAO = UM NVT, o mesmo conjunto que os cards contam ($nvt-conf,
+       "O CONJUNTO DE ACHADOS" la' em cima): o NVT confirmado, com todas as suas
+       instancias, de severidade MAXIMA >= 0.1 — sem Log, sem falso positivo
+       (codigo -1 do gvmd, com ou sem override). O indicador (todas as
+       instancias abaixo de $qod-min) fica FORA do plano: o resumo executivo ja'
+       se recusa a mandar remediar o que precisa de validacao manual, e o plano
+       nao desfaz isso; uma nota conta quantos ficaram de fora. NVTs diferentes
+       nunca se fundem numa acao, nem por texto de solucao parecido (a mesma
+       solucao generica de dois produtos seria UMA acao errada): o advisory que
+       um card consolidado absorveu continua sendo acao propria, e o link dela
+       leva ao card consolidado, que e' onde ele esta' descrito.
+
+       A ORDEM, em chaves de xsl:sort sobre uma lista ja' com os valores de
+       cada acao, nesta precedencia:
+         1. classe de severidade da maxima (Critico > Alto > Medio > Baixo);
+         2. hosts afetados, decrescente: os hosts DISTINTOS entre as instancias
+            que sao achado (severidade >= 0.1) — uma instancia falso positivo
+            num host nao o torna afetado; a de baixa confianca de um NVT
+            confirmado torna, como no card;
+         3. EPSS, decrescente, sem EPSS por ultimo (NaN na chave numerica
+            decrescente);
+         4. maior CVSS (a severidade maxima), decrescente;
+         5. nome do NVT (o do feed, normalizado), crescente;
+         6. OID, crescente.
+       Texto comparado como o xsl:sort do libxslt faz sem @lang: ponto de
+       codigo a ponto de codigo. A frase prio_order documenta a ordem no
+       proprio relatorio; o oraculo do CI (check-veracity.py, PrioOracle) a
+       reescreve de forma independente.
+
+       EPSS. O gvmd 26 escreve, em cada <result>, nvt/epss com max_severity e
+       max_epss (score e percentile com 5 casas e o CVE de cada um) quando o
+       NVT referencia um CVE pontuado pelo EPSS nos dados SCAP dele: gmp.c,
+       results_xml_append_epss e results_xml_append_nvt (so' com epss_cve nao
+       nulo); manage_sql_secinfo.c, update_vt_scap_extra_data (max_epss = o CVE
+       do NVT de maior EPSS). Sem os dados de EPSS carregados, ou NVT sem CVE
+       pontuado, o elemento nao vem — e a celula sai um travessao, nunca um numero
+       presumido. O criterio usa max_epss/score (a maior probabilidade de
+       exploracao entre os CVEs do NVT), o maior entre as instancias.
+
+       A TABELA mostra as $prio-rows-max primeiras acoes; o resto e' declarado
+       em \priotrunc ("+ N ... cada uma esta' na secao Achados Detalhados").
+       A ACAO e' a primeira frase da solucao — a mesma solucao do card
+       (catalogo do idioma, senao nvt/solution, senao a tag solution) — cortada
+       em $prio-action-max caracteres em fronteira de palavra, com o corte
+       declarado do escape_break; sem solucao, \prionosol. Embaixo dela, o nome
+       do NVT (o do sumario de achados), que diz DE QUE a acao trata. O link
+       (\priolink) leva ao card do achado e mostra o numero que o card tem: o
+       #N do card normal, ou o da linha do grupo no sumario para o advisory
+       absorvido num card consolidado.
+
+       A FRASE calculada conta as instancias com severidade >= 7.0 (achados
+       criticos e altos) das N primeiras acoes (X) e de todas (Y). Y = 0 diz
+       que nao ha criticos nem altos (nunca "0 de 0"); Y = 1 fala do unico
+       achado; sem acao e sem host medido, diz que nada foi medido — a
+       ausencia de acoes ali nao e' boa noticia. As notas dizem o que o plano
+       nao ve: EPSS ausente, indicadores fora do plano e export parcial (a regra
+       unica $export-partial). -->
+  <xsl:param name="prio-rows-max" select="20"/>
+  <xsl:param name="prio-action-max" select="160"/>
+
+  <!-- Hosts distintos de um NVT entre as instancias que sao achado: a chave e'
+       NVT + host (o 1o texto do <host>, normalizado). -->
+  <xsl:key name="by-prio-host" match="result[number(severity) &gt;= 0.1]"
+           use="concat(nvt/@oid, '|', normalize-space(host/text()))"/>
+
+  <!-- A palavra $w fecha a primeira frase? Termina em ponto, e o radical (a
+       palavra sem o ponto): tem mais de um caractere (uma letra ou um digito
+       so' nao fecha: "p." de pagina, o "1." que abre item de lista em
+       "1. Renomeie ... 2. Altere ..."); nao e' so' digito (o "10." de um item
+       de lista); e nao e' abreviacao ("e.g.", "p. ej."). Versao no fim de
+       frase ("2.4.58.") fecha. O preco, medido nos catalogos: frase que
+       termina num inteiro puro ("... Java 17. Veja ...") nao fecha ali, e a
+       acao segue ate' a frase seguinte — mais longa, nunca partida no meio.
+       So' le o argumento. -->
+  <func:function name="gvm:prio-stop">
+    <xsl:param name="w"/>
+    <xsl:variable name="stem" select="substring($w, 1, string-length($w) - 1)"/>
+    <func:result select="substring($w, string-length($w)) = '.'
+                         and string-length($stem) &gt; 1
+                         and translate($stem, '0123456789', '') != ''
+                         and not(contains(' e.g i.e p.ex p.ej ex ej vs cf approx incl ',
+                                          concat(' ', translate($stem, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), ' ')))"/>
+  </func:function>
+
+  <!-- A primeira frase de $s (ja' normalizado: espaco simples entre as
+       palavras): as palavras ate' a primeira que fecha frase, inclusive; sem
+       nenhuma, o texto inteiro. Sem recursao: str:tokenize e o preceding-
+       sibling dos tokens, como o escape_prose. -->
+  <xsl:template name="prio-first-sentence">
+    <xsl:param name="s"/>
+    <xsl:variable name="words" select="str:tokenize($s, ' ')"/>
+    <xsl:variable name="stop" select="$words[gvm:prio-stop(string(.))][1]"/>
+    <xsl:choose>
+      <xsl:when test="$stop">
+        <xsl:variable name="k" select="count($stop/preceding-sibling::*) + 1"/>
+        <xsl:for-each select="$words[position() &lt;= $k]">
+          <xsl:if test="position() &gt; 1"><xsl:text> </xsl:text></xsl:if>
+          <xsl:value-of select="."/>
+        </xsl:for-each>
+      </xsl:when>
+      <xsl:otherwise><xsl:value-of select="$s"/></xsl:otherwise>
+    </xsl:choose>
+  </xsl:template>
+
+  <xsl:template name="priorities-section">
+    <!-- 1. As acoes com os valores da ordem, numa passada sobre o documento de
+         origem (key() so' funciona la', nunca num laco sobre RTF). -->
+    <xsl:variable name="acts-rtf">
+      <xsl:for-each select="$nvt-conf">
+        <xsl:variable name="inst" select="key('by-nvt', nvt/@oid)"/>
+        <xsl:variable name="smax" select="gvm:sev-max($inst)"/>
+        <xsl:if test="$smax &gt;= 0.1">
+          <xsl:variable name="emax" select="math:max($inst/nvt/epss/max_epss/score[number(.) = number(.)])"/>
+          <a o="{nvt/@oid}" s="{$smax}" n="{normalize-space(nvt/name)}"
+             r="{1 + ($smax &gt;= 4.0) + ($smax &gt;= 7.0) + ($smax &gt;= 9.0)}"
+             h="{count($inst[number(severity) &gt;= 0.1][string-length(normalize-space(host/text())) &gt; 0]
+                            [generate-id() = generate-id(key('by-prio-host', concat(nvt/@oid, '|', normalize-space(host/text())))[1])])}"
+             x="{count($inst[number(severity) &gt;= 7.0])}">
+            <xsl:attribute name="e"><xsl:if test="$emax = $emax"><xsl:value-of select="$emax"/></xsl:if></xsl:attribute>
+          </a>
+        </xsl:if>
+      </xsl:for-each>
+    </xsl:variable>
+    <!-- 2. A ordem documentada (prio_order). @e vazio vira NaN, que a chave
+         numerica decrescente poe por ultimo. -->
+    <xsl:variable name="sorted-rtf">
+      <xsl:for-each select="exsl:node-set($acts-rtf)/a">
+        <xsl:sort select="@r" data-type="number" order="descending"/>
+        <xsl:sort select="@h" data-type="number" order="descending"/>
+        <xsl:sort select="@e" data-type="number" order="descending"/>
+        <xsl:sort select="@s" data-type="number" order="descending"/>
+        <xsl:sort select="@n" data-type="text" order="ascending"/>
+        <xsl:sort select="@o" data-type="text" order="ascending"/>
+        <xsl:copy-of select="."/>
+      </xsl:for-each>
+    </xsl:variable>
+    <xsl:variable name="acts" select="exsl:node-set($sorted-rtf)/a"/>
+    <xsl:variable name="nact" select="count($acts)"/>
+    <xsl:variable name="nshow" select="gvm:hx-min2($nact, number($prio-rows-max))"/>
+    <xsl:variable name="ytot" select="sum($acts/@x)"/>
+    <xsl:variable name="xtop" select="sum($acts[position() &lt;= $nshow]/@x)"/>
+    <xsl:variable name="nhosts" select="count(gvm:report()/host)"/>
+    <xsl:variable name="nind" select="count($nvt-low[key('by-nvt', nvt/@oid)[number(severity) &gt;= 0.1]])"/>
+    <xsl:variable name="epss-any"
+      select="count(gvm:report()/results/result/nvt/epss/max_epss/score[number(.) = number(.)]) &gt; 0"/>
+    <!-- O numero que cada card mostra, pela MESMA chave de ordenacao e o mesmo
+         node-set das linhas do sumario e dos cards (findings-summary-table,
+         consolidated-update-cards, finding-cards): grupo consolidado = a
+         posicao dele entre os grupos; card normal = a posicao + os grupos. -->
+    <xsl:variable name="grpnum-rtf">
+      <xsl:for-each select="$grp-reps">
+        <xsl:sort select="gvm:sev-max(gvm:grp-members(gvm:grp(nvt/name)))" data-type="number" order="descending"/>
+        <g k="{gvm:grp(nvt/name)}" n="{position()}" a="{concat('grp-', translate(nvt/@oid, '.', '-'))}"/>
+      </xsl:for-each>
+    </xsl:variable>
+    <xsl:variable name="cardnum-rtf">
+      <xsl:for-each select="$rows-conf">
+        <xsl:sort select="gvm:sev-max(key('by-nvt', nvt/@oid))" data-type="number" order="descending"/>
+        <c o="{nvt/@oid}" n="{position() + count($grp-reps)}"/>
+      </xsl:for-each>
+    </xsl:variable>
+
+    <xsl:call-template name="section-open"><xsl:with-param name="n" select="2"/></xsl:call-template>
+    <xsl:text>
+\setsectionrunner{2}{</xsl:text><xsl:value-of select="gvm:t('sec_prio_run')"/><xsl:text>}
+\suriPara{</xsl:text><xsl:value-of select="gvm:t('prio_intro_a')"/><xsl:value-of select="$qod-min"/>
+    <xsl:value-of select="gvm:t('prio_intro_b')"/><xsl:text>}
+</xsl:text>
+    <xsl:if test="$nact &gt; 0">
+      <xsl:text>\suriPara{</xsl:text><xsl:value-of select="gvm:t('prio_order')"/><xsl:text>}
+</xsl:text>
+    </xsl:if>
+    <xsl:text>\priosummary{</xsl:text>
+    <xsl:choose>
+      <xsl:when test="$nact = 0 and $nhosts = 0"><xsl:value-of select="gvm:t('prio_sum_nohost')"/></xsl:when>
+      <xsl:when test="$ytot = 0"><xsl:value-of select="gvm:t('prio_sum_none')"/></xsl:when>
+      <xsl:when test="$ytot = 1"><xsl:value-of select="gvm:t('prio_sum_one')"/></xsl:when>
+      <xsl:when test="$nshow = 1">
+        <xsl:value-of select="gvm:t('prio_sum_1')"/><xsl:value-of select="$xtop"/>
+        <xsl:value-of select="gvm:t('prio_sum_of')"/><xsl:value-of select="$ytot"/>
+        <xsl:value-of select="gvm:t('prio_sum_tail')"/>
+      </xsl:when>
+      <xsl:otherwise>
+        <xsl:value-of select="gvm:t('prio_sum_n_a')"/><xsl:value-of select="$nshow"/>
+        <xsl:value-of select="gvm:t('prio_sum_n_b')"/><xsl:value-of select="$xtop"/>
+        <xsl:value-of select="gvm:t('prio_sum_of')"/><xsl:value-of select="$ytot"/>
+        <xsl:value-of select="gvm:t('prio_sum_tail')"/>
+      </xsl:otherwise>
+    </xsl:choose>
+    <xsl:text>}
+</xsl:text>
+
+    <xsl:if test="$nact &gt; 0">
+      <xsl:text>\begin{prioritytable}
+</xsl:text>
+      <xsl:for-each select="$acts[position() &lt;= $nshow]">
+        <xsl:variable name="o" select="string(@o)"/>
+        <xsl:variable name="num" select="position()"/>
+        <xsl:variable name="e" select="string(@e)"/>
+        <xsl:variable name="h" select="string(@h)"/>
+        <xsl:variable name="smax" select="number(@s)"/>
+        <!-- De volta ao documento de origem: o representante do NVT. -->
+        <xsl:for-each select="$nvt-conf[nvt/@oid = $o]">
+          <xsl:variable name="sol-orig">
+            <xsl:choose>
+              <xsl:when test="string-length(normalize-space(nvt/solution)) &gt; 0">
+                <xsl:value-of select="nvt/solution"/>
+              </xsl:when>
+              <xsl:otherwise><xsl:value-of select="gvm:get-nvt-tag('solution')"/></xsl:otherwise>
+            </xsl:choose>
+          </xsl:variable>
+          <xsl:variable name="sol">
+            <xsl:call-template name="nvt-i18n">
+              <xsl:with-param name="field" select="'solution'"/>
+              <xsl:with-param name="orig" select="string($sol-orig)"/>
+            </xsl:call-template>
+          </xsl:variable>
+          <xsl:variable name="S" select="normalize-space($sol)"/>
+          <xsl:variable name="name">
+            <xsl:call-template name="nvt-i18n">
+              <xsl:with-param name="field" select="'name'"/>
+              <xsl:with-param name="orig" select="string(nvt/name)"/>
+            </xsl:call-template>
+          </xsl:variable>
+          <xsl:variable name="sevk">
+            <xsl:choose>
+              <xsl:when test="$smax &gt;= 9.0">critico</xsl:when>
+              <xsl:when test="$smax &gt;= 7.0">alto</xsl:when>
+              <xsl:when test="$smax &gt;= 4.0">medio</xsl:when>
+              <xsl:otherwise>baixo</xsl:otherwise>
+            </xsl:choose>
+          </xsl:variable>
+          <xsl:variable name="g" select="gvm:grp(nvt/name)"/>
+          <xsl:text>\priorow{</xsl:text><xsl:value-of select="$num"/><xsl:text>}{</xsl:text>
+          <xsl:choose>
+            <xsl:when test="string-length($S) = 0"><xsl:text>\prionosol</xsl:text></xsl:when>
+            <xsl:otherwise>
+              <xsl:variable name="fs">
+                <xsl:call-template name="prio-first-sentence">
+                  <xsl:with-param name="s" select="$S"/>
+                </xsl:call-template>
+              </xsl:variable>
+              <xsl:call-template name="escape_break">
+                <xsl:with-param name="string" select="string($fs)"/>
+                <xsl:with-param name="max" select="$prio-action-max"/>
+              </xsl:call-template>
+            </xsl:otherwise>
+          </xsl:choose>
+          <xsl:text>}{</xsl:text>
+          <xsl:call-template name="escape_name">
+            <xsl:with-param name="string" select="normalize-space($name)"/>
+          </xsl:call-template>
+          <xsl:text>}{</xsl:text>
+          <xsl:choose>
+            <xsl:when test="string-length(nvt/solution/@type) &gt; 0">
+              <xsl:call-template name="escape_break">
+                <xsl:with-param name="string" select="gvm:solution-type-label(nvt/solution/@type)"/>
+              </xsl:call-template>
+            </xsl:when>
+            <xsl:otherwise><xsl:text>---</xsl:text></xsl:otherwise>
+          </xsl:choose>
+          <xsl:text>}{</xsl:text><xsl:value-of select="$h"/>
+          <xsl:text>}{</xsl:text><xsl:value-of select="$sevk"/>
+          <xsl:text>}{</xsl:text><xsl:value-of select="key('by-nvt', $o)[number(severity) = $smax][1]/severity"/>
+          <xsl:text>}{</xsl:text>
+          <xsl:choose>
+            <xsl:when test="string-length($e) = 0"><xsl:text>---</xsl:text></xsl:when>
+            <xsl:when test="$L = 'en'">
+              <xsl:value-of select="format-number(number($e) * 100, '0.0##')"/><xsl:text>\%</xsl:text>
+            </xsl:when>
+            <xsl:otherwise>
+              <xsl:value-of select="format-number(number($e) * 100, '0,0##', 'ptes')"/><xsl:text>\%</xsl:text>
+            </xsl:otherwise>
+          </xsl:choose>
+          <xsl:text>}{\priolink{</xsl:text>
+          <xsl:choose>
+            <!-- Absorvido num card consolidado: a mesma regra de $rows-conf. -->
+            <xsl:when test="nvt/solution/@type = 'VendorFix' and $g = $grp-keys">
+              <xsl:variable name="gn" select="exsl:node-set($grpnum-rtf)/g[@k = $g]"/>
+              <xsl:value-of select="$gn/@a"/><xsl:text>}{\#</xsl:text><xsl:value-of select="$gn/@n"/>
+            </xsl:when>
+            <xsl:otherwise>
+              <xsl:value-of select="concat('fnd-', translate($o, '.', '-'))"/><xsl:text>}{\#</xsl:text>
+              <xsl:value-of select="exsl:node-set($cardnum-rtf)/c[@o = $o]/@n"/>
+            </xsl:otherwise>
+          </xsl:choose>
+          <xsl:text>}}
+</xsl:text>
+        </xsl:for-each>
+      </xsl:for-each>
+      <xsl:text>\end{prioritytable}
+</xsl:text>
+      <xsl:if test="$nact &gt; number($prio-rows-max)">
+        <xsl:text>\priotrunc{\suriEllip\ + </xsl:text>
+        <xsl:value-of select="gvm:num($nact - number($prio-rows-max))"/>
+        <xsl:value-of select="gvm:t('prio_trunc_a')"/>
+        <xsl:value-of select="gvm:t('sec_detailed')"/>
+        <xsl:value-of select="gvm:t('prio_trunc_b')"/>
+        <xsl:text>}
+</xsl:text>
+      </xsl:if>
+    </xsl:if>
+
+    <!-- 3. O que o plano nao ve. -->
+    <xsl:if test="$nact = 0 and $nhosts &gt; 0">
+      <xsl:text>\blocknote{</xsl:text><xsl:value-of select="gvm:t('prio_none')"/><xsl:text>}
+</xsl:text>
+    </xsl:if>
+    <xsl:choose>
+      <xsl:when test="$nact &gt; 0 and not($epss-any)">
+        <xsl:text>\blocknote{</xsl:text><xsl:value-of select="gvm:t('prio_epss_none')"/><xsl:text>}
+</xsl:text>
+      </xsl:when>
+      <xsl:when test="$nact &gt; 0 and $acts[position() &lt;= $nshow][string-length(@e) = 0]">
+        <xsl:text>\blocknote{</xsl:text><xsl:value-of select="gvm:t('prio_epss_some')"/><xsl:text>}
+</xsl:text>
+      </xsl:when>
+    </xsl:choose>
+    <xsl:if test="$nind &gt; 0">
+      <xsl:text>\blocknote{</xsl:text><xsl:value-of select="gvm:t('prio_ind_a')"/><xsl:value-of select="$nind"/>
+      <xsl:value-of select="gvm:t('prio_ind_b')"/><xsl:value-of select="$qod-min"/>
+      <xsl:value-of select="gvm:t('prio_ind_c')"/><xsl:text>}
+</xsl:text>
+    </xsl:if>
+    <xsl:if test="$export-partial">
+      <xsl:text>\blocknote{</xsl:text><xsl:value-of select="gvm:t('prio_partial_a')"/><xsl:value-of select="$export-total"/>
+      <xsl:value-of select="gvm:t('prio_partial_b')"/><xsl:value-of select="$export-total-full"/>
+      <xsl:value-of select="gvm:t('prio_partial_c')"/><xsl:text>}
+</xsl:text>
+    </xsl:if>
   </xsl:template>
 
   <!-- ================================================================= -->
@@ -2556,9 +2948,9 @@ SPDX-License-Identifier: GPL-2.0-or-later
        pairs of the results when it does not, numeric ascending by port number —
        plus, last, the single aggregated general/* row. -->
   <xsl:template name="hosts-ports">
-    <xsl:call-template name="section-open"><xsl:with-param name="n" select="3"/></xsl:call-template>
+    <xsl:call-template name="section-open"><xsl:with-param name="n" select="4"/></xsl:call-template>
     <xsl:text>
-\setsectionrunner{3}{</xsl:text><xsl:value-of select="gvm:t('sec_hosts_ports_run')"/><xsl:text>}
+\setsectionrunner{4}{</xsl:text><xsl:value-of select="gvm:t('sec_hosts_ports_run')"/><xsl:text>}
 
 \suriPara{</xsl:text><xsl:value-of select="gvm:t('hp_intro')"/><xsl:text>}
 </xsl:text>
@@ -2859,7 +3251,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
          node-sets que a tabela itera (veja "O CONJUNTO DE ACHADOS"). -->
     <xsl:variable name="n-low" select="count($nvt-low)"/>
     <xsl:variable name="n-ok" select="count($rows-conf) + count($grp-reps)"/>
-    <xsl:call-template name="section-open"><xsl:with-param name="n" select="4"/></xsl:call-template>
+    <xsl:call-template name="section-open"><xsl:with-param name="n" select="5"/></xsl:call-template>
     <xsl:text>
 </xsl:text>
 
@@ -3307,16 +3699,16 @@ SPDX-License-Identifier: GPL-2.0-or-later
 
   <xsl:template name="detailed-findings">
     <xsl:variable name="n-low" select="count($nvt-low)"/>
-    <!-- Secao 5 do documento: a ordem das secoes esta' fixada na montagem
+    <!-- Secao 6 do documento: a ordem das secoes esta' fixada na montagem
          (real-report), entao o numero e' constante e nao um contador do LaTeX
          — \suriSection carrega o numero como DADO, e ele tambem alimenta o
-         "S5 . ACHADOS DETALHADOS" do cabecalho corrido. -->
-    <xsl:call-template name="section-open"><xsl:with-param name="n" select="5"/></xsl:call-template>
+         "S6 . ACHADOS DETALHADOS" do cabecalho corrido. -->
+    <xsl:call-template name="section-open"><xsl:with-param name="n" select="6"/></xsl:call-template>
     <xsl:text>
 </xsl:text>
     <!-- Confirmed first; the low-confidence block is only introduced when there
          is something in it, so a clean report reads exactly as before.
-         A mesma tarja da secao 4 titula os dois blocos: quem le a pagina 6 ja'
+         A mesma tarja da secao 5 titula os dois blocos: quem le a pagina 6 ja'
          aprendeu o que "ACHADOS CONFIRMADOS" e "INDICADORES A VALIDAR"
          significam, e a faixa de QoD vem escrita na propria tarja. -->
     <!-- Com indicadores, a secao tem DUAS sequencias de cards e a segunda
@@ -3326,13 +3718,13 @@ SPDX-License-Identifier: GPL-2.0-or-later
          indicadores nao ha tarja na pagina e nao ha item no painel. -->
     <xsl:if test="$n-low &gt; 0">
       <xsl:call-template name="bookmark">
-        <xsl:with-param name="name" select="'bm-s5-confirmados'"/>
+        <xsl:with-param name="name" select="'bm-s6-confirmados'"/>
         <xsl:with-param name="text" select="gvm:t('sub_confirmed')"/>
       </xsl:call-template>
       <xsl:text>\suriSummaryHead{confirmados}
 </xsl:text>
       <!-- A tarja anuncia um bloco; sem nenhum confirmado ele ficava vazio,
-           colado na tarja de indicadores. Diz o que a tabela da secao 4 diz. -->
+           colado na tarja de indicadores. Diz o que a tabela da secao 5 diz. -->
       <xsl:if test="count($rows-conf) + count($grp-reps) = 0">
         <xsl:text>\suriPara{</xsl:text><xsl:value-of select="gvm:t('none_confirmed')"/><xsl:text>}
 </xsl:text>
@@ -3346,7 +3738,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
       <xsl:text>\clearpage
 </xsl:text>
       <xsl:call-template name="bookmark">
-        <xsl:with-param name="name" select="'bm-s5-indicadores'"/>
+        <xsl:with-param name="name" select="'bm-s6-indicadores'"/>
         <xsl:with-param name="text" select="gvm:t('sub_indicators')"/>
       </xsl:call-template>
       <xsl:text>\suriSummaryHead{indicadores}
@@ -3434,7 +3826,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
            procurava o numero do sumario e achava outro achado. Indicadores
            numeram a partir de 1, como a tabela deles. -->
       <xsl:variable name="cardnum" select="position() + count($grp-reps[$low = 0])"/>
-      <!-- Marcador do PDF (nivel 1, sob a secao 5): o MESMO numero e o MESMO
+      <!-- Marcador do PDF (nivel 1, sob a secao 6): o MESMO numero e o MESMO
            titulo (o traduzido) que o card mostra. -->
       <xsl:call-template name="bookmark">
         <xsl:with-param name="name" select="concat('bm-', $anchor)"/>
@@ -3845,7 +4237,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
         </xsl:variable>
         <xsl:variable name="ghosts" select="exsl:node-set($ghosts-rtf)/h[not(@v = preceding-sibling::h[1]/@v)]"/>
 
-        <!-- Marcador do PDF (nivel 1, sob a secao 5): o numero e' o da linha
+        <!-- Marcador do PDF (nivel 1, sob a secao 6): o numero e' o da linha
              do grupo no sumario (mesma ordem, entao o mesmo position()), que e'
              o que o primeiro card normal continua (#grupos + 1); o titulo e' o
              que o card mostra. -->
@@ -4007,7 +4399,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
              O card tem altura limitada — $adv-max linhas de advisory mais a
              linha de corte — entao uma pagina sempre o comporta inteiro.
              O \clearpage vem DEPOIS: antes do primeiro card ele deixaria o
-             titulo da secao 5 sozinho numa pagina em branco. -->
+             titulo da secao 6 sozinho numa pagina em branco. -->
         <xsl:text>\clearpage
 </xsl:text>
       </xsl:if>
@@ -4937,12 +5329,12 @@ SPDX-License-Identifier: GPL-2.0-or-later
     <!-- Distinct (transport, port) pairs behind the cells: a collapsed cell
          carries one <m> per member port, an uncollapsed one stands for itself. -->
     <xsl:variable name="nraw" select="count($ord/c[not(@collapsed = '1')]) + count($ord/c/m)"/>
-    <!-- Section 2 of the report. The runner of the running header is set apart
+    <!-- Section 3 of the report. The runner of the running header is set apart
          from the title because the title does not fit it (\suriSection would
          otherwise upper-case the whole "Mapa de Exposicao de Portas"). -->
-    <xsl:call-template name="section-open"><xsl:with-param name="n" select="2"/></xsl:call-template>
+    <xsl:call-template name="section-open"><xsl:with-param name="n" select="3"/></xsl:call-template>
     <xsl:text>
-\setsectionrunner{2}{</xsl:text>
+\setsectionrunner{3}{</xsl:text>
     <xsl:value-of select="gvm:t('hx_runner')"/>
     <xsl:text>}
 \suriPara{</xsl:text>
@@ -5029,7 +5421,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
   <xsl:template name="hx-notes">
     <xsl:param name="omitted"/>
     <!-- Export parcial: a MESMA regra do aviso do resumo executivo e da
-         secao 6 ($export-partial). -->
+         secao 7 ($export-partial). -->
     <xsl:variable name="partial" select="$export-partial"/>
     <xsl:if test="$omitted &gt; 0">
       <xsl:text>\blocknote{</xsl:text>
@@ -5108,10 +5500,10 @@ SPDX-License-Identifier: GPL-2.0-or-later
     <xsl:variable name="hosts" select="gvm:report()/host[string-length(normalize-space(ip)) &gt; 0]"/>
     <xsl:variable name="noiph" select="$nhosts - count($hosts)"/>
     <xsl:variable name="nglobal" select="count(exsl:node-set($hx-ord-rtf)/c)"/>
-    <!-- Secao 7: o apendice e' a ultima secao, depois de escopo e limitacoes. -->
-    <xsl:call-template name="section-open"><xsl:with-param name="n" select="7"/></xsl:call-template>
+    <!-- Secao 8: o apendice e' a ultima secao, depois de escopo e limitacoes. -->
+    <xsl:call-template name="section-open"><xsl:with-param name="n" select="8"/></xsl:call-template>
     <xsl:text>
-\setsectionrunner{7}{</xsl:text>
+\setsectionrunner{8}{</xsl:text>
     <xsl:value-of select="gvm:t('hx_host_runner')"/>
     <xsl:text>}
 </xsl:text>
@@ -5272,10 +5664,10 @@ SPDX-License-Identifier: GPL-2.0-or-later
   </xsl:template>
 
   <!-- ================================================================= -->
-  <!-- Escopo, metodologia e limitacoes (secao 6)                        -->
+  <!-- Escopo, metodologia e limitacoes (secao 7)                        -->
   <!-- ================================================================= -->
 
-  <!-- A SECAO 6 diz COMO o resultado foi obtido e o que ele NAO cobre, e so'
+  <!-- A SECAO 7 diz COMO o resultado foi obtido e o que ele NAO cobre, e so'
        com DADO do proprio relatorio: nada de port list, scan config ou outra
        coisa que exigiria perguntar ao gvmd (o generate roda sem rede e sem
        GMP). O que o XML nao traz sai \scopena ("nao informado no relatorio"),
@@ -5543,7 +5935,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
     </xsl:for-each>
   </xsl:template>
 
-  <!-- O corte declarado de uma tabela da secao 6: n linhas, $scope-rows-max
+  <!-- O corte declarado de uma tabela da secao 7: n linhas, $scope-rows-max
        impressas. \scopetrunc e nao \findingtrunc: veja suricatoos-blocks.sty. -->
   <xsl:template name="scope-trunc">
     <xsl:param name="n"/>
@@ -5570,9 +5962,9 @@ SPDX-License-Identifier: GPL-2.0-or-later
     <xsl:variable name="scanners"
       select="$rep/host/detail[name='scanned_with_scanner'][string-length(normalize-space(value)) &gt; 0]
                               [generate-id() = generate-id(key('by-scanner', normalize-space(value))[1])]"/>
-    <xsl:call-template name="section-open"><xsl:with-param name="n" select="6"/></xsl:call-template>
+    <xsl:call-template name="section-open"><xsl:with-param name="n" select="7"/></xsl:call-template>
     <xsl:text>
-\setsectionrunner{6}{</xsl:text><xsl:value-of select="gvm:t('sec_scope_run')"/><xsl:text>}
+\setsectionrunner{7}{</xsl:text><xsl:value-of select="gvm:t('sec_scope_run')"/><xsl:text>}
 \suriPara{</xsl:text><xsl:value-of select="gvm:t('scope_intro')"/><xsl:text>}
 </xsl:text>
 
@@ -5959,19 +6351,20 @@ SPDX-License-Identifier: GPL-2.0-or-later
   <!-- Navegacao: secoes, sumario e marcadores do PDF                    -->
   <!-- ================================================================= -->
 
-  <!-- AS SETE SECOES, numero e titulo, num lugar so'. Cada abertura de secao
+  <!-- AS OITO SECOES, numero e titulo, num lugar so'. Cada abertura de secao
        (section-open) e cada linha do sumario (contents-page) le daqui, entao o
        sumario nao tem como listar um titulo que a secao nao mostra. Elemento
        <sec>/@key e nao <s>/@k: <s k> e' a tabela de i18n, e a regua do CI
        (check-veracity.py) recusa chave de i18n definida duas vezes. -->
   <xsl:variable name="sections-rtf">
     <sec n="1" key="sec_exec"/>
-    <sec n="2" key="sec_hexmap"/>
-    <sec n="3" key="sec_hosts_ports"/>
-    <sec n="4" key="sec_findings_summary"/>
-    <sec n="5" key="sec_detailed"/>
-    <sec n="6" key="sec_scope"/>
-    <sec n="7" key="sec_hexmap_host"/>
+    <sec n="2" key="sec_prio"/>
+    <sec n="3" key="sec_hexmap"/>
+    <sec n="4" key="sec_hosts_ports"/>
+    <sec n="5" key="sec_findings_summary"/>
+    <sec n="6" key="sec_detailed"/>
+    <sec n="7" key="sec_scope"/>
+    <sec n="8" key="sec_hexmap_host"/>
   </xsl:variable>
   <xsl:variable name="sections" select="exsl:node-set($sections-rtf)/sec"/>
 
@@ -5993,7 +6386,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
     <xsl:text>}</xsl:text>
   </xsl:template>
 
-  <!-- A pagina de SUMARIO, logo depois do resumo executivo: as sete secoes,
+  <!-- A pagina de SUMARIO, logo depois do resumo executivo: as oito secoes,
        cada linha um link para o alto da secao, com a pagina em que ela abre
        (\suritocline le o rotulo que o \suriSection grava). Desenho, regras e
        faces sao do suricatoos-page.sty; daqui so' sai dado. -->
@@ -6096,7 +6489,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
 </xsl:text>
   </xsl:template>
 
-  <!-- O marcador de um host da secao 3: o que a faixa do card mostra, o IP e o
+  <!-- O marcador de um host da secao 4: o que a faixa do card mostra, o IP e o
        hostname. Host sem endereco nem nome (registro anonimo) ainda precisa de
        um titulo no painel: HOST n, na ordem dos cards. -->
   <xsl:template name="host-bookmark">
@@ -6121,9 +6514,9 @@ SPDX-License-Identifier: GPL-2.0-or-later
   <!-- Document assembly                                                 -->
   <!-- ================================================================= -->
 
-  <!-- O esqueleto do documento, na ordem do modelo: capa, resumo, mapa de
-       portas, hosts, sumario, detalhados, escopo e limitacoes, apendice,
-       contracapa.
+  <!-- O esqueleto do documento, na ordem do modelo: capa, resumo, sumario,
+       prioridades, mapa de portas, hosts, sumario de achados, detalhados,
+       escopo e limitacoes, apendice, contracapa.
        \clearpage e nao \newpage. As duas terminam a pagina, mas \newpage deixa
        material flutuante pendurado para a proxima, e o design abre CADA secao
        com \suriSection, que e' desenhado para ser a primeira coisa da folha (o
@@ -6134,13 +6527,15 @@ SPDX-License-Identifier: GPL-2.0-or-later
        instala como padrao do documento, e a capa e a contracapa trocam para
        `suribare' sozinhas, dentro de \suriCover / \suriBackCover.
        Numeracao das secoes, para quem emite \suriSection: 1 resumo executivo,
-       2 mapa de exposicao de portas, 3 hosts e portas abertas, 4 sumario de
-       achados, 5 achados detalhados, 6 escopo, metodologia e limitacoes,
-       7 apendice (exposicao por host); a tabela $sections, que section-open e
-       o sumario leem.
-       O SUMARIO (contents-page) entra entre o resumo executivo e o mapa de
-       portas, numa folha propria: o resumo continua sendo a primeira pagina
-       depois da capa, e o sumario nao e' secao (sem numero). -->
+       2 prioridades e proximos passos, 3 mapa de exposicao de portas, 4 hosts
+       e portas abertas, 5 sumario de achados, 6 achados detalhados, 7 escopo,
+       metodologia e limitacoes, 8 apendice (exposicao por host); a tabela
+       $sections, que section-open e o sumario leem.
+       O SUMARIO (contents-page) entra entre o resumo executivo e as
+       prioridades, numa folha propria: o resumo continua sendo a primeira
+       pagina depois da capa, e o sumario nao e' secao (sem numero). As
+       prioridades vem logo depois dele: e' o "por onde comecar" de quem acabou
+       de ler o resumo. -->
   <xsl:template name="real-report">
     <xsl:call-template name="header"/>
     <xsl:call-template name="newline"/>
@@ -6152,6 +6547,9 @@ SPDX-License-Identifier: GPL-2.0-or-later
     <xsl:text>\clearpage
 </xsl:text>
     <xsl:call-template name="contents-page"/>
+    <xsl:text>\clearpage
+</xsl:text>
+    <xsl:call-template name="priorities-section"/>
     <xsl:text>\clearpage
 </xsl:text>
     <xsl:call-template name="hexmap-section"/>

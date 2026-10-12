@@ -7,15 +7,15 @@ prova que o documento compila. Isto prova que o leitor CONSEGUE ANDAR pelo
 documento -- e que cada atalho leva aonde diz:
 
   sumario        a pagina "Sumario/Contents/Indice" existe, entre o resumo
-                 executivo e a secao 2, com as sete secoes em ordem; cada linha
+                 executivo e a secao 2, com as oito secoes em ordem; cada linha
                  e' \\hyperlink{sec-N} com o MESMO titulo do \\suriSection{N}, e
                  cada \\hypertarget{sec-N}{} abre a sua secao (vem colado antes
                  do \\suriSection{N});
   marcadores     cada \\suriBookmark do .tex vem colado antes da caixa que o
-                 emite; a secao 3 tem um por host do XML e a 5 um por card, com
+                 emite; a secao 4 tem um por host do XML e a 6 um por card, com
                  o MESMO numero e o MESMO titulo que o card mostra (cortado em
                  fronteira de palavra no teto $bookmark-max); as tarjas da
-                 secao 5 entram so' quando o documento as mostra;
+                 secao 6 entram so' quando o documento as mostra;
   hyperref       o preambulo carrega o hyperref com bookmarksopen=true,
                  bookmarksopenlevel=0 escritos -- o contrato a' vista; o efeito
                  (cada secao fechada) e' o padrao do hyperref, e quem o garante
@@ -23,7 +23,7 @@ documento -- e que cada atalho leva aonde diz:
 
 e, com --pdf (o PDF que o generate entregou), sobre o documento compilado:
 
-  pdf-arvore     o PDF TEM arvore de marcadores: sete itens de nivel 0
+  pdf-arvore     o PDF TEM arvore de marcadores: oito itens de nivel 0
                  "N  Titulo", os filhos de cada um sao os marcadores do .tex
                  daquela secao, na ordem, com o mesmo texto; nada abaixo do
                  nivel 1; secao com filhos fechada (Count < 0);
@@ -88,14 +88,17 @@ V = load_veracity()
 macros, group_at, skip_blank, plain = V.macros, V.group_at, V.skip_blank, V.plain
 norm_space, TexError, StylesheetError = V.norm_space, V.TexError, V.StylesheetError
 
-# As sete secoes do documento e a chave de i18n do titulo de cada uma: e' o
+# As oito secoes do documento e a chave de i18n do titulo de cada uma: e' o
 # CONTRATO do relatorio (real-report no latex.xsl), escrito aqui de proposito em
 # vez de lido da tabela $sections -- uma tabela errada la' nao pode aprovar a
-# si mesma. A 6 (escopo, metodologia e limitacoes) entrou antes do apendice,
-# que passou a ser a 7.
-SECTIONS = [(1, "sec_exec"), (2, "sec_hexmap"), (3, "sec_hosts_ports"),
-            (4, "sec_findings_summary"), (5, "sec_detailed"), (6, "sec_scope"),
-            (7, "sec_hexmap_host")]
+# si mesma. A 2 (prioridades e proximos passos) entrou logo depois do resumo
+# executivo, e as seguintes desceram um numero: a 7 (escopo, metodologia e
+# limitacoes) fica antes do apendice, que e' a 8.
+SECTIONS = [(1, "sec_exec"), (2, "sec_prio"), (3, "sec_hexmap"), (4, "sec_hosts_ports"),
+            (5, "sec_findings_summary"), (6, "sec_detailed"), (7, "sec_scope"),
+            (8, "sec_hexmap_host")]
+# As secoes com marcadores de nivel 1: os hosts e os cards de achado.
+SEC_HOSTS, SEC_CARDS = 4, 6
 BOXES = ("hostcard", "findingcard", "consolidatedcard", "suriSummaryHead")
 
 
@@ -256,19 +259,21 @@ def check_marcadores(m, tex, nav, sheet, lang):
             fails.append("\\suriBookmark %s nao vem colado antes de uma caixa que o emita"
                          " (vem \\%s)" % (name, nxt))
         sec = nav.section_of(pos)
-        if sec not in ("3", "5"):
-            fails.append("\\suriBookmark %s na secao %s (so' 3 e 5 tem nivel 1)" % (name, sec))
-    by_sec = {"3": [], "5": []}
+        if sec not in (str(SEC_HOSTS), str(SEC_CARDS)):
+            fails.append("\\suriBookmark %s na secao %s (so' %d e %d tem nivel 1)"
+                         % (name, sec, SEC_HOSTS, SEC_CARDS))
+    by_sec = {str(SEC_HOSTS): [], str(SEC_CARDS): []}
     for b in nav.bookmarks:
         sec = nav.section_of(b[0])
         if sec in by_sec:
             by_sec[sec].append(b)
 
-    # Secao 3: um marcador por host do XML, com o IP e o hostname do card.
+    # Secao 4: um marcador por host do XML, com o IP e o hostname do card.
     hosts = m.report.findall("host")
-    bms = by_sec["3"]
+    bms = by_sec[str(SEC_HOSTS)]
     if len(bms) != len(hosts):
-        fails.append("secao 3: %d marcador(es) de host, o XML tem %d host(s)" % (len(bms), len(hosts)))
+        fails.append("secao %d: %d marcador(es) de host, o XML tem %d host(s)"
+                     % (SEC_HOSTS, len(bms), len(hosts)))
     seen_ips = []
     for pos, lvl, name, text, nxt, k in bms:
         if nxt != "hostcard":
@@ -282,14 +287,15 @@ def check_marcadores(m, tex, nav, sheet, lang):
             fails.append("%s: '%s', o card mostra '%s'" % (name, got[:70], want[:70]))
     want_ips = sorted(norm_space(h.findtext("ip") or "") for h in hosts)
     if sorted(seen_ips) != want_ips:
-        fails.append("secao 3: hosts com marcador %s, esperado %s" % (sorted(seen_ips)[:6], want_ips[:6]))
+        fails.append("secao %d: hosts com marcador %s, esperado %s"
+                     % (SEC_HOSTS, sorted(seen_ips)[:6], want_ips[:6]))
 
-    # Secao 5: um marcador por card, o numero e o titulo do card; as tarjas
+    # Secao 6: um marcador por card, o numero e o titulo do card; as tarjas
     # entram exatamente quando o documento as mostra.
-    sec5, _ = tex.section(5)
-    off = tex.sections[5][0]
+    sec_cards, _ = tex.section(SEC_CARDS)
+    off = tex.sections[SEC_CARDS][0]
     n_low = sum(1 for n in m.nvts if n.low)
-    slabs = [b for b in by_sec["5"] if b[4] == "suriSummaryHead"]
+    slabs = [b for b in by_sec[str(SEC_CARDS)] if b[4] == "suriSummaryHead"]
     want_slabs = ([("confirmados", sheet.t("sub_confirmed", lang)),
                    ("indicadores", sheet.t("sub_indicators", lang))] if n_low else [])
     got_slabs = []
@@ -297,12 +303,13 @@ def check_marcadores(m, tex, nav, sheet, lang):
         mode = macro_at(s, k, "suriSummaryHead", 1)[0].strip()
         got_slabs.append((mode, nfc(bm_plain(text))))
     if got_slabs != [(a, nfc(b)) for a, b in want_slabs]:
-        fails.append("secao 5: tarjas no painel %s, esperado %s" % (got_slabs, want_slabs))
-    cards = sorted([(p + off, "findingcard", a) for p, a in macros(sec5, "findingcard", 4)] +
-                   [(p + off, "consolidatedcard", a) for p, a in macros(sec5, "consolidatedcard", 7)])
-    cbms = [b for b in by_sec["5"] if b[4] in ("findingcard", "consolidatedcard")]
+        fails.append("secao %d: tarjas no painel %s, esperado %s" % (SEC_CARDS, got_slabs, want_slabs))
+    cards = sorted([(p + off, "findingcard", a) for p, a in macros(sec_cards, "findingcard", 4)] +
+                   [(p + off, "consolidatedcard", a)
+                    for p, a in macros(sec_cards, "consolidatedcard", 7)])
+    cbms = [b for b in by_sec[str(SEC_CARDS)] if b[4] in ("findingcard", "consolidatedcard")]
     if len(cbms) != len(cards):
-        fails.append("secao 5: %d marcador(es) de card, %d card(s)" % (len(cbms), len(cards)))
+        fails.append("secao %d: %d marcador(es) de card, %d card(s)" % (SEC_CARDS, len(cbms), len(cards)))
     at = {b[5]: b for b in cbms}
     ncons = 0
     for p, kind, a in cards:
@@ -747,7 +754,7 @@ def check_text(pages, pdf, tree, sec_pages, nav, sheet, lang):
       - cada marcador de card cai numa pagina que mostra o "#N" DELE, e cada
         marcador de host numa que mostra o IP dele (o hostname, sem IP) -- cair
         uma pagina antes, ainda dentro da secao e em ordem, nao passa mais;
-      - cada tarja da secao 5 numa pagina que a mostra."""
+      - cada tarja da secao 6 numa pagina que a mostra."""
     fails = []
     if len(pages) != len(pdf.pages()):
         return ["o pdftotext leu %d pagina(s), o PDF tem %d" % (len(pages), len(pdf.pages()))]
@@ -814,7 +821,7 @@ def check_text(pages, pdf, tree, sec_pages, nav, sheet, lang):
                 if pat and not re.search(pat, page):
                     fails.append("'%s' cai na pagina %d, que nao mostra o %s do host"
                                  % (kt[:60], kp, "IP " + ip if ip else "hostname"))
-            elif name.startswith("bm-s5-"):
+            elif name.startswith("bm-s6-"):
                 if not re.search(words_re(nfc(kt).upper()), page):
                     fails.append("'%s' cai na pagina %d, que nao mostra a tarja" % (kt, kp))
     return fails

@@ -6,7 +6,7 @@ idiomas). Enderecos RFC 5737, nomes genericos sob .example, OIDs da faixa
 sintetica 1.3.6.1.4.1.25623.1.0.99xxxx (nao existem no feed); nenhum dado de
 scan real.
 
-Secao 6 (escopo, metodologia e limitacoes), as duas tabelas ACIMA do teto e as
+Secao 7 (escopo, metodologia e limitacoes), as duas tabelas ACIMA do teto e as
 contagens que o gvmd declara diferentes das que o relatorio carrega:
 - 12 hosts, todos autenticados por SSH e com falha de SMB: 24 linhas na tabela
   de autenticacao, 20 impressas e "+ 4" declarado. 192.0.2.21 repete o

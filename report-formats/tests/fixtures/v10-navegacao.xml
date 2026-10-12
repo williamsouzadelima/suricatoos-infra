@@ -8,7 +8,7 @@ feed); nenhum dado de scan real.
 
 Navegacao (marcadores do PDF e pagina de sumario). Pina os caminhos que as
 outras fixtures nao percorrem:
-- a secao 3 em mais de uma pagina: 14 hosts, cada um com o seu marcador (e,
+- a secao 4 em mais de uma pagina: 14 hosts, cada um com o seu marcador (e,
   acima do limite de 12, o apendice por host sai como frase, sem tabuleiros);
 - um host com 55 portas (192.0.2.15) vira dois cards: so' o PRIMEIRO leva o
   marcador, o de continuacao repete a faixa sem marcador;

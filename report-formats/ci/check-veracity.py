@@ -35,7 +35,7 @@ porque sao invariantes do documento, nao casos especiais.
   nome           o nome do projeto, quando cortado (capa, contracapa, narrativa,
                  titulo do mapa de portas), e' cortado em fronteira de palavra e
                  o corte declarado bate;
-  escopo         a secao 6 (escopo, metodologia e limitacoes), recalculada do
+  escopo         a secao 7 (escopo, metodologia e limitacoes), recalculada do
                  XML bloco a bloco: cada \\scopefact com o rotulo e o valor
                  certos -- tarefa, alvo, hosts (e a contagem declarada pelo
                  gvmd quando difere), inicio, fim e duracao do scan, situacao
@@ -55,10 +55,10 @@ porque sao invariantes do documento, nao casos especiais.
   alerta         o resumo executivo abre com o alerta de "nada medido" se e
                  somente se o relatorio nao tem host, e o alerta da' a causa
                  que o dado sustenta: tarefa que nunca iniciou (a mesma regra
-                 da secao 6) ou scan que iniciou e nao achou host (alive test).
+                 da secao 7) ou scan que iniciou e nao achou host (alive test).
 
 Os limiares (qod-min, group-min, adv-max, cortes do nome, scope-rows-max e os
-tetos de texto da secao 6), as listas de meses e dias e as frases do i18n sao
+tetos de texto da secao 7), as listas de meses e dias e as frases do i18n sao
 LIDOS do proprio latex.xsl, para a regua nunca divergir do relatorio; um nome
 lido que esteja definido mais de uma vez la' e' erro (exit 2). As regras de
 estado do scan (ScanState) e os dois sinais do inventario do agente sao os do
@@ -83,6 +83,13 @@ sys.dont_write_bytecode = True
 HERE = os.path.dirname(os.path.abspath(__file__))
 XSL_NS = "{http://www.w3.org/1999/XSL/Transform}"
 WS = " \t\r\n"                       # espaco em branco do XPath
+
+# As secoes que as checagens leem, pelo numero que o \suriSection carrega (a
+# tabela $sections do latex.xsl; o contrato inteiro, com os titulos, e' o
+# SECTIONS do check-navigation.py). A 2 (prioridades) entrou depois do resumo
+# executivo, e as seguintes desceram um numero.
+SEC_EXEC, SEC_PRIO, SEC_HEXMAP = 1, 2, 3
+SEC_SUMMARY, SEC_DETAIL, SEC_SCOPE = 5, 6, 7
 
 
 # ---------------------------------------------------------------------------
@@ -429,6 +436,11 @@ class Tex:
 
 ANCHOR_LINK = re.compile(r"\\hyperlink\{([^}]*)\}")
 ANCHOR_TARGET = re.compile(r"\\hypertarget\{([^}]*)\}")
+# O link da tabela de prioridades (secao 2) para o card do achado. E' um
+# \hyperlink por dentro (suricatoos-blocks.sty), com outro nome no .tex para
+# ficar fora da conta exata alvos == links + cortes do gates.sh: o card que ele
+# abre ja' tem o link da sua linha no sumario de achados.
+PRIO_LINK = re.compile(r"\\priolink\{([^}]*)\}")
 
 
 def fnd(oid):
@@ -527,7 +539,7 @@ def check_numeracao(m, tex, sheet, lang):
     fails = []
     rows = {}
     n_grp_rows = 0
-    for mode, block in tex.blocks(4):
+    for mode, block in tex.blocks(SEC_SUMMARY):
         nums, seen_nvt = [], False
         for r in summary_rows(block):
             nums.append(r["num"])
@@ -547,7 +559,7 @@ def check_numeracao(m, tex, sheet, lang):
                             len(nums)))
     cards = {}
     n_cons = 0
-    for mode, block in tex.blocks(5):
+    for mode, block in tex.blocks(SEC_DETAIL):
         fcs = finding_cards(block)
         ncons = len(consolidated_cards(block))
         n_cons += ncons
@@ -577,7 +589,7 @@ def check_secoes(m, tex, sheet, lang):
     fails = []
     none_conf = sheet.t("none_confirmed", lang)
     n_low = sum(1 for n in m.nvts if n.low)
-    for sec in (4, 5):
+    for sec in (SEC_SUMMARY, SEC_DETAIL):
         if sec not in tex.sections:
             fails.append("secao %d ausente" % sec)
             continue
@@ -586,15 +598,15 @@ def check_secoes(m, tex, sheet, lang):
         slabs = len(macros(text, "suriSummaryHead", 1))
         for mode, block in tex.blocks(sec):
             modes.append(mode)
-            items = (len(macros(block, "findingrow", 5)) if sec == 4 else
+            items = (len(macros(block, "findingrow", 5)) if sec == SEC_SUMMARY else
                      len(macros(block, "findingcard", 4)) + len(macros(block, "consolidatedcard", 7)))
-            # Secao 5 sem tarja nenhuma e relatorio sem achado: nao ha bloco
-            # anunciado que pudesse ficar vazio.
+            # Secao de cards sem tarja nenhuma e relatorio sem achado: nao ha
+            # bloco anunciado que pudesse ficar vazio.
             if items == 0 and not slabs and not m.nvts:
                 continue
             if items == 0 and not (mode == "confirmados" and none_conf in block):
                 fails.append("secao %d: tarja '%s' sem nenhuma %s" %
-                             (sec, mode, "linha" if sec == 4 else "card"))
+                             (sec, mode, "linha" if sec == SEC_SUMMARY else "card"))
         has_ind = "indicadores" in modes
         if has_ind != (n_low > 0):
             fails.append("secao %d: tarja de indicadores %s, mas o relatorio tem %d NVT(s) de baixa"
@@ -606,7 +618,7 @@ def check_consolidado(m, tex, sheet, lang):
     fails = []
     adv_max = sheet.num("adv-max")
     seen = set()
-    for mode, block in tex.blocks(5):
+    for mode, block in tex.blocks(SEC_DETAIL):
         for c in consolidated_cards(block):
             g = card_group(c, sheet, lang)
             if g not in m.groups:
@@ -627,7 +639,7 @@ def check_consolidado(m, tex, sheet, lang):
         fails.append("grupo '%s' (%d confirmados) sem card consolidado" % (g, len(m.groups[g])))
     # Quem foi absorvido nao tem card proprio; quem nao foi, tem -- no bloco certo.
     where = {}
-    for mode, block in tex.blocks(5):
+    for mode, block in tex.blocks(SEC_DETAIL):
         for c in finding_cards(block):
             where[c["anchor"]] = mode
     for n in m.nvts:
@@ -656,7 +668,7 @@ def check_instancias(m, tex, sheet, lang):
         # O xsl:sort numerico decrescente poe NaN no fim.
         return sev if isnum(sev) else float("-inf")
 
-    for mode, block in tex.blocks(4):
+    for mode, block in tex.blocks(SEC_SUMMARY):
         # Duas sequencias ordenadas por tabela: as linhas de grupo (no topo da
         # tabela de confirmados) e as de NVT. Cada uma em ordem decrescente.
         last = {"grp": None, "nvt": None}
@@ -698,7 +710,7 @@ def check_instancias(m, tex, sheet, lang):
                 fails.append("sumario '%s' fora de ordem: linha #%s (severidade maxima %s) depois"
                              " de uma de %s" % (mode, r["num"], key, last[kind]))
             last[kind] = key
-    for mode, block in tex.blocks(5):
+    for mode, block in tex.blocks(SEC_DETAIL):
         last = None
         for c, seg in card_segments(block):
             n = m.by_anchor.get(c["anchor"])
@@ -773,7 +785,7 @@ def catalog(bundle, lang):
 def check_acao(m, tex, sheet, lang, bundle):
     fails = []
     cat = catalog(bundle, lang)
-    for mode, block in tex.blocks(5):
+    for mode, block in tex.blocks(SEC_DETAIL):
         for c in consolidated_cards(block):
             g = card_group(c, sheet, lang)
             if g not in m.groups:
@@ -793,7 +805,7 @@ def check_acao(m, tex, sheet, lang, bundle):
 
 
 def check_vulns_unicas(m, tex, sheet, lang):
-    k = macros(tex.section(1)[0], "kpirow", 8)
+    k = macros(tex.section(SEC_EXEC)[0], "kpirow", 8)
     if not k:
         return ["sem \\kpirow no resumo executivo"]
     got = k[0][1][7].strip()
@@ -816,7 +828,7 @@ def check_faixas(m, tex, sheet, lang):
     ranges = ((9.0, 99), (7.0, 9.0), (4.0, 7.0), (0.1, 4.0))
     export = [sum(1 for r in m.results if isnum(r.sev) and lo <= r.sev < hi) for lo, hi in ranges]
     want = [int(x) for x in full] if rc_bands else export
-    sec1 = tex.section(1)[0]
+    sec1 = tex.section(SEC_EXEC)[0]
     bars = re.findall(r"\\sevbar\{(critico|alto|medio|baixo)\}\{([^}]*)\}", sec1)
     got = [int(xnum(v)) if isnum(xnum(v)) else v for _, v in bars]
     src = "result_count/*/full" if rc_bands else "contagem do export (faixa(s) ausente(s) no result_count)"
@@ -884,11 +896,12 @@ def check_faixas(m, tex, sheet, lang):
 def check_ancoras(m, tex, sheet, lang):
     fails = []
     links = ANCHOR_LINK.findall(tex.s)
+    plinks = PRIO_LINK.findall(tex.s)
     targets = ANCHOR_TARGET.findall(tex.s)
-    bad = sorted({a for a in links + targets if not re.fullmatch(r"[A-Za-z0-9-]+", a)})
+    bad = sorted({a for a in links + plinks + targets if not re.fullmatch(r"[A-Za-z0-9-]+", a)})
     if bad:
         fails.append("ancora(s) com caractere fora de [A-Za-z0-9-]: %s" % ", ".join(bad[:5]))
-    dangling = sorted(set(links) - set(targets))
+    dangling = sorted(set(links + plinks) - set(targets))
     if dangling:
         fails.append("link(s) sem alvo: %s" % ", ".join(dangling[:5]))
     dup = sorted({a for a in targets if targets.count(a) > 1})
@@ -929,7 +942,7 @@ def check_nome(m, tex, sheet, lang):
             continue
         places.append(("capa" if macro == "suriCover" else "contracapa", sheet.num(var),
                        raw, plain(val), trunc_count(val)))
-    lede = macros(tex.section(1)[0], "suriLede", 1)
+    lede = macros(tex.section(SEC_EXEC)[0], "suriLede", 1)
     opener = "\\textbf{``"
     if lede:
         t = lede[0][1][0]
@@ -941,9 +954,9 @@ def check_nome(m, tex, sheet, lang):
                            trunc_count(val)))
         else:
             fails.append("narrativa: nome do projeto nao encontrado")
-    # Titulo do card do mapa de portas (secao 2): o nome NORMALIZADO, teto de
+    # Titulo do card do mapa de portas (secao 3): o nome NORMALIZADO, teto de
     # 60 e marca "..." sem contagem (hx-board).
-    hexcards = macros(tex.section(2)[0], "hexcard", 3)
+    hexcards = macros(tex.section(SEC_HEXMAP)[0], "hexcard", 3)
     whole = norm_space(raw)
     if hexcards and whole:
         title = plain(hexcards[0][1][0])
@@ -982,7 +995,7 @@ def cut_fails(where, budget, name, vis, cut):
 
 
 # ---------------------------------------------------------------------------
-# Secao 6: escopo, metodologia e limitacoes
+# Secao 7: escopo, metodologia e limitacoes
 # ---------------------------------------------------------------------------
 NA = "\\scopena"     # o valor de todo dado que o relatorio nao traz
 # Letras do levels= que tem palavra propria (as outras saem como estao).
@@ -1068,7 +1081,7 @@ def detail_named(dets, name):
 
 
 class ScanState:
-    """As tres regras de estado do latex.xsl, que a secao 1 e a secao 6 leem:
+    """As tres regras de estado do latex.xsl, que a secao 1 e a secao 7 leem:
     nunca iniciou (sem scan_start, sem host, sem resultado e estado
     compativel), nao terminou (comecou e o estado e' de scan inacabado) e
     inventario do agente (um dos dois sinais do gmp-bridge, e nenhum detalhe
@@ -1091,7 +1104,7 @@ class ScanState:
 
 
 class ScopeOracle:
-    """O que a secao 6 deveria dizer, recalculado do XML: por bloco, as linhas
+    """O que a secao 7 deveria dizer, recalculado do XML: por bloco, as linhas
     \\scopefact (rotulo, valor), as linhas de tabela, o corte declarado e as
     notas; e os itens de limitacoes. Valor NA = \\scopena; ("corte", texto,
     teto) = texto livre com o corte declarado do escape_break (regra do
@@ -1336,7 +1349,7 @@ def scope_value_fails(where, got, want):
 
 
 def check_escopo(m, tex, sheet, lang):
-    """A secao 6 (escopo, metodologia e limitacoes) diz a verdade sobre o XML,
+    """A secao 7 (escopo, metodologia e limitacoes) diz a verdade sobre o XML,
     linha a linha: cada \\scopefact com o rotulo e o valor que o relatorio
     sustenta -- \\scopena EXATAMENTE quando o dado falta, os textos livres com
     o teto e o corte declarado --, as tabelas de autenticacao e de erros com
@@ -1345,9 +1358,9 @@ def check_escopo(m, tex, sheet, lang):
     de limitacoes conforme o estado do scan (nunca iniciou, nao terminou,
     inventario do agente) e a versao do feed."""
     fails = []
-    if 6 not in tex.sections:
-        return ["secao 6 ausente"]
-    text, _ = tex.section(6)
+    if SEC_SCOPE not in tex.sections:
+        return ["secao %d ausente" % SEC_SCOPE]
+    text, _ = tex.section(SEC_SCOPE)
     want = ScopeOracle(m, sheet, lang)
     labels = macros(text, "blocklabel", 1)
     got_labels = [a[0] for _, a in labels]
@@ -1361,7 +1374,7 @@ def check_escopo(m, tex, sheet, lang):
     for i, (lbl, exp) in enumerate(want.blocks):
         p = labels[i][0]
         blk = text[p:labels[i + 1][0] if i + 1 < len(labels) else len(text)]
-        where = "secao 6 / %s" % lbl
+        where = "secao %d / %s" % (SEC_SCOPE, lbl)
         # Fatos: rotulo e valor, na ordem.
         facts = macros(blk, "scopefact", 2)
         if [a[0] for _, a in facts] != [k for k, _ in exp["facts"]]:
@@ -1405,19 +1418,20 @@ def check_escopo(m, tex, sheet, lang):
     # o oraculo marcou ausentes (numa celula de tabela, numa nota...).
     total_na = len(re.findall(r"\\scopena(?![A-Za-z@])", text))
     if total_na != n_na:
-        fails.append("%d \\scopena na secao 6, esperado %d (um por dado ausente)" % (total_na, n_na))
+        fails.append("%d \\scopena na secao %d, esperado %d (um por dado ausente)"
+                     % (total_na, SEC_SCOPE, n_na))
     return fails
 
 
 def check_alerta(m, tex, sheet, lang):
     """O resumo executivo (secao 1) abre com o alerta de "nada medido" se e
     somente se o relatorio nao tem host, e o alerta da' a causa que o dado
-    sustenta, pelas MESMAS regras das notas da secao 6: a tarefa que nunca
+    sustenta, pelas MESMAS regras das notas da secao 7: a tarefa que nunca
     iniciou nao recebe o conselho de corrigir um alive test que nao rodou; o
     scan que iniciou e nao terminou recebe o corpo neutro (nao terminou, nenhum
     host registrado), sem diagnostico; so' o scan que terminou sem achar host
     recebe o conselho do alive test."""
-    boxes = macros(tex.section(1)[0], "alertbox", 2)
+    boxes = macros(tex.section(SEC_EXEC)[0], "alertbox", 2)
     if m.hosts > 0:
         return ["alerta de 'nada medido' num relatorio com %d host(s)" % m.hosts] if boxes else []
     if len(boxes) != 1:

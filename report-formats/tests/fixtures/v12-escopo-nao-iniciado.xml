@@ -4,7 +4,7 @@ Fixture SINTETICA do CI de veracidade do Suricatoos Premium PDF
 (report-formats/ci/check-veracity.py roda sobre o .tex desta fixture nos 3
 idiomas). Nomes genericos, nenhum endereco e nenhum dado de scan real.
 
-Secao 6 (escopo, metodologia e limitacoes), a tarefa que NUNCA INICIOU: o gvmd
+Secao 7 (escopo, metodologia e limitacoes), a tarefa que NUNCA INICIOU: o gvmd
 so' grava o inicio do scan quando o scanner comeca, entao <scan_start> e
 <scan_end> vem vazios, sem host, sem resultado e com zero erros. A secao tem de
 dizer que a tarefa nao chegou a iniciar, e inicio, fim e duracao saem como "nao

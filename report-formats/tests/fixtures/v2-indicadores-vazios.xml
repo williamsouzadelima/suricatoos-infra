@@ -9,7 +9,7 @@ Defeito 2 (pagina "Indicadores a validar" vazia). Quatro advisories VendorFix
 confirmados (QoD 98) e um QUINTO do mesmo produto com QoD 30. O agrupamento
 contava os cinco, absorvia o de QoD 30 no card consolidado e o tirava da tabela
 e dos cards de indicadores; mas o contador da secao ainda o contava, e a
-secao abria vazia. Invariante: nenhuma tarja "indicadores" (secao 4 ou 5) sem
+secao abria vazia. Invariante: nenhuma tarja "indicadores" (secao 5 ou 6) sem
 linha/card; a tarja existe se e somente se ha NVT de baixa confianca.
 -->
 <report extension="pdf" content_type="application/pdf" id="00000000-0000-4000-8000-000000000032">
