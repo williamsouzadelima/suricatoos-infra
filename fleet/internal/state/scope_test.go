@@ -68,6 +68,27 @@ func TestScopeNaFormaCanonicaDoPortao(t *testing.T) {
 	}
 }
 
+// Um token que fica vazio depois do TrimSpace (uma linha em branco com CRLF, um CR, um VT ou um U+00A0 solto entre
+// vírgulas) é pulado, como no fields do scopegate: o estado não diz "sem escopo" para um tenant cujo portão libera
+// faixas.
+func TestScopeIgnoraTokenSoDeEspacoComoOPortao(t *testing.T) {
+	nbsp := string(rune(0xa0))
+	for _, spec := range []string{
+		"192.0.2.0/24\r\n\r\n198.51.100.0/24",
+		"192.0.2.0/24, \r ,198.51.100.0/24",
+		"192.0.2.0/24,\v,198.51.100.0/24",
+		"192.0.2.0/24," + nbsp + ",198.51.100.0/24",
+		"192.0.2.0/24" + nbsp + "," + nbsp + "198.51.100.0/24" + nbsp,
+	} {
+		f := newFakes()
+		f.tenants.list = []tenant.Listing{{Name: "acme", Enabled: true, Scope: spec}}
+		got := current(t, collectOnce(t, f, contract.NodeStandalone), contract.KindScope).(*contract.DataScope)
+		if want := []string{"192.0.2.0/24", "198.51.100.0/24"}; len(got.Items) != 1 || !reflect.DeepEqual(got.Items[0].Scope, want) {
+			t.Errorf("%q: scope %+v", spec, got.Items)
+		}
+	}
+}
+
 // Uma entrada que não é IP/CIDR literal faz o portão recusar o escopo inteiro (nada passa): o estado diz isso —
 // escopo vazio —, nunca só as entradas boas.
 func TestScopeComEntradaNaoLiteralSaiVazio(t *testing.T) {

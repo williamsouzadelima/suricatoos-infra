@@ -56,15 +56,19 @@ func (c *Collector) collectScope(cyc *cycle) ([]byte, error) {
 }
 
 // scopeEntries is a tenant's scope as the scope gate (scopegate, slice F2.4a) reads it: tokens separated by commas,
-// spaces, tabs or newlines, each an IP or CIDR literal, in the gate's canonical form. One token that is not a
-// literal makes the gate refuse the whole scope — nothing passes —, and that is what the state says: an empty
+// spaces, tabs or newlines, trimmed (a token left empty — a blank CRLF line, a lone CR, VT or no-break space — is
+// skipped, as scopegate's fields does), each an IP or CIDR literal, in the gate's canonical form. One token that is
+// not a literal makes the gate refuse the whole scope — nothing passes —, and that is what the state says: an empty
 // scope, never just the good entries.
 func scopeEntries(spec string) []string {
 	out := []string{}
 	for _, tok := range strings.FieldsFunc(spec, func(r rune) bool {
 		return r == ',' || r == ' ' || r == '\n' || r == '\t'
 	}) {
-		canonical, ok := canonicalLiteral(strings.TrimSpace(tok))
+		if tok = strings.TrimSpace(tok); tok == "" {
+			continue
+		}
+		canonical, ok := canonicalLiteral(tok)
 		if !ok {
 			return []string{}
 		}
