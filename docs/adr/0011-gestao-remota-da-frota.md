@@ -33,7 +33,8 @@ Decisões fixas do plano aprovado pelo mantenedor (11/10/2026), que este ADR **n
 - **D2** — o **escopo de varredura é autoridade LOCAL** do nó e **nunca** é alterado remotamente no v1 (o hub
   só lê). Alvo criado remotamente = só IP/CIDR literal ⊆ escopo do tenant (nó central: registro
   `control-plane/tenants`; standalone/sensor: `FLEET_SCAN_SCOPE` local), reaproveitando
-  `sensor/internal/scope/scope.go` (deny absoluto de loopback/link-local/metadata/multicast/self).
+  o portão de escopo do sensor, extraído na F2.4a para o módulo compartilhado `scopegate/` (deny absoluto de
+  loopback/link-local/metadata/multicast/self).
 - **D3** — remediação ([ADR-0010](0010-executor-remediacao-windows.md)): só **leitura** remota no v1;
   aprovar/rejeitar remotamente é v2, atrás de política local.
 - **D4** — do nó sai só **metadado operacional e contagens**; achado detalhado só por `report.export`
@@ -62,7 +63,7 @@ O que já existe e é reusado (verificado, read-only):
   (loopback, link-local/metadata, multicast, não-especificado) **e** sobreposição de CIDR com ele. Os IPs
   próprios (`SCAN_SELF_DENY_IPS`) só são negados quando o alvo é **um IP**: um CIDR que contém um IP próprio
   passa (ramo CIDR do `CheckHost`). A frota fecha essa lacuna no contrato (regra de escopo do Catálogo) e a
-  F2.4 a corrige na extração do pacote.
+  F2.4a a corrige na extração para o módulo compartilhado `scopegate/`.
 - `control-plane/tenants/tenants.go` — registro `{name, scope, gmp_user, enabled}`; `Known` (habilitado),
   `ScopeSpec`, `GmpUser`; arquivo `TENANTS_FILE` (não-secreto). As senhas gvmd por tenant ficam à parte, em
   `SENSOR_TENANT_SECRETS` (`{tenant: senha}`, host-only `0600`, `compose/docker-compose.override.yml`).
@@ -155,7 +156,7 @@ O que já existe e é reusado (verificado, read-only):
 | cliente do hub | HTTPS ≥ TLS 1.3 + mTLS, certificado recarregado a cada handshake (molde `sensor/internal/cloud`) |
 | verificador + store anti-replay/journal | ordem fixa de checagens; nonce, decisão e resultado persistidos (escrita atômica, `fsync`, `0600`) |
 | política local | `FLEET_STATE_DIR/policy.json` (`allow`, `sensitive_per_hour`, `total_per_hour`); só o operador local edita |
-| portão de escopo | lógica de `sensor/internal/scope` extraída para pacote compartilhado (F2.4) |
+| portão de escopo | módulo compartilhado `scopegate/`, extraído de `sensor/internal/scope` (F2.4a) |
 | coletores de estado + outbox de eventos | hash por kind; outbox durável, entrega ≥ 1 vez |
 | auditoria local | dois fluxos append-only encadeados por hash, com rotação própria: `FLEET_STATE_DIR/audit-exec.jsonl` e `audit-reject.jsonl` |
 | executor serial | um comando por vez; despacha para `fleet_ops.py`, API admin local ou feed-updater |
@@ -503,7 +504,7 @@ destino do comando (ack em `fleet-result.schema.json#/$defs/ack`).
 | 8 | payload válido para o tipo (schema estrito + regras semânticas, como o filtro explícito do `report.export`) | `bad_payload` | `rejected`, final |
 | 8 | `report.export`: a combinação (`format`, `lang`, `variant`) está em `capabilities.report_formats` do estado `node` | `unsupported_report_variant` | `rejected`, final |
 | 9 | escopo: os hosts de `target.create` e os resultantes de `target.modify` (os atuais, lidos no gvmd, se o payload não traz `hosts`); os alvos de `sensor_job.enqueue`; os hosts do target de `task.start/resume` e de `task.create/modify` com `target_id`; e os dos targets das tarefas que o comando liga a uma agenda ou cuja agenda ele altera (`schedule.create` com `task_ids`, `task.modify` com `schedule_id` não vazio, `task.clone` de tarefa com agenda, `schedule.modify`). Tudo lido no gvmd antes da decisão; tem de ser IP/CIDR literal ⊆ escopo do tenant, fora do espaço degenerado e **sem conter** IP próprio nem do hub | `scope_denied` | `rejected`, final |
-| — | o store anti-replay/journal não pôde ser gravado, ou a leitura no gvmd da linha 9 falhou | `unavailable` | `deferred` |
+| — | o store anti-replay/journal não pôde ser gravado, a configuração local (política, registro de tenants, segredos) não pôde ser relida, ou a leitura no gvmd da linha 9 falhou | `unavailable` | `deferred` |
 
 Na linha 0, `type` só precisa casar `^[a-z][a-z_]*\.[a-z][a-z_]*$` (`command_type_any`, como em
 `fleet-command.schema.json#/$defs/envelope`): um tipo fora do catálogo é `unsupported` (linha 7), não
@@ -815,8 +816,9 @@ Regras transversais:
     `exclude_hosts`. A F2.3 confirma no gvmd se um target em uso aceita modificação.
   - Consequência operacional: um alvo que cubra o próprio nó (ex.: o `/24` inteiro da LAN onde ele mora) é
     negado, e o hub precisa montar faixas que não o contenham — o nó nunca injeta exclusões sozinho.
-  - O `sensor/internal/scope` de hoje só nega IP próprio isolado; a F2.4 fecha isso no pacote extraído, com
-    teste.
+  - O `sensor/internal/scope` só negava IP próprio isolado; a F2.4a fecha isso no módulo compartilhado
+    `scopegate/`, com teste. Na frota a regra nega sempre; no sensor ela começa só registrando
+    (`SCAN_SELF_DENY_CIDR_MODE=log`), para não parar a varredura do `/24` da LAN onde ele mora.
 - **Lixeira, nunca `ultimate`.** Restaurar ou esvaziar a lixeira é ação **local** (GSA). Criação e alteração
   não têm rollback automático: `output_*_modify.before` traz os valores anteriores dos campos alterados
   (exceto `comment`) para reverter à mão.
@@ -1056,8 +1058,9 @@ sensibilidade por dado: [docs/data-inventory.md — Canal de gestão da frota (A
   python-gvm; filtro explícito; checagem de dono; alive test em sub-elementos `<alive_test>`, com o fallback
   documentado (confirmar em LAB que o gvmd 26.x aceita o padrão assim); `target.modify` muda portas só por
   `port_list_id`; testes sem gvmd, no estilo de `test_scan_bridge.py`.
-- **F2.4 — política, escopo, anti-replay e auditoria.** `policy.json` + padrão; portão de escopo extraído de
-  `sensor/internal/scope` para pacote compartilhado (sem cópia divergente; `scope_test.go` e
+- **F2.4 — política, escopo, anti-replay e auditoria** (em quatro fatias: F2.4a escopo, F2.4b política,
+  orçamentos e tenants, F2.4c auditoria, F2.4d store e pipeline). `policy.json` + padrão; portão de escopo
+  extraído de `sensor/internal/scope` para o módulo compartilhado `scopegate/` (sem cópia divergente; `scope_test.go` e
   `degenerate_test.go` migram junto) e com a regra de CIDR que **contém** IP próprio ou do hub (o `scope.go`
   atual só nega IP isolado), testada, mais os IPs do hub no self-deny e o re-check de escopo das agendas e do
   `target.modify`; store anti-replay/journal (linha 2a, `redeliveries`, `replay_floor`, sem gravar
