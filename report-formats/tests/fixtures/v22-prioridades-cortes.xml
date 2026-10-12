@@ -9,14 +9,20 @@ e percentile com 5 casas); nenhum dado de scan real.
 
 Secao 2 (prioridades e proximos passos): os CORTES e os textos da coluna de
 acao:
-- 25 acoes, 23 delas criticas ou altas: a tabela mostra as 20 primeiras e
-  declara "+ 5"; a frase calculada diz quantos dos achados criticos e altos as
-  20 tratam (21 de 24: a primeira acao tem duas instancias);
-- dois grupos consolidados (5 advisories VendorFix confirmados do Contoso
-  Mailer e os 6 "Example Filler", VendorFix com as mesmas duas primeiras
-  palavras): cada advisory e' uma acao propria (a unidade e' o NVT) e o link
-  de cada uma leva ao card consolidado do seu grupo (#1 e #2 do sumario de
-  achados); o primeiro card normal e' o #3;
+- 17 acoes, uma por card: os dois cards consolidados (5 advisories VendorFix
+  confirmados do Contoso Mailer e os 6 "Example Filler", VendorFix com as
+  mesmas duas primeiras palavras) sao UMA acao cada, com o titulo do card na
+  coluna de nome, o link para o card consolidado (#1 e #2 do sumario de
+  achados) e a acao unica do card (a do Example Filler e' a primeira frase
+  com o "p." de uma letra); o primeiro card normal e' o #3; as 17 cabem na
+  tabela, sem corte declarado (o "+ N" por card e' da v26), e a frase diz
+  que tratam 24 de 24 achados criticos e altos (o grupo conta as instancias
+  de todos os membros);
+- nome e acao traduzidos de um NVT avulso: o ...141635 e' de proposito um OID
+  PUBLICO do feed (a excecao a faixa sintetica), presente nos catalogos pt_BR
+  e es como os advisories da v5, com nome e solucao do fornecedor sinteticos
+  (VENDOR-RAW); em pt_BR e es a linha traz o nome e a primeira frase da
+  solucao do catalogo, e a ordem usa o nome do feed;
 - NVT sem solucao nenhuma ("sem solucao informada", tipo travessao); solucao vazia
   com tipo NoneAvailable; solucao so' na tag (o mesmo fallback do card);
 - primeira frase: cortada em fronteira de palavra no teto (e o corte
@@ -38,7 +44,7 @@ acao:
   <scan_start>2026-09-01T09:00:00Z</scan_start>
   <scan_end>2026-09-01T10:12:00Z</scan_end>
   <hosts><count>6</count></hosts>
-  <result_count>40<full>40</full><filtered>26</filtered><critical><full>3</full><filtered>3</filtered></critical><high><full>29</full><filtered>21</filtered></high><medium><full>6</full><filtered>2</filtered></medium><low><full>2</full><filtered>0</filtered></low><log><full>0</full><filtered>0</filtered></log><false_positive><full>0</full><filtered>0</filtered></false_positive></result_count>
+  <result_count>40<full>40</full><filtered>27</filtered><critical><full>3</full><filtered>3</filtered></critical><high><full>29</full><filtered>21</filtered></high><medium><full>6</full><filtered>3</filtered></medium><low><full>2</full><filtered>0</filtered></low><log><full>0</full><filtered>0</filtered></log><false_positive><full>0</full><filtered>0</filtered></false_positive></result_count>
   <filters id="00000000-0000-4000-8000-000000000002">
     <term>apply_overrides=1 levels=chmlgf rows=-1 min_qod=1 first=1 sort-reverse=severity</term>
   </filters>
@@ -314,6 +320,15 @@ acao:
       <severity>4.5</severity>
       <qod><value>98</value><type>remote_banner</type></qod>
       <description>Synthetic detection output for Example Filler Medium Finding 2.</description>
+    </result>
+    <result id="p-0027">
+      <host>192.0.2.33<hostname>app33.example.com</hostname></host>
+      <port>8080/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.141635"><type>nvt</type><name>VENDOR-RAW Example Script Library Cross Site Scripting</name><family>Synthetic</family><cvss_base>6.1</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">VENDOR-RAW: upgrade the script library to the fixed release. Clear the caches.</solution><refs></refs></nvt>
+      <threat>Medium</threat>
+      <severity>6.1</severity>
+      <qod><value>98</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for VENDOR-RAW Example Script Library Cross Site Scripting.</description>
     </result>
   </results>
 </report>

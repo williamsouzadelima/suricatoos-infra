@@ -36,18 +36,22 @@ porque sao invariantes do documento, nao casos especiais.
                  titulo do mapa de portas), e' cortado em fronteira de palavra e
                  o corte declarado bate;
   prioridades    a secao 2 (prioridades e proximos passos), recalculada do XML:
-                 as acoes -- um NVT confirmado de severidade maxima >= 0.1 cada,
-                 o mesmo conjunto dos cards, sem Log, sem falso positivo e sem
-                 indicador -- na ordem documentada (classe de severidade, hosts
-                 afetados, EPSS, maior CVSS, nome do NVT, OID), linha a linha ate'
-                 o teto $prio-rows-max: a acao (primeira frase da solucao, com o
-                 teto $prio-action-max e o corte declarado), o nome, o tipo de
-                 solucao traduzido, os hosts distintos, a severidade, o EPSS e o
-                 link para o card certo, com o numero que o card tem; o "+ N"
-                 so' acima do teto; a frase "as N primeiras acoes tratam X de Y
-                 achados criticos e altos" (e as formas sem nenhum, com um so',
-                 com uma acao so' e sem host medido); as notas de EPSS, de
-                 indicadores fora do plano e de export parcial;
+                 as acoes -- uma por card de achado confirmado de severidade
+                 maxima >= 0.1: o card de um NVT, ou o card consolidado de um
+                 grupo, que e' UMA acao com as instancias de todos os membros;
+                 sem Log, sem falso positivo e sem indicador -- na ordem
+                 documentada (classe de severidade, hosts afetados, EPSS, maior
+                 CVSS, nome, OID), linha a linha ate' o teto $prio-rows-max: a
+                 acao (primeira frase da solucao -- num grupo, a do membro mais
+                 severo --, com o teto $prio-action-max e o corte declarado), o
+                 nome (num grupo, o titulo do card), o tipo de solucao
+                 traduzido, os hosts distintos (num grupo, a uniao), a
+                 severidade, o EPSS e o link para o card certo, com o numero que
+                 o card tem; o "+ N" so' acima do teto; a frase "as N primeiras
+                 acoes tratam X de Y achados criticos e altos" (e as formas sem
+                 nenhum, com um so', com uma acao so' e sem host medido); as
+                 notas de EPSS, de indicadores fora do plano e de export
+                 parcial;
   escopo         a secao 7 (escopo, metodologia e limitacoes), recalculada do
                  XML bloco a bloco: cada \\scopefact com o rotulo e o valor
                  certos -- tarefa, alvo, hosts (e a contagem declarada pelo
@@ -988,22 +992,23 @@ def check_nome(m, tex, sheet, lang):
     return fails
 
 
-def cut_fails(where, budget, name, vis, cut):
+def cut_fails(where, budget, name, vis, cut, what="nome"):
     """O texto visivel `vis' de um campo cortado em `budget' caracteres e' o
-    nome inteiro (cabe) ou o seu inicio cortado na ULTIMA fronteira de palavra
-    da janela (veja check_nome), com o corte declarado `cut' (None: a marca nao
-    traz contagem) batendo com o que sobrou."""
+    texto inteiro `name' (cabe) ou o seu inicio cortado na ULTIMA fronteira de
+    palavra da janela (veja check_nome), com o corte declarado `cut' (None: a
+    marca nao traz contagem) batendo com o que sobrou. `what' nomeia o campo
+    nas mensagens (o nome do projeto, a acao de uma prioridade...)."""
     k = len(vis)
     if cut is None:
         cut = len(name) - k
     if len(name) <= budget:
         if cut or vis != name:
-            return ["%s: nome cabe (%d <= %d) e saiu '%s' (+%d)"
-                    % (where, len(name), budget, vis[:40], cut)]
+            return ["%s: %s cabe (%d <= %d) e saiu '%s' (+%d)"
+                    % (where, what, len(name), budget, vis[:40], cut)]
         return []
     if not name.startswith(vis) or cut != len(name) - k:
-        return ["%s: '%s' (+%d) nao e' o inicio do nome com o corte declarado"
-                % (where, vis[:40], cut)]
+        return ["%s: '%s' (+%d) nao e' o inicio do(a) %s com o corte declarado"
+                % (where, vis[:40], cut, what)]
     back = min(budget // 2, 199)
     spaces = [i for i in range(budget - back, budget + 1) if name[i] in WS]
     want = spaces[-1] if spaces else budget
@@ -1355,7 +1360,7 @@ def scope_value_fails(where, got, want):
     if isinstance(want, tuple) and want[0] == "corte":
         if got == NA:
             return ["%s = \\scopena, e o XML tem '%s'" % (where, norm_space(want[1])[:40])]
-        return cut_fails(where, want[2], want[1], plain(got), trunc_count(got))
+        return cut_fails(where, want[2], want[1], plain(got), trunc_count(got), what="valor")
     if isinstance(want, tuple):
         return ["%s com data ilegivel no XML (%r)" % (where, want[1])]
     if want == NA:
@@ -1487,7 +1492,7 @@ def check_alerta(m, tex, sheet, lang):
 # palavra de uma letra ("p.") tambem nao fecham, pela regra do radical.
 PRIO_ABBREV = ("e.g", "i.e", "p.ex", "p.ej", "ex", "ej", "vs", "cf", "approx", "incl")
 ASCII_LOWER = str.maketrans("ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz")
-NOSOL = "\\prionosol"    # a acao de um NVT cuja solucao o relatorio nao traz
+NOSOL = "\\prionosol"    # a acao de um card cuja solucao o relatorio nao traz
 
 
 def prio_stop(word):
@@ -1526,17 +1531,24 @@ def epss_cell(score, lang):
 class PrioOracle:
     """O que a secao 2 deveria dizer, recalculado do XML.
 
-    Uma ACAO por NVT confirmado (o mesmo conjunto dos cards: QoD pelo NVT, com
-    todas as instancias) de severidade maxima >= 0.1 -- sem Log, sem falso
-    positivo; o indicador (todas as instancias abaixo do piso de QoD) fica
-    fora do plano e e' contado numa nota. Ordem: classe de severidade
-    (decrescente), hosts afetados (distintos, entre as instancias com
-    severidade >= 0.1; decrescente), EPSS (max_epss/score, o maior entre as
-    instancias; decrescente, sem EPSS por ultimo), maior CVSS (decrescente),
-    nome do NVT (o do feed, normalizado; crescente) e OID (crescente) -- texto
-    comparado ponto de codigo a ponto de codigo, como o xsl:sort do libxslt sem
-    @lang. Ate' $prio-rows-max linhas; X e Y contam as instancias com
-    severidade >= 7.0 das N primeiras acoes e de todas."""
+    Uma ACAO por card de achado confirmado, como a secao de achados detalhados
+    o mostra: o card de um NVT confirmado que nenhum card consolidado absorveu,
+    ou o card consolidado de um grupo (Model.groups: VendorFix confirmados com
+    as mesmas duas primeiras palavras, >= group-min), que e' UMA acao com as
+    instancias de todos os membros. Entra a acao de severidade maxima >= 0.1 --
+    sem Log, sem falso positivo; o indicador (todas as instancias abaixo do
+    piso de QoD) fica fora do plano e e' contado numa nota. Ordem: classe de
+    severidade (decrescente), hosts afetados (distintos -- num grupo, a uniao
+    --, entre as instancias com severidade >= 0.1; decrescente), EPSS
+    (max_epss/score, o maior entre as instancias; decrescente, sem EPSS por
+    ultimo), maior CVSS (decrescente), nome (o do NVT como no feed,
+    normalizado; num grupo, a chave do produto) crescente e OID (o do NVT, ou
+    o do representante do grupo, o 1o membro) crescente -- texto comparado
+    ponto de codigo a ponto de codigo, como o xsl:sort do libxslt sem @lang.
+    A acao de um grupo e' a acao unica do card: a solucao do membro mais
+    severo (Model.group_top), nao a do representante. Ate' $prio-rows-max
+    linhas; X e Y contam as instancias com severidade >= 7.0 das N primeiras
+    acoes e de todas (num grupo, as dos membros)."""
 
     def __init__(self, m, sheet, lang, bundle, tex):
         self.sheet, self.lang = sheet, lang
@@ -1557,49 +1569,82 @@ class PrioOracle:
                 self.cards[c["anchor"]] = str(ncons)
             for c in finding_cards(block):
                 self.cards[c["anchor"]] = c["num"]
+
+        def card(kind, insts, sev, name, oid):
+            """Os valores de ordem de uma acao, a partir das instancias dela."""
+            hits = [r for r in insts if isnum(r.sev) and r.sev >= 0.1]
+            scores = [v for v in (xnum(s) for r in insts for s in r.epss) if isnum(v)]
+            return {"kind": kind, "sev": sev, "name": name, "oid": oid,
+                    "rank": 1 + (sev >= 4.0) + (sev >= 7.0) + (sev >= 9.0),
+                    "hosts": len({r.host for r in hits if r.host}),
+                    "epss": max(scores) if scores else None,
+                    "x": sum(1 for r in insts if isnum(r.sev) and r.sev >= 7.0)}
+
         acts = []
+        # O card de um NVT: o confirmado que nenhum card consolidado absorveu.
         for n in m.nvts:
-            if n.low or not (isnum(n.maxsev) and n.maxsev >= 0.1):
+            if n.low or n.oid in m.absorbed or not (isnum(n.maxsev) and n.maxsev >= 0.1):
                 continue
-            hits = [r for r in n.inst if isnum(r.sev) and r.sev >= 0.1]
-            scores = [v for v in (xnum(s) for r in n.inst for s in r.epss) if isnum(v)]
-            acts.append({"nvt": n,
-                         "rank": 1 + (n.maxsev >= 4.0) + (n.maxsev >= 7.0) + (n.maxsev >= 9.0),
-                         "hosts": len({r.host for r in hits if r.host}),
-                         "epss": max(scores) if scores else None,
-                         "x": sum(1 for r in n.inst if isnum(r.sev) and r.sev >= 7.0),
-                         "name": norm_space(n.rep.name)})
+            a = card("nvt", n.inst, n.maxsev, norm_space(n.rep.name), n.oid)
+            a["nvt"] = n
+            acts.append(a)
+        # O card consolidado: UMA acao, com as instancias de todos os membros;
+        # nome = a chave do produto, OID = o do representante (o 1o membro, dono
+        # da ancora grp-).
+        for g, members in m.groups.items():
+            sev = m.group_maxsev(g)
+            if not (isnum(sev) and sev >= 0.1):
+                continue
+            a = card("grupo", [r for n in members for r in n.inst], sev, g, members[0].oid)
+            a["group"] = g
+            acts.append(a)
         acts.sort(key=lambda a: (-a["rank"], -a["hosts"],
                                  (0, -a["epss"]) if a["epss"] is not None else (1, 0),
-                                 -a["nvt"].maxsev, a["name"], a["nvt"].oid))
+                                 -a["sev"], a["name"], a["oid"]))
         self.acts = acts
         shown = acts[:self.cap]
         cat = catalog(bundle, lang)
+
+        def solution(r):
+            """A solucao que o card imprime para a instancia r: o catalogo do
+            idioma, senao nvt/solution, senao a tag solution."""
+            tr = cat.get(r.oid)
+            orig = r.solution if norm_space(r.solution) else r.tag("solution")
+            tr_sol = (tr.findtext("solution") or "") if tr is not None else ""
+            return norm_space(tr_sol if norm_space(tr_sol) else orig)
+
         self.rows = []
         for i, a in enumerate(shown, 1):
-            n = a["nvt"]
-            rep = n.rep
-            tr = cat.get(n.oid)
-            # A solucao do card (finding-cards): o catalogo do idioma, senao
-            # nvt/solution, senao a tag solution.
-            orig = rep.solution if norm_space(rep.solution) else rep.tag("solution")
-            tr_sol = (tr.findtext("solution") or "") if tr is not None else ""
-            sol = norm_space(tr_sol if norm_space(tr_sol) else orig)
-            tr_name = (tr.findtext("name") or "") if tr is not None else ""
-            stype = rep.soltype or ""
-            if n.oid in m.absorbed:
-                anchor = "grp-" + m.groups[n.group][0].oid.replace(".", "-")
+            if a["kind"] == "grupo":
+                g = a["group"]
+                # A acao unica do card consolidado e o CVSS do chip dele: o
+                # membro mais severo (o 1o no empate), nao o representante.
+                top = m.group_top(g)
+                sol = solution(top)
+                name = t("grp_title") + ": " + g
+                tlabel = t("st_VendorFix")
+                cvss = top.sev_raw.strip()
+                anchor = "grp-" + m.groups[g][0].oid.replace(".", "-")
             else:
+                n = a["nvt"]
+                sol = solution(n.rep)
+                tr = cat.get(n.oid)
+                tr_name = (tr.findtext("name") or "") if tr is not None else ""
+                name = tr_name if norm_space(tr_name) else n.rep.name
+                stype = n.rep.soltype or ""
+                tlabel = ((t("st_" + stype) if "st_" + stype in sheet.i18n else stype)
+                          if stype else "---")
+                cvss = n.maxsev_raw.strip()
                 anchor = fnd(n.oid)
             self.rows.append({
                 "num": str(i),
+                "kind": a["kind"],
                 "action": ("corte", first_sentence(sol), self.act_max) if sol else NOSOL,
-                "name": norm_space(tr_name if norm_space(tr_name) else rep.name),
-                "type": ((t("st_" + stype) if "st_" + stype in sheet.i18n else stype)
-                         if stype else "---"),
-                "hosts": str(a["hosts"]),
-                "sev": sev_key_row(n.maxsev),
-                "cvss": n.maxsev_raw.strip(),
+                "name": norm_space(name),
+                "type": tlabel,
+                "hosts": gvm_num(a["hosts"], lang),
+                "sev": sev_key_row(a["sev"]),
+                "cvss": cvss,
                 "epss": epss_cell(a["epss"], lang) if a["epss"] is not None else "---",
                 "anchor": anchor})
         N = len(shown)
@@ -1652,13 +1697,13 @@ class PrioOracle:
 
 def check_prioridades(m, tex, sheet, lang, bundle):
     """A secao 2 (prioridades e proximos passos) diz a verdade sobre o XML: as
-    acoes na ordem documentada, cada uma com a posicao, a acao (primeira frase
-    da solucao, teto e corte declarado; \\prionosol so' sem solucao), o nome,
-    o tipo de solucao traduzido, os hosts distintos, a severidade, o EPSS e o
-    link para o card do achado com o numero que esse card tem; o "+ N" so'
-    acima do teto; a frase calculada; as notas (EPSS, indicadores fora do
-    plano, export parcial); e os blocos na ordem introducao, frase, tabela,
-    corte, notas."""
+    acoes (uma por card; o consolidado e' uma) na ordem documentada, cada uma
+    com a posicao, a acao (primeira frase da solucao, teto e corte declarado;
+    \\prionosol so' sem solucao), o nome, o tipo de solucao traduzido, os
+    hosts distintos, a severidade, o EPSS e o link para o card do achado com o
+    numero que esse card tem; o "+ N" so' acima do teto; a frase calculada; as
+    notas (EPSS, indicadores fora do plano, export parcial); e os blocos na
+    ordem introducao, frase, tabela, corte, notas."""
     if SEC_PRIO not in tex.sections:
         return ["secao %d ausente" % SEC_PRIO]
     text, _ = tex.section(SEC_PRIO)
@@ -1687,14 +1732,14 @@ def check_prioridades(m, tex, sheet, lang, bundle):
         act = a[1].strip()
         if w["action"] == NOSOL:
             if act != NOSOL:
-                fails.append("%s: acao '%s', esperado \\prionosol (o NVT nao traz solucao)"
+                fails.append("%s: acao '%s', esperado \\prionosol (o card nao traz solucao)"
                              % (cell, flat(act)[:60]))
         elif act == NOSOL:
-            fails.append("%s: \\prionosol, e o NVT traz a solucao '%s'"
+            fails.append("%s: \\prionosol, e o card traz a solucao '%s'"
                          % (cell, w["action"][1][:60]))
         else:
-            fails += cut_fails("%s: acao" % cell, w["action"][2], w["action"][1],
-                               plain(act), trunc_count(act))
+            fails += cut_fails(cell, w["action"][2], w["action"][1],
+                               plain(act), trunc_count(act), what="acao")
         for k, label in ((2, "name"), (3, "type")):
             if flat(a[k]) != norm_space(w[label]):
                 fails.append("%s: %s '%s', esperado '%s'"

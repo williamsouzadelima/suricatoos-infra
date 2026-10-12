@@ -9,7 +9,10 @@ Defeito 8 (ancora do card consolidado). O grupo e' nomeado pelas duas
 primeiras palavras do NVT, e a ancora so' trocava " ./:,()": com _ & % # $ (ou
 ~ ^) nessas palavras, \hyperlink e \hypertarget recebiam caractere especial
 cru e o pdflatex quebrava. Invariante: toda ancora casa ^[A-Za-z0-9-]+$, todo
-\hyperlink tem \hypertarget e o nome continua impresso escapado.
+\hyperlink tem \hypertarget e o nome continua impresso escapado. Na secao 2
+(prioridades), o titulo do card consolidado sai na coluna de nome da tabela
+com o mesmo escape do card (escape_name), e o link da linha leva a mesma
+ancora grp-.
 -->
 <report extension="pdf" content_type="application/pdf" id="00000000-0000-4000-8000-000000000038">
   <task id="00000000-0000-4000-8000-000000000001">

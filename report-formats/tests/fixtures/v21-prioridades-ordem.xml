@@ -21,13 +21,19 @@ nome do NVT > OID), e as regras de contagem:
 - nome do NVT: "Example Alpha ..." antes de "Example Beta ..." (Beta vem antes
   no XML); OID: dois NVTs com o MESMO nome, ...992109 antes de ...992110
   (o 992110 vem antes no XML);
+- nome comparado ponto de codigo a ponto de codigo, como o xsl:sort do libxslt
+  sem @lang: "Example Zeta ..." antes de "Example beta ..." (maiuscula antes
+  de minuscula) e "Example Bravo ..." antes de "Example Ágata ..." (letra
+  acentuada depois de todo ASCII), os dois pares Baixos empatados em tudo o
+  mais; uma colacao de idioma inverteria os dois, e em cada par o que deve
+  vir depois vem antes no XML e tem o OID menor;
 - hosts afetados = hosts DISTINTOS entre as instancias que sao achado: o desktop
   tem 3 instancias em 2 hosts (duas portas no mesmo host); o mail relay tem
   uma instancia falso positivo (-1.0, override) em outro host, que nao conta;
   a instancia de QoD 30 de um NVT confirmado (broker) conta, como no card;
 - fora do plano: o Log (banner) e o indicador de QoD 30 (database), que vira a
   nota "fora deste plano: 1 indicador";
-- frase calculada: 13 acoes (todas na tabela) tratam 14 de 14 achados criticos
+- frase calculada: 17 acoes (todas na tabela) tratam 14 de 14 achados criticos
   e altos confirmados (as duas instancias criticas do indicador nao contam).
 -->
 <report extension="pdf" content_type="application/pdf" id="00000000-0000-4000-8000-000000000211">
@@ -40,7 +46,7 @@ nome do NVT > OID), e as regras de contagem:
   <scan_start>2026-09-01T09:00:00Z</scan_start>
   <scan_end>2026-09-01T10:12:00Z</scan_end>
   <hosts><count>6</count></hosts>
-  <result_count>30<full>30</full><filtered>30</filtered><critical><full>10</full><filtered>10</filtered></critical><high><full>6</full><filtered>6</filtered></high><medium><full>7</full><filtered>7</filtered></medium><low><full>5</full><filtered>5</filtered></low><log><full>1</full><filtered>1</filtered></log><false_positive><full>1</full><filtered>1</filtered></false_positive></result_count>
+  <result_count>34<full>34</full><filtered>34</filtered><critical><full>10</full><filtered>10</filtered></critical><high><full>6</full><filtered>6</filtered></high><medium><full>7</full><filtered>7</filtered></medium><low><full>9</full><filtered>9</filtered></low><log><full>1</full><filtered>1</filtered></log><false_positive><full>1</full><filtered>1</filtered></false_positive></result_count>
   <filters id="00000000-0000-4000-8000-000000000002">
     <term>apply_overrides=1 levels=chmlgf rows=-1 min_qod=1 first=1 sort-reverse=severity</term>
   </filters>
@@ -350,6 +356,42 @@ nome do NVT > OID), e as regras de contagem:
       <severity>8.8</severity>
       <qod><value>30</value><type>remote_banner</type></qod>
       <description>Synthetic detection output for Example Unconfirmed Database Flaw.</description>
+    </result>
+    <result id="p-0031">
+      <host>192.0.2.22<hostname>host22.example.com</hostname></host>
+      <port>8443/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992116"><type>nvt</type><name>Example beta Status Page Disclosure</name><family>Synthetic</family><cvss_base>3.7</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">Disable the public status page.</solution><refs></refs></nvt>
+      <threat>Low</threat>
+      <severity>3.7</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example beta Status Page Disclosure.</description>
+    </result>
+    <result id="p-0032">
+      <host>192.0.2.23<hostname>host23.example.com</hostname></host>
+      <port>8443/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992117"><type>nvt</type><name>Example Zeta Status Page Disclosure</name><family>Synthetic</family><cvss_base>3.7</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">Disable the public status page.</solution><refs></refs></nvt>
+      <threat>Low</threat>
+      <severity>3.7</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Zeta Status Page Disclosure.</description>
+    </result>
+    <result id="p-0033">
+      <host>198.51.100.21<hostname>host24.example.com</hostname></host>
+      <port>8444/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992118"><type>nvt</type><name>Example Ágata Report Viewer Disclosure</name><family>Synthetic</family><cvss_base>3.5</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">Restrict the report viewer to authenticated users.</solution><refs></refs></nvt>
+      <threat>Low</threat>
+      <severity>3.5</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Ágata Report Viewer Disclosure.</description>
+    </result>
+    <result id="p-0034">
+      <host>198.51.100.22<hostname>host25.example.com</hostname></host>
+      <port>8444/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992119"><type>nvt</type><name>Example Bravo Report Viewer Disclosure</name><family>Synthetic</family><cvss_base>3.5</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">Restrict the report viewer to authenticated users.</solution><refs></refs></nvt>
+      <threat>Low</threat>
+      <severity>3.5</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Bravo Report Viewer Disclosure.</description>
     </result>
   </results>
 </report>

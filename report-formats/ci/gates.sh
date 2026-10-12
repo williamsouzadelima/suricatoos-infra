@@ -116,9 +116,9 @@ overfull_baseline() {
     # interrompido; v15/v16 inventario do agente; v17 concluido sem host; v18
     # import do sensor; v19a/v19b o veto do comentario do bridge; v20a..v20i a
     # tabela de estados) e as da secao 2 (v21 a ordem do plano com EPSS; v22
-    # mais de 20 acoes, grupos consolidados, textos de solucao e cortes; v23 sem
-    # critico nem alto e sem EPSS; v24 exatamente 20 acoes e um so' alto; v25
-    # uma acao so').
+    # grupos consolidados, textos de solucao e cortes; v23 sem critico nem alto
+    # e sem EPSS; v24 exatamente 20 acoes e um so' alto; v25 uma acao so'; v26
+    # mais de 20 acoes por card, com cards consolidados dentro e fora das 20).
     */v1-numeracao | */v2-indicadores-vazios | */v3-consolidado-qod | \
     */v4-instancias | */v5-acao-traduzida | */v6-vulns-unicas | \
     */v7a-faixas | */v7b-lowconf | */v7c-todos-lowconf | \
@@ -132,7 +132,8 @@ overfull_baseline() {
     */v20g-estado-parada-solicitada-sem-inicio | */v20h-estado-parado-sem-inicio | \
     */v20i-estado-interrompido-sem-inicio | \
     */v21-prioridades-ordem | */v22-prioridades-cortes | */v23-prioridades-sem-criticos | \
-    */v24-prioridades-vinte-acoes | */v25-prioridades-acao-unica) echo 0 ;;
+    */v24-prioridades-vinte-acoes | */v25-prioridades-acao-unica | \
+    */v26-prioridades-cards) echo 0 ;;
     *) return 1 ;;
   esac
 }
