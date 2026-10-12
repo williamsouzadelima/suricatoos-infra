@@ -3,6 +3,8 @@
 package fsutil
 
 import (
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"syscall"
@@ -43,6 +45,42 @@ func TestFlagsDoAcrescimoEDoCorte(t *testing.T) {
 	}
 	if truncateFlags&(os.O_APPEND|os.O_CREATE|os.O_TRUNC|os.O_RDWR) != 0 {
 		t.Errorf("TruncateDurable: flags %#x", truncateFlags)
+	}
+}
+
+// Ler no lugar um arquivo próprio (a auditoria, no boot) não segue link — um link plantado no lugar dele levaria o
+// conector a ler, e passar adiante, outro arquivo do nó —, não trava numa FIFO e não pega terminal.
+func TestOpenRegularNoFollowRecusaLink(t *testing.T) {
+	for name, flag := range map[string]int{"O_NOFOLLOW": syscall.O_NOFOLLOW, "O_NONBLOCK": syscall.O_NONBLOCK, "O_NOCTTY": syscall.O_NOCTTY} {
+		if readNoFollowFlags&flag != flag {
+			t.Errorf("OpenRegularNoFollow abre sem %s", name)
+		}
+	}
+	if readNoFollowFlags&(os.O_WRONLY|os.O_RDWR|os.O_CREATE|os.O_TRUNC|os.O_APPEND) != 0 {
+		t.Errorf("OpenRegularNoFollow tem de abrir só para leitura: flags %#x", readNoFollowFlags)
+	}
+	dir := t.TempDir()
+	target := filepath.Join(dir, "chave.pem")
+	if err := os.WriteFile(target, []byte("conteudo de outro arquivo\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(dir, "audit.jsonl")
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatal(err)
+	}
+	dangling := filepath.Join(dir, "audit-reject.jsonl")
+	if err := os.Symlink(filepath.Join(dir, "nao-existe"), dangling); err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range []string{link, dangling} {
+		f, err := OpenRegularNoFollow(p)
+		if err == nil {
+			f.Close()
+			t.Fatalf("%s: abriu através de um link", filepath.Base(p))
+		}
+		if errors.Is(err, fs.ErrNotExist) {
+			t.Fatalf("%s: um link no caminho não é ausente (%v)", filepath.Base(p), err)
+		}
 	}
 }
 

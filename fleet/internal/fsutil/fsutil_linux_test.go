@@ -67,6 +67,16 @@ func TestAcrescimoECorteNumaFIFONaoTravam(t *testing.T) {
 		return err
 	}
 	truncate := func() error { return TruncateDurable(fifo, 0) }
+	readOwn := func() error {
+		f, err := OpenRegularNoFollow(fifo)
+		if err == nil {
+			f.Close()
+		}
+		return err
+	}
+	if err := within("OpenRegularNoFollow sem escritor", readOwn); !errors.Is(err, ErrNotRegular) {
+		t.Errorf("OpenRegularNoFollow numa FIFO: esperava ErrNotRegular, deu %v", err)
+	}
 	if err := within("OpenAppend sem leitor", openAppend); err == nil {
 		t.Error("OpenAppend numa FIFO sem leitor deveria falhar")
 	}

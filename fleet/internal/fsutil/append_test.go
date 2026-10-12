@@ -145,6 +145,31 @@ func TestOpenRegular(t *testing.T) {
 	}
 }
 
+// O arquivo próprio lido no lugar (a auditoria, no boot) abre como o OpenRegular — ausente é fs.ErrNotExist, o
+// que não é arquivo regular é ErrNotRegular —, mas nunca através de link (TestOpenRegularNoFollowRecusaLink, unix).
+func TestOpenRegularNoFollow(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "audit.jsonl")
+	if err := os.WriteFile(path, []byte("linha\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	f, err := OpenRegularNoFollow(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := io.ReadAll(f)
+	f.Close()
+	if err != nil || string(b) != "linha\n" {
+		t.Fatalf("leitura: %q, %v", b, err)
+	}
+	if _, err := OpenRegularNoFollow(filepath.Join(dir, "nao-existe")); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("ausente: esperava fs.ErrNotExist, deu %v", err)
+	}
+	if _, err := OpenRegularNoFollow(dir); !errors.Is(err, ErrNotRegular) {
+		t.Fatalf("diretório: esperava ErrNotRegular, deu %v", err)
+	}
+}
+
 // O SyncDir exportado é o mesmo sync de diretório do WriteAtomic (mesmo seam, mesmas regras).
 func TestSyncDirUsaOSyncDoWriteAtomic(t *testing.T) {
 	boom := errors.New("EIO simulado")

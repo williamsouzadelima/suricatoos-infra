@@ -1,7 +1,8 @@
 // Package fsutil holds the file primitives the fleet connector's local state needs:
 //
 //   - ReadBounded: a bounded, race-free read of a file the operator (or another service) owns, telling "absent"
-//     from "present but unusable"; OpenRegular is the same open, for a file read as a stream;
+//     from "present but unusable"; OpenRegular is the same open, for a file read as a stream, and
+//     OpenRegularNoFollow the one for a file the connector owns, which never goes through a symbolic link;
 //   - WriteAtomic: the atomic, durable replacement of a state file the connector owns (ADR-0011 "Anti-replay,
 //     idempotência e entrega": temp + rename with fsync, 0600), and RemoveOrphanTemps, which cleans what a crash
 //     in the middle of it leaves behind;
@@ -57,6 +58,23 @@ func ReadBounded(path string, limit int64) ([]byte, error) {
 // the caller, for a file read as a stream instead of held whole in memory. The caller closes it.
 func OpenRegular(path string) (*os.File, error) {
 	f, err := openExisting(path)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := regularInfo(f, path); err != nil {
+		f.Close()
+		return nil, err
+	}
+	return f, nil
+}
+
+// OpenRegularNoFollow is OpenRegular for a file the connector owns and reads in place (the local audit, at boot):
+// it never opens through a symbolic link at the last component — on unix the open itself refuses it (O_NOFOLLOW);
+// elsewhere an Lstat refuses it first —, so a link planted in place of the file cannot make the connector read, and
+// pass on, another file of the node. A path with nothing at it satisfies fs.ErrNotExist; a link, dangling or not,
+// is an error that does not; what is not a regular file is ErrNotRegular. The caller closes it.
+func OpenRegularNoFollow(path string) (*os.File, error) {
+	f, err := openReadNoFollow(path)
 	if err != nil {
 		return nil, err
 	}
