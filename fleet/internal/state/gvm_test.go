@@ -34,9 +34,9 @@ func TestTasksConteudoOrdenadoPorID(t *testing.T) {
 	}
 }
 
-// O dono gvmd de cada tenant conhecido vai para o fleet_ops; um nome fora do padrão de tenant, um usuário gvmd
-// que dois tenants dividem (a frota não adivinha), um usuário que o fleet_ops recusaria e um tenant sem usuário
-// ficam de fora — os objetos deles saem só como contagem. Um tenant desabilitado continua conhecido.
+// O dono gvmd de cada tenant habilitado vai para o fleet_ops; um nome fora do padrão de tenant, um tenant
+// desabilitado, um usuário gvmd que dois tenants dividem (a frota não adivinha), um usuário que o fleet_ops recusaria
+// e um tenant sem usuário ficam de fora — os objetos deles saem só como contagem.
 func TestOwnersSoDosTenantsConhecidos(t *testing.T) {
 	f := newFakes()
 	f.tenants.list = []tenant.Listing{
@@ -51,11 +51,71 @@ func TestOwnersSoDosTenantsConhecidos(t *testing.T) {
 		{Name: "umbrella", Enabled: true, GVMUser: strings.Repeat("u", 256)},
 	}
 	collectOnce(t, f, contract.NodeStandalone)
-	want := map[string]string{"tenant-acme": "acme", "tenant-initech": "initech", strings.Repeat("u", 256): "umbrella"}
+	want := map[string]string{"tenant-acme": "acme", strings.Repeat("u", 256): "umbrella"}
 	for _, kind := range []contract.StateKind{contract.KindTasks, contract.KindTargets, contract.KindSchedules, contract.KindReports} {
 		if got := f.gvm.owners[kind]; len(got) != 1 || !reflect.DeepEqual(got[0], want) {
 			t.Errorf("%s: owners %v", kind, got)
 		}
+	}
+}
+
+// O mapa de donos em duas passadas: primeiro conta quem reivindica cada usuário gvmd em TODO o registro (qualquer
+// nome, habilitado ou não), depois mapeia o usuário só quando o único reivindicante tem nome válido e está
+// habilitado. Assim um usuário dividido com um tenant fora da frota (nome inválido, desabilitado) nunca vai para o
+// outro: os objetos dele saem só como contagem.
+func TestOwnersEmDuasPassadas(t *testing.T) {
+	l := func(name string, enabled bool, user string) tenant.Listing {
+		return tenant.Listing{Name: name, Enabled: enabled, GVMUser: user}
+	}
+	cases := []struct {
+		name string
+		list []tenant.Listing
+		want map[string]string
+	}{
+		{"nome inválido dividindo o usuário com acme", []tenant.Listing{l("Bad Name", true, "u"), l("acme", true, "u")}, map[string]string{}},
+		{"acme antes do nome inválido", []tenant.Listing{l("acme", true, "u"), l("Bad Name", true, "u")}, map[string]string{}},
+		{"desabilitado dividindo o usuário com um habilitado", []tenant.Listing{l("acme-old", false, "u"), l("acme", true, "u")}, map[string]string{}},
+		{"habilitado antes do desabilitado", []tenant.Listing{l("acme", true, "u"), l("acme-old", false, "u")}, map[string]string{}},
+		{"desabilitado sozinho", []tenant.Listing{l("initech", false, "tenant-initech")}, map[string]string{}},
+		{"nome vazio dividindo o usuário", []tenant.Listing{l("", false, "u"), l("acme", true, "u")}, map[string]string{}},
+		{"habilitado sozinho", []tenant.Listing{l("acme", true, "u"), l("globex", true, "v")}, map[string]string{"u": "acme", "v": "globex"}},
+	}
+	for _, c := range cases {
+		if got := gvmOwners(c.list); !reflect.DeepEqual(got, c.want) {
+			t.Errorf("%s: owners %v, esperava %v", c.name, got, c.want)
+		}
+	}
+}
+
+// Os objetos de um tenant desabilitado, ou de um usuário que ele divide com um habilitado, só são contados; o scope
+// continua mostrando o desabilitado, com enabled false.
+func TestObjetosDeTenantDesabilitadoSoContados(t *testing.T) {
+	f := newFakes()
+	f.tenants.list = []tenant.Listing{
+		{Name: "acme", Enabled: true, Scope: "192.0.2.0/24", GVMUser: "tenant-acme"},
+		{Name: "initech", Enabled: false, Scope: "198.51.100.0/24", GVMUser: "tenant-initech"},
+		{Name: "globex", Enabled: true, GVMUser: "compartilhado"},
+		{Name: "globex-antigo", Enabled: false, GVMUser: "compartilhado"},
+	}
+	f.gvm.tasks = contract.DataTasks{Items: []contract.TaskItem{fullTask(uuidTask1, "acme"), fullTask(uuidTask2, "initech"),
+		fullTask(uuidTask3, "globex")}}
+	c := collectOnce(t, f, contract.NodeCentral)
+	if got := f.gvm.owners[contract.KindTasks][0]; !reflect.DeepEqual(got, map[string]string{"tenant-acme": "acme"}) {
+		t.Fatalf("owners %v", got)
+	}
+	tasks := current(t, c, contract.KindTasks).(*contract.DataTasks)
+	if len(tasks.Items) != 1 || tasks.Items[0].Tenant != "acme" || tasks.UnattributedCount != 2 {
+		t.Fatalf("tasks %+v", tasks)
+	}
+	scope := current(t, c, contract.KindScope).(*contract.DataScope)
+	var initech *contract.ScopeItem
+	for i := range scope.Items {
+		if scope.Items[i].Tenant == "initech" {
+			initech = &scope.Items[i]
+		}
+	}
+	if initech == nil || initech.Enabled || len(scope.Items) != 4 {
+		t.Fatalf("scope %+v", scope.Items)
 	}
 }
 

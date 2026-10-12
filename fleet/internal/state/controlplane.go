@@ -21,8 +21,9 @@ type ControlPlane interface {
 	Remediation(ctx context.Context) ([]contract.RemediationItem, error)
 }
 
-// knownTenants is the check of a control-plane item's tenant: a tenant of the node's listing, enabled or not, whose
-// name matches the tenant pattern.
+// knownTenants is the check of a control-plane item's tenant: an ENABLED tenant of the node's listing whose name
+// matches the tenant pattern. The items of a disabled tenant are only counted, like those of an unknown one (the
+// scope kind still shows the tenant, with enabled false).
 func (c *Collector) knownTenants(cyc *cycle) (func(string) bool, error) {
 	list, err := c.listing(cyc)
 	if err != nil {
@@ -30,7 +31,7 @@ func (c *Collector) knownTenants(cyc *cycle) (func(string) bool, error) {
 	}
 	names := make(map[string]bool, len(list))
 	for _, l := range list {
-		if ruleTenant.ok(l.Name) {
+		if l.Enabled && ruleTenant.ok(l.Name) {
 			names[l.Name] = true
 		}
 	}

@@ -19,16 +19,16 @@ func fullAgent(id, tenantName string) contract.AgentItem {
 		Online: true}
 }
 
-// O tenant de um agente é o O do certificado: só um tenant conhecido do nó (habilitado ou não) é listado; o resto
-// — desconhecido, vazio, fora do padrão — é só contado. Agentes de tenants diferentes podem ter o mesmo agent_id
-// (o hostname): os dois saem, em ordem de (agent_id, tenant).
+// O tenant de um agente é o O do certificado: só um tenant conhecido E habilitado do nó é listado; o resto —
+// desabilitado, desconhecido, vazio, fora do padrão — é só contado. Agentes de tenants diferentes podem ter o mesmo
+// agent_id (o hostname): os dois saem, em ordem de (agent_id, tenant).
 func TestAgentsAtribuidosSoATenantConhecido(t *testing.T) {
 	f := newFakes()
 	f.tenants.list = append(f.tenants.list, tenant.Listing{Name: "initech", Enabled: false}, tenant.Listing{Name: "-ruim-", Enabled: true})
 	a1, a2, a3 := fullAgent("DESKTOP-01", "globex"), fullAgent("DESKTOP-01", "acme"), fullAgent("ALPHA", "initech")
 	f.cp.agents = []contract.AgentItem{a1, fullAgent("X", "intruso"), a2, fullAgent("Y", ""), a3, fullAgent("Z", "-ruim-")}
 	got := current(t, collectOnce(t, f, contract.NodeCentral), contract.KindAgents).(*contract.DataAgents)
-	if want := []contract.AgentItem{a3, a2, a1}; !reflect.DeepEqual(got.Items, want) || got.UnattributedCount != 3 || got.Truncated {
+	if want := []contract.AgentItem{a2, a1}; !reflect.DeepEqual(got.Items, want) || got.UnattributedCount != 4 || got.Truncated {
 		t.Fatalf("agents %+v", got)
 	}
 }

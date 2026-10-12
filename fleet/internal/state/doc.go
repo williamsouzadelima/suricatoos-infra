@@ -9,19 +9,20 @@
 // (KindsOf: the five central-only kinds exist nowhere else), each from its own source, node last:
 //
 //   - tasks, targets, schedules, reports: gvmd, through gmp-bridge/fleet_ops.py's state.* reads (GVM; Bridge runs it
-//     with fleetops.Runner as the node's current gvmd user). fleet_ops gets owners — the gvmd user of each known
-//     tenant mapped to its name (gvmOwners: a name outside the tenant pattern, a tenant without a user, a user two
-//     tenants share or one fleet_ops would refuse are left out) — and attributes every object by its owner. No
+//     with fleetops.Runner as the node's current gvmd user). fleet_ops gets owners — the gvmd user of each enabled
+//     tenant mapped to its name (gvmOwners, in two passes: a user any two records of the registry share, a disabled
+//     tenant, a name outside the tenant pattern, a tenant without a user or a user fleet_ops would refuse are left
+//     out, and their objects only counted) — and attributes every object by its owner. No
 //     comment, no hostname (targets list IP/CIDR literals only, at most 256, and count the rest), no credential;
 //     reports are metadata and counts, never a finding.
 //   - agents, tokens, sensors, scan_requests, remediation (central only): the control-plane admin API of slice F2.2
 //     (ControlPlane; its HTTP client arrives with F2.2), items in the contract's shape — no secret, no created_by, no
 //     separate hostname or inventory, no payload or signature, a job's targets as a count —, attributed by the
-//     tenant the control-plane gives (cert O, token scope, job tenant).
+//     tenant the control-plane gives (cert O, token scope, job tenant) when it is an enabled tenant of the node.
 //   - scope: the tenant registry (tenant.Source: TENANTS_FILE on the central node, FLEET_TENANT + FLEET_SCAN_SCOPE
-//     on standalone and sensor) — enabled, the CIDRs in the scope gate's canonical form (one non-literal entry makes
-//     the gate refuse the whole scope, and the state says so: an empty scope), whether a gvmd user AND a password
-//     exist; never the user's name nor the password.
+//     on standalone and sensor) — every tenant, a disabled one with enabled false; the CIDRs in the scope gate's
+//     canonical form (one non-literal entry makes the gate refuse the whole scope, and the state says so: an empty
+//     scope); whether a gvmd user AND a password exist; never the user's name nor the password.
 //   - audit_tail: audit.Tail(), verbatim.
 //   - node: versions, feeds with version and age, health, capabilities (the types and kinds of the node kind;
 //     report_formats = what gvmd has installed — fleet_ops reports it — cut to what the image ships: Manifest),
@@ -30,9 +31,9 @@
 // # Content rules (D4, LGPD, "Multi-tenant")
 //
 // Whatever a source returned is checked again before a byte leaves (finishList): every list carries items,
-// truncated and unattributed_count; an item whose tenant is not known (or is not a valid tenant name) is never
-// listed, only counted, and so is an item the schema would refuse (a source that got one item wrong does not take
-// the snapshot with it). The lists are cut at the schema's item caps and the whole data at 16 MiB minus room for
+// truncated and unattributed_count; an item whose tenant is not known and enabled (or is not a valid tenant name) is
+// never listed, only counted, and so is an item the schema would refuse (a source that got one item wrong does not
+// take the snapshot with it). The lists are cut at the schema's item caps and the whole data at 16 MiB minus room for
 // the body (maxDataBytes), marking truncated — never a document over the cap, never an invalid one. The string
 // rules mirror the schema (rule, compared with the schema files by a test), with one addition the schema cannot
 // express: an IP/CIDR must really be a literal (net.ParseIP/ParseCIDR), since its pattern lets through hostnames

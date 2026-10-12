@@ -106,7 +106,8 @@ type Source interface {
 	SecretFileWarnings() []string
 	// List returns every tenant the node knows, for the fleet state (slice F2.5): on the central node every record
 	// of TENANTS_FILE, in file order — disabled ones and ones whose name is not a valid tenant included, as they
-	// are: the caller decides what they become (the state only counts the invalid ones); on standalone and sensor
+	// are: the caller decides what they become (the state only counts their objects, and shows a disabled tenant in
+	// the scope kind); on standalone and sensor
 	// the single FLEET_TENANT, always enabled. It never reads a password. Errors as in Resolve: an unreadable or
 	// malformed registry is an error, a registry file that does not exist is no tenant.
 	List() ([]Listing, error)

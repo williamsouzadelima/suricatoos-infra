@@ -57,23 +57,25 @@ type LocalHealth struct {
 // character, U+FFFE or U+FFFF. A key it would refuse would fail the whole read, so such a user is left out here.
 var ownerRule = newRule(1, 256, "", nil)
 
-// gvmOwners maps the gvmd user of each known tenant to the tenant (the owners of fleet_ops' state.* reads). Left
-// out, so that their objects are only counted: a name outside the tenant pattern, a tenant without a gvmd user, a
-// user fleet_ops would refuse, and a user that two tenants share — the fleet never guesses which one owns an
-// object. A disabled tenant is still a known tenant (ADR "Multi-tenant": "tenant conhecido").
+// gvmOwners maps the gvmd user of each enabled tenant to the tenant (the owners of fleet_ops' state.* reads), in two
+// passes. The first counts the claimants of every gvmd user over the WHOLE registry — every record with a usable
+// user, whatever its name or enabled flag. The second maps a user only when its single claimant has a valid tenant
+// name and is enabled. So the objects of a user that two records share are only counted — the fleet never guesses
+// which one owns an object, even when one of them is outside the fleet (an invalid name, a disabled tenant) —, and
+// so are those of a disabled tenant, of an invalid name, of a tenant without a gvmd user and of a user fleet_ops
+// would refuse (such a user is never a key of owners).
 func gvmOwners(list []tenant.Listing) map[string]string {
-	owners := map[string]string{}
-	shared := map[string]bool{}
+	claims := map[string]int{}
 	for _, l := range list {
-		if !ruleTenant.ok(l.Name) || !ownerRule.ok(l.GVMUser) || shared[l.GVMUser] {
-			continue
+		if ownerRule.ok(l.GVMUser) {
+			claims[l.GVMUser]++
 		}
-		if prev, ok := owners[l.GVMUser]; ok && prev != l.Name {
-			delete(owners, l.GVMUser)
-			shared[l.GVMUser] = true
-			continue
+	}
+	owners := map[string]string{}
+	for _, l := range list {
+		if ownerRule.ok(l.GVMUser) && claims[l.GVMUser] == 1 && l.Enabled && ruleTenant.ok(l.Name) {
+			owners[l.GVMUser] = l.Name
 		}
-		owners[l.GVMUser] = l.Name
 	}
 	return owners
 }
