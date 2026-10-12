@@ -15633,7 +15633,7 @@ index 1b9d72b..3ce5228 100644
  
      log.debug('Detected language', lang);
 diff --git a/src/gmp/locale/lang.ts b/src/gmp/locale/lang.ts
-index f2459b8..3d00711 100644
+index f2459b8..94f9f09 100644
 --- a/src/gmp/locale/lang.ts
 +++ b/src/gmp/locale/lang.ts
 @@ -6,6 +6,7 @@
@@ -15669,7 +15669,7 @@ index f2459b8..3d00711 100644
    ns: ['gsa'], // use gsa as namespace
    defaultNS: 'gsa',
    fallbackNS: 'gsa',
-@@ -76,9 +84,17 @@ i18next.on('languageChanged', (lang: string) => {
+@@ -76,9 +84,23 @@ i18next.on('languageChanged', (lang: string) => {
    if (currentLocale !== lang) {
      log.debug('Language changed to', lang);
  
@@ -15684,10 +15684,48 @@ index f2459b8..3d00711 100644
 +    // (the LanguageProvider sets them only on a later change).
 +    setDateLocale(lang);
 +
++    // Suricatoos: so does the language of the page (index.html says "en"),
++    // which screen readers and the translate offer of the browser read.
++    if (typeof document !== 'undefined') {
++      document.documentElement.lang = lang.replace('_', '-');
++    }
++
 +    notifyLanguageChangeListeners(lang, initial);
    }
  });
  
+@@ -91,6 +113,31 @@ export const initLocale = ({
+   return i18next.use(backend).use(detector).use(initReactI18next).init(options);
+ };
+ 
++/**
++ * Suricatoos: calls `ready` once, when i18next has initialized (the catalog of
++ * the detected language loaded, or its load failed) or after `timeout` ms,
++ * whichever comes first. The first paint then comes in the language of the
++ * UI, and a slow catalog never leaves the page blank.
++ */
++export const onLocaleReady = (ready: () => void, timeout = 2000): void => {
++  if (i18next.isInitialized && !i18next.isInitializing) {
++    ready();
++    return;
++  }
++  let timer: ReturnType<typeof setTimeout> | undefined;
++  const once = () => {
++    if (timer === undefined) {
++      return;
++    }
++    clearTimeout(timer);
++    timer = undefined;
++    i18next.off('initialized', once);
++    ready();
++  };
++  timer = setTimeout(once, timeout);
++  i18next.on('initialized', once);
++};
++
+ /**
+  * Subscribe to get notified about locale changes
+  *
 diff --git a/src/gmp/models/date.ts b/src/gmp/models/date.ts
 index 44176d5..5fb6807 100644
 --- a/src/gmp/models/date.ts
@@ -15701,10 +15739,28 @@ index 44176d5..5fb6807 100644
  import 'dayjs/locale/pt-br';
  import 'dayjs/locale/ru';
 diff --git a/src/web/components/provider/LanguageProvider.tsx b/src/web/components/provider/LanguageProvider.tsx
-index a417b0b..851647d 100644
+index a417b0b..ff2d1a4 100644
 --- a/src/web/components/provider/LanguageProvider.tsx
 +++ b/src/web/components/provider/LanguageProvider.tsx
-@@ -44,7 +44,7 @@ const LanguageProvider = ({children}: LanguageProviderProps) => {
+@@ -9,7 +9,7 @@ import {
+   getLocale,
+   setLocale as changeGmpLocale,
+   onLanguageChange,
+-  DEFAULT_LANGUAGE,
++  FALLBACK_LANGUAGE,
+ } from 'gmp/locale/lang';
+ import useGmp from 'web/hooks/useGmp';
+ 
+@@ -39,12 +39,15 @@ export const LanguageContext = createContext<LanguageContextProps>({
+ const LanguageProvider = ({children}: LanguageProviderProps) => {
+   const gmp = useGmp();
+   const {session} = gmp;
++  // Suricatoos: before the first detection the texts on screen are the keys
++  // (English), so the state starts as English: the detected language (pt-BR
++  // by default) is then a change, and everything renders again translated.
+   const [languageState, setLanguageState] = useState<string>(
+-    getLocale() ?? DEFAULT_LANGUAGE,
++    getLocale() ?? FALLBACK_LANGUAGE,
    );
  
    const handleLanguageChange = useCallback(
@@ -15713,7 +15769,7 @@ index a417b0b..851647d 100644
        setLanguageState(currentLang => {
          if (currentLang !== newLang) {
            // Explicitly set date locale
-@@ -53,13 +53,17 @@ const LanguageProvider = ({children}: LanguageProviderProps) => {
+@@ -53,13 +56,17 @@ const LanguageProvider = ({children}: LanguageProviderProps) => {
            // store language in the session
            session.setLocale(newLang);
  
@@ -15740,10 +15796,10 @@ index a417b0b..851647d 100644
          }
 diff --git a/src/web/utils/__tests__/suricatoosLocale.test.ts b/src/web/utils/__tests__/suricatoosLocale.test.ts
 new file mode 100644
-index 0000000..70d8cad
+index 0000000..81fecf3
 --- /dev/null
 +++ b/src/web/utils/__tests__/suricatoosLocale.test.ts
-@@ -0,0 +1,228 @@
+@@ -0,0 +1,239 @@
 +/* SPDX-FileCopyrightText: 2026 Suricatoos
 + *
 + * SPDX-License-Identifier: AGPL-3.0-or-later
@@ -15903,6 +15959,17 @@ index 0000000..70d8cad
 +  });
 +});
 +
++describe('the language of the page follows the UI', () => {
++  test('<html lang> is the BCP 47 tag of the language', async () => {
++    await i18next.changeLanguage('pt_BR');
++    expect(document.documentElement.lang).toEqual('pt-BR');
++    await i18next.changeLanguage('es');
++    expect(document.documentElement.lang).toEqual('es');
++    await i18next.changeLanguage('en');
++    expect(document.documentElement.lang).toEqual('en');
++  });
++});
++
 +describe('the language detected at start is not a choice of the user', () => {
 +  test('LanguageProvider saves the setting only on a later change', async () => {
 +    // Fresh modules: no language seen yet, as when the page loads.
@@ -15970,5 +16037,299 @@ index 0000000..70d8cad
 +    expect(_('at {{time}}', {time: '11/10/2026'})).toEqual(
 +      'at 11&#x2F;10&#x2F;2026',
 +    );
++  });
++});
+diff --git a/src/gmp/locale/__tests__/lang.test.ts b/src/gmp/locale/__tests__/lang.test.ts
+index 54db558..1ce36f3 100644
+--- a/src/gmp/locale/__tests__/lang.test.ts
++++ b/src/gmp/locale/__tests__/lang.test.ts
+@@ -4,7 +4,14 @@
+  */
+ 
+ import {describe, test, expect, testing} from '@gsa/testing';
+-import {_, setLocale, getLocale, onLanguageChange, _l} from 'gmp/locale/lang';
++import {
++  _,
++  DEFAULT_LANGUAGE,
++  setLocale,
++  getLocale,
++  onLanguageChange,
++  _l,
++} from 'gmp/locale/lang';
+ import {isFunction} from 'gmp/utils/identity';
+ 
+ describe('setLocale tests', () => {
+@@ -12,24 +19,24 @@ describe('setLocale tests', () => {
+     setLocale('en');
+     expect(getLocale()).toEqual('en');
+ 
+-    setLocale('de');
+-    expect(getLocale()).toEqual('de');
++    setLocale('es');
++    expect(getLocale()).toEqual('es');
+   });
+ 
+   test('should allow to use en-US for en', () => {
+     setLocale('en');
+     expect(getLocale()).toEqual('en');
+ 
+-    setLocale('de-CH');
+-    expect(getLocale()).toEqual('de');
++    setLocale('es-MX');
++    expect(getLocale()).toEqual('es');
+   });
+ 
+-  test('should fallback to en for unknown locales', () => {
++  test('should fallback to the default language for unknown locales', () => {
+     setLocale('en');
+     expect(getLocale()).toEqual('en');
+ 
+     setLocale('foo');
+-    expect(getLocale()).toEqual('en');
++    expect(getLocale()).toEqual(DEFAULT_LANGUAGE);
+   });
+ 
+   test('should notify language change listeners', () => {
+@@ -41,9 +48,9 @@ describe('setLocale tests', () => {
+     const unsubscribe = onLanguageChange(callback);
+     expect(isFunction(unsubscribe)).toEqual(true);
+ 
+-    setLocale('de');
+-    expect(getLocale()).toEqual('de');
+-    expect(callback).toHaveBeenCalledWith('de', false);
++    setLocale('es');
++    expect(getLocale()).toEqual('es');
++    expect(callback).toHaveBeenCalledWith('es', false);
+   });
+ 
+   test('should not be notify when unsubscribed', () => {
+@@ -55,9 +62,9 @@ describe('setLocale tests', () => {
+     const unsubscribe = onLanguageChange(callback);
+     expect(isFunction(unsubscribe)).toEqual(true);
+ 
+-    setLocale('de');
+-    expect(getLocale()).toEqual('de');
+-    expect(callback).toHaveBeenCalledWith('de', false);
++    setLocale('es');
++    expect(getLocale()).toEqual('es');
++    expect(callback).toHaveBeenCalledWith('es', false);
+ 
+     callback.mockClear();
+ 
+@@ -71,8 +78,8 @@ describe('setLocale tests', () => {
+     setLocale('en');
+     expect(getLocale()).toEqual('en');
+ 
+-    setLocale('de');
+-    expect(getLocale()).toEqual('de');
++    setLocale('es');
++    expect(getLocale()).toEqual('es');
+   });
+ });
+ 
+diff --git a/src/index.tsx b/src/index.tsx
+index f13de1d..3276ac4 100644
+--- a/src/index.tsx
++++ b/src/index.tsx
+@@ -5,11 +5,16 @@
+ 
+ import {createRoot} from 'react-dom/client';
+ import {StyleSheetManager} from 'styled-components';
++import {onLocaleReady} from 'gmp/locale/lang';
+ import App from 'web/App';
+ 
+ const root = createRoot(document.getElementById('app') as HTMLElement);
+-root.render(
+-  <StyleSheetManager enableVendorPrefixes>
+-    <App />
+-  </StyleSheetManager>,
++// Suricatoos: the first paint waits for the catalog of the detected language
++// (at most 2 s), instead of showing the English keys and then switching.
++onLocaleReady(() =>
++  root.render(
++    <StyleSheetManager enableVendorPrefixes>
++      <App />
++    </StyleSheetManager>,
++  ),
+ );
+diff --git a/src/web/utils/__tests__/suricatoosFirstVisit.test.tsx b/src/web/utils/__tests__/suricatoosFirstVisit.test.tsx
+new file mode 100644
+index 0000000..b28c715
+--- /dev/null
++++ b/src/web/utils/__tests__/suricatoosFirstVisit.test.tsx
+@@ -0,0 +1,175 @@
++/* SPDX-FileCopyrightText: 2026 Suricatoos
++ *
++ * SPDX-License-Identifier: AGPL-3.0-or-later
++ */
++
++/* Suricatoos: the first visit. The UI comes up in the language detected for
++ * the browser (pt-BR by default) once its catalog loads — on the login page
++ * too —, the first paint waits for that catalog (bounded), and the detected
++ * language is not saved as a choice of the user. Each test is a page load:
++ * fresh modules, a backend that answers after the first render. */
++
++import {type ReactNode} from 'react';
++import {afterEach, describe, expect, test, testing} from '@gsa/testing';
++
++const CATALOGS: Record<string, Record<string, string>> = {
++  pt_BR: {
++    Refresh: 'Atualizar',
++    'Sign in to your account': 'Entre na sua conta',
++  },
++  es: {
++    Refresh: 'Actualizar',
++    'Sign in to your account': 'Inicie sesión en su cuenta',
++  },
++};
++
++// The catalog arrives 30 ms after it is asked for, like over HTTP.
++class SlowBackend {
++  static readonly type = 'backend';
++
++  init() {}
++
++  read(
++    language: string,
++    _namespace: string,
++    callback: (error: unknown, data?: unknown) => void,
++  ) {
++    setTimeout(() => callback(null, CATALOGS[language] ?? {}), 30);
++  }
++}
++
++// A catalog that never comes.
++class SilentBackend {
++  static readonly type = 'backend';
++
++  init() {}
++
++  read() {}
++}
++
++const pageLoad = async (
++  languages: string[],
++  stored?: string,
++  backend: unknown = SlowBackend,
++) => {
++  testing.resetModules();
++  Object.defineProperty(window.navigator, 'languages', {
++    value: languages,
++    configurable: true,
++  });
++  window.localStorage.clear();
++  if (stored !== undefined) {
++    window.localStorage.setItem('locale', stored);
++  }
++  const lang = await import('gmp/locale/lang');
++  const {default: Detector} = await import('gmp/locale/detector');
++  const {default: LanguageProvider} = await import(
++    'web/components/provider/LanguageProvider'
++  );
++  const {default: GmpContext} = await import(
++    'web/components/provider/GmpProvider'
++  );
++  const {default: useTranslation} = await import('web/hooks/useTranslation');
++  const rtl = await import('@testing-library/react');
++  // what App.tsx does when it is imported
++  const ready = lang.initLocale({backend: backend as never, detector: Detector});
++  const saveSetting = testing.fn().mockResolvedValue(undefined);
++  const gmp = {
++    user: {saveSetting},
++    session: {setLocale: testing.fn()},
++    settings: {},
++  };
++  const seen: string[] = [];
++  const Probe = () => {
++    const [_] = useTranslation();
++    const text = _('Refresh');
++    seen.push(text);
++    return <span data-testid="probe">{text}</span>;
++  };
++  const page = (children: ReactNode) => (
++    <GmpContext.Provider value={gmp as never}>
++      <LanguageProvider>{children}</LanguageProvider>
++    </GmpContext.Provider>
++  );
++  return {lang, ready, rtl, saveSetting, seen, Probe, page};
++};
++
++// What each test rendered: unmounted after it, even when it fails.
++let mounted: Array<() => void> = [];
++afterEach(() => {
++  for (const unmount of mounted) {
++    unmount();
++  }
++  mounted = [];
++});
++
++describe('first visit', () => {
++  test.each([
++    [['pt-BR', 'pt', 'en-US', 'en'], undefined, 'Atualizar'],
++    [['pt-BR'], undefined, 'Atualizar'],
++    [['fr-FR'], undefined, 'Atualizar'],
++    [['fr-FR'], 'pt_BR', 'Atualizar'],
++    [['pt-BR'], 'pt_BR', 'Atualizar'],
++    [['es-MX', 'es'], undefined, 'Actualizar'],
++    [['en-US'], undefined, 'Refresh'],
++  ])(
++    'browser %j, last session %s: the page shows %s once the catalog loads',
++    async (languages, stored, expected) => {
++      const {ready, rtl, saveSetting, Probe, page} = await pageLoad(
++        languages as string[],
++        stored as string | undefined,
++      );
++      // painted at once, before the catalog (the fallback of src/index.tsx)
++      mounted.push(rtl.render(page(<Probe />)).unmount);
++      await rtl.act(async () => {
++        await ready;
++      });
++      expect(rtl.screen.getByTestId('probe')).toHaveTextContent(
++        expected as string,
++      );
++      expect(saveSetting).not.toHaveBeenCalled();
++    },
++  );
++
++  test('the login page comes up in pt-BR', async () => {
++    const {ready, rtl, page} = await pageLoad(['pt-BR', 'pt', 'en-US', 'en']);
++    const {default: LoginPage} = await import('web/pages/login/LoginPage');
++    const {ThemeProvider} = await import('@greenbone/ui-lib');
++    mounted.push(
++      rtl.render(
++        <ThemeProvider defaultColorScheme="light">
++          {page(<LoginPage />)}
++        </ThemeProvider>,
++      ).unmount,
++    );
++    await rtl.act(async () => {
++      await ready;
++    });
++    expect(
++      rtl.screen.getByRole('heading', {name: 'Entre na sua conta'}),
++    ).toBeInTheDocument();
++    expect(document.documentElement.lang).toEqual('pt-BR');
++  }, 30000); // the whole login page is imported again (fresh modules): slow
++
++  test('the first paint waits for the catalog: no English first', async () => {
++    const {lang, rtl, seen, Probe, page} = await pageLoad(['pt-BR']);
++    // what src/index.tsx does
++    await rtl.act(async () => {
++      await new Promise<void>(resolve =>
++        lang.onLocaleReady(() => {
++          mounted.push(rtl.render(page(<Probe />)).unmount);
++          resolve();
++        }),
++      );
++    });
++    expect(seen[0]).toEqual('Atualizar');
++    expect(seen).not.toContain('Refresh');
++  });
++
++  test('a catalog that never comes does not leave the page blank', async () => {
++    const {lang} = await pageLoad(['pt-BR'], undefined, SilentBackend);
++    const start = Date.now();
++    await new Promise<void>(resolve => lang.onLocaleReady(resolve, 50));
++    expect(Date.now() - start).toBeLessThan(1000);
 +  });
 +});
