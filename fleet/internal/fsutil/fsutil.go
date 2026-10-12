@@ -4,8 +4,10 @@
 //     from "present but unusable"; OpenRegular is the same open, for a file read as a stream, and
 //     OpenRegularNoFollow the one for a file the connector owns, which never goes through a symbolic link;
 //   - WriteAtomic: the atomic, durable replacement of a state file the connector owns (ADR-0011 "Anti-replay,
-//     idempotência e entrega": temp + rename with fsync, 0600), and RemoveOrphanTemps, which cleans what a crash
-//     in the middle of it leaves behind;
+//     idempotência e entrega": temp + rename with fsync, 0600), WriteAtomicStream for content written in pieces,
+//     and RemoveOrphanTemps, which cleans what a crash in the middle of either leaves behind;
+//   - LockExclusive: the exclusive, non-blocking lock that keeps a second connector out of the same
+//     FLEET_STATE_DIR (flock on unix, LockFileEx on Windows);
 //   - OpenAppend, TruncateDurable and SyncDir: what an append-only file the connector owns (the local audit) needs —
 //     the append-only open, the durable cut that undoes a failed append, and the directory sync after a file is
 //     created, renamed or removed;
@@ -139,7 +141,18 @@ func readRegular(f *os.File, name string, limit int64) ([]byte, error) {
 // caller must not treat the replacement as recorded (it answers unavailable and tries again). The directory sync
 // is skipped on Windows, where a directory cannot be opened for it, and a filesystem that only says it cannot sync
 // a directory (EINVAL or ENOTSUP) is tolerated; any other error, such as EIO, is returned.
-func WriteAtomic(path string, data []byte) (err error) {
+func WriteAtomic(path string, data []byte) error {
+	return WriteAtomicStream(path, func(w io.Writer) error {
+		_, err := w.Write(data)
+		return err
+	})
+}
+
+// WriteAtomicStream is WriteAtomic for content too large to hold in memory (the compacted anti-replay store): fill
+// writes the new content to the temporary file, in as many pieces as it likes, and must not keep w after it
+// returns. The guarantees and errors are WriteAtomic's; an error from fill is returned as it is, before the rename,
+// so the previous content of path stays and the temporary file is removed.
+func WriteAtomicStream(path string, fill func(w io.Writer) error) (err error) {
 	dir := filepath.Dir(path)
 	f, err := os.CreateTemp(dir, filepath.Base(path)+tempInfix+"*") // created with mode 0600
 	if err != nil {
@@ -152,7 +165,7 @@ func WriteAtomic(path string, data []byte) (err error) {
 			os.Remove(tmp)
 		}
 	}()
-	if _, err = f.Write(data); err != nil {
+	if err = fill(f); err != nil {
 		f.Close()
 		return err
 	}
