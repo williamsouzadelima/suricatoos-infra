@@ -441,6 +441,25 @@ func TestTetoDescartaOsMaisAntigosEConta(t *testing.T) {
 	}
 }
 
+// Um arquivo com mais eventos que o teto (gravado com um teto maior) volta no boot só com os mais novos, e os de
+// fora contam como descartados.
+func TestBootAcimaDoTetoFicaComOsMaisNovos(t *testing.T) {
+	b := newBox(t)
+	b.capacity = MaxOutbox + 10
+	b.add(evs(1, MaxOutbox+5)...)
+	b.restart()
+	if r := b.Recovery(); r.Events != MaxOutbox || b.Len() != MaxOutbox || b.Dropped() != 5 {
+		t.Fatalf("Recovery %+v, Len %d, Dropped %d", r, b.Len(), b.Dropped())
+	}
+	if _, got := b.next(); got[0] != uuidN(6) {
+		t.Fatalf("o primeiro depois do boot é %s", got[0])
+	}
+	b.restart()
+	if b.Len() != MaxOutbox || b.Dropped() != 0 {
+		t.Fatalf("segundo boot: Len %d, Dropped %d", b.Len(), b.Dropped())
+	}
+}
+
 // Sem 2xx, o mesmo lote volta — antes e depois de um reinício —, com os mesmos event_ids e os mesmos bytes.
 func TestSemDoisXXOLoteVolta(t *testing.T) {
 	b := newBox(t)

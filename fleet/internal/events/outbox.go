@@ -147,12 +147,12 @@ func open(cfg Config, ops fileOps, newID func() string) (*Outbox, error) {
 	}
 	rec.BaselineLost = sc.absent || sc.unreadable != nil || sc.lost
 	o.base.prune(kinds)
-	rec.Events = len(o.queue)
 	if len(o.queue) > o.capacity { // a file of a build with a larger cap: the oldest go, as the cap says
 		over := len(o.queue) - o.capacity
 		o.dropped += int64(over)
 		o.leaveLocked(o.queue[over-1].seq)
 	}
+	rec.Events = len(o.queue)
 	// the boot always rewrites: it leaves out what was not taken (an incomplete or corrupt record) and makes what was
 	// read durable before any of it is trusted
 	if err := o.rewriteLocked(); err != nil && !errors.Is(err, fsutil.ErrNotDurable) {
