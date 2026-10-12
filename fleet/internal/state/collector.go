@@ -45,6 +45,12 @@ type Config struct {
 	Audit AuditTail
 	// Floor is the anti-replay store (replay.Open): the replay_floor of the node kind.
 	Floor ReplayFloor
+	// Local returns what the connector knows of its node on its own (versions it is told, health it measures), read
+	// at every collection of the node kind. nil = nothing.
+	Local func() Local
+	// Formats is report-formats/manifest.json (slice R5) as the image ships it (LoadManifest). nil = before R5: only
+	// the technical edition of suricatoos-pdf is advertised.
+	Formats *Manifest
 	// Now dates collected_at; nil = time.Now.
 	Now func() time.Time
 	// Logger receives one line when a kind's collection starts failing (or its error changes) and one when it
@@ -66,8 +72,11 @@ type Collector struct {
 
 	collecting sync.Mutex // one cycle at a time
 
-	mu     sync.Mutex
-	logged map[contract.StateKind]string // the error text last logged per kind
+	mu         sync.Mutex
+	logged     map[contract.StateKind]string // the error text last logged per kind
+	formats    []contract.ReportFormatCapability
+	formatsErr error // the failure of gvmd in the node snapshot of formats
+	hasNode    bool
 }
 
 // Open checks the configuration and reads FLEET_STATE_DIR/state-sent.json (see Recovery).
@@ -124,25 +133,48 @@ func (c *Collector) Collect(ctx context.Context) {
 	c.collecting.Lock()
 	defer c.collecting.Unlock()
 	cyc := &cycle{}
-	for _, kind := range c.kinds {
+	for _, kind := range c.order() {
 		if ctx.Err() != nil {
 			return
 		}
-		data, err := c.collectKind(ctx, cyc, kind)
+		data, warn, err := c.collectKind(ctx, cyc, kind)
 		if err != nil {
 			c.tracker.fail(kind, err)
 			c.note(kind, err)
 			continue
 		}
 		c.tracker.update(snapshotOf(kind, data, c.now()))
-		c.note(kind, nil)
+		if warn != nil { // a new snapshot that still carries a failure (node without gvmd)
+			c.tracker.fail(kind, warn)
+		}
+		c.note(kind, warn)
 	}
 	if err := c.tracker.flush(); err != nil {
 		c.log.Warn("estado: não foi possível gravar o que o hub já tem", "erro", err.Error())
 	}
 }
 
-func (c *Collector) collectKind(ctx context.Context, cyc *cycle, kind contract.StateKind) ([]byte, error) {
+// order is the order of a cycle: every kind but node, then node — whose health reflects how the others went.
+func (c *Collector) order() []contract.StateKind {
+	out := make([]contract.StateKind, 0, len(c.kinds))
+	for _, kind := range c.kinds {
+		if kind != contract.KindNode {
+			out = append(out, kind)
+		}
+	}
+	return append(out, contract.KindNode)
+}
+
+// collectKind returns the data of one kind; warn is a failure that did not prevent a new snapshot.
+func (c *Collector) collectKind(ctx context.Context, cyc *cycle, kind contract.StateKind) (data []byte, warn, err error) {
+	if kind == contract.KindNode {
+		return c.collectNode(ctx)
+	}
+	data, err = c.collectList(ctx, cyc, kind)
+	return data, nil, err
+}
+
+func (c *Collector) collectList(ctx context.Context, cyc *cycle, kind contract.StateKind) ([]byte, error) {
 	switch kind {
 	case contract.KindScope:
 		return c.collectScope(cyc)
