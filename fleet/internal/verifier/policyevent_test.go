@@ -51,7 +51,8 @@ func TestSinalDoEventoLevaOTenantDoEnvelope(t *testing.T) {
 	}
 	c := command("outro nó", contract.TypeTaskStart)
 	c.NodeID = "node-lab-0002"
-	if o := n.process(signed(c, payloads[contract.TypeTaskStart]), tv); o.PolicyEvent != nil || o.PolicyEventTenant != "" {
+	o = n.process(signed(c, payloads[contract.TypeTaskStart]), tv)
+	if o.PolicyEvent != nil || o.PolicyEventTenant != "" {
 		t.Fatalf("linha 4 com sinal: %+v, %q", o.PolicyEvent, o.PolicyEventTenant)
 	}
 }

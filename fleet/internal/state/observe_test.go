@@ -45,8 +45,8 @@ func TestObservacaoDeCadaCicloComOsTenantsAtribuidos(t *testing.T) {
 			t.Fatalf("%s fora da observação", kind)
 		}
 		cur, _ := c.Current(kind)
-		if string(ob.Snapshot.Data) != string(cur.Data) || ob.Snapshot.SHA256 != cur.SHA256 || ob.Snapshot.Kind != kind ||
-			!ob.Snapshot.CollectedAt.Equal(cur.CollectedAt) {
+		if string(ob.Snapshot.Data) != string(cur.Data) || ob.Snapshot.SHA256 != cur.SHA256 ||
+			ob.Snapshot.Kind != kind || !ob.Snapshot.CollectedAt.Equal(cur.CollectedAt) {
 			t.Errorf("%s: o retrato observado não é o atual", kind)
 		}
 		if ob.Partial {
@@ -81,7 +81,8 @@ func TestTenantsObservadosSaoOsDaAtribuicao(t *testing.T) {
 	c, o := observing(t, f, contract.NodeCentral)
 	c.Collect(context.Background())
 	obs := o.got[0]
-	gvmKinds := []contract.StateKind{contract.KindTasks, contract.KindTargets, contract.KindSchedules, contract.KindReports}
+	gvmKinds := []contract.StateKind{contract.KindTasks, contract.KindTargets, contract.KindSchedules,
+		contract.KindReports}
 	cpKinds := []contract.StateKind{contract.KindAgents, contract.KindTokens, contract.KindSensors,
 		contract.KindScanRequests, contract.KindRemediation}
 	for _, kind := range gvmKinds {
@@ -90,7 +91,8 @@ func TestTenantsObservadosSaoOsDaAtribuicao(t *testing.T) {
 		}
 	}
 	for _, kind := range cpKinds {
-		if got, want := obs.Kinds[kind].Tenants, []string{"acme", "hooli", "initech", "umbrella"}; !slices.Equal(got, want) {
+		want := []string{"acme", "hooli", "initech", "umbrella"}
+		if got := obs.Kinds[kind].Tenants; !slices.Equal(got, want) {
 			t.Errorf("%s: tenants %v, esperava %v", kind, got, want)
 		}
 	}
