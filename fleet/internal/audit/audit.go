@@ -17,11 +17,14 @@
 // the previous line of the same stream, without its '\n'; the first line of each stream carries 64 zeros. A line
 // goes to the current file with O_APPEND and is fsynced (and, in a file with no line yet, the directory is synced
 // first) BEFORE the method returns: an error means the line does not count, and the caller must not proceed to the
-// effect it records. After a failed write or fsync the file is cut back to its size before the write; when that
-// cut fails too — or the file changed underneath, or any other failure leaves its state unknown — the stream is
-// poisoned: it refuses every append (ErrPoisoned) until the next Open, so no line is ever appended after garbage.
-// An error from the fsutil primitives, ErrNotDurable included, is such a failure. A COMPLETE line whose fsync never
-// returned before a crash survives as a valid line: a line records the intent, written before the effect.
+// effect it records. Any error — one from the fsutil primitives, ErrNotDurable included — counts as a failed append
+// (the line does not count). After a failed write or fsync the file is cut back to its size before the write. The
+// stream is poisoned only when the file may hold bytes it cannot vouch for: the cut itself failed, or the current
+// file changed underneath (another file in its place — os.SameFile against the last write —, or a size the stream
+// did not leave). A poisoned stream refuses every append (ErrPoisoned) until the next Open, so no line is ever
+// appended after garbage. An error before anything is written (opening the file, syncing the directory, a step of
+// the rotation) only fails that append. A COMPLETE line whose fsync never returned before a crash survives as a
+// valid line: a line records the intent, written before the effect.
 //
 // # Rotation
 //

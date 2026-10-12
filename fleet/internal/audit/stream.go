@@ -35,8 +35,9 @@ const (
 
 var (
 	// ErrPoisoned: after a failure that left the current file in a state the stream cannot vouch for — the undo of
-	// a failed append failed, or the file changed underneath — the stream refuses every append until the next Open
-	// (whose boot recovery reads the files again). The caller does not proceed to the effect.
+	// a failed append failed, or the file changed underneath (replaced by another, or bytes it did not write) — the
+	// stream refuses every append until the next Open (whose boot recovery reads the files again). The caller does
+	// not proceed to the effect.
 	ErrPoisoned = errors.New("audit: o fluxo recusa novas linhas até o próximo Open")
 	// ErrSeqExhausted: the last seq is 2^53-1; only a tampered file gets there.
 	ErrSeqExhausted = errors.New("audit: seq chegou ao teto de 2^53-1")
