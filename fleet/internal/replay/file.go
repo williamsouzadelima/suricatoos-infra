@@ -63,6 +63,7 @@ func defaultConfig() config {
 // scan is what the boot read of the log found.
 type scan struct {
 	absent     bool
+	empty      bool // the file exists but holds no complete line (0 bytes, or only a partial one): as good as absent
 	unreadable error
 	corrupt    int
 	first      *Corruption
@@ -128,7 +129,10 @@ func (s *Store) scanLocked() scan {
 		off += n
 		sc.end = off
 	}
-	if !b.head && sc.end > 0 {
+	switch {
+	case sc.end == 0:
+		sc.empty = true
+	case !b.head:
 		sc.corrupt++
 		if sc.first == nil {
 			sc.first = &Corruption{Line: 1, Reason: "arquivo sem cabeçalho"}

@@ -322,3 +322,45 @@ func TestPisoQueNaoSeGravaFicaPendente(t *testing.T) {
 		t.Fatalf("o piso tem de ir antes da entrada: %v", got)
 	}
 }
+
+// Um replay.log existente sem nenhum registro completo — 0 byte, ou só os bytes de um registro parcial — conta como
+// AUSENTE (sonda P1 da revisão): é reescrito com o cabeçalho na hora, nunca vira "store corrompido", e o piso só vem
+// quando o nó já tem identidade, como para o arquivo que não existe.
+func TestStoreSemRegistroCompletoContaComoAusente(t *testing.T) {
+	for name, content := range map[string]string{"0 byte": "", "só parcial": `9f8e7d6c {"k":"entry","at":1`} {
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			if err := os.WriteFile(filepath.Join(dir, FileName), []byte(content), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			s := openWith(t, dir, t0, Options{}, defaultConfig()) // primeiro boot: sem identidade
+			rec := s.Recovery()
+			if !rec.Absent || rec.Corrupt != 0 || rec.FloorReason != "" || rec.RewriteErr != nil || rec.DiscardedBytes != int64(len(content)) {
+				t.Fatalf("recovery %+v", rec)
+			}
+			if got := kinds(t, dir); !slices.Equal(got, []string{kindHead}) {
+				t.Fatalf("o arquivo devia ser reescrito com o cabeçalho: %v", got)
+			}
+			if err := s.SetFloor(t0); err != nil { // o enroll
+				t.Fatal(err)
+			}
+			mustRecord(t, s.Store, env(t, "a"), accepted, t0)
+			s.Close()
+			s2 := openAt(t, dir, t0.Add(time.Minute))
+			if rec := s2.Recovery(); rec.Corrupt != 0 || rec.FloorReason != "" {
+				t.Fatalf("o boot seguinte achou um store corrompido: %+v", rec)
+			}
+			s2.Close()
+
+			// num nó com identidade, o mesmo arquivo é perda de estado (ausente), nunca corrupção
+			dir2 := t.TempDir()
+			if err := os.WriteFile(filepath.Join(dir2, FileName), []byte(content), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			s3 := openAt(t, dir2, t0)
+			if rec := s3.Recovery(); rec.Corrupt != 0 || !strings.HasPrefix(rec.FloorReason, "store ausente") {
+				t.Fatalf("com identidade: %+v", rec)
+			}
+		})
+	}
+}

@@ -154,7 +154,7 @@ type Corruption struct {
 
 // Recovery is what Open found and did. Interrupted and SecretLost are for the connector (F2.6) to report.
 type Recovery struct {
-	Absent         bool        // there was no store file
+	Absent         bool        // there was no store file, or one without a single complete record (0 bytes, or a partial one)
 	Unreadable     error       // the file could not be read: nothing of it was kept
 	Corrupt        int         // complete records refused (checksum, decode, rules) — and a file without its head
 	FirstCorrupt   *Corruption // the first of them
@@ -272,7 +272,8 @@ func (s *Store) resetLocked() {
 // bootLocked decides, at the verification clock t, the replay floor and what to do with the file.
 func (s *Store) bootLocked(t time.Time, sc scan, opts Options) {
 	rec := &s.recovery
-	rec.Absent, rec.Unreadable, rec.Corrupt, rec.FirstCorrupt = sc.absent, sc.unreadable, sc.corrupt, sc.first
+	absent := sc.absent || sc.empty // a file without a single complete record holds nothing: it is rewritten like a missing one
+	rec.Absent, rec.Unreadable, rec.Corrupt, rec.FirstCorrupt = absent, sc.unreadable, sc.corrupt, sc.first
 	rec.DiscardedBytes = sc.partial
 	if sc.unreadable != nil {
 		s.resetLocked() // what was read before the failure cannot be told complete
@@ -284,7 +285,7 @@ func (s *Store) bootLocked(t time.Time, sc scan, opts Options) {
 		reason = "store ilegível"
 	case sc.corrupt > 0:
 		reason = "store corrompido"
-	case sc.absent && opts.IdentityExists:
+	case absent && opts.IdentityExists:
 		reason = "store ausente num nó que já tem identidade"
 	case s.clk.Lost() != nil:
 		reason = "marca d'água inutilizável"
@@ -318,7 +319,7 @@ func (s *Store) bootLocked(t time.Time, sc scan, opts Options) {
 		s.log.Error("anti-replay: store ilegível; começa vazio com piso de replay", "erro", sc.unreadable.Error())
 	}
 
-	rewrite := sc.absent || sc.unreadable != nil || sc.corrupt > 0 || s.hasDeadLocked(t)
+	rewrite := absent || sc.unreadable != nil || sc.corrupt > 0 || s.hasDeadLocked(t)
 	if !rewrite && sc.partial > 0 {
 		if err := s.cfg.ops.truncate(s.path, sc.end); err != nil {
 			rewrite = true
