@@ -409,6 +409,23 @@ func TestCorrupcaoDerrubaABaseSemEventos(t *testing.T) {
 	b.expect(`task.status_changed acme {"task_id":"` + uuidTask1 + `","from":"Done","to":"Stopped","progress":-1}`)
 }
 
+// A base de um kind sem nenhum objeto e a dos feeds sem nenhum feed (gvmd recém-instalado) também atravessam um
+// reinício: o primeiro objeto e o primeiro feed depois dele são novos de verdade.
+func TestBaseVaziaAtravessaOReinicio(t *testing.T) {
+	b := newBox(t)
+	w := newWorld(t)
+	b.observe(w.obs()) // nenhum objeto, nenhum feed
+	b.restart()
+	if r := b.Recovery(); r.BaselineLost {
+		t.Fatalf("%+v", r)
+	}
+	w.tasks = []contract.TaskItem{task(uuidTask1, "acme", "New")}
+	w.feeds = []contract.FeedStatus{feed(contract.FeedNVT, "1", 1)}
+	b.observe(w.obs())
+	b.expect(`feed.updated - {"feed":"nvt","version":"1"}`,
+		`task.status_changed acme {"task_id":"`+uuidTask1+`","from":"","to":"New","progress":-1}`)
+}
+
 // O limiar é o FLEET_FEED_STALE_HOURS do nó.
 func TestLimiarDoFeedVemDaConfiguracao(t *testing.T) {
 	b := newBox(t)

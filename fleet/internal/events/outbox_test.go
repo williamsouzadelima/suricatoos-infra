@@ -460,6 +460,22 @@ func TestBootAcimaDoTetoFicaComOsMaisNovos(t *testing.T) {
 	}
 }
 
+// A seq continua depois de reescritas com a outbox vazia: um evento novo nunca fica com a seq de um que já saiu (o
+// boot seguinte o daria como saído e ele se perderia).
+func TestSeqContinuaDepoisDeReescritaVazia(t *testing.T) {
+	b := newBox(t)
+	b.add(evs(1, 3)...)
+	bt, _ := b.next()
+	b.delivered(bt)
+	b.restart() // a reescrita grava só a cabeça
+	b.restart() // e o boot seguinte a lê de volta
+	b.add(ev(4))
+	b.restart()
+	if _, got := b.next(); !slices.Equal(got, idsOf(4, 4)) {
+		t.Fatalf("depois das reescritas: %v", got)
+	}
+}
+
 // Sem 2xx, o mesmo lote volta — antes e depois de um reinício —, com os mesmos event_ids e os mesmos bytes.
 func TestSemDoisXXOLoteVolta(t *testing.T) {
 	b := newBox(t)
