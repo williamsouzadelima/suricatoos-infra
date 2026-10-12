@@ -3,6 +3,7 @@ package replay
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"hash/crc32"
 	"regexp"
 	"time"
@@ -56,6 +57,9 @@ type job struct {
 	status                        contract.ResultStatus
 	code                          contract.ErrorCode
 	tokenID                       string // enroll_token.create: the id of the token it created
+	// restored: the job was loaded at boot — accepted by an earlier run of the connector. It never becomes executing:
+	// after a restart such a command is reported (interrupted), never run late.
+	restored bool
 }
 
 // Job is the journal of one accepted command, as the store answers it. CanonicalSHA256 and CommandID are its key in
@@ -222,7 +226,8 @@ func (s *Store) journalStep(j Job, t time.Time, line []byte, step func(e *entry,
 }
 
 // MarkExecuting records that the accepted command j is about to run (received → executing): the executor calls it
-// BEFORE the execution and runs the command only when it returns nil.
+// BEFORE the execution and runs the command only when it returns nil. A command accepted by an earlier run of the
+// connector (loaded at boot: Recovery.Interrupted) is ErrJobState — it is reported interrupted, never run late.
 func (s *Store) MarkExecuting(j Job, t time.Time) error {
 	if !validInstant(t) {
 		return invalid("instante inválido")
@@ -232,6 +237,9 @@ func (s *Store) MarkExecuting(j Job, t time.Time) error {
 	e, err := s.findJobLocked(j, t)
 	if err != nil {
 		return err
+	}
+	if e.job.restored {
+		return fmt.Errorf("%w: aceito antes do reinício do conector; nunca roda (reportar interrupted)", ErrJobState)
 	}
 	if e.job.state != StateReceived {
 		return ErrJobState

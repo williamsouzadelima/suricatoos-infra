@@ -292,3 +292,38 @@ func TestResultadoRelidoConfereOChecksumGuardado(t *testing.T) {
 		t.Fatalf("resultado trocado foi devolvido: ok=%v err=%v", ok, err)
 	}
 }
+
+// Um comando aceito antes do reinício e ainda "recebido" — exposto como Interrupted no boot — nunca passa a
+// executando: o corte local do reinício vale por construção, não só pela documentação (sonda P2 da revisão), também
+// depois de uma compactação. O resultado interrupted dele continua gravável, e um aceito NESTA execução roda.
+func TestJobDoBootNuncaPassaParaExecutando(t *testing.T) {
+	s, dir := firstBoot(t)
+	acceptedJob(t, s.Store, "antes do reinício", contract.TypeTaskStart, taskPayload)
+	mustRecord(t, s.Store, expiringEnv(t, "vence", "2026-10-11T12:30:00Z"), accepted, t0)
+	s.Close()
+	later := time.Date(2026, 10, 18, 12, 30, 1, 0, time.UTC) // a "vence" já venceu: a compactação reescreve
+	s2 := openWith(t, dir, later, Options{}, defaultConfig())
+	rec := s2.Recovery()
+	if len(rec.Interrupted) != 1 || rec.Interrupted[0].State != StateReceived {
+		t.Fatalf("interrompidos %+v", rec.Interrupted)
+	}
+	if got := kinds(t, dir); len(got) != 2 { // o boot compactou (head + a entrada que ficou)
+		t.Fatalf("registros %v", got)
+	}
+	before := storeBytes(t, dir)
+	if err := s2.MarkExecuting(rec.Interrupted[0], later); !errors.Is(err, ErrJobState) {
+		t.Fatalf("um job do boot passou a executando: %v", err)
+	}
+	if string(storeBytes(t, dir)) != string(before) {
+		t.Fatal("a recusa gravou no store")
+	}
+	if err := s2.RecordResult(rec.Interrupted[0], failed(contract.ErrorInterrupted), later); err != nil {
+		t.Fatalf("o resultado interrupted do job do boot: %v", err)
+	}
+	c := command("depois do reinício")
+	c.IssuedAt, c.NotAfter = "2026-10-18T12:00:00Z", "2026-10-18T13:00:00Z"
+	e := mustRecord(t, s2.Store, verified(t, c, taskPayload), accepted, later)
+	if err := s2.MarkExecuting(*e.Job, later); err != nil {
+		t.Fatalf("um aceito desta execução roda: %v", err)
+	}
+}

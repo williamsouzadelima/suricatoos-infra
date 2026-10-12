@@ -8,15 +8,17 @@ import (
 	"github.com/williamsouzadelima/suricatoos-infra/fleet/internal/replay"
 )
 
-// Begin records that an accepted command is about to run: the executed line (exec stream), then the journal step
-// executing — both BEFORE the execution, the audit line first (a line never follows its effect). The executor runs
-// the command if and only if Begin returned nil; a command whose Begin failed is reported failed, never run.
+// Begin records that an accepted command is about to run: the journal step executing, then the executed line (exec
+// stream) — both BEFORE the execution. The journal goes first so that a command the store refuses to start (one
+// accepted before a restart, or already started) gets no executed line at all. The executor runs the command if and
+// only if Begin returned nil; a command whose Begin failed is reported failed, never run — and if only the line
+// failed, the journal already says executing, so the command can never start later either.
 func (v *Verifier) Begin(j replay.Job, now time.Time) error {
 	t := v.d.clock.Now(now)
-	if err := v.d.audit.Executed(t, audit.Ref{CommandID: j.CommandID, Type: j.Type, Tenant: j.Tenant}); err != nil {
+	if err := v.d.store.MarkExecuting(j, t); err != nil {
 		return err
 	}
-	return v.d.store.MarkExecuting(j, t)
+	return v.d.audit.Executed(t, audit.Ref{CommandID: j.CommandID, Type: j.Type, Tenant: j.Tenant})
 }
 
 // Finish records how a command ended — the result line (exec stream), then the journal result (without the secret:

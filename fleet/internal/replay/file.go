@@ -236,7 +236,7 @@ func entryOf(r record) (entry, error) {
 	if _, ok := contract.LookupType(typ); !ok || !reTenant.MatchString(r.Tenant) {
 		return entry{}, errors.New("accepted sem tipo do catálogo ou sem tenant")
 	}
-	e.job = &job{typ: typ, tenant: r.Tenant, state: StateReceived}
+	e.job = &job{typ: typ, tenant: r.Tenant, state: StateReceived, restored: true} // read at boot: an earlier run's
 	return e, nil
 }
 
