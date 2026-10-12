@@ -36,7 +36,9 @@
 //
 // unauthenticated and redelivered are counts, never one line per envelope: at most one line of each per minute,
 // and at most one version_mismatch per 10 minutes. Time is always a parameter — the verification clock of the
-// caller. See Unauthenticated, Redelivered, VersionMismatch and Flush.
+// caller. See Unauthenticated, Redelivered, VersionMismatch and Flush. Open resumes the limits from the stream's
+// last line of each kind, except from one whose at is more than VersionMismatchWindow after boot: the
+// verification clock never goes back, so that is a sign of tampering, exposed in Recovery.FutureAt and logged.
 //
 // # Boot
 //
@@ -67,6 +69,8 @@ package audit
 import (
 	"errors"
 	"log/slog"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/williamsouzadelima/suricatoos-infra/fleet/contract"
@@ -129,7 +133,17 @@ func open(stateDir string, boot time.Time, opts Options, cfg config) (*Log, erro
 	if err != nil {
 		return nil, err
 	}
-	l.reject.flood = newFlood(bootAt, sc.last)
+	var future []FutureLine
+	l.reject.flood, future = newFlood(bootAt, sc.last)
+	if len(future) > 0 {
+		l.reject.recovery.FutureAt = future
+		var lines []string
+		for _, f := range future {
+			lines = append(lines, string(f.Event)+"="+contract.FormatUTCTime(f.At))
+		}
+		logger.Warn("auditoria: linha do anti-enchente com at no futuro do boot (indício de adulteração ou de marca d'água perdida); os limites não são retomados dela",
+			"fluxo", string(contract.StreamReject), "linhas", strings.Join(lines, " "), "boot", contract.FormatUTCTime(bootAt))
+	}
 	return l, nil
 }
 
@@ -236,5 +250,6 @@ func (s *stream) status() StreamStatus {
 		b := *r.FirstBreak
 		r.FirstBreak = &b
 	}
+	r.FutureAt = slices.Clone(r.FutureAt)
 	return StreamStatus{Seq: s.seq, HeadSHA256: s.head, Recovery: r, Poisoned: s.poisoned}
 }

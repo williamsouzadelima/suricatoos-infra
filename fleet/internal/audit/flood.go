@@ -25,16 +25,28 @@ type flood struct {
 	lastVM      time.Time // at of the latest version_mismatch line; zero = none known
 }
 
-// newFlood starts the periods at boot or, when the stream holds a later line of the kind (a clock that went back),
-// at that line; it resumes the last version_mismatch from the stream. So the limits hold across restarts.
-func newFlood(boot time.Time, last map[contract.AuditEvent]chainFields) *flood {
+// newFlood starts the periods at boot or, when the stream holds a later line of the kind (a clock that went back a
+// little), at that line; it resumes the last version_mismatch from the stream. So the limits hold across restarts.
+// A line whose at is more than VersionMismatchWindow after boot is not resumed from — the verification clock never
+// goes back, so only tampering (or a lost watermark) puts a line there, and resuming from it would silence its kind
+// until that date —: newFlood returns those lines, for Recovery.FutureAt and the log.
+func newFlood(boot time.Time, last map[contract.AuditEvent]chainFields) (*flood, []FutureLine) {
+	limit := boot.Add(VersionMismatchWindow)
+	var future []FutureLine
 	lastAt := func(ev contract.AuditEvent) time.Time {
-		if p, ok := last[ev]; ok {
-			if t, err := contract.ParseUTCTime(p.At); err == nil {
-				return t
-			}
+		p, ok := last[ev]
+		if !ok {
+			return time.Time{}
 		}
-		return time.Time{}
+		t, err := contract.ParseUTCTime(p.At)
+		if err != nil {
+			return time.Time{}
+		}
+		if t.After(limit) {
+			future = append(future, FutureLine{Event: ev, At: t})
+			return time.Time{}
+		}
+		return t
 	}
 	later := func(a, b time.Time) time.Time {
 		if b.After(a) {
@@ -42,11 +54,12 @@ func newFlood(boot time.Time, last map[contract.AuditEvent]chainFields) *flood {
 		}
 		return a
 	}
-	return &flood{
+	f := &flood{
 		unauthStart: later(boot, lastAt(contract.AuditEventUnauthenticated)),
 		redelStart:  later(boot, lastAt(contract.AuditEventRedelivered)),
 		lastVM:      lastAt(contract.AuditEventVersionMismatch),
 	}
+	return f, future
 }
 
 // Unauthenticated counts one envelope refused at verification lines 0–2 (bad_envelope, payload_mismatch,

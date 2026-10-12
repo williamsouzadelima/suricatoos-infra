@@ -32,6 +32,18 @@ type Recovery struct {
 	// the earlier tails, is the witness — and the stream goes on from its last line. FirstBreak is the first one.
 	Breaks     int
 	FirstBreak *Break
+	// FutureAt lists the anti-flood lines (unauthenticated, redelivered, version_mismatch: the latest of each kind in
+	// the reject stream) whose at is more than VersionMismatchWindow after boot. The verification clock never goes
+	// back, so no line written by this node gets there: it is a sign of tampering (or of a lost watermark). Open does
+	// not resume the limits from such a line — one line could otherwise silence its kind until that date — and logs
+	// a WARN.
+	FutureAt []FutureLine
+}
+
+// FutureLine is an anti-flood line found at boot with an at in the future of the boot.
+type FutureLine struct {
+	Event contract.AuditEvent
+	At    time.Time
 }
 
 // Break locates one broken link of a stream.

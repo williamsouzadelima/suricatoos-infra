@@ -5,7 +5,9 @@ import (
 	"math/rand/v2"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -303,6 +305,87 @@ func TestBootGuardaSoOsTresEventosDoAntiEnchente(t *testing.T) {
 	}
 }
 
+// A sonda da revisão: uma linha do anti-enchente com at no futuro, forjada mas bem encadeada, não silencia o tipo
+// dela até essa data. O relógio de verificação nunca volta, então nenhuma linha deste nó passa de boot + 10 min: o
+// Open não retoma os limites dela, expõe o fato no Status (indício de adulteração) e loga um WARN.
+func TestAtNoFuturoNaoSilenciaOAntiEnchente(t *testing.T) {
+	dir := t.TempDir()
+	cfg := defaultConfig()
+	if err := os.WriteFile(filepath.Join(dir, RejectFileName), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	const future = "2099-01-01T00:00:00Z"
+	appendChained(t, dir, cfg.reject, newUnauthenticated(future, contract.AuditUnauthenticated{Since: future, BadSignature: 1}))
+	vm, err := newVersionMismatch(future, []string{"1.0"}, []string{"2.0"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	appendChained(t, dir, cfg.reject, vm)
+
+	l, sink := openAt(t, dir, cfg)
+	rec := l.Status().Reject.Recovery
+	want := []FutureLine{
+		{Event: contract.AuditEventUnauthenticated, At: at(t, future)},
+		{Event: contract.AuditEventVersionMismatch, At: at(t, future)},
+	}
+	if rec.Breaks != 0 || !slices.Equal(rec.FutureAt, want) {
+		t.Fatalf("recovery %+v, esperava FutureAt %v", rec, want)
+	}
+	if logs := sink.lines(); len(logs) != 1 || !strings.Contains(logs[0], "level=WARN") || !strings.Contains(logs[0], "futuro") {
+		t.Fatalf("esperava um WARN sobre o futuro, veio %v", logs)
+	}
+	for i := range 48 * 60 / 7 { // 48 h, uma rodada a cada 7 min
+		now := testBoot.Add(time.Duration(i) * 7 * time.Minute)
+		for _, err := range []error{
+			l.Unauthenticated(now, contract.ReasonBadSignature),
+			l.VersionMismatch(now, []string{"1.0"}, []string{"2.0"}),
+			l.Flush(now),
+		} {
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	es := rejectEntries(t, dir)
+	// tirando as duas forjadas: uma linha de contagem por rodada depois da 1ª, e um version_mismatch a cada 14 min
+	if n := len(ofEvent(es, contract.AuditEventUnauthenticated)) - 1; n < 400 {
+		t.Fatalf("só %d linhas unauthenticated em 48 h", n)
+	}
+	if n := len(ofEvent(es, contract.AuditEventVersionMismatch)) - 1; n < 200 {
+		t.Fatalf("só %d linhas version_mismatch em 48 h", n)
+	}
+}
+
+// Um at restaurado até boot + 10 min (relógio que voltou um pouco no reinício) ainda vale: os limites seguem
+// atravessando o reinício, e nada vai para o FutureAt.
+func TestAtRestauradoDentroDaJanelaAindaVale(t *testing.T) {
+	dir := t.TempDir()
+	l, _ := openAt(t, dir, defaultConfig())
+	if err := l.VersionMismatch(boot(5*time.Minute), []string{"1.0"}, []string{"2.0"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := l.Redelivered(boot(5 * time.Minute)); err != nil { // fecha o período em 5 min
+		t.Fatal(err)
+	}
+	l2, sink := openAt(t, dir, defaultConfig()) // boot 12:00, as linhas são das 12:05
+	if rec := l2.Status().Reject.Recovery; len(rec.FutureAt) != 0 || len(sink.lines()) != 0 {
+		t.Fatalf("um at dentro da janela não é do futuro: %+v, logs %v", rec, sink.lines())
+	}
+	if err := l2.VersionMismatch(boot(14*time.Minute+59*time.Second), []string{"1.0"}, []string{"2.0"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := l2.Redelivered(boot(5*time.Minute + 59*time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	es := rejectEntries(t, dir)
+	if n := len(ofEvent(es, contract.AuditEventVersionMismatch)); n != 1 {
+		t.Fatalf("version_mismatch 9 min 59 s depois da linha restaurada: %d linhas", n)
+	}
+	if n := len(ofEvent(es, contract.AuditEventRedelivered)); n != 1 {
+		t.Fatalf("redelivered 59 s depois da linha restaurada: %d linhas", n)
+	}
+}
+
 // floodModel tracks what the current Log counted, to check that no count is lost or counted twice.
 type floodModel struct {
 	unauth    [3]int64 // occurrences given to the current Log, by reason
@@ -357,10 +440,22 @@ func TestAntiEnchenteSobQualquerPadraoDeChamadas(t *testing.T) {
 					t.Fatalf("seed %d: %v", seed, err)
 				}
 			default: // reinício: o que estava pendente se perde, o que foi gravado fica
-				if l, err = open(dir, randTime(), Options{}, defaultConfig()); err != nil {
+				// o boot é qualquer instante que o relógio de verificação permite: ele nunca volta, e o Open só
+				// desconfia de linha mais de VersionMismatchWindow à frente do boot (TestAtNoFuturo...)
+				es := rejectEntries(t, dir)
+				b := randTime()
+				for _, e := range es {
+					if floor := at(t, e.At).Add(-VersionMismatchWindow); floor.After(b) {
+						b = floor
+					}
+				}
+				if l, err = open(dir, b, Options{}, defaultConfig()); err != nil {
 					t.Fatal(err)
 				}
-				m = floodModel{firstLine: len(rejectEntries(t, dir))}
+				if f := l.Status().Reject.Recovery.FutureAt; len(f) != 0 {
+					t.Fatalf("seed %d: reinício legítimo com linha no futuro: %v", seed, f)
+				}
+				m = floodModel{firstLine: len(es)}
 			}
 		}
 		// um Flush bem depois de tudo grava o que restou do Log atual
