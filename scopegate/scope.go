@@ -42,8 +42,14 @@ type Scope struct {
 // reasonSelfDenyCIDR names the rule without the self-deny IP itself.
 const reasonSelfDenyCIDR = "contém IP do self-deny"
 
-// Option configures a Scope built by New.
-type Option func(*Scope)
+// Option configures New.
+type Option func(*options)
+
+// options is what the Options set; only warnSelfDenyCIDR outlives New.
+type options struct {
+	warnSelfDenyCIDR    func(cidr, reason string)
+	warnIgnoredSelfDeny func(quotedToken string)
+}
 
 // LogSelfDenyCIDR puts the rule "a CIDR that CONTAINS a self-deny IP" (e.g. the
 // /24 of the LAN where the node lives) in LOG mode for CheckHost and Filter: the
@@ -53,16 +59,32 @@ type Option func(*Scope)
 // rule is enforced. A self-deny IP on its own — bare, /32 or /128 — is always
 // denied.
 func LogSelfDenyCIDR(warn func(cidr, reason string)) Option {
-	return func(s *Scope) { s.warnSelfDenyCIDR = warn }
+	return func(o *options) { o.warnSelfDenyCIDR = warn }
+}
+
+// OnIgnoredSelfDeny makes New report each self-deny token it ignores (one that is
+// not a single IP, /32 or /128): warn is called once per such token, in order and
+// synchronously during New, with the token already cut and quoted (safe to log).
+func OnIgnoredSelfDeny(warn func(quotedToken string)) Option {
+	return func(o *options) { o.warnIgnoredSelfDeny = warn }
 }
 
 // New builds a Scope from an allow spec (comma/space CIDRs or bare IPs; the
 // tenant's authorized internal ranges) and a self-deny spec (the node's own
 // addresses + the cloud endpoints — never scan targets). Both may be empty; an
-// empty allow spec denies everything (deny-all). A self-deny token that is not a
-// bare IP is ignored.
+// empty allow spec denies everything (deny-all).
+//
+// A self-deny token is a single IP, or a /32 or /128 (the address itself). Any
+// other token is IGNORED — reported through OnIgnoredSelfDeny — so the sensor
+// keeps starting on a sloppy SCAN_SELF_DENY_IPS. That leniency makes New unfit
+// for FLEET_SELF_DENY_IPS: parse it with ParseSelfDeny and add it with
+// WithSelfDeny.
 func New(allowSpec, selfDenySpec string, opts ...Option) (*Scope, error) {
-	s := &Scope{}
+	var o options
+	for _, opt := range opts {
+		opt(&o)
+	}
+	s := &Scope{warnSelfDenyCIDR: o.warnSelfDenyCIDR}
 	for _, tok := range fields(allowSpec) {
 		p, _, ok := literal(tok)
 		if !ok {
@@ -71,12 +93,11 @@ func New(allowSpec, selfDenySpec string, opts ...Option) (*Scope, error) {
 		s.allow = append(s.allow, p)
 	}
 	for _, tok := range fields(selfDenySpec) {
-		if p, bare, ok := literal(tok); ok && bare {
-			s.deny = append(s.deny, p.Addr())
+		if ip, ok := selfDenyAddr(tok); ok {
+			s.deny = append(s.deny, ip)
+		} else if o.warnIgnoredSelfDeny != nil {
+			o.warnIgnoredSelfDeny(echo(tok))
 		}
-	}
-	for _, opt := range opts {
-		opt(s)
 	}
 	return s, nil
 }

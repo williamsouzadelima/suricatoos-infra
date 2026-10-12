@@ -245,3 +245,67 @@ func TestConcurrentChecksWhileSwappingScope(t *testing.T) {
 		t.Fatal("o Scope trocado perdeu os IPs do hub")
 	}
 }
+
+// selfDenyAllow cobre a LAN do nó, a faixa do hub e o /32 IPv6 de documentação.
+const selfDenyAllow = "192.0.2.0/24, 198.51.100.0/24, 2001:db8::/32"
+
+// TestNewSelfDenyAcceptsSingleAddressPrefix: no self-deny, um /32 ou /128 é o
+// próprio endereço (como já é no alvo); antes era ignorado em silêncio.
+func TestNewSelfDenyAcceptsSingleAddressPrefix(t *testing.T) {
+	s, err := New(selfDenyAllow, "192.0.2.10/32, 2001:db8:1::10/128, ::ffff:198.51.100.7/128")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, h := range []string{"192.0.2.10", "2001:db8:1::10", "198.51.100.7"} {
+		if got, err := s.CheckHost(h); err == nil {
+			t.Errorf("%s está no self-deny como /32 ou /128 e deveria ser negado, passou como %q", h, got)
+		}
+	}
+	if _, err := s.CheckHost("192.0.2.11"); err != nil {
+		t.Errorf("o vizinho segue no escopo: %v", err)
+	}
+}
+
+// TestNewReportsEachIgnoredSelfDenyToken: o que New não consegue usar é
+// informado, um por token, e nunca impede a construção (o sensor sobe).
+func TestNewReportsEachIgnoredSelfDenyToken(t *testing.T) {
+	var ignored []string
+	s, err := New(lanAllow, "192.0.2.10, 192.0.2.0/24, 192.0.2.11%eth0, nope, ::ffff:192.0.2.12/32",
+		OnIgnoredSelfDeny(func(tok string) { ignored = append(ignored, tok) }))
+	if err != nil {
+		t.Fatalf("token inutilizável não é fatal: %v", err)
+	}
+	want := []string{`"192.0.2.0/24"`, `"192.0.2.11%eth0"`, `"nope"`, `"::ffff:192.0.2.12/32"`}
+	if !reflect.DeepEqual(ignored, want) {
+		t.Errorf("tokens ignorados = %q, quer %q", ignored, want)
+	}
+	if _, err := s.CheckHost("192.0.2.10"); err == nil {
+		t.Error("o token válido segue valendo")
+	}
+}
+
+// TestParseSelfDenyStrict: o parser da frota (FLEET_SELF_DENY_IPS) não ignora
+// nada — qualquer token que não seja IP isolado, /32 ou /128 invalida o spec.
+func TestParseSelfDenyStrict(t *testing.T) {
+	got, err := ParseSelfDeny("192.0.2.10, 2001:db8:1::10/128, 198.51.100.7/32 ::ffff:203.0.113.5")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []netip.Addr{netip.MustParseAddr("192.0.2.10"), netip.MustParseAddr("2001:db8:1::10"),
+		netip.MustParseAddr("198.51.100.7"), netip.MustParseAddr("203.0.113.5")}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("ParseSelfDeny = %v, quer %v", got, want)
+	}
+	got, err = ParseSelfDeny("192.0.2.10, 192.0.2.0/24, nope")
+	if err == nil || got != nil {
+		t.Fatalf("spec com token inutilizável deveria falhar inteiro, got %v err=%v", got, err)
+	}
+	for _, tok := range []string{`"192.0.2.0/24"`, `"nope"`} {
+		if !strings.Contains(err.Error(), tok) {
+			t.Errorf("o erro deveria citar %s: %v", tok, err)
+		}
+	}
+	if got, err := ParseSelfDeny(" "); err != nil || len(got) != 0 {
+		t.Errorf("spec vazio não tem token ruim: %v %v", got, err)
+	}
+}
