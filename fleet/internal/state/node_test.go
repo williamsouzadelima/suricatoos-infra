@@ -106,6 +106,9 @@ func TestNodeSemPisoDeReplayFalha(t *testing.T) {
 		if _, ok := c.Current(contract.KindNode); ok || c.Errors()[contract.KindNode] == nil {
 			t.Errorf("piso %q: o node saiu sem piso válido", floor)
 		}
+		if len(f.gvm.nodeReqs) != 0 { // nem chega ao fleet_ops, que o recusaria
+			t.Errorf("piso %q: state.node foi pedido", floor)
+		}
 	}
 }
 

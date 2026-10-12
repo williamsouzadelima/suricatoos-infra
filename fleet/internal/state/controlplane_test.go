@@ -24,7 +24,7 @@ func fullAgent(id, tenantName string) contract.AgentItem {
 // (o hostname): os dois saem, em ordem de (agent_id, tenant).
 func TestAgentsAtribuidosSoATenantConhecido(t *testing.T) {
 	f := newFakes()
-	f.tenants.list = append(f.tenants.list, tenant.Listing{Name: "initech", Enabled: false})
+	f.tenants.list = append(f.tenants.list, tenant.Listing{Name: "initech", Enabled: false}, tenant.Listing{Name: "-ruim-", Enabled: true})
 	a1, a2, a3 := fullAgent("DESKTOP-01", "globex"), fullAgent("DESKTOP-01", "acme"), fullAgent("ALPHA", "initech")
 	f.cp.agents = []contract.AgentItem{a1, fullAgent("X", "intruso"), a2, fullAgent("Y", ""), a3, fullAgent("Z", "-ruim-")}
 	got := current(t, collectOnce(t, f, contract.NodeCentral), contract.KindAgents).(*contract.DataAgents)

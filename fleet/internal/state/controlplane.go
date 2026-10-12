@@ -34,7 +34,7 @@ func (c *Collector) knownTenants(cyc *cycle) (func(string) bool, error) {
 			names[l.Name] = true
 		}
 	}
-	return func(t string) bool { return names[t] && ruleTenant.ok(t) }, nil
+	return func(t string) bool { return names[t] }, nil
 }
 
 // cpList reads one control-plane listing and finishes it.

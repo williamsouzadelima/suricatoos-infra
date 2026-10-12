@@ -90,7 +90,7 @@ func (c *Collector) gvmOwners(cyc *cycle) (map[string]string, func(string) bool,
 	for _, name := range owners {
 		names[name] = true
 	}
-	return owners, func(t string) bool { return names[t] && ruleTenant.ok(t) }, nil
+	return owners, func(t string) bool { return names[t] }, nil
 }
 
 var taskSpec = listSpec[contract.TaskItem]{

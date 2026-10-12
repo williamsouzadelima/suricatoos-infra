@@ -177,6 +177,9 @@ func TestReinicioNaoReenviaSemNecessidade(t *testing.T) {
 	}
 
 	again := openTestTracker(t, dir, localKinds)
+	if p := again.pending(); len(p) != 0 { // hashes aceitos lidos do arquivo, mas ainda nenhum retrato
+		t.Fatalf("pendente sem retrato depois do reinício: %v", p)
+	}
 	again.update(tasks)                                  // igual ao enviado
 	again.update(snap(t, contract.KindScope, "outro"))   // mudou durante a parada
 	again.update(audit)                                  // o resync antes da parada continua valendo
@@ -270,11 +273,27 @@ func TestGravacaoQueFalhaNaoMudaAVerdadeEmMemoria(t *testing.T) {
 		t.Fatalf("o hub aceitou: nada pendente, veio %v", p)
 	}
 	failing = false
-	if err := tr.flush(); err != nil {
+	if err := tr.markSent(contract.KindTasks, tasks.SHA256); err != nil { // a mesma marca repetida regrava já
 		t.Fatal(err)
 	}
 	again := openTestTracker(t, dir, localKinds)
 	if again.sent[contract.KindTasks] != tasks.SHA256 {
+		t.Fatalf("a marca repetida não regravou: %v", again.sent)
+	}
+
+	// o flush do fim de cada ciclo refaz o arquivo atrasado
+	scope := snap(t, contract.KindScope, "s")
+	tr.update(scope)
+	failing = true
+	if err := tr.markSent(contract.KindScope, scope.SHA256); err == nil {
+		t.Fatal("a falha de gravação tem de ser informada")
+	}
+	failing = false
+	if err := tr.flush(); err != nil {
+		t.Fatal(err)
+	}
+	again = openTestTracker(t, dir, localKinds)
+	if again.sent[contract.KindScope] != scope.SHA256 || again.sent[contract.KindTasks] != tasks.SHA256 {
 		t.Fatalf("o flush não gravou: %v", again.sent)
 	}
 	n := writes
