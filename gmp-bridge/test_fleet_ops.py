@@ -379,10 +379,13 @@ class FakeGvmd:
         sub(el, "reverse_lookup_only", "0")
         sub(el, "reverse_lookup_unify", "0")
         sub(el, "allow_simultaneous_ips", "1")
-        legacy, methods = alive_strings(t["alive"])
-        alive = sub(el, "alive_tests", legacy)
-        for method in methods:
-            sub(alive, "alive_test", method)
+        if t.get("alive_text") is not None:            # a gvmd that sends only its own string
+            sub(el, "alive_tests", t["alive_text"])
+        else:
+            legacy, methods = alive_strings(t["alive"])
+            alive = sub(el, "alive_tests", legacy)
+            for method in methods:
+                sub(alive, "alive_test", method)
         if details:
             sub(el, "port_range", t["port_range"])
         return el
@@ -962,8 +965,8 @@ class TestInterface:
         assert fleet_ops.TIMEOUT_EXPORT == 890 < 900
 
     def test_output_encoding_is_compact_utf8_without_escapes(self):
-        out = fleet_ops.dumps({"ok": True, "output": {"name": "Varredura São Paulo <&>  "}})
-        assert out == '{"ok":true,"output":{"name":"Varredura São Paulo <&>  "}}'.encode("utf-8")
+        out = fleet_ops.dumps({"ok": True, "output": {"name": "Varredura São Paulo <&> \u2028"}})
+        assert out == '{"ok":true,"output":{"name":"Varredura São Paulo <&> \u2028"}}'.encode("utf-8")
 
 
 # --------------------------------------------------------------------------- #
@@ -986,8 +989,9 @@ class TestSentinelPassword:
         resp, code = run(gvmd, cmd("task.start", {"task_id": TASK}))
         assert "[redacted]" in assert_error(resp, code, "gvm_error")   # not the exact gvmd text
 
-    # "gvmd refused start_task (400): " is 31 characters: pads 170-195 put the password
-    # across a 200-character cut of the text, pads 455-478 across the 512 cut of the message.
+    # "gvmd refused start_task (400): " is 31 characters: pads 455-478 put the password across
+    # the 512 cut of the message; pads 170-195 cover a short cut of the gvmd text, which no
+    # longer exists (the text is redacted first and only the whole message is ever cut).
     @pytest.mark.parametrize("pad", [170, 185, 195, 455, 470, 478])
     def test_password_across_any_cut_never_leaves_a_piece(self, gvmd, pad):
         gvmd.refuse["start_task"] = ("400", "A" * pad + SENTINEL + " tail")
@@ -1001,6 +1005,12 @@ class TestSentinelPassword:
         monkeypatch.setattr(fleet_ops, "_SECRETS", [SENTINEL])
         message = fleet_ops._error("gvm_error", "x" * pad + SENTINEL + " tail")["error"]["message"]
         assert len(message) <= MESSAGE_MAX and SENTINEL[:4] not in message
+
+    @pytest.mark.parametrize("status", ["ab" + SENTINEL, SENTINEL, "4000", "40", "4x0"])
+    def test_a_status_that_is_not_three_digits_is_never_printed(self, gvmd, status):
+        gvmd.refuse["start_task"] = (status, "Internal error")
+        resp, code = run(gvmd, cmd("task.start", {"task_id": TASK}))
+        assert assert_error(resp, code, "gvm_error") == "gvmd refused start_task (???): Internal error"
 
     def test_password_in_a_request_key_is_redacted_before_the_key_is_cut(self, gvmd):
         req = cmd("task.start", {"task_id": TASK})
@@ -1412,6 +1422,23 @@ class TestTargets:
         resp, code = run(gvmd, cmd("target.create", target_payload()))
         assert_error(resp, code, "gvm_error", "target.create")
         assert len(gvmd.sent("create_target")) == 1
+
+    def test_alive_refusal_text_under_another_status_does_not_trigger_the_fallback(self, gvmd):
+        gvmd.refuse["create_target"] = ("500", "Error in alive test")
+        resp, code = run(gvmd, cmd("target.create", target_payload()))
+        assert_error(resp, code, "gvm_error", "target.create")
+        assert len(gvmd.sent("create_target")) == 1
+
+    def test_reading_a_gvmd_that_sends_only_its_string(self, gvmd):
+        gvmd.add_target(TARGET2, alive_text="ICMP & ARP Ping")
+        gvmd.add_target(U(42), alive_text="Y" * 64)
+        gvmd.add_target(U(43), alive_text="X" * 65)             # beyond the schema's 64: omitted
+        gvmd.add_target(U(44), alive_text="")
+        resp, code = run(gvmd, state_req("targets"))
+        items = {i["target_id"]: i for i in assert_state("targets", resp, code)["items"]}
+        assert items[TARGET2]["alive_test"] == "ICMP & ARP Ping"
+        assert items[U(42)]["alive_test"] == "Y" * 64
+        assert "alive_test" not in items[U(43)] and "alive_test" not in items[U(44)]
 
     def test_reading_reports_a_set_outside_the_table_as_its_methods(self, gvmd):
         gvmd.add_target(TARGET2, alive=frozenset({ICMP, SYN}))
@@ -2007,11 +2034,25 @@ class TestStateNode:
         assert assert_state("node", resp, code)["health"]["status"] == "degraded"
 
     @pytest.mark.parametrize("floor", ["2026-02-30T00:00:00Z", "2026-10-11T24:00:00Z", "2026-10-11T12:00:60Z",
-                                       "2026-10-11T12:00:00.5Z", "2026-10-11T12:00:00+00:00"])
+                                       "2026-10-11T12:00:00.5Z", "2026-10-11T12:00:00+00:00",
+                                       "0000-01-01T00:00:00Z"])
     def test_replay_floor_must_be_a_real_utc_instant(self, gvmd, floor):
         resp, code = run(gvmd, state_req("node", dict(NODE_PAYLOAD, replay_floor=floor)))
         assert_error(resp, code, "internal_error")
         assert gvmd.calls == []
+
+    def test_utc_check_is_the_schema_pattern(self):
+        pattern = re.compile(json.loads((SCHEMA_DIR / "fleet-command.schema.json").read_text(encoding="utf-8"))[
+            "$defs"]["utc_time"]["pattern"])
+        for value in ["0000-01-01T00:00:00Z", "0001-01-01T00:00:00Z", "0999-06-15T12:00:00Z",
+                      "9999-12-31T23:59:59Z", "2026-00-10T00:00:00Z", "2026-13-10T00:00:00Z",
+                      "2026-10-00T00:00:00Z", "2026-10-32T00:00:00Z", "2026-10-11T24:00:00Z",
+                      "2026-10-11T23:60:00Z", "2026-10-11T23:59:60Z", "2026-10-11T23:59:59z"]:
+            assert bool(fleet_ops._UTC_RE.fullmatch(value)) == bool(pattern.search(value)), value
+
+    def test_replay_floor_year_0001_is_a_real_instant(self, gvmd):
+        resp, code = run(gvmd, state_req("node", dict(NODE_PAYLOAD, replay_floor="0001-01-01T00:00:00Z")))
+        assert assert_state("node", resp, code)["replay_floor"] == "0001-01-01T00:00:00Z"
 
     def test_connector_cannot_supply_gvmd_owned_fields(self, gvmd):
         for payload in (dict(NODE_PAYLOAD, versions={"gmp_protocol": "22.7"}),
@@ -2184,8 +2225,32 @@ class TestOwnerChecksAndNotFoundTexts:
         assert assert_error(resp, code, "not_found") == "object not found"
 
 
+# gvmd 26.31.1 status_texts that are a conflict, transcribed from the gvmd sources HERE,
+# independently of fleet_ops.CONFLICT_TEXTS (as ADR_ALIVE_TABLE is for the alive sets).
+GVMD_CONFLICT_TEXTS = [
+    "Task is active already",                                   # gmp.c start_task / resume_task
+    "Task must be in Stopped or Interrupted state",             # resume_task
+    "Task must have a target",                                  # start_task
+    "Status must be New to edit Target",                        # modify_task
+    "Status must be New to edit config",
+    "Status must be New to edit scanner",
+    "For import tasks only name, comment and observers can be modified",
+    "Target is in use",                                         # modify_target, CASE_DELETE
+    "Schedule is in use",                                       # CASE_DELETE
+    "Resource is in use",                                       # gmp_delete.c
+    "Target exists already",
+    "Task exists already",
+    "Schedule exists already",
+    "Schedule with new name exists already",
+]
+
+
 class TestRefusalClassifier:
-    @pytest.mark.parametrize("text", sorted(fleet_ops.CONFLICT_TEXTS))
+    def test_conflict_texts_are_exactly_the_transcribed_gvmd_ones(self):
+        assert len(GVMD_CONFLICT_TEXTS) == len(set(GVMD_CONFLICT_TEXTS)) == 14
+        assert set(GVMD_CONFLICT_TEXTS) == fleet_ops.CONFLICT_TEXTS
+
+    @pytest.mark.parametrize("text", GVMD_CONFLICT_TEXTS)
     def test_exact_gvmd_conflict_texts(self, gvmd, text):
         gvmd.refuse["start_task"] = ("400", text)
         resp, code = run(gvmd, cmd("task.start", {"task_id": TASK}))
@@ -2250,15 +2315,23 @@ class TestXmlText:
         raw = (b'{"op":"task.create","command_id":"' + CID.encode() + b'","tenant":"acme",'
                b'"tenant_gmp_user":"acme-gmp","payload":{"name":' + raw_name +
                b',"target_id":"' + TARGET.encode() + b'","scan_config_id":"' + CONFIG.encode() + b'"}}')
-        resp, code = run(gvmd, None, raw=raw)
-        assert_error(resp, code, "internal_error", "task.create")
+        resp, code = run(gvmd, None, raw=raw, env=ENV_TENANT)      # the right user: only the text is wrong
+        assert "XML 1.0" in assert_error(resp, code, "internal_error", "task.create")
         assert gvmd.calls == []
 
-    def test_surrogate_in_a_key_is_refused(self, gvmd):
+    def test_surrogate_in_a_known_root_value_is_refused(self, gvmd):
+        # tenant_gmp_user's own checker (no C0) would let it through: only the XML rule refuses it
+        raw = (b'{"op":"task.start","command_id":"' + CID.encode() + b'","tenant":"acme",'
+               b'"tenant_gmp_user":"acme-gmp\\udc00","payload":{"task_id":"' + TASK.encode() + b'"}}')
+        resp, code = run(gvmd, None, raw=raw, env=ENV_READER)
+        assert "XML 1.0" in assert_error(resp, code, "internal_error")
+        assert gvmd.calls == []
+
+    def test_surrogate_in_a_key_is_refused_as_text_not_as_unknown_key(self, gvmd):
         raw = (b'{"op":"task.start","command_id":"' + CID.encode() + b'","tenant":"acme",'
                b'"tenant_gmp_user":"acme-gmp","payload":{"task_id":"' + TASK.encode() + b'"},"\\ud800":1}')
-        resp, code = run(gvmd, None, raw=raw)
-        assert_error(resp, code, "internal_error")
+        resp, code = run(gvmd, None, raw=raw, env=ENV_READER)
+        assert "XML 1.0" in assert_error(resp, code, "internal_error")
 
     def test_paired_surrogates_and_astral_text_are_fine(self, gvmd):
         raw = (b'{"op":"task.create","command_id":"' + CID.encode() + b'","tenant":"acme",'
@@ -2289,6 +2362,27 @@ class TestXmlText:
         resp, code = run(gvmd, None, raw=raw)
         assert "nesting" in assert_error(resp, code, "internal_error")
 
+    def test_nesting_of_exactly_32_levels_passes_the_depth_rule(self, gvmd):
+        deep = "1"
+        for _ in range(31):            # request = level 1, payload = level 2, innermost = level 32
+            deep = '{"a":' + deep + "}"
+        raw = (b'{"op":"task.start","command_id":"' + CID.encode() + b'","tenant":"acme",'
+               b'"tenant_gmp_user":"acme-gmp","payload":' + deep.encode() + b"}")
+        resp, code = run(gvmd, None, raw=raw)
+        message = assert_error(resp, code, "internal_error")
+        assert "nesting" not in message and "unknown key" in message   # refused by the payload rule only
+
+    def test_depth_rule_boundary(self):
+        def nest(levels):
+            value = {}
+            for _ in range(levels - 1):
+                value = {"a": value}
+            return value
+        fleet_ops._check_strings(nest(32))
+        fleet_ops._check_strings({"a": [[[[]]]]})
+        with pytest.raises(fleet_ops.OpError):
+            fleet_ops._check_strings(nest(33))
+
 
 class TestExportFilter:
     @pytest.mark.parametrize("flt", [
@@ -2297,6 +2391,7 @@ class TestExportFilter:
         "min_qod=100 levels=f apply_overrides=1 sort-reverse=severity",
         "rows=-1  apply_overrides=0   levels=gc min_qod=9",            # empty tokens are ignored
         "apply_overrides=1 min_qod=70 levels=chmlgf levelsx=1 x_levels=c",  # other keys
+        "x apply_overrides=1 min_qod=0 levels=hml x",                    # search words, no quote
     ])
     def test_explicit_filters_are_accepted_and_sent_verbatim(self, gvmd, tmp_path, flt):
         gvmd.add_report(REPORT, content={PDF_PT: PDF_BYTES})
@@ -2322,9 +2417,16 @@ class TestExportFilter:
         "apply_overrides:1 min_qod=70 levels=chmlg",
         "apply_overrides=1 min_qod=70 levels=chmlg levels=f",   # key twice
         "apply_overrides=1 apply_overrides=1 min_qod=70 levels=c",
-        "apply_overrides=1 min_qod=70 levels",                  # bare key, as the validator reads it
-        '"apply_overrides=1 min_qod=70 levels=chmlg"',          # quotes do not group
-    ])
+        "apply_overrides=1 min_qod=70 levels",                  # bare key: it IS the key
+        "apply_overrides=1 levels=hml min_qod",                 # bare key (Emenda 3 example)
+        "apply_overrides=1 min_qod=70 levels=chml levels",      # bare key next to a valid key=
+        '"apply_overrides=1 min_qod=70 levels=chmlg"',          # any double quote (Emenda 3)
+        '"x apply_overrides=1 min_qod=0 levels=hml x"',         # the quoted phrase of the re-review
+        'levels="hml" apply_overrides=1 min_qod=0',             # quote after '='
+        'apply_overrides=1 min_qod=0 levels=hml "x"',
+        "apply_overrides=1" + chr(0xA0) + "min_qod=70 levels=c",    # tokens split on ' ' only (NBSP)
+        "apply_overrides=1" + chr(0x2003) + "min_qod=70 levels=c",  # ... and not on EM SPACE
+    ], ids=lambda flt: ascii(flt))
     def test_implicit_filters_are_refused_before_gvmd(self, gvmd, tmp_path, flt):
         gvmd.add_report(REPORT, content={PDF_PT: PDF_BYTES})
         resp, code = run(gvmd, export_req(tmp_path, filter=flt))
@@ -2352,6 +2454,17 @@ def _contract_command_cases():
 # Root-level JSON rules of the contract that live INSIDE the payload.
 PAYLOAD_JSON_CASES = {"duplicate-key-in-payload.json", "task-create-name-unpaired-surrogate.json",
                       "payload-nesting-depth-33.json"}
+# Invalid examples of GVM types whose defect is in the ENVELOPE (the connector's verification
+# lines 0-2): fleet_ops never sees them. Explicit, so an example nobody classified fails loudly.
+ENVELOPE_LEVEL_CASES = {
+    "duplicate-key.json", "gmp-passthrough-field.json", "issued-at-february-30.json",
+    "issued-at-fractional-seconds.json", "issued-at-hour-24.json", "issued-at-offset.json",
+    "issued-at-year-0000.json", "issued-by-email.json", "key-case-different.json", "missing-signature.json",
+    "node-id-trailing-newline.json", "nonce-uppercase.json", "not-after-second-60.json",
+    "payload-html-escaped-after-hashing.json", "payload-sha256-mismatch.json",
+    "signature-base64-noncanonical.json", "signature-field-altered.json", "signature-other-key.json",
+    "trailing-data.json",
+}
 GVM_TYPES = {op for op in fleet_ops._OPS if op in fleet_ops.COMMAND_TYPES}
 
 
@@ -2379,11 +2492,19 @@ def test_request_validation_agrees_with_the_contract_examples(case):
         fleet_ops.parse_request(raw)                                  # must not raise
         return
     path = case["expect"].get("path", "")
-    if not (path.startswith("/payload") or name in PAYLOAD_JSON_CASES):
+    if name in ENVELOPE_LEVEL_CASES:
+        assert not path.startswith("/payload"), f"{name} points into the payload"
         pytest.skip("envelope-level rule (the connector's verification lines 0-2)")
+    assert path.startswith("/payload") or name in PAYLOAD_JSON_CASES, f"unclassified invalid example {name}"
     with pytest.raises(fleet_ops.OpError) as refused:
         fleet_ops.parse_request(raw)
     assert refused.value.code == "internal_error"
+
+
+def test_envelope_level_list_has_no_stale_entry():
+    gvm_invalid = {c["file"].rsplit("/", 1)[1] for c in _contract_command_cases()
+                   if c["file"].startswith("invalid/") and _request_around(c)[0] in GVM_TYPES}
+    assert ENVELOPE_LEVEL_CASES <= gvm_invalid
 
 
 def test_contract_examples_cover_the_new_rules():
@@ -2392,4 +2513,6 @@ def test_contract_examples_cover_the_new_rules():
             "report-export-filter-min-qod-101.json", "report-export-filter-without-overrides-and-qod.json",
             "report-export-filter-any-order.json", "target-modify-port-range.json",
             "target-modify-unknown-alive-test.json", "task-create-name-noncharacter.json",
-            "task-create-name-unpaired-surrogate.json", "target-modify-port-list.json"} <= names
+            "task-create-name-unpaired-surrogate.json", "target-modify-port-list.json",
+            "report-export-filter-quoted-phrase.json", "report-export-filter-quoted-levels.json",
+            "report-export-filter-bare-key.json"} <= names

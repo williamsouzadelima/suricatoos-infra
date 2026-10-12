@@ -64,9 +64,9 @@ Rules (ADR-0011 "Catálogo de comandos v1" + F2.3 brief):
     by name; never 'Consider Alive' nor 'Scan Config Default' by fallback. Read back,
     a set is reported by its contract name, else as the methods joined with ', ';
   * report.export: the hub's filter must pin apply_overrides=, min_qod= and levels=
-    (ADR export_filter rule); report.summary: counts only, from the filter the node
-    builds out of min_qod, apply_overrides and levels — no free filter, no
-    OID/name/CVE ever leaves;
+    and hold no double quote (ADR export_filter rule); report.summary: counts only,
+    from the filter the node builds out of min_qod, apply_overrides and levels — no
+    free filter, no OID/name/CVE ever leaves;
   * state.*: metadata and counts only; comments and hostnames never leave; an object
     whose owner is not in `owners` (or maps to an invalid tenant name), or that cannot
     be represented within the schema, is only counted (unattributed_count).
@@ -247,7 +247,10 @@ _TZ_RE = re.compile(r"[A-Za-z][A-Za-z0-9_+-]*(?:/[A-Za-z0-9_+-]+)*")
 _LEVELS_RE = re.compile(r"c?h?m?l?g?")
 _VERSION_RE = re.compile(r"[0-9A-Za-z][0-9A-Za-z.+_-]*")
 _SHA256_RE = re.compile(r"[0-9a-f]{64}")
-_UTC_RE = re.compile(r"[0-9]{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]Z")
+# utc_time of the schema: years 0001-9999 and the field ranges (the calendar is checked apart).
+_UTC_RE = re.compile(r"(?:000[1-9]|00[1-9][0-9]|0[1-9][0-9]{2}|[1-9][0-9]{3})-(?:0[1-9]|1[0-2])"
+                     r"-(?:0[1-9]|[12][0-9]|3[01])T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]Z")
+_STATUS_CODE_RE = re.compile(r"[0-9]{3}")
 _STATUS_RE = re.compile(r"[A-Za-z][A-Za-z ]*")
 _FLEET_PREFIX_RE = re.compile(
     r"(?:fleet:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12} )+")
@@ -314,7 +317,10 @@ def _from_status(e: _GmpStatus) -> OpError:
     text = _clean(_redact(e.text)) or "no detail"
     if e.status == "400" and text in CONFLICT_TEXTS:
         return OpError("conflict", f"gvmd refused {e.command}: {text}")
-    return OpError("gvm_error", f"gvmd refused {e.command} ({_clean(e.status)[:8]}): {text}")
+    # The status is printed only when it is a 3-digit code: any other value is external
+    # text that must not be cut (or shown) outside the redaction path.
+    status = e.status if _STATUS_CODE_RE.fullmatch(e.status) else "???"
+    return OpError("gvm_error", f"gvmd refused {e.command} ({status}): {text}")
 
 
 def _is_timeout(e: BaseException) -> bool:
@@ -564,9 +570,14 @@ def _post_target_create(payload, path):
 def export_filter_problem(flt: str):
     """None when a report.export filter pins apply_overrides, min_qod and levels
     explicitly (ADR-0011 normative rule, the example validator's export_filter check),
-    else why not. Tokens = the filter split on ' ' (quotes do not group); a token belongs
-    to a key when it starts with the key followed by a relation (= < > ~ :); each key
-    exactly once, with '=' and a valid value."""
+    else why not. No double quote at all: gvmd's split_filter groups a part that starts
+    with one (also after = or ~) into a single term, hiding the keywords. Tokens = the
+    filter split on single spaces (never str.split(): other whitespace stays inside a
+    token, as in gvmd); a token belongs to a key when it IS the key or starts with the
+    key followed by a relation (= < > ~ :); each key exactly once, with '=' and a valid
+    value."""
+    if '"' in flt:
+        return "contains a double quote"
     seen = {}
     for token in flt.split(" "):
         key = re.split(r"[=<>~:]", token, maxsplit=1)[0]
