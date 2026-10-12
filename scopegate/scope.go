@@ -9,9 +9,14 @@
 //  1. IP-LITERAL ONLY — a non-IP target is refused (no scan-time DNS re-resolution).
 //  2. ALLOWLIST (the tenant's authorized ranges — RFC1918 IS legitimate here) minus
 //     an ABSOLUTE self-protection deny-list (the degenerate space of degenerate.go +
-//     the sensor's own interfaces and the cloud endpoints, via SCAN_SELF_DENY_IPS).
-//     The self-deny is env-driven because a sensor's "self" is its client, not the
-//     Suricatoos prod boxes.
+//     the node's own interfaces and the cloud/hub endpoints: SCAN_SELF_DENY_IPS on
+//     the sensor; FLEET_SELF_DENY_IPS plus the hub's IPs, via WithSelfDeny, on the
+//     fleet). The self-deny is env-driven because a node's "self" is its client, not
+//     the Suricatoos prod boxes. A CIDR that CONTAINS a self-deny IP is denied too.
+//
+// The sensor filters job targets with CheckHost/Filter, where LogSelfDenyCIDR can
+// let a CIDR containing a self-deny IP pass with a warning (its rollout mode); the
+// fleet checks a whole gvmd target with CheckTarget, which always denies it.
 //
 // A bare IPv4-mapped address (::ffff:a.b.c.d) is its IPv4 address everywhere.
 package scopegate
@@ -105,40 +110,57 @@ func (s *Scope) Empty() bool { return len(s.allow) == 0 }
 // off-scope IP, or a CIDR not fully within the allow-set all fail, and so does a
 // CIDR that contains a self/cloud address unless LogSelfDenyCIDR is set.
 func (s *Scope) CheckHost(host string) (string, error) {
+	canonical, containsSelf, err := s.gate(host)
+	if err != nil {
+		return "", err
+	}
+	if containsSelf {
+		if s.warnSelfDenyCIDR == nil {
+			return "", fmt.Errorf("CIDR %s negado: %s", canonical, reasonSelfDenyCIDR)
+		}
+		s.warnSelfDenyCIDR(canonical, reasonSelfDenyCIDR)
+	}
+	return canonical, nil
+}
+
+// gate runs every check on one host and returns its canonical form, except the
+// decision on a CIDR that CONTAINS a self-deny IP: that one is reported in
+// containsSelf for the caller (CheckHost per mode, CheckTarget always denies). A
+// single address equal to a self-deny IP — bare, /32 or /128 — is an error here.
+func (s *Scope) gate(host string) (canonical string, containsSelf bool, err error) {
 	p, bare, ok := literal(strings.TrimSpace(host))
 	if !ok {
-		return "", fmt.Errorf("%q não é IP/CIDR literal", host)
+		return "", false, fmt.Errorf("%s não é IP/CIDR literal", echo(host))
 	}
 	// Individual IP: full degenerate + self-deny + allow-membership checks.
 	if bare {
 		ip := p.Addr()
 		if reason := degenerate(p); reason != "" {
-			return "", fmt.Errorf("host %s negado: %s", ip, reason)
+			return "", false, fmt.Errorf("host %s negado: %s", ip, reason)
 		}
 		if s.denied(ip) {
-			return "", fmt.Errorf("host %s negado: self-deny (IP próprio/nuvem)", ip)
+			return "", false, fmt.Errorf("host %s negado: IP do self-deny", ip)
 		}
 		if !s.allowed(p) {
-			return "", fmt.Errorf("host %s fora do escopo autorizado", ip)
+			return "", false, fmt.Errorf("host %s fora do escopo autorizado", ip)
 		}
-		return ip.String(), nil
+		return ip.String(), false, nil
 	}
-	// CIDR subnet: must not overlap degenerate space, must be FULLY within one
-	// allow CIDR and must not contain a self-deny IP.
+	// CIDR subnet: must not overlap degenerate space and must be FULLY within one
+	// allow CIDR.
 	if reason := degenerate(p); reason != "" {
-		return "", fmt.Errorf("CIDR %s negado: sobrepõe %s", p, reason)
+		return "", false, fmt.Errorf("CIDR %s negado: sobrepõe %s", p, reason)
 	}
 	if !s.allowed(p) {
-		return "", fmt.Errorf("CIDR %s fora do escopo autorizado", p)
+		return "", false, fmt.Errorf("CIDR %s fora do escopo autorizado", p)
 	}
-	if s.containsDenied(p) {
-		// A /32 or /128 IS the self-deny address: denied in any mode.
-		if p.IsSingleIP() || s.warnSelfDenyCIDR == nil {
-			return "", fmt.Errorf("CIDR %s negado: %s", p, reasonSelfDenyCIDR)
-		}
-		s.warnSelfDenyCIDR(p.String(), reasonSelfDenyCIDR)
+	if !s.containsDenied(p) {
+		return p.String(), false, nil
 	}
-	return p.String(), nil
+	if p.IsSingleIP() { // a /32 or /128 IS the self-deny address
+		return "", false, fmt.Errorf("CIDR %s negado: é IP do self-deny", p)
+	}
+	return p.String(), true, nil
 }
 
 // Filter splits targets into canonical in-scope IPs (kept) and rejected (dropped).

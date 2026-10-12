@@ -201,11 +201,12 @@ func TestConcurrentChecksWhileSwappingScope(t *testing.T) {
 				default:
 				}
 				s := cur.Load()
-				if _, err := s.CheckHost("192.0.2.0/24"); err == nil {
+				_, err := s.CheckHost("192.0.2.0/24")
+				if err == nil || s.CheckTarget([]string{"192.0.2.0/24"}, nil) == nil {
 					t.Error("o /24 do nó passou durante a troca")
 					return
 				}
-				_, _ = s.CheckHost(hubLAN) // passa ou não, conforme o hub já entrou
+				_ = s.CheckTarget([]string{hubLAN}, nil) // passa ou não, conforme o hub já entrou
 			}
 		}()
 	}
