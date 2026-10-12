@@ -1451,7 +1451,7 @@ func TestStatusRoutesShowWhenAJobWasVerifiedOrExpired(t *testing.T) {
 	applied := jobIn(t, reg, StateApplied)
 	lapsing := jobIn(t, reg, StateApproved) // 1h TTL, never handed out
 
-	reg.now = at(clockBase.Add(8 * day)) // the agent's first poll after the deadline sweeps it
+	reg.now = at(clockBase.Add(8 * day)) // the agent's first poll after the deadline sweeps it (an Enqueue would too)
 	if _, ok := reg.Poll("win1", "acme"); ok {
 		t.Fatal("the poll must not deliver a job past its deadline")
 	}

@@ -96,16 +96,21 @@ func requiresSignature(s JobState) bool {
 // defaultReapRetention is how long terminal jobs are kept before Reap drops them.
 const defaultReapRetention = 7 * 24 * time.Hour
 
-// Reap removes terminal jobs whose last event is older than retention — the last of the
-// job's creation, rejection, closure, verification, expiry, result and refused reports,
-// see lastEventAt, so that closing or verifying an old job or a late report restarts the
-// clock; the agent's late reports only up to maxLateReportAge after the job's creation,
-// so a job it alone keeps touching goes at CreatedAt + maxLateReportAge + retention at the
-// latest — bounding the queue file's growth, and returns the count removed. Called
-// opportunistically from Enqueue; the wiring may also call it on a timer.
+// Reap first sweeps to EXPIRED every job whose ExpiresAt passed before the agent took it
+// (PENDING_APPROVAL, APPROVED, DELIVERED without ack) — the rule Poll applies to the
+// polling agent's jobs, here to ALL of them, so those of an agent that never polls again
+// expire too — and then removes terminal jobs whose last event is older than retention:
+// the last of the job's creation, rejection, closure, verification, expiry, result and
+// refused reports, see lastEventAt, so that closing or verifying an old job or a late
+// report restarts the clock; the agent's late reports only up to maxLateReportAge after
+// the job's creation, so a job it alone keeps touching goes at CreatedAt +
+// maxLateReportAge + retention at the latest. That bounds the queue file's growth.
+// Returns the count removed (a job swept just now is not: it has only just become final
+// and stays a retention). Called opportunistically from Enqueue; the wiring may also call
+// it on a timer.
 //
 // Only TERMINAL states go (VERIFIED, FAILED, EXPIRED, REJECTED, CLOSED). ACKED and
-// APPLIED are not terminal and, since Poll no longer expires them by ExpiresAt,
+// APPLIED are not terminal and, since the sweep does not expire them by ExpiresAt,
 // NOTHING here removes them: an ACKED job leaves that state when the agent reports
 // (→ APPLIED/FAILED) or an operator closes it (→ CLOSED), an APPLIED one when an
 // operator marks it verified (→ VERIFIED) or closes it. A job stuck there (agent
@@ -114,30 +119,35 @@ const defaultReapRetention = 7 * 24 * time.Hour
 func (r *Registry) Reap(retention time.Duration) int {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	n := r.reapLocked(retention)
-	if n > 0 {
+	removed, expired := r.reapLocked(retention)
+	if removed > 0 || expired > 0 {
 		if err := r.saveLocked(); err != nil {
 			log.Printf("remediation: saveLocked após reap: %v", err)
 		}
 	}
-	return n
+	return removed
 }
 
-// reapLocked deletes terminal jobs whose last event (see lastEventAt) is older than
-// retention (caller holds the lock, caller persists). Returns the count removed.
-func (r *Registry) reapLocked(retention time.Duration) int {
+// reapLocked sweeps to EXPIRED the jobs whose deadline lapsed (RemediationJob.expireIfLapsed)
+// and deletes the terminal ones whose last event (see lastEventAt) is older than retention
+// (caller holds the lock, caller persists). Returns how many jobs it removed and how many
+// it expired.
+func (r *Registry) reapLocked(retention time.Duration) (removed, expired int) {
 	if retention <= 0 {
 		retention = defaultReapRetention
 	}
-	cutoff := r.now().Add(-retention)
-	n := 0
+	now := r.now().UTC()
+	cutoff := now.Add(-retention)
 	for id, j := range r.jobs {
+		if j.expireIfLapsed(now) {
+			expired++
+		}
 		if j.State.terminal() && j.lastEventAt().Before(cutoff) {
 			delete(r.jobs, id)
-			n++
+			removed++
 		}
 	}
-	return n
+	return removed, expired
 }
 
 // Enqueue creates a PENDING_APPROVAL job. It is NOT signed and NOT deliverable
@@ -363,7 +373,9 @@ func whenOrDash(t time.Time) string {
 // maintenance window are held. Jobs whose ExpiresAt lapsed BEFORE the agent took
 // them (PENDING_APPROVAL, APPROVED, DELIVERED-unacked) are swept to EXPIRED; an
 // ACKED or APPLIED job is never expired here (see JobState.expirable), so a late
-// Report still lands and an applied job stays verifiable. A job for a DIFFERENT
+// Report still lands and an applied job stays verifiable. (The reaper runs the same
+// sweep on EVERY agent's jobs, see Reap, so those of an agent that stops polling expire
+// as well; this one makes the polling agent's expire at once.) A job for a DIFFERENT
 // agent or tenant is never returned.
 func (r *Registry) Poll(agentID, tenant string) (*RemediationJob, bool) {
 	r.mu.Lock()
@@ -376,9 +388,7 @@ func (r *Registry) Poll(agentID, tenant string) (*RemediationJob, bool) {
 		if j.AgentID != agentID || j.Tenant != tenant || j.State.terminal() {
 			continue
 		}
-		if j.State.expirable() && !j.ExpiresAt.IsZero() && now.After(j.ExpiresAt) {
-			j.State = StateExpired
-			j.ExpiredAt = now // when the queue learns of it (this poll), not the deadline: nobody saw it before
+		if j.expireIfLapsed(now) { // ExpiredAt = this poll: when the queue learns of it, not the deadline
 			changed = true
 			continue
 		}

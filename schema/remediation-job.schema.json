@@ -33,7 +33,7 @@
     "delivered_at": { "type": "string", "format": "date-time" },
     "acked_at": { "type": "string", "format": "date-time" },
     "verified_at": { "type": "string", "format": "date-time", "description": "when an operator marked the APPLIED job VERIFIED (state VERIFIED); absent on jobs verified before this field existed" },
-    "expired_at": { "type": "string", "format": "date-time", "description": "when the expiry sweep moved the job to EXPIRED: the first agent poll after expires_at, not expires_at itself; absent on jobs expired before this field existed" },
+    "expired_at": { "type": "string", "format": "date-time", "description": "when the expiry sweep moved the job to EXPIRED: the first agent poll or job enqueue (the reaper sweeps every job, so an agent that stopped polling is covered) after expires_at, not expires_at itself; absent on jobs expired before this field existed" },
     "result": { "$ref": "remediation-result.schema.json" },
     "late_reports": {
       "type": "array",

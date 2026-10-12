@@ -138,23 +138,26 @@ job no próximo poll, verifica a assinatura/janela e aplica **dentro da janela**
 
   Só um job `APPLIED` vira `VERIFIED`: outro estado → `409`, id inexistente → `404`, sem operador → `400`.
 - **Expiração e limpeza:** o `expires_at` só vale **até o agente assumir o job** (`PENDING_APPROVAL`,
-  `APPROVED` ou `DELIVERED` sem ack viram `EXPIRED`). `ACKED` e `APPLIED` **não expiram**: o relatório
+  `APPROVED` ou `DELIVERED` sem ack viram `EXPIRED`). Quem os marca é o **primeiro poll do agente dono do
+  job ou o primeiro enfileiramento (de qualquer job) depois do prazo, o que vier antes**: o reaper varre
+  **todos** os jobs, então o de um host que nunca mais faz poll (aposentado, cert revogado) também expira e sai
+  da fila, em vez de ficar vencido para sempre. `ACKED` e `APPLIED` **não expiram**: o relatório
   do agente ainda é aceito depois do prazo e um job aplicado segue verificável. Jobs terminais
   (`VERIFIED`/`FAILED`/`EXPIRED`/`REJECTED`/`CLOSED`) saem da fila no próximo enfileiramento quando o
   **último evento** deles tem mais de 7 dias — o último entre criação, rejeição (`rejected_at`), fechamento
-  (`closed_at`), verificação (`verified_at`), expiração (`expired_at`: a hora em que o primeiro poll depois do
-  prazo varreu o job, não o `expires_at`), resultado do agente e último relatório recusado: verificar ou
-  fechar um job antigo, ou um relatório que chega tarde, reinicia a contagem — **levando junto o `result` e
-  os `late_reports`** (`before`/`rollback_token`), então anote o que precisar antes. **O que o agente manda
-  tem limite; o que o operador faz, não.** O agente pode mandar relatórios recusados à vontade, e cada um
-  diferente reiniciaria a contagem de 7 dias; por isso eles só a reiniciam até **90 dias depois da criação**
-  (`created_at`). Depois disso o relatório ainda é recusado, guardado e logado, mas não acrescenta retenção: um
-  job em que só o agente mexe sai no máximo **97 dias** (90 + 7) depois de criado — sem esse limite, um agente
-  que trocasse o relatório a cada poucos dias manteria os próprios jobs (e o `rollback_token` deles) na fila
-  para sempre. Rejeitar, fechar e verificar, ao contrário, **sempre** dão os 7 dias inteiros a partir do
-  momento em que acontecem, por mais velho que o job seja: um `APPLIED` verificado ou fechado no dia 120 fica
-  até o dia 127, `result` e `rollback_token` incluídos. Um job `ACKED`/`APPLIED` parado **não** é limpo
-  sozinho — feche-o você, com cuidado:
+  (`closed_at`), verificação (`verified_at`), expiração (`expired_at`: a hora em que a varredura — poll ou
+  enfileiramento — marcou o job, não o `expires_at`), resultado do agente e último relatório recusado:
+  verificar ou fechar um job antigo, ou um relatório que chega tarde, reinicia a contagem — **levando junto o
+  `result` e os `late_reports`** (`before`/`rollback_token`), então anote o que precisar antes. **O que o
+  agente manda tem limite; o que o operador faz, não.** O agente pode mandar relatórios recusados à
+  vontade, e cada um diferente reiniciaria a contagem de 7 dias; por isso eles só a reiniciam até **90 dias
+  depois da criação** (`created_at`). Depois disso o relatório ainda é recusado, guardado e logado, mas não
+  acrescenta retenção: um job em que só o agente mexe sai no máximo **97 dias** (90 + 7) depois de criado —
+  sem esse limite, um agente que trocasse o relatório a cada poucos dias manteria os próprios jobs (e o
+  `rollback_token` deles) na fila para sempre. Rejeitar, fechar e verificar, ao contrário, **sempre** dão os
+  7 dias inteiros a partir do momento em que acontecem, por mais velho que o job seja: um `APPLIED`
+  verificado ou fechado no dia 120 fica até o dia 127, `result` e `rollback_token` incluídos. Um job
+  `ACKED`/`APPLIED` parado **não** é limpo sozinho — feche-o você, com cuidado:
   - `APPLIED`: **prefira `verified`** (preserva o aprovador e o resultado). Use `close` só se o job não vai
     ser verificado (ex.: o fix foi revertido à mão, ou o host saiu de operação).
   - `ACKED` (o agente recebeu e sumiu): hoje o agente dá o `ack` **depois** de aplicar, então um `ACKED`
@@ -234,8 +237,9 @@ job no próximo poll, verifica a assinatura/janela e aplica **dentro da janela**
   ```
 
   Um `applied` nessa linha quer dizer que o agente **aplicou uma mudança num job que a fila já dera por
-  encerrado** — por exemplo, o job foi fechado enquanto o agente ainda aplicava, ou venceu (`EXPIRED`) antes de
-  o `ack`/relatório dele chegar (o `ack` só vem depois de aplicar). **O que fazer:** (1) leia o
+  encerrado** — por exemplo, o job foi fechado enquanto o agente ainda aplicava, ou venceu (`EXPIRED`, por um
+  enfileiramento qualquer ou pelo poll dele) antes de o `ack`/relatório dele chegar (o `ack` só vem depois de
+  aplicar). **O que fazer:** (1) leia o
   `late_reports` do job: o `before`, o `after` e o `rollback_token` que o agente informou; (2) confira o host
   (o `remediation.journal.json`, no diretório de estado do agente, tem `"status":"applied"` para o `job_id` se a
   mudança foi feita — mas guarda só status e horário, nada de `before`); (3) decida se a mudança fica; (4) se

@@ -453,7 +453,7 @@ type jobView struct {
 	DeliveredAt   time.Time `json:"delivered_at,omitzero"`
 	AckedAt       time.Time `json:"acked_at,omitzero"`
 	VerifiedAt    time.Time `json:"verified_at,omitzero"` // VERIFIED jobs: when an operator marked them verified
-	ExpiredAt     time.Time `json:"expired_at,omitzero"`  // EXPIRED jobs: when the sweep moved them there (the first poll past the deadline)
+	ExpiredAt     time.Time `json:"expired_at,omitzero"`  // EXPIRED jobs: when the sweep moved them there (the first poll or enqueue past the deadline)
 	Result        *Result   `json:"result,omitempty"`     // the agent's report (status/detail/before/after/rollback_token)
 	// Reports the queue refused (409) because the job was final, or APPLIED with a
 	// different result, kept whole — rollback_token included, for the manual revert: the

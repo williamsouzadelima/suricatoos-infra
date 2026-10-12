@@ -88,7 +88,8 @@ func (s JobState) terminal() bool {
 //
 // Caveat: today's agent runner acks AFTER applying (right before it reports), so
 // a job being applied is still DELIVERED here, and one whose ack/report never
-// arrives before ExpiresAt lapses can still be swept. Acking before applying, on
+// arrives before ExpiresAt lapses can still be swept — by the next Enqueue's reaper,
+// whoever's it is, as well as by that agent's next poll. Acking before applying, on
 // the agent side, would close that window.
 func (s JobState) expirable() bool {
 	switch s {
@@ -96,6 +97,20 @@ func (s JobState) expirable() bool {
 		return true
 	}
 	return false
+}
+
+// expireIfLapsed moves a job whose ExpiresAt passed while it was still in an expirable
+// state to EXPIRED, stamping now as ExpiredAt — the moment the queue learned of it, which
+// is also when its retention starts — and reports whether it did. Poll runs it on the
+// polling agent's jobs and the reaper on every job (Registry.reapLocked), so the jobs of
+// an agent that never polls again expire, and age out, as well.
+func (j *RemediationJob) expireIfLapsed(now time.Time) bool {
+	if !j.State.expirable() || j.ExpiresAt.IsZero() || !now.After(j.ExpiresAt) {
+		return false
+	}
+	j.State = StateExpired
+	j.ExpiredAt = now
+	return true
 }
 
 // allStates lists every lifecycle state (the listing filter accepts exactly these).
@@ -154,7 +169,7 @@ type RemediationJob struct {
 	DeliveredAt   time.Time       `json:"delivered_at,omitempty"`
 	AckedAt       time.Time       `json:"acked_at,omitempty"`
 	VerifiedAt    time.Time       `json:"verified_at,omitzero"` // when an operator marked the APPLIED job VERIFIED (MarkVerified)
-	ExpiredAt     time.Time       `json:"expired_at,omitzero"`  // when the expiry sweep moved the job to EXPIRED (the poll that found the deadline lapsed)
+	ExpiredAt     time.Time       `json:"expired_at,omitzero"`  // when the expiry sweep moved the job to EXPIRED (the poll or reap that found the deadline lapsed)
 	Result        *Result         `json:"result,omitempty"`
 	// LateReports keeps the reports the queue refused (see Registry.Report) whole, so
 	// an operator can still reach their before/rollback_token: at most maxLateReports
@@ -182,12 +197,13 @@ type EnqueueRequest struct {
 // rejection, a closure, a verification, an expiry, the agent's result or the latest
 // report it refused. A final job is reaped a retention AFTER this — not after its
 // creation — so closing or verifying an old APPLIED job, an expiry that the sweep only
-// finds out about on the agent's next poll, a result that arrives late or a late refused
-// report restarts the clock instead of handing the data they just preserved (approver,
-// result, rollback_token) to the very next Enqueue's reaper. Every final state has a
-// stamp of its own here (VERIFIED: VerifiedAt, EXPIRED: ExpiredAt, REJECTED: RejectedAt,
-// CLOSED: ClosedAt, FAILED: the result's ReportedAt); jobs persisted before VerifiedAt
-// and ExpiredAt existed simply do not have those two, and fall back to the rest.
+// finds out about on the agent's next poll or the next Enqueue, a result that arrives
+// late or a late refused report restarts the clock instead of handing the data they
+// just preserved (approver, result, rollback_token) to the very next Enqueue's reaper.
+// Every final state has a stamp of its own here (VERIFIED: VerifiedAt, EXPIRED:
+// ExpiredAt, REJECTED: RejectedAt, CLOSED: ClosedAt, FAILED: the result's ReportedAt);
+// jobs persisted before VerifiedAt and ExpiredAt existed simply do not have those two,
+// and fall back to the rest.
 //
 // The clock restarts whenever something happens, with one limit, and only on what the
 // AGENT controls: its late reports (the first result is a single report) restart it only
