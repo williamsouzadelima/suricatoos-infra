@@ -118,9 +118,11 @@ type Outcome struct {
 	Result *replay.Result
 	// Accepted is set when the decision is accepted: what the executor runs.
 	Accepted *Accepted
-	// PolicyEvent is the data of the event command.rejected_by_policy, for a final rejection of lines 6–9 (F2.5
-	// sends it; this is only the signal).
-	PolicyEvent *contract.DataCommandRejected
+	// PolicyEvent is the data of the event command.rejected_by_policy, for a final rejection of lines 6–9 (package
+	// events sends it; this is only the signal), and PolicyEventTenant the envelope's tenant, which that tenant-scoped
+	// event carries — also for tenant_unknown, where it is the tenant the hub signed. Both are empty otherwise.
+	PolicyEvent       *contract.DataCommandRejected
+	PolicyEventTenant string
 }
 
 // Accepted is a command the pipeline accepted: recorded, budget consumed, audited as received.
