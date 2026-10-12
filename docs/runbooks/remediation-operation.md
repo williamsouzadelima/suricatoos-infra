@@ -145,13 +145,16 @@ job no próximo poll, verifica a assinatura/janela e aplica **dentro da janela**
   (`closed_at`), verificação (`verified_at`), expiração (`expired_at`: a hora em que o primeiro poll depois do
   prazo varreu o job, não o `expires_at`), resultado do agente e último relatório recusado: verificar ou
   fechar um job antigo, ou um relatório que chega tarde, reinicia a contagem — **levando junto o `result` e
-  os `late_reports`** (`before`/`rollback_token`), então anote o que precisar antes. **Teto absoluto:** um job
-  terminal nunca fica na fila além de **90 dias depois da criação** (`created_at`), aconteça o que acontecer
-  depois. Cada relatório recusado diferente reinicia a contagem de 7 dias e quem os manda é o agente; sem o
-  teto, um que os trocasse a cada poucos dias manteria os próprios jobs (e o `rollback_token` deles) na fila
-  para sempre. O teto vale para o job **terminal**: um `APPLIED` parado há mais de 90 dias continua na fila,
-  mas, se for verificado ou fechado depois disso, já nasce acima do teto e sai no próximo enfileiramento —
-  anote o `result` **antes**. Um job `ACKED`/`APPLIED` parado **não** é limpo sozinho — feche-o você, com cuidado:
+  os `late_reports`** (`before`/`rollback_token`), então anote o que precisar antes. **O que o agente manda
+  tem limite; o que o operador faz, não.** O agente pode mandar relatórios recusados à vontade, e cada um
+  diferente reiniciaria a contagem de 7 dias; por isso eles só a reiniciam até **90 dias depois da criação**
+  (`created_at`). Depois disso o relatório ainda é recusado, guardado e logado, mas não acrescenta retenção: um
+  job em que só o agente mexe sai no máximo **97 dias** (90 + 7) depois de criado — sem esse limite, um agente
+  que trocasse o relatório a cada poucos dias manteria os próprios jobs (e o `rollback_token` deles) na fila
+  para sempre. Rejeitar, fechar e verificar, ao contrário, **sempre** dão os 7 dias inteiros a partir do
+  momento em que acontecem, por mais velho que o job seja: um `APPLIED` verificado ou fechado no dia 120 fica
+  até o dia 127, `result` e `rollback_token` incluídos. Um job `ACKED`/`APPLIED` parado **não** é limpo
+  sozinho — feche-o você, com cuidado:
   - `APPLIED`: **prefira `verified`** (preserva o aprovador e o resultado). Use `close` só se o job não vai
     ser verificado (ex.: o fix foi revertido à mão, ou o host saiu de operação).
   - `ACKED` (o agente recebeu e sumiu): hoje o agente dá o `ack` **depois** de aplicar, então um `ACKED`
@@ -257,8 +260,8 @@ job no próximo poll, verifica a assinatura/janela e aplica **dentro da janela**
   desinstalação de KB é documentada, não automática.
 - `before`/`rollback_token` só existem na nuvem no `result` do job ou, se o relatório foi recusado com `409`
   (§3), em `late_reports` (a listagem e a resposta do `close` mostram os dois); o journal do agente guarda só
-  status e horário. Saem da fila com o job terminal, 7 dias depois do último evento dele e, de qualquer
-  jeito, 90 dias depois da criação (§3): anote o que precisar antes.
+  status e horário. Saem da fila com o job terminal, 7 dias depois do último evento dele (§3; os relatórios
+  recusados do agente só contam até 90 dias depois da criação): anote o que precisar antes.
 - Config sob **GPO/Intune/WSUS** (`HKLM\SOFTWARE\Policies`) **não** é corrigida localmente (o domínio
   reverteria) — o achado recomenda mudar a **política**. Isso evita o fix "que não cola".
 

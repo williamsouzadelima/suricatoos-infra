@@ -1928,8 +1928,8 @@ func TestReportOfAForeignOrNeverDeliveredJobIsNotFound(t *testing.T) {
 // old one, an expiry the sweep only finds out about when the agent next polls, a result
 // that comes in late or a late refused report must restart the clock, or the data they
 // just preserved (the approver, the result, the rollback_token) is reaped by the very
-// next Enqueue. (The clock has an absolute ceiling: see
-// TestFinalJobsAreNeverKeptBeyondTheAbsoluteCeiling.)
+// next Enqueue. (Only what the agent controls — its late reports — is capped, to 90 days
+// after the job's creation: see TestLateReportsRestartTheRetentionOnlyForNinetyDays.)
 func TestFinalJobsAreRetainedFromTheirLastEvent(t *testing.T) {
 	day := 24 * time.Hour
 	t0 := clockBase
@@ -2004,6 +2004,42 @@ func TestFinalJobsAreRetainedFromTheirLastEvent(t *testing.T) {
 				t.Fatalf("the first poll after the deadline left the job %s, want EXPIRED", got)
 			}
 			return j, t0.Add(8 * day)
+		}},
+		// What an operator does is never capped by the age of the job: a job that sat APPLIED
+		// (or pending) for 120 days gets the whole retention from the day it is verified,
+		// closed or rejected, result and rollback_token included (the loop below checks the
+		// job is kept whole).
+		{"verified on day 120 (applied on day 0)", func(t *testing.T, r *Registry) (*RemediationJob, time.Time) {
+			r.now = at(t0)
+			j := reportedJob(t, r, appliedRun)
+			r.now = at(t0.Add(120 * day))
+			if _, err := r.MarkVerified(j.JobID); err != nil {
+				t.Fatal(err)
+			}
+			return j, t0.Add(120 * day)
+		}},
+		{"closed on day 120 (applied on day 0)", func(t *testing.T, r *Registry) (*RemediationJob, time.Time) {
+			r.now = at(t0)
+			j := reportedJob(t, r, appliedRun)
+			r.now = at(t0.Add(120 * day))
+			if _, err := r.Close(j.JobID, "bob", "revisto"); err != nil {
+				t.Fatal(err)
+			}
+			return j, t0.Add(120 * day)
+		}},
+		{"rejected on day 120 (pending since day 0, 200-day TTL)", func(t *testing.T, r *Registry) (*RemediationJob, time.Time) {
+			r.now = at(t0)
+			j, err := r.Enqueue(EnqueueRequest{
+				Tenant: "acme", AgentID: "win1", Type: TypePackagePatch, Payload: json.RawMessage(`{}`), TTL: 200 * day,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			r.now = at(t0.Add(120 * day))
+			if err := r.Reject(j.JobID, "bob"); err != nil {
+				t.Fatal(err)
+			}
+			return j, t0.Add(120 * day)
 		}},
 		{"control: nothing happened since day 0", func(t *testing.T, r *Registry) (*RemediationJob, time.Time) {
 			r.now = at(t0)
@@ -2115,65 +2151,133 @@ func TestVerifiedAndExpiredAreStampedAndPersisted(t *testing.T) {
 
 // A final job's retention clock restarts with every event, and an authenticated agent
 // produces events at will: each DISTINCT report it sends for a job it was handed is
-// refused, kept, and counts as the latest event. Left at that, an agent rotating its
+// refused, kept, and would count as the latest event. Left at that, an agent rotating its
 // reports every few days would keep its own jobs — result, rollback_token and all — in
-// the queue for ever. So a final job is also capped to maxFinalAge (90 days) counted from
-// its CREATION, whatever happened since; a job that is not final is not touched by it
-// (nothing but an operator or the agent ends it).
-func TestFinalJobsAreNeverKeptBeyondTheAbsoluteCeiling(t *testing.T) {
+// the queue for ever. So late reports restart the clock only until maxLateReportAge (90
+// days) after the job's CREATION: past that they are still refused, kept and audited, but
+// add no retention, and a job that nothing but the agent touches goes at CreatedAt + 90
+// days + the retention at the latest. What the agent does NOT control is never capped:
+// an operator's reject, close or verification restart the clock whenever they happen,
+// however old the job (TestFinalJobsAreRetainedFromTheirLastEvent has those rows).
+func TestLateReportsRestartTheRetentionOnlyForNinetyDays(t *testing.T) {
 	day := 24 * time.Hour
 	t0 := clockBase
 
-	t.Run("rotating distinct late reports does not keep a final job for ever", func(t *testing.T) {
-		r, _ := testReg(t)
-		r.now = at(t0)
-		j := closedFrom(t, r, StateDelivered) // created and closed on day 0
-		present := func() bool { _, ok := r.Get(j.JobID, "win1", "acme"); return ok }
-
-		// A new report every 5 days, each followed by the Enqueue of somebody else's job
-		// (what runs the reaper): the latest event is never more than 5 days old, so the
-		// retention alone would never let go of the job.
-		for d := 5; d <= 90; d += 5 {
-			r.now = at(t0.Add(time.Duration(d) * day))
-			err := r.Report(j.JobID, "win1", "acme", &Result{Status: "applied", Detail: fmt.Sprintf("dia %d", d), RollbackToken: fmt.Sprintf("rb-%d", d)})
-			if !errors.Is(err, ErrInvalidState) {
-				t.Fatalf("day %d: report: err = %v, want ErrInvalidState (refused and kept)", d, err)
+	// However the job became final, an agent that keeps sending distinct reports every 5
+	// days — from the first day it can until day 95 — gets it kept until day 97 (= 90
+	// days after its creation + the 7-day retention) and not a minute longer.
+	for _, tc := range []struct {
+		name  string
+		build func(t *testing.T, r *Registry) (j *RemediationJob, firstReport int) // firstReport: day of the first late report
+	}{
+		{"closed on day 0", func(t *testing.T, r *Registry) (*RemediationJob, int) {
+			r.now = at(t0)
+			return closedFrom(t, r, StateDelivered), 5
+		}},
+		{"verified on day 10", func(t *testing.T, r *Registry) (*RemediationJob, int) {
+			r.now = at(t0)
+			j := reportedJob(t, r, appliedRun)
+			r.now = at(t0.Add(10 * day))
+			if _, err := r.MarkVerified(j.JobID); err != nil {
+				t.Fatal(err)
 			}
+			return j, 15
+		}},
+		{"expired after delivery on day 0", func(t *testing.T, r *Registry) (*RemediationJob, int) {
+			r.now = at(t0)
+			j := jobIn(t, r, StateDelivered)
+			r.now = at(t0.Add(2 * time.Hour))
+			r.Poll("win1", "acme") // the sweep expires it: delivered, never reported
+			if got := stateOf(t, r, j.JobID); got != StateExpired {
+				t.Fatalf("state = %s, want EXPIRED", got)
+			}
+			return j, 5
+		}},
+	} {
+		t.Run("rotating distinct late reports cannot keep a job past 90 days plus the retention/"+tc.name, func(t *testing.T) {
+			r, _ := testReg(t)
+			j, first := tc.build(t, r)
+			present := func() bool { _, ok := r.Get(j.JobID, "win1", "acme"); return ok }
+
+			// A new report every 5 days, each followed by the Enqueue of somebody else's job
+			// (what runs the reaper): the latest report is never more than 5 days old, so the
+			// retention alone would never let go of the job.
+			for d := first; d <= 95; d += 5 {
+				r.now = at(t0.Add(time.Duration(d) * day))
+				err := r.Report(j.JobID, "win1", "acme", &Result{Status: "applied", Detail: fmt.Sprintf("dia %d", d), RollbackToken: fmt.Sprintf("rb-%d", d)})
+				if !errors.Is(err, ErrInvalidState) {
+					t.Fatalf("day %d: report: err = %v, want ErrInvalidState (refused and kept)", d, err)
+				}
+				enq(t, r, "win2", "acme")
+				if !present() {
+					t.Fatalf("day %d: the job was reaped before CreatedAt + 90 days + the retention", d)
+				}
+			}
+			// Day 97 is CreatedAt + 90 days + 7 days: not BEYOND it yet, though the last report
+			// is only 2 days old...
+			r.now = at(t0.Add(97 * day))
 			enq(t, r, "win2", "acme")
 			if !present() {
-				t.Fatalf("day %d: the job was reaped before the ceiling", d)
+				t.Fatal("the job was reaped on day 97, exactly CreatedAt + 90 days + the retention")
 			}
+			// ...and a minute later it goes: the reports after day 90 added nothing.
+			r.now = at(t0.Add(97*day + time.Minute))
+			enq(t, r, "win2", "acme")
+			if present() {
+				t.Error("the job outlived CreatedAt + 90 days + the retention, kept alive by the reports it kept sending")
+			}
+			// Sending one more does not bring it back: the agent now hears 404, like for any
+			// job the queue no longer has.
+			r.now = at(t0.Add(100 * day))
+			if err := r.Report(j.JobID, "win1", "acme", &Result{Status: "applied", Detail: "dia 100", RollbackToken: "rb-100"}); !errors.Is(err, ErrNotFound) {
+				t.Errorf("report on the reaped job: err = %v, want ErrNotFound", err)
+			}
+		})
+	}
+
+	// The agent's late report cannot stretch the life of a job an operator closed after the
+	// 90 days either: the closure gave it a full retention from day 120, and the report of
+	// day 125 — kept and audited as always — adds nothing to it.
+	t.Run("a late report on a job past 90 days adds no retention", func(t *testing.T) {
+		r, _ := testReg(t)
+		r.now = at(t0)
+		j := reportedJob(t, r, appliedRun) // APPLIED on day 0
+		r.now = at(t0.Add(120 * day))
+		if _, err := r.Close(j.JobID, "bob", "revisto"); err != nil {
+			t.Fatal(err)
 		}
-		// Day 90 itself is not BEYOND the ceiling: the job was still there above, with a
-		// report from that very instant. A minute later it goes, report or no report.
-		r.now = at(t0.Add(90*day + time.Minute))
+		r.now = at(t0.Add(125 * day))
+		if err := r.Report(j.JobID, "win1", "acme", &Result{Status: "failed", After: "WIPED", RollbackToken: "rb-125"}); !errors.Is(err, ErrInvalidState) {
+			t.Fatalf("late report on day 125: err = %v, want ErrInvalidState (refused and kept)", err)
+		}
+		r.now = at(t0.Add(127 * day))
 		enq(t, r, "win2", "acme")
-		if present() {
-			t.Error("the job outlived CreatedAt + 90 days, kept alive by the reports it kept sending")
+		if _, ok := r.Get(j.JobID, "win1", "acme"); !ok {
+			t.Fatal("the job was reaped on day 127, exactly a retention after its closure")
 		}
-		// Sending one more does not bring it back: the agent now hears 404, like for any
-		// job the queue no longer has.
-		r.now = at(t0.Add(95 * day))
-		if err := r.Report(j.JobID, "win1", "acme", &Result{Status: "applied", Detail: "dia 95", RollbackToken: "rb-95"}); !errors.Is(err, ErrNotFound) {
-			t.Errorf("report on the reaped job: err = %v, want ErrNotFound", err)
+		r.now = at(t0.Add(127*day + time.Minute))
+		enq(t, r, "win2", "acme")
+		if _, ok := r.Get(j.JobID, "win1", "acme"); ok {
+			t.Error("the report of day 125 stretched the life of a job closed on day 120")
 		}
 	})
 
-	t.Run("an explicit retention longer than the ceiling does not outlive it", func(t *testing.T) {
+	// An explicit retention (Reap) is the retention: the capped report counts as day 90.
+	t.Run("an explicit retention counts from the capped report", func(t *testing.T) {
 		r, _ := testReg(t)
 		r.now = at(t0)
-		j := jobIn(t, r, StateFailed)
-		r.now = at(t0.Add(89 * day))
-		if _, err := r.Close(j.JobID, "bob", "revisto"); err != nil { // an operator event, 1 day before the ceiling
-			t.Fatal(err)
+		j := closedFrom(t, r, StateDelivered) // closed on day 0
+		r.now = at(t0.Add(100 * day))
+		if err := r.Report(j.JobID, "win1", "acme", &Result{Status: "applied", RollbackToken: "rb-100"}); !errors.Is(err, ErrInvalidState) {
+			t.Fatalf("late report on day 100: err = %v, want ErrInvalidState (refused and kept)", err)
 		}
-		r.now = at(t0.Add(90 * day))
-		if n := r.Reap(365 * day); n != 0 {
-			t.Errorf("Reap on day 90 removed %d: the ceiling is CreatedAt + 90 days, not before", n)
+		r.now = at(t0.Add(120 * day)) // 30 days after day 90
+		if n := r.Reap(30 * day); n != 0 {
+			t.Errorf("Reap(30 days) on day 120 removed %d: the report of day 100 counts as day 90, which is not beyond 30 days", n)
 		}
-		r.now = at(t0.Add(91 * day))
-		if n := r.Reap(365 * day); n != 1 {
-			t.Errorf("Reap on day 91 removed %d, want the job: no retention outlives the ceiling", n)
+		r.now = at(t0.Add(120*day + time.Minute))
+		if n := r.Reap(30 * day); n != 1 {
+			t.Errorf("Reap(30 days) a minute later removed %d, want the job: the report of day 100 counts as day 90", n)
 		}
 	})
 

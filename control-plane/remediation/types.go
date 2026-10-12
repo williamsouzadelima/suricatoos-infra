@@ -189,9 +189,11 @@ type EnqueueRequest struct {
 // CLOSED: ClosedAt, FAILED: the result's ReportedAt); jobs persisted before VerifiedAt
 // and ExpiredAt existed simply do not have those two, and fall back to the rest.
 //
-// The clock restarts, but not for ever: reapLocked also caps a final job's life to
-// maxFinalAge from its creation, because some of these events (a late report) are the
-// agent's to produce.
+// The clock restarts whenever something happens, with one limit, and only on what the
+// AGENT controls: its late reports (the first result is a single report) restart it only
+// until maxLateReportAge after the job's creation — it can send them at will, so past
+// that they would keep the job for ever. What an operator does (reject, close, verify)
+// or the queue's own expiry restart it whenever they happen, however old the job is.
 func (j *RemediationJob) lastEventAt() time.Time {
 	last := j.CreatedAt
 	later := func(t time.Time) {
@@ -206,11 +208,26 @@ func (j *RemediationJob) lastEventAt() time.Time {
 	if j.Result != nil {
 		later(j.Result.ReportedAt)
 	}
+	lateLimit := j.CreatedAt.Add(maxLateReportAge)
 	for _, lr := range j.LateReports {
-		later(lr.ReportedAt)
+		reported := lr.ReportedAt
+		if reported.After(lateLimit) {
+			reported = lateLimit
+		}
+		later(reported)
 	}
 	return last
 }
+
+// maxLateReportAge is how long after a job's creation a refused (late) report can still
+// restart its retention clock (lastEventAt). The agent sends late reports at will — every
+// distinct report for a job it was handed is refused, kept and would count as the latest
+// event — so one that rotated them every few days would keep the job (result,
+// rollback_token) in the queue for ever. Past this age a late report is still refused,
+// kept and audited, but adds no retention: a job nothing but the agent touches goes at
+// CreatedAt + maxLateReportAge + the retention at the latest. It limits the agent only:
+// the operator's own actions are never capped by the age of the job.
+const maxLateReportAge = 90 * 24 * time.Hour
 
 // lateReportIndex is the index in LateReports of the kept report with the same content
 // as res (everything the agent supplies; the server's timestamp does not count), or -1.
