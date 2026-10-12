@@ -55,8 +55,11 @@ concurrency:
   group: report-formats-ci-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  GVMD_IMAGE: registry.community.greenbone.net/community/gvmd:stable
+# A imagem do gvmd (compile, controle negativo e measure) e' FIXADA por digest em
+# report-formats/ci/lib.sh (GVMD_IMAGE), e so' la': a tag `stable' muda sozinha
+# (12/10/2026: dois digests em dois runs do mesmo dia). Trocar de imagem e' um PR
+# proprio; o comentario de lib.sh diz como resolver o digest novo. O digest usado
+# aparece no log de cada job ("digest: ...") e no resumo do measure.
 
 jobs:
   feed-sync:
@@ -95,7 +98,7 @@ jobs:
         run: python3 -m unittest discover -s report-formats/tests -p 'test_*.py' -v
 
   compile:
-    name: compila no gvmd:stable (${{ matrix.lang }}, ${{ matrix.variant }})
+    name: compila no gvmd fixado (${{ matrix.lang }}, ${{ matrix.variant }})
     # pdf-texto le o `pdftotext -layout` do poppler 24.02 desta imagem (outro poppler/xpdf quebra a regex do sumario e o portao reprova); ubuntu-latest esta migrando, entao trocar e' deliberado.
     runs-on: ubuntu-24.04
     timeout-minutes: 40

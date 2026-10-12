@@ -14,6 +14,13 @@ gvmd:stable (26.31.1), openvas-scanner:stable, ospd-openvas:stable, pg-gvm:stabl
 pg-gvm-migrator:stable, redis-server, nginx:latest, gvm-config:latest, gvm-tools,
 gvm-libs:stable (base de build do gsad)
 
+## CI do relatorio (report-formats) — gvmd fixado por digest
+O CI e a medicao do Suricatoos Premium PDF rodam na imagem do gvmd FIXADA por digest em
+`report-formats/ci/lib.sh` (a tag `stable` muda sozinha). Origem `gvmd:stable`, resolvida em
+2026-10-12 (gvmd v26.41.0):
+`registry.community.greenbone.net/community/gvmd@sha256:94f00ed57c93163756f5c84bd79db5e3de96706be8c051ae201e5c35ffddcfd3`.
+Como atualizar: o comentario de `report-formats/ci/lib.sh`.
+
 ## Feed (Greenbone, NAO forkado) — FEED_RELEASE=24.10
 vulnerability-tests, notus-data, scap-data, cert-bund-data, dfn-cert-data,
 data-objects, report-formats, gpg-data

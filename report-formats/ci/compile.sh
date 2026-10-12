@@ -130,7 +130,7 @@ done
 
 if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
   {
-    echo "### Suricatoos Premium PDF no gvmd:stable — $lang / $variant"
+    echo "### Suricatoos Premium PDF no gvmd fixado por digest — $lang / $variant"
     echo
     echo "| idioma | edição | fixture | veredito | páginas | erros TeX | Font shape undefined | Type 3 | links / alvos (+corte) | Overfull \\hbox (base) | veracidade | navegação |"
     echo "|---|---|---|---|---|---|---|---|---|---|---|---|"

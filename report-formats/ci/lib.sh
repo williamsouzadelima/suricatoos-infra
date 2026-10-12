@@ -3,8 +3,36 @@
 # executado). Bash no runner; o que roda DENTRO da imagem do gvmd e' sh POSIX.
 
 # A imagem de PRODUCAO do gvmd: tem xsltproc + texlive, e e' onde o `generate`
-# roda de verdade. Sobrescrevivel pelo ambiente (o workflow a define).
-: "${GVMD_IMAGE:=registry.community.greenbone.net/community/gvmd:stable}"
+# roda de verdade. FIXADA por DIGEST, aqui e so' aqui (o CI de relatorio e a
+# medicao a herdam; o workflow nao a repete): a tag `stable' muda sozinha --
+# em 12/10/2026 andou de sha256:fec60184... para sha256:94f00ed5... entre dois
+# runs do CI no mesmo dia --, e uma imagem que muda sob o CI faz um portao
+# reprovar (ou passar) sem que nada do repo tenha mudado.
+#
+#   origem:    registry.community.greenbone.net/community/gvmd:stable
+#   resolvida: 2026-10-12 -> gvmd v26.41.0 (imagem criada em 2026-10-12T07:11Z,
+#              revisao 02a05165 do greenbone/gvmd); indice OCI linux/amd64 +
+#              linux/arm64 (os runners sao amd64). E' a imagem em que o CI da R5
+#              passou (runs de 931635e e ba4b5cf, em 2026-10-12).
+#
+# Para ATUALIZAR (imagem nova e' mudanca deliberada, num PR proprio):
+#   1. resolva o digest que a `stable' tem agora. Com docker:
+#        docker pull registry.community.greenbone.net/community/gvmd:stable
+#        docker image inspect --format '{{index .RepoDigests 0}}' \
+#          registry.community.greenbone.net/community/gvmd:stable
+#      Sem docker (token anonimo + HEAD do manifesto; o digest vem em
+#      Docker-Content-Digest):
+#        T=$(curl -s 'https://registry.community.greenbone.net/service/token?service=harbor-registry&scope=repository:community/gvmd:pull' | python3 -c 'import sys,json; print(json.load(sys.stdin)["token"])')
+#        curl -sI -H "Authorization: Bearer $T" -H 'Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json' \
+#          https://registry.community.greenbone.net/v2/community/gvmd/manifests/stable | grep -i docker-content-digest
+#   2. troque o digest abaixo e a data/versao/revisao deste comentario
+#      (a versao: label org.opencontainers.image.version da imagem);
+#   3. abra o PR: o CI roda todos os portoes na imagem nova. Reprovou? e' a imagem
+#      nova que mudou algo (xsltproc, texlive, poppler?): conserte o relatorio ou
+#      adie a troca -- nao fixe de novo sem entender.
+# Para experimentar a `stable' de hoje sem mexer na fixacao, defina GVMD_IMAGE no
+# ambiente (ele vence o valor padrao daqui).
+: "${GVMD_IMAGE:=registry.community.greenbone.net/community/gvmd@sha256:94f00ed57c93163756f5c84bd79db5e3de96706be8c051ae201e5c35ffddcfd3}"
 # O gvmd chama o `generate` como o usuario gvmd, uid 1001, NAO root.
 GVMD_UID=1001
 
