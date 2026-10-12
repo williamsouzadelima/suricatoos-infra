@@ -51,13 +51,18 @@ func TestCIDRContainingSelfIPPassesAndWarnsInLogMode(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// 192.0.0.0/16 também contém o nó, mas sai por estar fora do escopo: sem aviso.
-	kept, dropped := s.Filter([]string{"192.0.2.0/24", "192.0.2.128/25", "192.0.2.10", "192.0.0.0/16"})
+	kept, dropped := s.Filter([]string{"192.0.2.0/24", "192.0.2.128/25", "192.0.2.10"})
 	if !reflect.DeepEqual(kept, []string{"192.0.2.0/24", "192.0.2.128/25"}) {
 		t.Fatalf("kept errado: %v", kept)
 	}
-	if !reflect.DeepEqual(dropped, []string{"192.0.2.10", "192.0.0.0/16"}) {
+	if !reflect.DeepEqual(dropped, []string{"192.0.2.10"}) {
 		t.Fatalf("dropped errado: %v (o IP do nó isolado é sempre negado)", dropped)
+	}
+	// Contra um escopo /25, o /24 também contém o nó mas sai por estar fora do
+	// escopo: recusado e sem aviso.
+	narrow, _ := New("192.0.2.0/25", nodeIPs, LogSelfDenyCIDR(w.record))
+	if got, err := narrow.CheckHost("192.0.2.0/24"); err == nil {
+		t.Fatalf("CIDR fora do escopo deveria ser recusado, passou como %q", got)
 	}
 	if len(w) != 1 || !strings.HasPrefix(w[0], "192.0.2.0/24 | ") {
 		t.Fatalf("esperado UM aviso para 192.0.2.0/24, veio %q", w)
