@@ -26,6 +26,9 @@ It also writes ``manifest.json``: the nine ``{format, lang, variant, uuid, name}
 combinations, versioned in the repo, which the fleet connector reads to announce
 ``capabilities.report_formats`` and to map a ``report.export`` to the right
 report format id. The CI (ci/check-manifest.py) checks it against the objects.
+And it writes ``suricatoos-premium-pdf/report_format.xml``, the reference
+descriptor of the English technical object (the build never reads it; writing
+it here keeps its VERSION and file list current).
 
 Usage:  python3 build-feed-xml.py
 """
@@ -324,6 +327,31 @@ def manifest_bytes() -> bytes:
     return (json.dumps(manifest(), ensure_ascii=False, indent=2) + "\n").encode("utf-8")
 
 
+# The bundle's own report_format.xml: the reference descriptor of the English
+# technical object. The build never READS it (each object embeds its own
+# descriptor, synthesised above); it WRITES it, from the same function the EN
+# technical object uses, so its summary, description, VERSION and file list
+# can no longer go stale by hand. ci/check-manifest.py checks it.
+REFERENCE = os.path.join(BUNDLE, "report_format.xml")
+REFERENCE_NOTE = (
+    "<!-- Reference descriptor of the English technical object, WRITTEN by\n"
+    "     ../build-feed-xml.py: do not edit it by hand. It is the descriptor the\n"
+    "     EN technical feed object embeds, so its summary, description, VERSION\n"
+    "     and file list follow the build. The nine objects installed (three\n"
+    "     editions x three languages) are synthesised by the build, each with its\n"
+    "     own copy; the build never reads this file. -->\n")
+
+
+def reference_descriptor() -> bytes:
+    fmt_id, name = next((f, n) for lang, variant, f, n in FORMATS
+                        if (lang, variant) == ("en", "technical"))
+    xml = report_format_xml_for(fmt_id, name, "en", "technical")
+    head = b"<!-- Copyright (C) 2026 Suricatoos -->\n"
+    if not xml.startswith(head):
+        raise SystemExit("report_format_xml_for: unexpected header, cannot write the reference descriptor")
+    return head + REFERENCE_NOTE.encode("utf-8") + xml[len(head):]
+
+
 def main():
     print("bundle manifest (%s):" % VERSION)
     for n in object_file_names(LANGS[0]):
@@ -341,6 +369,9 @@ def main():
     with open(MANIFEST, "wb") as fh:
         fh.write(manifest_bytes())
     print("wrote %s  (%d combinations)" % (os.path.basename(MANIFEST), len(FORMATS)))
+    with open(REFERENCE, "wb") as fh:
+        fh.write(reference_descriptor())
+    print("wrote suricatoos-premium-pdf/report_format.xml  (reference descriptor, EN technical)")
 
 
 if __name__ == "__main__":

@@ -38,7 +38,8 @@ jobs:
           # Falha se o XML ou o manifesto versionado divergir do bundle (forca
           # regeneracao no commit), ou se o build escrever objeto que o commit
           # nao tem (o git diff nao ve arquivo novo).
-          git diff --exit-code report-formats/pdf-suricatoos-*.xml report-formats/manifest.json
+          git diff --exit-code report-formats/pdf-suricatoos-*.xml report-formats/manifest.json \
+            report-formats/suricatoos-premium-pdf/report_format.xml
           test -z "$(git status --porcelain --untracked-files=all -- report-formats)"
           python3 report-formats/ci/check-manifest.py
 

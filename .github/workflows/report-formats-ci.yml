@@ -66,7 +66,8 @@ jobs:
           python3 report-formats/build-feed-xml.py
           # Falha se o XML ou o manifesto versionado divergir do bundle:
           # regenere e commite.
-          git diff --exit-code report-formats/pdf-suricatoos-*.xml report-formats/manifest.json
+          git diff --exit-code report-formats/pdf-suricatoos-*.xml report-formats/manifest.json \
+            report-formats/suricatoos-premium-pdf/report_format.xml
           # O git diff nao ve arquivo NOVO: um objeto que o build escreve e o
           # commit esqueceu passaria. Nada sob report-formats/ pode ficar fora.
           test -z "$(git status --porcelain --untracked-files=all -- report-formats)"

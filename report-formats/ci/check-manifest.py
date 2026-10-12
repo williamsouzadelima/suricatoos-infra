@@ -11,6 +11,10 @@ Confere:
   - as combinacoes sao exatamente idioma x edicao (en, pt_BR, es x technical,
     client, executive), uma de cada, com format `suricatoos-pdf', UUIDs
     canonicos (minusculos, v4) e distintos, nomes distintos que dizem o idioma;
+  - o nome de cada combinacao e' exatamente "Suricatoos PDF — <edicao>
+    (<IDIOMA>)", com o rotulo da EDICAO no idioma dela (EDITION_LABEL:
+    Technical/Técnico/Técnico, Client/Cliente/Cliente,
+    Executive/Executivo/Ejecutivo): e' pelo nome que se escolhe no GSA;
   - cada combinacao tem o SEU UUID, o fixado aqui: os tres tecnicos sao os de
     sempre (o objeto instalado e' atualizado no lugar; o mapeamento do ADR-0011
     os cita) e os seis das edicoes, os gerados uma vez na fatia R5;
@@ -19,7 +23,10 @@ Confere:
     EXATAMENTE aquele idioma e aquela edicao na linha do xsltproc (os dois
     pares uma vez cada), o report_format.xml embutido tem o mesmo id e nome, e
     o catalogo de NVT embutido e' o do idioma;
-  - nao ha pdf-suricatoos-*.xml que o manifesto nao descreva.
+  - nao ha pdf-suricatoos-*.xml que o manifesto nao descreva;
+  - o descritor de referencia do bundle (suricatoos-premium-pdf/
+    report_format.xml) e' o que o build escreve: o do objeto tecnico EN, com a
+    VERSION e a lista de arquivos de agora.
 
 Uso: python3 report-formats/ci/check-manifest.py [--dir report-formats/]
 Sai 0 se tudo bate, 1 se algo nao bate, 2 em erro de leitura.
@@ -40,6 +47,22 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 LANGS = ("en", "pt_BR", "es")
 VARIANTS = ("technical", "client", "executive")
 LANG_LABEL = {"en": "(EN)", "pt_BR": "(PT-BR)", "es": "(ES)"}
+# O rotulo da EDICAO no nome do menu do GSA, no idioma do objeto: e' pelo nome
+# que o usuario escolhe a edicao no GSA (o conector da frota usa o UUID). Dois
+# nomes trocados entre edicoes continuariam distintos e com o idioma certo, e
+# so' esta tabela os pega.
+EDITION_LABEL = {
+    ("en", "technical"): "Technical",
+    ("pt_BR", "technical"): "Técnico",
+    ("es", "technical"): "Técnico",
+    ("en", "client"): "Client",
+    ("pt_BR", "client"): "Cliente",
+    ("es", "client"): "Cliente",
+    ("en", "executive"): "Executive",
+    ("pt_BR", "executive"): "Executivo",
+    ("es", "executive"): "Ejecutivo",
+}
+NAME_FORMAT = "Suricatoos PDF — %s %s"   # rotulo da edicao, rotulo do idioma
 # Os UUIDs dos nove objetos, FIXOS: os tres tecnicos sao os de antes das
 # edicoes (o EN e' o primeiro objeto instalado, e o ADR-0011 os cita), e os seis
 # das edicoes do cliente e executiva foram gerados uma vez (uuid4) na fatia R5.
@@ -105,6 +128,10 @@ def check(rf_dir):
                          % (where, uid, FIXED_UUIDS.get((lang, variant))))
         if not (name or "").endswith(" " + LANG_LABEL.get(lang, "?")):
             fails.append("%s: o nome %r nao diz o idioma %s" % (where, name, LANG_LABEL.get(lang)))
+        want_name = NAME_FORMAT % (EDITION_LABEL.get((lang, variant), "?"), LANG_LABEL.get(lang, "?"))
+        if name != want_name:
+            fails.append("%s: o nome %r, esperado %r (a edicao e o idioma no menu do GSA)"
+                         % (where, name, want_name))
         fpath = os.path.join(rf_dir, "pdf-suricatoos-%s.xml" % uid)
         if not os.path.exists(fpath):
             fails.append("%s: falta %s" % (where, os.path.basename(fpath)))
@@ -127,6 +154,11 @@ def check(rf_dir):
         cats = sorted(n for n in files if n.startswith("nvt-i18n-"))
         if cats != ["nvt-i18n-%s.xml" % lang]:
             fails.append("%s: catalogo(s) embutido(s) %s, esperado o do idioma" % (where, cats))
+    ref = os.path.join(rf_dir, "suricatoos-premium-pdf", "report_format.xml")
+    with open(ref, "rb") as fh:
+        if fh.read() != b.reference_descriptor():
+            fails.append("suricatoos-premium-pdf/report_format.xml nao e' o descritor de referencia que o "
+                         "build-feed-xml.py escreve (regere e commite)")
     described = {"pdf-suricatoos-%s.xml" % u for u in uuids}
     extra = sorted(os.path.basename(p) for p in glob.glob(os.path.join(rf_dir, "pdf-suricatoos-*.xml"))
                    if os.path.basename(p) not in described)
