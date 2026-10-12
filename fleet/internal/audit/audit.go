@@ -61,7 +61,8 @@
 // # No secret
 //
 // The input types (Ref, Command, Outcome) have no field for a payload, an output or a secret: the only secret of
-// the contract, the token in the output of enroll_token.create, cannot reach the audit.
+// the contract, the token in the output of enroll_token.create, cannot reach the audit. The one free text of a
+// result, its Detail, is dropped for that command (with a WARN).
 //
 // A Log is safe for concurrent use; each stream has its own lock.
 package audit
@@ -211,9 +212,18 @@ func (l *Log) Executed(t time.Time, r Ref) error {
 	return l.exec.build(t, func(at string) (*entry, error) { return newExecuted(at, r) })
 }
 
-// Result records, in the exec stream, how an accepted command ended, before the result is reported.
+// Result records, in the exec stream, how an accepted command ended, before the result is reported. For
+// enroll_token.create — whose output is the only secret of the contract — the Detail is dropped, whatever the
+// status, and a WARN (which does not repeat it) says so: free text there could carry the token.
 func (l *Log) Result(t time.Time, r Ref, o Outcome) error {
-	return l.exec.build(t, func(at string) (*entry, error) { return newResult(at, r, o) })
+	return l.exec.build(t, func(at string) (*entry, error) {
+		e, err := newResult(at, r, o)
+		if err == nil && r.Type == contract.TypeEnrollTokenCreate && o.Detail != "" {
+			l.exec.log.Warn("auditoria: detail descartado no result de enroll_token.create (a saída desse comando é o único segredo do contrato)",
+				"command_id", r.CommandID)
+		}
+		return e, err
+	})
 }
 
 // Rejected records, in the reject stream, a final rejection (verification lines 3–9) before its ack.

@@ -104,6 +104,47 @@ func TestOrdemRecebidoExecutadoResultado(t *testing.T) {
 	}
 }
 
+// O único segredo do contrato é a saída do enroll_token.create: o result desse comando sai SEM detail — texto livre
+// que poderia carregá-lo —, qualquer que seja o status, e um WARN (que não repete o texto) registra o descarte. O
+// result dos outros tipos mantém o detail.
+func TestResultDeEnrollTokenCreateSaiSemDetail(t *testing.T) {
+	dir := t.TempDir()
+	l, sink := openAt(t, dir, defaultConfig())
+	fake := "st_" + "exemplo." + "nao-e-segredo" // a forma do token, montada aqui: valor fictício
+	ref := Ref{CommandID: "3b9c1d2e-4f5a-4b6c-8d7e-9f0a1b2c3d4e", Type: contract.TypeEnrollTokenCreate, Tenant: "acme"}
+	outcomes := []Outcome{
+		{Status: contract.StatusSucceeded, ObjectIDs: []string{"tok01"}, Detail: "token " + fake + " criado"},
+		{Status: contract.StatusFailed, ErrorCode: contract.ErrorSecretLost, Detail: "reinício perdeu " + fake},
+	}
+	for _, o := range outcomes {
+		if err := l.Result(testBoot, ref, o); err != nil {
+			t.Fatal(err)
+		}
+	}
+	taskStart := validCommand().Ref
+	if err := l.Result(testBoot, taskStart, Outcome{Status: contract.StatusFailed, ErrorCode: contract.ErrorGVM, Detail: "gvmd respondeu 400"}); err != nil {
+		t.Fatal(err)
+	}
+	lines := execLines(t, dir)
+	for _, line := range lines[:2] {
+		if strings.Contains(line, `"detail"`) || strings.Contains(line, "nao-e-segredo") {
+			t.Fatalf("o result de enroll_token.create levou o detail: %s", line)
+		}
+	}
+	if !strings.Contains(lines[2], `"detail":"gvmd respondeu 400"`) {
+		t.Fatalf("o result de outro tipo perdeu o detail: %s", lines[2])
+	}
+	logs := sink.lines()
+	if len(logs) != 2 {
+		t.Fatalf("esperava um WARN por detail descartado, veio %v", logs)
+	}
+	for _, line := range logs {
+		if !strings.Contains(line, "level=WARN") || !strings.Contains(line, "enroll_token.create") || strings.Contains(line, "nao-e-segredo") {
+			t.Fatalf("log: %s", line)
+		}
+	}
+}
+
 // Linha que não se monta (entrada fora do contrato) não grava nada e não gasta seq.
 func TestEntradaInvalidaNaoGastaSeq(t *testing.T) {
 	dir := t.TempDir()

@@ -123,7 +123,7 @@ type Outcome struct {
 	ErrorCode contract.ErrorCode      // only with StatusFailed; "" = none
 	ObjectIDs []string                // the objects the command created or acted on (same rules as Command's)
 	Artifact  *contract.AuditArtifact // report.export only: sha256 and size of what left the node
-	Detail    string                  // short, connector-generated; never finding data
+	Detail    string                  // short, connector-generated; never finding data; dropped for enroll_token.create
 }
 
 var (
@@ -379,7 +379,10 @@ func newResult(at string, r Ref, o Outcome) (*entry, error) {
 		e.Artifact = &contract.AuditArtifact{SHA256: a.SHA256, Size: a.Size}
 	}
 	r.fill(e)
-	e.ObjectIDs, e.Detail = ids, cleanText(o.Detail, MaxDetailRunes)
+	e.ObjectIDs = ids
+	if r.Type != contract.TypeEnrollTokenCreate { // its output is the only secret of the contract: no free text
+		e.Detail = cleanText(o.Detail, MaxDetailRunes)
+	}
 	return e, nil
 }
 
