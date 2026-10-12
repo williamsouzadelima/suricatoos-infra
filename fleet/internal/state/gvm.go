@@ -80,6 +80,15 @@ func gvmOwners(list []tenant.Listing) map[string]string {
 	return owners
 }
 
+// ownerTenants is the set of the tenants an owners map names: the domain of the gvmd kinds' known check.
+func ownerTenants(owners map[string]string) map[string]bool {
+	names := make(map[string]bool, len(owners))
+	for _, name := range owners {
+		names[name] = true
+	}
+	return names
+}
+
 // gvmOwners returns, for this cycle, the owners map and the check of an item's tenant: one of the tenants the map
 // names, so an item fleet_ops attributed to anything else is only counted.
 func (c *Collector) gvmOwners(cyc *cycle) (map[string]string, func(string) bool, error) {
@@ -88,10 +97,7 @@ func (c *Collector) gvmOwners(cyc *cycle) (map[string]string, func(string) bool,
 		return nil, nil, err
 	}
 	owners := gvmOwners(list)
-	names := make(map[string]bool, len(owners))
-	for _, name := range owners {
-		names[name] = true
-	}
+	names := ownerTenants(owners)
 	return owners, func(t string) bool { return names[t] }, nil
 }
 

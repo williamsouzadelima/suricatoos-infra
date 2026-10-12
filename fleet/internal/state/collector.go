@@ -90,6 +90,10 @@ type Config struct {
 	// Logger receives one line when a kind's collection starts failing (or its error changes) and one when it
 	// recovers — never one per cycle. nil discards them.
 	Logger *slog.Logger
+	// Observe receives, at the end of every complete cycle, what the cycle found (Observation): the event transitions
+	// (package events) are derived from it. It runs in the cycle's goroutine, one cycle at a time and in their order,
+	// and must not call Collect. A cycle cut short by its context is not observed; the next one is. nil = nobody.
+	Observe func(Observation)
 }
 
 // Collector collects the state of a node — one snapshot per kind — and keeps the "send only when it changes"
@@ -196,11 +200,12 @@ func (c *Collector) listing(cyc *cycle) ([]tenant.Listing, error) {
 
 // Collect runs one cycle: every kind of the node, each from its own source. A source that fails costs only its
 // kind, which keeps its last snapshot and exposes the error (Errors). A context that ends stops the cycle between
-// two kinds.
+// two kinds. A complete cycle ends with Config.Observe.
 func (c *Collector) Collect(ctx context.Context) {
 	c.collecting.Lock()
 	defer c.collecting.Unlock()
 	cyc := &cycle{}
+	obs := Observation{Kinds: map[contract.StateKind]Observed{}}
 	for _, kind := range c.order() {
 		if ctx.Err() != nil {
 			return
@@ -211,14 +216,19 @@ func (c *Collector) Collect(ctx context.Context) {
 			c.note(kind, err)
 			continue
 		}
-		c.tracker.update(snapshotOf(kind, data, c.now()))
+		snap := snapshotOf(kind, data, c.now())
+		c.tracker.update(snap)
 		if warn != nil { // a new snapshot that still carries a failure (node without gvmd)
 			c.tracker.fail(kind, warn)
 		}
 		c.note(kind, warn)
+		obs.Kinds[kind] = Observed{Snapshot: snap, Tenants: attributed(kind, cyc.tenants), Partial: warn != nil}
 	}
 	if err := c.tracker.flush(); err != nil {
 		c.log.Warn("estado: não foi possível gravar o que o hub já tem", "erro", err.Error())
+	}
+	if c.cfg.Observe != nil && ctx.Err() == nil {
+		c.cfg.Observe(obs)
 	}
 }
 

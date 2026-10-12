@@ -1,7 +1,9 @@
 // Package state is the fleet node's state (ADR-0011 "Estado e eventos" → "Estado", slice F2.5a): one snapshot per
 // kind — data_<kind> of fleet-state.schema.json —, its content_sha256, and the bookkeeping of "send only when it
 // changes". The sending itself (PUT /fleet/v1/state/{kind}), the heartbeat and the hub's resync belong to the
-// connector (slice F2.6), which uses the API below; the event outbox and the transitions are slice F2.5b.
+// connector (slice F2.6), which uses the API below; the event outbox and the transitions are package events, which
+// reads every complete cycle through Config.Observe (an Observation: each new snapshot with the tenants its kind
+// attributed objects to) and checks what it sends with the schema's string rules exported here (ValidUUID...).
 //
 // # Kinds and sources
 //
