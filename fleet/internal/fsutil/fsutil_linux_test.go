@@ -38,3 +38,20 @@ func TestReadBoundedFIFONaoTravaOChamador(t *testing.T) {
 		}
 	}
 }
+
+// Fora do Windows o diretório é aberto e sincronizado de verdade, e a falha de abrir não é engolida.
+func TestSyncDirDeVerdadeNoLinux(t *testing.T) {
+	if err := syncDir(t.TempDir()); err != nil {
+		t.Fatalf("sincronizar um diretório comum não pode falhar: %v", err)
+	}
+	if err := syncDir(filepath.Join(t.TempDir(), "nao-existe")); err == nil {
+		t.Fatal("diretório que não abre tem de ser erro, não sucesso")
+	}
+	// o WriteAtomic devolve esse erro como ErrNotDurable quando o diretório some entre o rename e o sync
+	dir := t.TempDir()
+	swapSyncDirectory(t, func(string) error { return syncDir(filepath.Join(dir, "sumiu")) })
+	err := WriteAtomic(filepath.Join(dir, "estado.json"), []byte("x"))
+	if !errors.Is(err, ErrNotDurable) || !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("esperava ErrNotDurable com a causa da abertura, deu %v", err)
+	}
+}

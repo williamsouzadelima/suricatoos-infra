@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"syscall"
 )
 
 var (
@@ -68,11 +69,16 @@ func readRegular(f *os.File, name string, limit int64) ([]byte, error) {
 
 // WriteAtomic replaces the file at path with data so that a reader — or a crash at any point — sees either the
 // previous content or the new one, never a mix: the data goes to a temporary file in the same directory (mode
-// 0600), is fsynced, and is renamed over path. The directory is then synced too, so the rename itself survives
-// a power cut; that last step is best effort (a directory cannot be opened for sync on Windows, and some
-// filesystems refuse it): the file content is durable either way, and the only thing a failed directory sync
-// can cost is the very last replacement after a power cut. On any error the temporary file is removed and the
-// previous content of path is untouched.
+// 0600), is fsynced, and is renamed over path; then the directory is synced, so the rename itself survives a
+// power cut.
+//
+// An error before the rename leaves the previous content of path untouched and removes the temporary file. An
+// error from the directory sync — it could not be opened or synced — comes after the rename and wraps
+// ErrNotDurable: the new content IS in place and readers see it, but nothing says it survives a power cut, so the
+// caller must not treat the replacement as recorded (it answers unavailable and tries again). The directory sync
+// is skipped on Windows, where a directory cannot be opened for it, and a filesystem that only says it cannot sync
+// a directory (EINVAL, or errors.ErrUnsupported: ENOTSUP, EOPNOTSUPP, ENOSYS) is tolerated; any other error,
+// such as EIO, is returned.
 func WriteAtomic(path string, data []byte) (err error) {
 	dir := filepath.Dir(path)
 	f, err := os.CreateTemp(dir, filepath.Base(path)+".tmp-*") // created with mode 0600
@@ -80,8 +86,9 @@ func WriteAtomic(path string, data []byte) (err error) {
 		return err
 	}
 	tmp := f.Name()
+	renamed := false
 	defer func() {
-		if err != nil {
+		if err != nil && !renamed {
 			os.Remove(tmp)
 		}
 	}()
@@ -99,18 +106,36 @@ func WriteAtomic(path string, data []byte) (err error) {
 	if err = os.Rename(tmp, path); err != nil {
 		return err
 	}
-	syncDir(dir)
+	renamed = true
+	if serr := syncDirectory(dir); serr != nil {
+		return fmt.Errorf("%w: sincronizar o diretório %s: %w", ErrNotDurable, dir, serr)
+	}
 	return nil
 }
 
-func syncDir(dir string) {
+// ErrNotDurable: WriteAtomic renamed the new content into place, but could not confirm that the directory entry
+// is durable. The content is visible; only its survival of a power cut is unknown.
+var ErrNotDurable = errors.New("fsutil: substituição feita, mas não confirmada como durável")
+
+// syncDirectory syncs the directory dir after a rename. It is a variable only so that a test can make it fail.
+var syncDirectory = syncDir
+
+func syncDir(dir string) error {
 	if runtime.GOOS == "windows" {
-		return
+		return nil
 	}
 	d, err := os.Open(dir)
 	if err != nil {
-		return
+		return err
 	}
-	d.Sync()
-	d.Close()
+	defer d.Close()
+	if err := d.Sync(); err != nil && !dirSyncUnsupported(err) {
+		return err
+	}
+	return nil
+}
+
+// dirSyncUnsupported reports whether err only says that this filesystem cannot sync a directory.
+func dirSyncUnsupported(err error) bool {
+	return errors.Is(err, syscall.EINVAL) || errors.Is(err, errors.ErrUnsupported)
 }

@@ -3,11 +3,13 @@ package fsutil
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"syscall"
 	"testing"
 )
 
@@ -207,6 +209,89 @@ func TestWriteAtomicFalhaNaoDeixaTemporario(t *testing.T) {
 	}
 	if len(entries) != 1 || entries[0].Name() != "estado.json" {
 		t.Fatalf("o temporário deveria ter sido removido, sobrou %d entradas", len(entries))
+	}
+}
+
+// swapSyncDirectory troca, durante o teste, a função que sincroniza o diretório depois do rename.
+func swapSyncDirectory(t *testing.T, fn func(dir string) error) {
+	t.Helper()
+	old := syncDirectory
+	syncDirectory = fn
+	t.Cleanup(func() { syncDirectory = old })
+}
+
+// O rename já aconteceu quando o diretório é sincronizado: o conteúdo novo está no lugar, mas não se sabe se
+// sobrevive a uma queda de energia. O chamador (o orçamento, o store anti-replay) tem de saber disso.
+func TestWriteAtomicDevolveOErroDoSyncDoDiretorio(t *testing.T) {
+	boom := errors.New("EIO simulado")
+	var gotDir string
+	swapSyncDirectory(t, func(dir string) error { gotDir = dir; return boom })
+
+	dir := t.TempDir()
+	p := filepath.Join(dir, "estado.json")
+	if err := os.WriteFile(p, []byte("antigo"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	err := WriteAtomic(p, []byte("novo"))
+	if !errors.Is(err, ErrNotDurable) {
+		t.Fatalf("esperava ErrNotDurable, deu %v", err)
+	}
+	if !errors.Is(err, boom) {
+		t.Fatalf("o erro do sync tem de continuar acessível: %v", err)
+	}
+	if gotDir != dir {
+		t.Fatalf("sincronizou %q, esperava o diretório do arquivo %q", gotDir, dir)
+	}
+	// o rename já tinha acontecido: o conteúdo novo está lá, e nenhum temporário sobra
+	if got, _ := os.ReadFile(p); string(got) != "novo" {
+		t.Fatalf("conteúdo %q", got)
+	}
+	if entries, _ := os.ReadDir(dir); len(entries) != 1 {
+		t.Fatalf("sobrou arquivo ao lado de estado.json: %d entradas", len(entries))
+	}
+}
+
+func TestWriteAtomicSemErroNoSyncDoDiretorioDevolveNil(t *testing.T) {
+	called := 0
+	swapSyncDirectory(t, func(string) error { called++; return nil })
+	if err := WriteAtomic(filepath.Join(t.TempDir(), "estado.json"), []byte("x")); err != nil {
+		t.Fatal(err)
+	}
+	if called != 1 {
+		t.Fatalf("o diretório deveria ser sincronizado uma vez, foi %d", called)
+	}
+}
+
+// Só "este sistema de arquivos não sincroniza diretório" é tolerado; qualquer outro erro de E/S não é.
+func TestDirSyncToleraSoONaoSuportado(t *testing.T) {
+	tolerated := map[string]error{
+		"EINVAL":                       syscall.EINVAL,
+		"EINVAL embrulhado":            fmt.Errorf("sync: %w", syscall.EINVAL),
+		"ENOTSUP":                      syscall.ENOTSUP,
+		"EOPNOTSUPP":                   syscall.EOPNOTSUPP,
+		"ENOSYS":                       syscall.ENOSYS,
+		"errors.ErrUnsupported":        errors.ErrUnsupported,
+		"ErrUnsupported em *PathError": &fs.PathError{Op: "sync", Path: "/d", Err: errors.ErrUnsupported},
+	}
+	for name, err := range tolerated {
+		if !dirSyncUnsupported(err) {
+			t.Errorf("%s: deveria ser tolerado", name)
+		}
+	}
+	refused := map[string]error{
+		"nil":               nil,
+		"EIO":               syscall.EIO,
+		"EIO embrulhado":    fmt.Errorf("sync: %w", syscall.EIO),
+		"EACCES":            syscall.EACCES,
+		"ENOSPC":            syscall.ENOSPC,
+		"não existe":        fs.ErrNotExist,
+		"erro qualquer":     errors.New("falhou"),
+		"EIO em *PathError": &fs.PathError{Op: "sync", Path: "/d", Err: syscall.EIO},
+	}
+	for name, err := range refused {
+		if dirSyncUnsupported(err) {
+			t.Errorf("%s: não pode ser tolerado", name)
+		}
 	}
 }
 
