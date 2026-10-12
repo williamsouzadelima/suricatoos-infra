@@ -1,0 +1,53 @@
+name: fleet-ci
+
+# Módulo fleet/ (ADR-0011): o contrato Go (fleet/contract) que o conector do nó e o hub (commandcenter)
+# importam. Os testes leem os schemas, os exemplos de schema/examples/fleet e o exemplo trabalhado do ADR,
+# então mudanças neles também disparam este CI. O teste local é barrado pelo Smart App Control no host de
+# desenvolvimento Windows: este workflow é o portão do `go test -race` (a F2.6 acrescenta o publish).
+on:
+  push:
+    branches: [main, "feat/**"]
+    paths:
+      - "fleet/**"
+      - "schema/fleet-*.json"
+      - "schema/examples/fleet/**"
+      - "docs/adr/0011-gestao-remota-da-frota.md"
+      - "go.work"
+      - ".github/workflows/fleet-ci.yml"
+  pull_request:
+    paths:
+      - "fleet/**"
+      - "schema/fleet-*.json"
+      - "schema/examples/fleet/**"
+      - "docs/adr/0011-gestao-remota-da-frota.md"
+      - "go.work"
+      - ".github/workflows/fleet-ci.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build-test:
+    name: build & test (fleet)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: fleet
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+          cache-dependency-path: fleet/go.mod
+      - name: gofmt
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then echo "gofmt needed on:"; echo "$unformatted"; exit 1; fi
+      - name: go vet
+        run: go vet ./...
+      - name: build
+        run: go build ./...
+      # Inclui o corpus de FuzzVerifyAt (sementes = os golden vectors) como teste normal e a trava
+      # byte a byte de testdata/golden-v1.json (TestGolden).
+      - name: test (race)
+        run: go test -race ./...

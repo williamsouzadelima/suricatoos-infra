@@ -4,6 +4,7 @@ use (
 	./agent
 	./control-plane
 	./correlation
+	./fleet
 	./ingest
 	./sensor
 )
