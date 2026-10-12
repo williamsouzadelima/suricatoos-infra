@@ -7,8 +7,8 @@ todo o resto e upstream Greenbone, e os 8 containers de feed permanecem Greenbon
 ## Estrutura
 - compose/compose.yaml                  compose canonico Greenbone (pinado)
 - compose/docker-compose.override.yml   aponta gsa/gsad p/ imagens suricatoos + env do vendor
-- assets/                               SVGs de marca Suricatoos + suricatoos-theme.css
-- patches/gsa-v27.4.1.patch             mudancas de codigo do gsa
+- assets/                               SVGs de marca Suricatoos
+- patches/gsa-v27.4.1.patch             mudancas de codigo do gsa (inclui o tema: public/suricatoos-theme.css)
 - patches/gsad-v26.4.0.patch            mudancas de codigo do gsad
 - VERSIONS.md                           versoes pinadas
 
@@ -25,7 +25,8 @@ todo o resto e upstream Greenbone, e os 8 containers de feed permanecem Greenbon
 ## Branding (resumo)
 - Logo header: mark do suricato (icon/svg/greenbone.svg + Greenbone_white_logo.svg), size 38px
 - Login: wordmark navy; favicon/splash: mark; decoracoes de fundo vazias
-- Tema: green Greenbone -> teal #0aa4a6 (Theme.tsx) + override Mantine green->teal (suricatoos-theme.css)
+- Tema: claro/escuro (auto), acento indigo, dentro do patch do gsa (public/suricatoos-theme.css + Theme.tsx)
+- Fontes (Inter, Space Grotesk, JetBrains Mono): vem do proprio bundle (@fontsource, licenca OFL em public/licenses/); o tema nunca usa @import de URL externa (a CSP so aceita font-src 'self')
 - Footer/titulo/versao: via Footer.tsx + env GSA_VENDOR_TITLE/GSA_VENDOR_VERSION
 
 ## Upgrade (nova release GVM)
