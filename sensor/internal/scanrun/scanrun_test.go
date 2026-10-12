@@ -6,12 +6,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/williamsouzadelima/suricatoos-infra/sensor/internal/scope"
+	"github.com/williamsouzadelima/suricatoos-infra/scopegate"
 )
 
 func testRunner(t *testing.T, run bridgeExec) *Runner {
 	t.Helper()
-	sc, _ := scope.New("10.20.0.0/16", "10.20.0.9")
+	sc, _ := scopegate.New("10.20.0.0/16", "10.20.0.9")
 	r := New(Config{Scope: sc, PollInterval: time.Millisecond, MaxDuration: time.Hour})
 	r.run = run
 	r.sleep = func(time.Duration) {}

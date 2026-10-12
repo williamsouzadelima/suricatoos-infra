@@ -1,4 +1,4 @@
-package scope
+package scopegate
 
 import (
 	"reflect"
@@ -33,16 +33,19 @@ func TestScopeAbsoluteDeny(t *testing.T) {
 }
 
 func TestScopeSelfDeny(t *testing.T) {
-	// A allowlist inclui a faixa, mas SCAN_SELF_DENY_IPS nega o próprio IP do sensor + a nuvem.
-	s, _ := New("10.20.0.0/16", "10.20.0.9, 172.233.11.97")
+	// A allowlist inclui as faixas do sensor E da nuvem, mas SCAN_SELF_DENY_IPS nega o
+	// próprio IP do sensor + a nuvem: quem nega é o self-deny, não o escopo.
+	s, _ := New("10.20.0.0/16, 203.0.113.0/24", "10.20.0.9, 203.0.113.97")
 	if _, err := s.CheckHost("10.20.0.9"); err == nil {
 		t.Error("IP do próprio sensor deveria ser negado")
 	}
-	if _, err := s.CheckHost("172.233.11.97"); err == nil {
+	if _, err := s.CheckHost("203.0.113.97"); err == nil {
 		t.Error("endpoint da nuvem deveria ser negado")
 	}
-	if _, err := s.CheckHost("10.20.0.10"); err != nil {
-		t.Errorf("outro host da faixa deveria passar: %v", err)
+	for _, ok := range []string{"10.20.0.10", "203.0.113.98"} {
+		if _, err := s.CheckHost(ok); err != nil {
+			t.Errorf("outro host da faixa deveria passar: %v", err)
+		}
 	}
 }
 
@@ -64,7 +67,7 @@ func TestScopeCIDRTargets(t *testing.T) {
 
 func TestScopeRejectsHostname(t *testing.T) {
 	s, _ := New("10.20.0.0/16", "")
-	for _, h := range []string{"evil.com", "notanip", "", "10.20.0.1:80"} {
+	for _, h := range []string{"evil.example", "notanip", "", "10.20.0.1:80"} {
 		if _, err := s.CheckHost(h); err == nil {
 			t.Errorf("hostname/malformado %q deveria ser rejeitado", h)
 		}
@@ -83,11 +86,11 @@ func TestScopeEmptyDenyAll(t *testing.T) {
 
 func TestScopeFilter(t *testing.T) {
 	s, _ := New("10.20.0.0/16", "10.20.0.9")
-	kept, dropped := s.Filter([]string{"10.20.1.1", "8.8.8.8", "10.20.0.9", "evil.com"})
+	kept, dropped := s.Filter([]string{"10.20.1.1", "198.51.100.8", "10.20.0.9", "evil.example"})
 	if !reflect.DeepEqual(kept, []string{"10.20.1.1"}) {
 		t.Fatalf("kept errado: %v", kept)
 	}
-	if !reflect.DeepEqual(dropped, []string{"8.8.8.8", "10.20.0.9", "evil.com"}) {
+	if !reflect.DeepEqual(dropped, []string{"198.51.100.8", "10.20.0.9", "evil.example"}) {
 		t.Fatalf("dropped errado: %v", dropped)
 	}
 }

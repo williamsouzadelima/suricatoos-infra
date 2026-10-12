@@ -11,7 +11,10 @@
 //	ENROLL_TOKEN           bootstrap token (tenant + policy=scanner-sensor); only needed until enrolled
 //	CLOUD_BASE_URL         e.g. https://scanner.suricatoos.com  (derives the /agent + /ingest URLs)
 //	SCAN_SCOPE             the sensor's baked authorized CIDRs (must match the tenant's cloud scope)
-//	SCAN_SELF_DENY_IPS     the sensor's own IPs + cloud endpoints — never scan targets
+//	SCAN_SELF_DENY_IPS     the sensor's own IPs + cloud endpoints — never scan targets (single
+//	                       IPs, or /32 or /128; any other token is skipped with a warning)
+//	SCAN_SELF_DENY_CIDR_MODE  log (default) | enforce: a target CIDR that CONTAINS a self-deny IP
+//	                       (e.g. the sensor's LAN /24) is scanned + one warning line, or denied
 //	GMP_SOCKET             local gvmd socket (default: /run/gvmd/gvmd.sock)
 //	SENSOR_GMP_USER        local gvmd user (per-sensor, generated at install)
 //	SENSOR_GVM_PASSWORD    local gvmd password
@@ -37,7 +40,6 @@ import (
 	"github.com/williamsouzadelima/suricatoos-infra/sensor/internal/feedsync"
 	"github.com/williamsouzadelima/suricatoos-infra/sensor/internal/renew"
 	"github.com/williamsouzadelima/suricatoos-infra/sensor/internal/scanrun"
-	"github.com/williamsouzadelima/suricatoos-infra/sensor/internal/scope"
 	"github.com/williamsouzadelima/suricatoos-infra/sensor/internal/supervisor"
 )
 
@@ -60,7 +62,7 @@ func main() {
 	}
 
 	// Baked scope: the sensor independently re-validates every target.
-	sc, err := scope.New(os.Getenv("SCAN_SCOPE"), os.Getenv("SCAN_SELF_DENY_IPS"))
+	sc, err := newScope(os.Getenv, log.Printf)
 	if err != nil {
 		log.Fatalf("scope: %v", err)
 	}
