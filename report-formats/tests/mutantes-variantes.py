@@ -8,7 +8,7 @@ essa prova quando o latex.xsl, o build-feed-xml.py ou os checadores mudarem.
 Roda com python3 e lxml (o libxslt do lxml e' o do `xsltproc` do generate);
 nao precisa de TeX.
 
-Tres modos:
+Quatro modos:
 
   xslt  cada mutante troca um trecho do latex.xsl numa COPIA do bundle, gera o
         .tex das fixtures da edicao nos 3 idiomas e roda os dois checadores com
@@ -22,7 +22,13 @@ Tres modos:
         canonico) numa COPIA de report-formats/ (o builder, o bundle e o
         ci/check-manifest.py), roda o builder la' e o check-manifest.py contra
         o que ele escreveu: tem de reprovar (o builder recusar tambem conta). O
-        controle (sem troca) tem de passar.
+        controle (sem troca) tem de passar. Cobre a igualdade de conteudo (o
+        objeto leva EXATAMENTE os bytes do bundle) e a VERSION no objeto.
+  versao cada mutante quebra uma propriedade da VERSION por conteudo (constante,
+        hora do build, caminho da pasta, data de arquivo, so' parte do conteudo,
+        marcador sem preencher...) numa COPIA do builder e roda o
+        tests/test_feed.py contra ela: algum teste tem de reprovar. O mutante
+        tem de rodar (um que nao roda e' invalido, nao reprovado).
 
 E um modo a parte, fora de `todos':
 
@@ -32,7 +38,7 @@ E um modo a parte, fora de `todos':
 
 Uso (de qualquer diretorio; os caminhos saem da posicao deste arquivo):
 
-  python3 report-formats/tests/mutantes-variantes.py [xslt|tex|feed|todos]
+  python3 report-formats/tests/mutantes-variantes.py [xslt|tex|feed|versao|todos]
           [--so NOME ...] [--trabalho DIR] [--manter]
   python3 report-formats/tests/mutantes-variantes.py regressao --base <commit>
 
@@ -417,11 +423,83 @@ FEED_MUTANTES = [
      "build-feed-xml.py",
      [('"finding, the port and IP exposure map and the per-host appendix (English). "',
        '"finding, the port and IP exposure map and the per-host appendix (English), changed. "'),
-      ('    with open(REFERENCE, "wb") as fh:\n        fh.write(reference_descriptor())\n',
+      ('    with open(REFERENCE, "wb") as fh:\n        fh.write(reference_descriptor(version))\n',
        '    pass  # o descritor de referencia fica como estava\n')]),
     ("token-repetido-no-generate", "o generate canonico cita o par da edicao duas vezes",
      "suricatoos-premium-pdf/generate",
      [("rc=0\nxsltproc --stringparam lang en", "# --stringparam variant technical\nrc=0\nxsltproc --stringparam lang en")]),
+    # --- o objeto leva EXATAMENTE os bytes do bundle (igualdade de conteudo) -----------------------
+    ("membro-do-bundle-truncado", "o build embute um membro do bundle sem o ultimo byte",
+     "build-feed-xml.py",
+     [("        return b64_bytes(fh.read())\n", "        return b64_bytes(fh.read()[:-1])\n")]),
+    ("sty-fora-do-objeto", "o build deixa um .sty do bundle de fora dos objetos (e da lista que declara)",
+     "build-feed-xml.py",
+     [('    styles = sorted(n for n in os.listdir(BUNDLE) if n.endswith(".sty"))\n',
+       '    styles = sorted(n for n in os.listdir(BUNDLE) if n.endswith(".sty") and n != "suricatoos-hex.sty")\n')]),
+    ("generate-alterado-alem-do-par", "o generate embutido ganha uma linha a mais, alem dos dois valores da edicao",
+     "build-feed-xml.py",
+     [("    return script\n", '    return script + b"# alterado\\n"\n')]),
+    # --- a VERSION no objeto e no manifesto ---------------------------------------------------------
+    ("marcador-de-versao-vazando", "a VERSION nunca e' preenchida: o marcador @VERSION@ vai para o objeto",
+     "build-feed-xml.py",
+     [("    return text.replace(VERSION_TOKEN, version)\n", "    return text\n")]),
+    ("versao-velha-no-descritor-embutido", "o descritor embutido diz outra VERSION que o resumo do objeto",
+     "build-feed-xml.py",
+     [("% b64_bytes(report_format_xml_for(fmt_id, name, lang, variant, version)))",
+       '% b64_bytes(report_format_xml_for(fmt_id, name, lang, variant, "sha256-000000000000")))')]),
+    ("resumo-sem-a-versao", "o resumo do objeto tecnico EN nao diz a VERSION",
+     "build-feed-xml.py",
+     [('"finding, the port and IP exposure map and the per-host appendix (English). "\n'
+       '        "Version " + VERSION_TOKEN + "."),',
+       '"finding, the port and IP exposure map and the per-host appendix (English). "\n'
+       '        "Version unknown."),')]),
+    ("versao-no-manifesto", "o manifesto versionado volta a trazer a VERSION",
+     "build-feed-xml.py",
+     [('    return {\n        "report_formats": [', '    return {\n        "version": derive_version(),\n        "report_formats": [')]),
+]
+# O descritor de referencia velho so' existe se um build do builder INTACTO o escreveu antes.
+FEED_PRE_BUILD = {"descritor-de-referencia-velho"}
+
+# ---------------------------------------------------------------------------
+# Mutantes da VERSION: o test_feed.py roda contra um build-feed-xml.py mutado
+# (REPORT_FORMATS_DIR). Cada mutante quebra uma propriedade da VERSION por
+# conteudo, e pelo menos um teste tem de reprovar.
+# ---------------------------------------------------------------------------
+DIGEST_LOOP = "    for fname, text in feed_objects(VERSION_TOKEN):\n        data = text.encode(\"utf-8\")\n"
+VERSAO_MUTANTES = [
+    ("controle", "nenhuma troca", []),
+    ("versao-fixa", "a VERSION e' uma constante: nenhum byte a mais a muda",
+     [("    return VERSION_PREFIX + content_digest()[:VERSION_DIGITS]\n",
+       '    return VERSION_PREFIX + "000000000000"\n')]),
+    ("versao-com-relogio", "a VERSION mistura a hora do build: duas execucoes dao duas VERSIONs",
+     [("    return VERSION_PREFIX + content_digest()[:VERSION_DIGITS]\n",
+       "    import time\n"
+       "    return VERSION_PREFIX + hashlib.sha256((content_digest() + repr(time.time())).encode()).hexdigest()"
+       "[:VERSION_DIGITS]\n")]),
+    ("versao-depende-do-diretorio", "o caminho da pasta do build entra na VERSION",
+     [("    h = hashlib.sha256()\n    for fname, text in feed_objects(VERSION_TOKEN):\n",
+       "    h = hashlib.sha256(HERE.encode())\n    for fname, text in feed_objects(VERSION_TOKEN):\n")]),
+    ("versao-depende-da-data-do-arquivo", "a data de modificacao do latex.xsl entra na VERSION",
+     [("    h = hashlib.sha256()\n    for fname, text in feed_objects(VERSION_TOKEN):\n",
+       "    h = hashlib.sha256(repr(os.path.getmtime(os.path.join(BUNDLE, 'latex.xsl'))).encode())\n"
+       "    for fname, text in feed_objects(VERSION_TOKEN):\n")]),
+    ("versao-so-do-latex-xsl", "a VERSION so' olha o latex.xsl (os .sty, o catalogo e o texto do build nao a mudam)",
+     [(DIGEST_LOOP,
+       "    for fname, text in [('latex.xsl', open(os.path.join(BUNDLE, 'latex.xsl'), 'rb').read().decode('latin-1'))]:\n"
+       "        data = text.encode(\"utf-8\")\n")]),
+    ("versao-sem-os-objetos-es", "a VERSION ignora os objetos em espanhol (o catalogo es nao a muda)",
+     [(DIGEST_LOOP,
+       "    for fname, text in [o for o in feed_objects(VERSION_TOKEN) if o[0].split('-', 2)[2][:8] not in "
+       "('91afce49', '9ebc0c90', '330072bd')]:\n        data = text.encode(\"utf-8\")\n")]),
+    ("versao-sem-o-texto-do-build", "a VERSION so' olha os membros do bundle (resumo, descricao e nome nao a mudam)",
+     [(DIGEST_LOOP,
+       "    for fname, text in [(feed_object_name(f), ''.join(b64_file(os.path.join(BUNDLE, m)) for m in shared_files(l)))\n"
+       "                        for l, v, f, n in FORMATS]:\n"
+       "        data = text.encode(\"utf-8\")\n")]),
+    ("marcador-de-versao-vazando", "a VERSION nunca e' preenchida: o marcador @VERSION@ vai para o objeto",
+     [("    return text.replace(VERSION_TOKEN, version)\n", "    return text\n")]),
+    ("manifesto-com-versao", "o manifesto versionado volta a trazer a VERSION",
+     [('    return {\n        "report_formats": [', '    return {\n        "version": derive_version(),\n        "report_formats": [')]),
 ]
 
 
@@ -571,26 +649,38 @@ def modo_tex(work, only):
     return bad
 
 
+def copia_do_feed(work, name, rel, subs, pre_build=False):
+    """Uma COPIA de report-formats/ so' com o que o build precisa (o builder, o
+    check-manifest e o bundle, sem o descritor gerado: como numa `git archive'),
+    com `subs' aplicadas ao arquivo `rel'. `pre_build' roda antes o builder
+    INTACTO, para existir no disco o que o build mutado nao reescreve."""
+    d = os.path.join(work, "feed-" + name)
+    shutil.rmtree(d, ignore_errors=True)
+    os.makedirs(os.path.join(d, "ci"))
+    shutil.copy(os.path.join(RF, "build-feed-xml.py"), d)
+    shutil.copy(os.path.join(CI, "check-manifest.py"), os.path.join(d, "ci"))
+    shutil.copytree(BUNDLE, os.path.join(d, "suricatoos-premium-pdf"),
+                    ignore=shutil.ignore_patterns("__pycache__", "report_format.xml"))
+    if pre_build:
+        subprocess.run([sys.executable, "-X", "utf8", os.path.join(d, "build-feed-xml.py")],
+                       capture_output=True, check=True)
+    p = os.path.join(d, rel)
+    s = open(p, "rb").read().decode("utf-8")
+    for a, b in subs:
+        n = s.count(a)
+        if n != 1:
+            raise SystemExit("mutante feed %s: trecho achado %d vez(es), esperado 1: %r" % (name, n, a[:90]))
+        s = s.replace(a, b)
+    open(p, "wb").write(s.encode("utf-8"))
+    return d
+
+
 def modo_feed(work, only):
     bad = 0
     for name, what, rel, subs in FEED_MUTANTES:
         if only and name not in only and name != "controle":
             continue
-        d = os.path.join(work, "feed-" + name)
-        shutil.rmtree(d, ignore_errors=True)
-        os.makedirs(os.path.join(d, "ci"))
-        shutil.copy(os.path.join(RF, "build-feed-xml.py"), d)
-        shutil.copy(os.path.join(CI, "check-manifest.py"), os.path.join(d, "ci"))
-        shutil.copytree(BUNDLE, os.path.join(d, "suricatoos-premium-pdf"),
-                        ignore=shutil.ignore_patterns("__pycache__"))
-        p = os.path.join(d, rel)
-        s = open(p, "rb").read().decode("utf-8")
-        for a, b in subs:
-            n = s.count(a)
-            if n != 1:
-                raise SystemExit("mutante feed %s: trecho achado %d vez(es), esperado 1: %r" % (name, n, a[:90]))
-            s = s.replace(a, b)
-        open(p, "wb").write(s.encode("utf-8"))
+        d = copia_do_feed(work, name, rel, subs, pre_build=name in FEED_PRE_BUILD)
         b = subprocess.run([sys.executable, "-X", "utf8", os.path.join(d, "build-feed-xml.py")],
                            capture_output=True)
         if b.returncode != 0:
@@ -603,8 +693,40 @@ def modo_feed(work, only):
             msg = next((l.strip(" |") for l in out if l.startswith("  | ")), out[-1] if out else "")
         ok = (not failed) if name == "controle" else failed
         bad += not ok
-        print("%-30s %s\n    %s %s" % (name, what, "OK  " if ok else "ERRO",
+        print("%-34s %s\n    %s %s" % (name, what, "OK  " if ok else "ERRO",
                                        ("reprovado: " + msg[:140]) if failed else "passou"), flush=True)
+    return bad
+
+
+def modo_versao(work, only):
+    """Roda o tests/test_feed.py contra um build-feed-xml.py mutado: cada mutante
+    quebra uma propriedade da VERSION por conteudo e algum teste tem de reprovar.
+    O mutante tem de COMPILAR e RODAR (o build sai 0): um mutante invalido nao
+    conta como reprovado."""
+    bad = 0
+    for name, what, subs in VERSAO_MUTANTES:
+        if only and name not in only and name != "controle":
+            continue
+        d = copia_do_feed(work, "versao-" + name, "build-feed-xml.py", subs)
+        b = subprocess.run([sys.executable, "-X", "utf8", os.path.join(d, "build-feed-xml.py")],
+                           capture_output=True)
+        if b.returncode != 0:
+            print("%-34s %s\n    MUTANTE INVALIDO (o build mutado nao roda): %s"
+                  % (name, what, b.stderr.decode("utf-8", "replace").strip().splitlines()[-1][:140]), flush=True)
+            bad += 1
+            continue
+        env = dict(os.environ, REPORT_FORMATS_DIR=d)
+        r = subprocess.run([sys.executable, "-X", "utf8", "-m", "unittest", "test_feed"],
+                           cwd=HERE, env=env, capture_output=True)
+        err = r.stderr.decode("utf-8", "replace").splitlines()
+        reprovados = [l.split()[1] for l in err if l.startswith(("FAIL:", "ERROR:"))]
+        failed = r.returncode != 0
+        msg = ("%d teste(s): %s" % (len(reprovados), ", ".join(reprovados[:3]) + (", ..." if len(reprovados) > 3 else ""))
+               if reprovados else (err[-1] if err else ""))
+        ok = (not failed) if name == "controle" else failed
+        bad += not ok
+        print("%-34s %s\n    %s %s" % (name, what, "OK  " if ok else "ERRO",
+                                       ("reprovado em " + msg[:170]) if failed else "passou"), flush=True)
     return bad
 
 
@@ -651,7 +773,8 @@ def modo_regressao(work, base):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("modo", nargs="?", default="todos", choices=("xslt", "tex", "feed", "regressao", "todos"))
+    ap.add_argument("modo", nargs="?", default="todos",
+                    choices=("xslt", "tex", "feed", "versao", "regressao", "todos"))
     ap.add_argument("--so", nargs="*", default=[])
     ap.add_argument("--trabalho")
     ap.add_argument("--manter", action="store_true")
@@ -675,6 +798,9 @@ def main():
         if a.modo in ("feed", "todos"):
             print("== mutantes do build-feed-xml.py e do generate", flush=True)
             bad += modo_feed(work, set(a.so))
+        if a.modo in ("versao", "todos"):
+            print("== mutantes da VERSION por conteudo (tests/test_feed.py)", flush=True)
+            bad += modo_versao(work, set(a.so))
     finally:
         if not a.manter and not a.trabalho:
             shutil.rmtree(work, ignore_errors=True)

@@ -48,10 +48,12 @@ def main() -> int:
         return 2
     fmt_id, name = objs[(args.lang, args.variant)]
 
-    # Mesma ordem do objeto de feed: scripts sintetizados, depois os membros.
+    # Mesma ordem do objeto de feed: scripts sintetizados, depois os membros. O
+    # descritor leva a VERSION que o build deriva do conteudo, como no objeto.
     members = [
         ("generate", b.generate_for(args.lang, args.variant)),
-        ("report_format.xml", b.report_format_xml_for(fmt_id, name, args.lang, args.variant)),
+        ("report_format.xml",
+         b.report_format_xml_for(fmt_id, name, args.lang, args.variant, b.derive_version())),
     ]
     for n in b.shared_files(args.lang):
         with open(os.path.join(b.BUNDLE, n), "rb") as fh:

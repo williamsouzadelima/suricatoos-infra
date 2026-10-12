@@ -5,9 +5,14 @@ anunciar capabilities.report_formats e escolher o objeto de um report.export
 (ADR-0011). Um manifesto que mente manda o export para a edicao ou o idioma
 errado sem erro nenhum.
 
-Confere:
-  - o manifesto e' o que o build-feed-xml.py escreve (mesmos bytes) e traz a
-    VERSION dele;
+Roda DEPOIS do build-feed-xml.py: os nove objetos e o descritor de referencia
+sao gerados, nao versionados. Confere:
+  - o manifesto e' o que o build-feed-xml.py escreve (mesmos bytes) e nao traz
+    VERSION (arquivo versionado nao guarda valor derivado do conteudo);
+  - a VERSION que o build deriva do conteudo tem o formato `sha256-<12 hex>' e e'
+    a que cada objeto diz, uma vez no resumo e uma na descricao, e no
+    report_format.xml embutido; nenhum objeto deixa o marcador da VERSION
+    (VERSION_TOKEN) sem preencher;
   - as combinacoes sao exatamente idioma x edicao (en, pt_BR, es x technical,
     client, executive), uma de cada, com format `suricatoos-pdf', UUIDs
     canonicos (minusculos, v4) e distintos, nomes distintos que dizem o idioma;
@@ -23,6 +28,11 @@ Confere:
     EXATAMENTE aquele idioma e aquela edicao na linha do xsltproc (os dois
     pares uma vez cada), o report_format.xml embutido tem o mesmo id e nome, e
     o catalogo de NVT embutido e' o do idioma;
+  - o objeto leva EXATAMENTE os bytes do bundle: os membros, na ordem do
+    build, sao os arquivos de suricatoos-premium-pdf/ lidos daqui (nada a
+    mais, nada a menos, nenhum byte trocado) e o `generate' embutido e' o do
+    bundle, diferindo so' nos dois valores da linha do xsltproc -- a igualdade
+    de conteudo entre o que se publica e o que esta no repo;
   - nao ha pdf-suricatoos-*.xml que o manifesto nao descreva;
   - o descritor de referencia do bundle (suricatoos-premium-pdf/
     report_format.xml) e' o que o build escreve: o do objeto tecnico EN, com a
@@ -82,6 +92,9 @@ FIXED_UUIDS = {
 }
 UUID4 = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}")
 XSLTPROC = re.compile(rb"(?m)^xsltproc --stringparam lang (\S+) --stringparam variant (\S+) ")
+# O formato da VERSION que o build deriva do conteudo (repetido aqui de proposito:
+# o checador nao confia no builder para dizer qual e' o formato certo).
+VERSION_RE = re.compile(r"sha256-[0-9a-f]{12}")
 
 
 def load_builder(rf_dir):
@@ -92,6 +105,46 @@ def load_builder(rf_dir):
     return mod
 
 
+def _version_in_text(where, what, tag, text, version):
+    """A VERSION do build aparece UMA vez no texto e fecha a frase (`... Version
+    <v>.'); nenhuma outra VERSION (a de um build velho) fica no texto."""
+    text = text or ""
+    if VERSION_RE.findall(text) != [version] or not text.endswith(" " + version + "."):
+        return ["%s: o %s do %s nao diz so' a VERSION %s no fim: %r" % (where, tag, what, version, text[-70:])]
+    return []
+
+
+def _members_are_the_bundle(where, root, files, gen, lang, bundle_dir, b):
+    """O objeto leva EXATAMENTE os bytes do bundle, lidos daqui e nao do build:
+    e' a igualdade de conteudo entre o que se publica e o que esta no repo."""
+    fails = []
+    order = [f.get("name") for f in root.findall("file")]
+    if order != b.object_file_names(lang):
+        fails.append("%s: membros %s, o build declara %s" % (where, order, b.object_file_names(lang)))
+    # Um .sty do bundle que o objeto nao leva e' relatorio que nao compila em producao.
+    for s in sorted(n for n in os.listdir(bundle_dir) if n.endswith(".sty")):
+        if s not in files:
+            fails.append("%s: o bundle tem %s e o objeto nao o leva" % (where, s))
+    for n in order:
+        if n in ("generate", "report_format.xml"):
+            continue   # sintetizados por objeto; conferidos abaixo e acima
+        path = os.path.join(bundle_dir, n)
+        if not os.path.exists(path):
+            fails.append("%s: o objeto leva %s e o bundle nao o tem" % (where, n))
+            continue
+        with open(path, "rb") as fh:
+            want = fh.read()
+        got = base64.b64decode(files.get(n, ""))
+        if got != want:
+            fails.append("%s: %s embutido (%d bytes) difere do bundle (%d bytes)" % (where, n, len(got), len(want)))
+    # O generate e' o do bundle, a menos dos dois valores da linha do xsltproc.
+    with open(os.path.join(bundle_dir, "generate"), "rb") as fh:
+        canon = fh.read()
+    if XSLTPROC.sub(b"xsltproc --stringparam lang en --stringparam variant technical ", gen) != canon:
+        fails.append("%s: o generate embutido difere do bundle alem dos dois valores da linha do xsltproc" % where)
+    return fails
+
+
 def check(rf_dir):
     fails = []
     path = os.path.join(rf_dir, "manifest.json")
@@ -99,10 +152,15 @@ def check(rf_dir):
         raw = fh.read()
     man = json.loads(raw.decode("utf-8"))
     b = load_builder(rf_dir)
+    bundle_dir = os.path.join(rf_dir, "suricatoos-premium-pdf")
+    version = b.derive_version()
     if raw != b.manifest_bytes():
         fails.append("manifest.json nao e' o que o build-feed-xml.py escreve (regere e commite)")
-    if man.get("version") != b.VERSION:
-        fails.append("versao do manifesto %r, a do build-feed-xml.py e' %r" % (man.get("version"), b.VERSION))
+    if "version" in man:
+        fails.append("manifest.json traz `version' (%r): arquivo versionado nao guarda a VERSION, que o "
+                     "build deriva do conteudo" % man["version"])
+    if not VERSION_RE.fullmatch(version):
+        fails.append("VERSION %r fora do formato sha256-<12 hex>" % version)
     entries = man.get("report_formats") or []
     combos = [(e.get("lang"), e.get("variant")) for e in entries]
     want = [(lang, v) for v in VARIANTS for lang in LANGS]
@@ -137,9 +195,15 @@ def check(rf_dir):
             fails.append("%s: falta %s (os objetos de feed sao gerados, nao versionados: rode "
                          "report-formats/build-feed-xml.py)" % (where, os.path.basename(fpath)))
             continue
-        root = ET.parse(fpath).getroot()
+        with open(fpath, "rb") as fh:
+            data = fh.read()
+        root = ET.fromstring(data)
         if root.get("id") != uid or root.findtext("name") != name:
             fails.append("%s: o objeto diz id %s, nome %r" % (where, root.get("id"), root.findtext("name")))
+        if b.VERSION_TOKEN.encode("ascii") in data:
+            fails.append("%s: o objeto deixou o marcador %s da VERSION sem preencher" % (where, b.VERSION_TOKEN))
+        for tag in ("summary", "description"):
+            fails.extend(_version_in_text(where, "objeto", tag, root.findtext(tag), version))
         files = {f.get("name"): f.text or "" for f in root.findall("file")}
         gen = base64.b64decode(files.get("generate", ""))
         lines = XSLTPROC.findall(gen)
@@ -148,20 +212,27 @@ def check(rf_dir):
         for tok in (b"--stringparam lang ", b"--stringparam variant "):
             if gen.count(tok) != 1:
                 fails.append("%s: o generate embutido tem %r %d vez(es)" % (where, tok.decode(), gen.count(tok)))
-        desc = ET.fromstring(base64.b64decode(files.get("report_format.xml", "")))
+        desc_bytes = base64.b64decode(files.get("report_format.xml", ""))
+        desc = ET.fromstring(desc_bytes)
         if desc.get("id") != uid or desc.findtext("name") != name:
             fails.append("%s: o report_format.xml embutido diz id %s, nome %r"
                          % (where, desc.get("id"), desc.findtext("name")))
+        if b.VERSION_TOKEN.encode("ascii") in desc_bytes:
+            fails.append("%s: o report_format.xml embutido deixou o marcador %s da VERSION sem preencher"
+                         % (where, b.VERSION_TOKEN))
+        for tag in ("summary", "description"):
+            fails.extend(_version_in_text(where, "report_format.xml embutido", tag, desc.findtext(tag), version))
         cats = sorted(n for n in files if n.startswith("nvt-i18n-"))
         if cats != ["nvt-i18n-%s.xml" % lang]:
             fails.append("%s: catalogo(s) embutido(s) %s, esperado o do idioma" % (where, cats))
-    ref = os.path.join(rf_dir, "suricatoos-premium-pdf", "report_format.xml")
+        fails.extend(_members_are_the_bundle(where, root, files, gen, lang, bundle_dir, b))
+    ref = os.path.join(bundle_dir, "report_format.xml")
     if not os.path.exists(ref):
         fails.append("falta suricatoos-premium-pdf/report_format.xml (descritor de referencia: gerado, "
                      "nao versionado; rode report-formats/build-feed-xml.py)")
     else:
         with open(ref, "rb") as fh:
-            if fh.read() != b.reference_descriptor():
+            if fh.read() != b.reference_descriptor(version):
                 fails.append("suricatoos-premium-pdf/report_format.xml nao e' o descritor de referencia que o "
                              "build-feed-xml.py escreve (arquivo gerado, nao versionado: rode o build)")
     described = {"pdf-suricatoos-%s.xml" % u for u in uuids}

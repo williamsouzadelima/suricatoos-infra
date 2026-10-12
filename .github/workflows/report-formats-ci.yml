@@ -13,7 +13,12 @@ name: report-formats-ci
 #              le) e o build tem de reescreve-lo igual; nada gerado fica fora do
 #              que o .gitignore declara, nenhum objeto gerado esta' versionado, e
 #              o manifesto descreve exatamente os objetos (ci/check-manifest.py:
-#              UUID, nome, idioma e edicao do generate embutido);
+#              UUID, nome, idioma e edicao do generate embutido, a VERSION em
+#              cada objeto e os bytes do bundle que cada objeto leva). A VERSION
+#              e' derivada do CONTEUDO, nunca editada a mao; tests/test_feed.py
+#              prova que o mesmo conteudo da a mesma VERSION (outro diretorio,
+#              outro processo), que um byte a mais da outra, e que gerar duas
+#              vezes escreve os mesmos bytes;
 #   compile    por idioma x edicao (technical, client, executive -- os nomes
 #              do contrato da frota, ADR-0011): `sh ./generate` ponta a ponta
 #              + compilacao de
@@ -83,8 +88,11 @@ jobs:
           # E nenhum objeto gerado pode voltar a ser versionado (git add -f).
           test -z "$(git ls-files -- 'report-formats/pdf-suricatoos-*.xml' report-formats/suricatoos-premium-pdf/report_format.xml)"
 
-      - name: Manifesto = objetos de feed (UUID, nome, idioma e edicao)
+      - name: Manifesto = objetos de feed (UUID, nome, idioma, edicao, VERSION e bytes do bundle)
         run: python3 report-formats/ci/check-manifest.py
+
+      - name: Testes do feed (VERSION por conteudo, geracao idempotente, o que o git versiona)
+        run: python3 -m unittest discover -s report-formats/tests -p 'test_*.py' -v
 
   compile:
     name: compila no gvmd:stable (${{ matrix.lang }}, ${{ matrix.variant }})

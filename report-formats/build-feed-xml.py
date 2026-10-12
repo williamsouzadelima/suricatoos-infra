@@ -22,17 +22,30 @@ the stock Greenbone ``pdf-c402cc3e-...`` feed object. Dropping the resulting fil
 into the report-formats feed source makes gvmd install them as predefined +
 trusted (no GPG signing, no GSA change).
 
+The nine objects are BUILD OUTPUTS, not versioned (.gitignore): every report
+change used to regenerate ~21 MB in the history of the public repo. The CI
+(feed-sync) and the publish workflow run this script before using them, and the
+Dockerfile COPYs them into the feed image.
+
+The VERSION is never edited by hand: it is derived from the content (see
+``derive_version``), so the same bundle gives the same VERSION on any machine
+and any change to what the objects carry gives another one.
+
 It also writes ``manifest.json``: the nine ``{format, lang, variant, uuid, name}``
 combinations, versioned in the repo, which the fleet connector reads to announce
 ``capabilities.report_formats`` and to map a ``report.export`` to the right
 report format id. The CI (ci/check-manifest.py) checks it against the objects.
-And it writes ``suricatoos-premium-pdf/report_format.xml``, the reference
-descriptor of the English technical object (the build never reads it; writing
-it here keeps its VERSION and file list current).
+It carries no VERSION: a versioned file cannot hold a value derived from the
+content that is committed together with it (and every bundle change would
+conflict on that line). And it writes ``suricatoos-premium-pdf/report_format.xml``,
+the reference descriptor of the English technical object (generated and not
+versioned like the objects, since it embeds the VERSION; the build never reads it).
 
-Usage:  python3 build-feed-xml.py
+Usage:  python3 build-feed-xml.py [--print-version]
 """
+import argparse
 import base64
+import hashlib
 import json
 import os
 
@@ -40,7 +53,28 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 BUNDLE = os.path.join(HERE, "suricatoos-premium-pdf")
 MANIFEST = os.path.join(HERE, "manifest.json")
 
-VERSION = "20261012g"
+# ---------------------------------------------------------------------------
+# VERSION: derived from the CONTENT, never edited by hand.
+#
+# It is the sha256 of what the nine feed objects carry -- the bundle members that
+# ship, the synthesised generate and descriptor, and the texts written below --,
+# rendered with VERSION_TOKEN where the VERSION itself goes (so it cannot depend
+# on itself), cut to VERSION_DIGITS hex digits:
+#   - the same content gives the same VERSION on any machine and in any directory
+#     (no build date, no git history, no path, no mtime);
+#   - one byte more or less in any shipped member or text gives another VERSION;
+#   - a file of the bundle directory that never ships (FONTS.md, tools/...) does
+#     not count: the VERSION names what is delivered, not what sits in the folder.
+# The VERSION is informational text -- the summary and description of each object
+# --: gvmd re-imports a feed report format when the file's mtime is newer than the
+# report format's modification_time (gvmd 26.40.2 and 26.41.0,
+# report_format_updated_in_feed), not by comparing versions, and the feed-updater
+# only compares the image ID.
+# The "sha256-" prefix keeps it from being read as a number: a bare hex string such
+# as 1e5 or 000123 is a float or an integer to some YAML and JSON consumers.
+VERSION_TOKEN = "@VERSION@"
+VERSION_PREFIX = "sha256-"
+VERSION_DIGITS = 12
 
 # O `format' do contrato da frota (ADR-0011): o mesmo nos nove objetos.
 FORMAT = "suricatoos-pdf"
@@ -65,43 +99,45 @@ FORMATS = [
 ]
 
 # Plain text only: these strings go into the XML verbatim (no & and no <).
+# VERSION_TOKEN stands where the VERSION goes; with_version() fills it at render
+# time (derive_version() renders with the token itself, to hash everything else).
 SUMMARY = {
     ("en", "technical"): (
         "Suricatoos PDF vulnerability report, technical edition: the complete report, with every "
         "finding, the port and IP exposure map and the per-host appendix (English). "
-        "Version " + VERSION + "."),
+        "Version " + VERSION_TOKEN + "."),
     ("pt_BR", "technical"): (
         "Relatório PDF de vulnerabilidades Suricatoos, edição técnica: o relatório completo, com "
         "todos os achados, o mapa de exposição de portas e IPs e o apêndice por host "
-        "(Português-BR). Versão " + VERSION + "."),
+        "(Português-BR). Versão " + VERSION_TOKEN + "."),
     ("es", "technical"): (
         "Informe PDF de vulnerabilidades Suricatoos, edición técnica: el informe completo, con "
         "todos los hallazgos, el mapa de exposición de puertos e IPs y el apéndice por host "
-        "(Español). Versión " + VERSION + "."),
+        "(Español). Versión " + VERSION_TOKEN + "."),
     ("en", "client"): (
         "Suricatoos PDF vulnerability report, client edition: the technical report for the "
         "client's IT team, without false positives and with informational (Log) results only as "
-        "a count (English). Version " + VERSION + "."),
+        "a count (English). Version " + VERSION_TOKEN + "."),
     ("pt_BR", "client"): (
         "Relatório PDF de vulnerabilidades Suricatoos, edição do cliente: o relatório técnico para "
         "a equipe de TI do cliente, sem falsos positivos e com os resultados informativos (Log) "
-        "só como contagem (Português-BR). Versão " + VERSION + "."),
+        "só como contagem (Português-BR). Versão " + VERSION_TOKEN + "."),
     ("es", "client"): (
         "Informe PDF de vulnerabilidades Suricatoos, edición para el cliente: el informe técnico "
         "para el equipo de TI del cliente, sin falsos positivos y con los resultados informativos "
-        "(Log) solo como recuento (Español). Versión " + VERSION + "."),
+        "(Log) solo como recuento (Español). Versión " + VERSION_TOKEN + "."),
     ("en", "executive"): (
         "Suricatoos PDF vulnerability report, executive edition: the executive summary, the "
         "priorities and next steps, and the scope, methodology and limitations (English). "
-        "Version " + VERSION + "."),
+        "Version " + VERSION_TOKEN + "."),
     ("pt_BR", "executive"): (
         "Relatório PDF de vulnerabilidades Suricatoos, edição executiva: o resumo executivo, as "
         "prioridades e próximos passos, e o escopo, a metodologia e as limitações "
-        "(Português-BR). Versão " + VERSION + "."),
+        "(Português-BR). Versão " + VERSION_TOKEN + "."),
     ("es", "executive"): (
         "Informe PDF de vulnerabilidades Suricatoos, edición ejecutiva: el resumen ejecutivo, las "
         "prioridades y próximos pasos, y el alcance, la metodología y las limitaciones "
-        "(Español). Versión " + VERSION + "."),
+        "(Español). Versión " + VERSION_TOKEN + "."),
 }
 DESCRIPTION = {
     ("en", "technical"): (
@@ -111,7 +147,7 @@ DESCRIPTION = {
         "scope with its severity and the IP addresses mapped to it, a hosts and open-ports "
         "inventory, a findings summary table, detailed findings grouped by vulnerability (CVSS, "
         "CVEs, affected systems, remediation), scope, methodology and limitations, and a per-host "
-        "appendix. Version " + VERSION + "."),
+        "appendix. Version " + VERSION_TOKEN + "."),
     ("pt_BR", "technical"): (
         "Edição técnica do relatório corporativo premium de avaliação de vulnerabilidades em PDF "
         "(Português-BR): capa com a marca, resumo executivo de risco com painel de severidade, "
@@ -119,7 +155,7 @@ DESCRIPTION = {
         "par (transporte, porta) do escopo com sua severidade e os endereços IP mapeados, "
         "inventário de hosts e portas abertas, tabela-resumo de achados, achados detalhados "
         "agrupados por vulnerabilidade (CVSS, CVEs, sistemas afetados, remediação), escopo, "
-        "metodologia e limitações, e um apêndice por host. Versão " + VERSION + "."),
+        "metodologia e limitações, e um apêndice por host. Versão " + VERSION_TOKEN + "."),
     ("es", "technical"): (
         "Edición técnica del informe corporativo premium de evaluación de vulnerabilidades en PDF "
         "(Español): portada con la marca, resumen ejecutivo de riesgo con panel de severidad, "
@@ -127,41 +163,41 @@ DESCRIPTION = {
         "(transporte, puerto) del alcance con su severidad y las direcciones IP mapeadas, "
         "inventario de hosts y puertos abiertos, tabla-resumen de hallazgos, hallazgos detallados "
         "agrupados por vulnerabilidad (CVSS, CVEs, sistemas afectados, remediación), alcance, "
-        "metodología y limitaciones, y un apéndice por host. Versión " + VERSION + "."),
+        "metodología y limitaciones, y un apéndice por host. Versión " + VERSION_TOKEN + "."),
     ("en", "client"): (
         "Client edition of the Suricatoos PDF report, for the client's IT team (English): the "
         "same structure as the technical edition, without any false positive (results marked as "
         "false positive are left out of every list, card, count and total, as if the report had "
         "been exported without them) and with informational (Log) results only as a count; "
         "low-confidence findings stay in the separate block of indicators to validate. "
-        "Version " + VERSION + "."),
+        "Version " + VERSION_TOKEN + "."),
     ("pt_BR", "client"): (
         "Edição do cliente do relatório PDF Suricatoos, para a equipe de TI do cliente "
         "(Português-BR): a mesma estrutura da edição técnica, sem nenhum falso positivo (os "
         "resultados marcados como falso positivo ficam fora de toda lista, card, contagem e total, "
         "como se o relatório fosse exportado sem eles) e com os resultados informativos (Log) só "
         "como contagem; os achados de baixa confiança continuam no bloco separado de indicadores "
-        "a validar. Versão " + VERSION + "."),
+        "a validar. Versão " + VERSION_TOKEN + "."),
     ("es", "client"): (
         "Edición para el cliente del informe PDF Suricatoos, para el equipo de TI del cliente "
         "(Español): la misma estructura de la edición técnica, sin ningún falso positivo (los "
         "resultados marcados como falso positivo quedan fuera de toda lista, tarjeta, recuento y "
         "total, como si el informe se exportara sin ellos) y con los resultados informativos (Log) "
         "solo como recuento; los hallazgos de baja confianza siguen en el bloque separado de "
-        "indicadores a validar. Versión " + VERSION + "."),
+        "indicadores a validar. Versión " + VERSION_TOKEN + "."),
     ("en", "executive"): (
         "Executive edition of the Suricatoos PDF report (English): the executive summary, the "
         "priorities and next steps, and the scope, methodology and limitations, numbered 1 to 3; "
-        "no finding cards, no hosts and ports, no appendix. Version " + VERSION + "."),
+        "no finding cards, no hosts and ports, no appendix. Version " + VERSION_TOKEN + "."),
     ("pt_BR", "executive"): (
         "Edição executiva do relatório PDF Suricatoos (Português-BR): o resumo executivo, as "
         "prioridades e próximos passos, e o escopo, a metodologia e as limitações, numerados de "
-        "1 a 3; sem cards de achado, sem hosts e portas, sem apêndice. Versão " + VERSION + "."),
+        "1 a 3; sem cards de achado, sem hosts e portas, sem apêndice. Versão " + VERSION_TOKEN + "."),
     ("es", "executive"): (
         "Edición ejecutiva del informe PDF Suricatoos (Español): el resumen ejecutivo, las "
         "prioridades y próximos pasos, y el alcance, la metodología y las limitaciones, numerados "
         "del 1 al 3; sin tarjetas de hallazgo, sin hosts y puertos, sin apéndice. "
-        "Versión " + VERSION + "."),
+        "Versión " + VERSION_TOKEN + "."),
 }
 
 # Files whose content is IDENTICAL across all the objects (read from disk).
@@ -265,7 +301,12 @@ def generate_for(lang: str, variant: str) -> bytes:
     return script
 
 
-def report_format_xml_for(fmt_id: str, name: str, lang: str, variant: str) -> bytes:
+def with_version(text: str, version: str) -> str:
+    """SUMMARY and DESCRIPTION carry VERSION_TOKEN where the VERSION goes."""
+    return text.replace(VERSION_TOKEN, version)
+
+
+def report_format_xml_for(fmt_id: str, name: str, lang: str, variant: str, version: str) -> bytes:
     """A per-object report_format.xml embedded as the object's own descriptor.
     gvmd uses the outer feed element for identity, but we keep this consistent so
     the delivered descriptor never contradicts the object it ships in."""
@@ -281,18 +322,19 @@ def report_format_xml_for(fmt_id: str, name: str, lang: str, variant: str) -> by
         "  <report_type>all</report_type>\n"
         "%s\n"
         "</report_format>\n"
-    ) % (fmt_id, name, SUMMARY[(lang, variant)], DESCRIPTION[(lang, variant)], files)
+    ) % (fmt_id, name, with_version(SUMMARY[(lang, variant)], version),
+         with_version(DESCRIPTION[(lang, variant)], version), files)
     return xml.encode("utf-8")
 
 
-def build_feed_object(lang: str, variant: str, fmt_id: str, name: str) -> str:
+def build_feed_object(lang: str, variant: str, fmt_id: str, name: str, version: str) -> str:
     # Order mirrors the stock bundle: scripts first, then embedded assets.
     parts = [
         "<!-- Copyright (C) 2026 Suricatoos -->",
         '<report_format id="%s">' % fmt_id,
         "  <name>%s</name>" % name,
-        "  <summary>%s</summary>" % SUMMARY[(lang, variant)],
-        "  <description>%s</description>" % DESCRIPTION[(lang, variant)],
+        "  <summary>%s</summary>" % with_version(SUMMARY[(lang, variant)], version),
+        "  <description>%s</description>" % with_version(DESCRIPTION[(lang, variant)], version),
         "  <extension>pdf</extension>",
         "  <content_type>application/pdf</content_type>",
         "  <report_type>all</report_type>",
@@ -300,7 +342,7 @@ def build_feed_object(lang: str, variant: str, fmt_id: str, name: str) -> str:
     # Synthesised, object-specific files.
     parts.append('  <file name="generate">%s</file>' % b64_bytes(generate_for(lang, variant)))
     parts.append('  <file name="report_format.xml">%s</file>'
-                 % b64_bytes(report_format_xml_for(fmt_id, name, lang, variant)))
+                 % b64_bytes(report_format_xml_for(fmt_id, name, lang, variant, version)))
     # Bundle members, all read in binary. Quase todos sao identicos entre os
     # objetos; a excecao e' o catalogo de traducao, que e' o do idioma do objeto.
     for n in shared_files(lang):
@@ -310,12 +352,43 @@ def build_feed_object(lang: str, variant: str, fmt_id: str, name: str) -> str:
     return "\n".join(parts)
 
 
+def feed_object_name(fmt_id: str) -> str:
+    """The file name gvmd requires: it takes the UUID from the end of the name."""
+    return "pdf-suricatoos-%s.xml" % fmt_id
+
+
+def feed_objects(version: str) -> list:
+    """The nine feed objects as (file name, text), in the order of FORMATS."""
+    return [(feed_object_name(fmt_id), build_feed_object(lang, variant, fmt_id, name, version))
+            for lang, variant, fmt_id, name in FORMATS]
+
+
+def content_digest() -> str:
+    """sha256 of everything the nine objects carry but the VERSION itself: the
+    objects rendered with VERSION_TOKEN where it goes, each framed by its file
+    name and length. Pure function of the bundle members that ship and of the
+    texts in this file -- nothing from the machine, the clock or git."""
+    h = hashlib.sha256()
+    for fname, text in feed_objects(VERSION_TOKEN):
+        data = text.encode("utf-8")
+        h.update(("%s %d\n" % (fname, len(data))).encode("ascii"))
+        h.update(data)
+    return h.hexdigest()
+
+
+def derive_version() -> str:
+    """The VERSION of the nine objects: VERSION_PREFIX + the first VERSION_DIGITS
+    hex digits of content_digest()."""
+    return VERSION_PREFIX + content_digest()[:VERSION_DIGITS]
+
+
 def manifest() -> dict:
     """As nove combinacoes (format, lang, variant) -> report format, na ordem de
     FORMATS: o que o conector da frota le para anunciar
-    capabilities.report_formats e escolher o objeto de um report.export."""
+    capabilities.report_formats e escolher o objeto de um report.export. Sem
+    VERSION: arquivo versionado nao pode guardar um valor derivado do conteudo
+    que vai no mesmo commit."""
     return {
-        "version": VERSION,
         "report_formats": [
             {"format": FORMAT, "lang": lang, "variant": variant, "uuid": fmt_id, "name": name}
             for lang, variant, fmt_id, name in FORMATS
@@ -331,7 +404,8 @@ def manifest_bytes() -> bytes:
 # technical object. The build never READS it (each object embeds its own
 # descriptor, synthesised above); it WRITES it, from the same function the EN
 # technical object uses, so its summary, description, VERSION and file list
-# can no longer go stale by hand. ci/check-manifest.py checks it.
+# can no longer go stale by hand. It embeds the VERSION, so it is generated and
+# not versioned, like the objects (.gitignore). ci/check-manifest.py checks it.
 REFERENCE = os.path.join(BUNDLE, "report_format.xml")
 REFERENCE_NOTE = (
     "<!-- Reference descriptor of the English technical object, WRITTEN by\n"
@@ -342,10 +416,10 @@ REFERENCE_NOTE = (
     "     own copy; the build never reads this file. -->\n")
 
 
-def reference_descriptor() -> bytes:
+def reference_descriptor(version: str) -> bytes:
     fmt_id, name = next((f, n) for lang, variant, f, n in FORMATS
                         if (lang, variant) == ("en", "technical"))
-    xml = report_format_xml_for(fmt_id, name, "en", "technical")
+    xml = report_format_xml_for(fmt_id, name, "en", "technical", version)
     head = b"<!-- Copyright (C) 2026 Suricatoos -->\n"
     if not xml.startswith(head):
         raise SystemExit("report_format_xml_for: unexpected header, cannot write the reference descriptor")
@@ -353,24 +427,33 @@ def reference_descriptor() -> bytes:
 
 
 def main():
-    print("bundle manifest (%s):" % VERSION)
+    ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    ap.add_argument("--print-version", action="store_true",
+                    help="print the VERSION derived from the content and exit (writes nothing)")
+    args = ap.parse_args()
+    version = derive_version()
+    if args.print_version:
+        print(version)
+        return
+    print("VERSION %s  (content digest of the nine objects)" % version)
+    print("bundle manifest:")
     for n in object_file_names(LANGS[0]):
         src = os.path.join(BUNDLE, n)
         size = os.path.getsize(src) if os.path.exists(src) else 0
         print("  %-32s %9s bytes%s" % (n, size or "synth", "" if size else " (synthesised)"))
-    for lang, variant, fmt_id, name in FORMATS:
-        xml = build_feed_object(lang, variant, fmt_id, name)
-        out = os.path.join(HERE, "pdf-suricatoos-%s.xml" % fmt_id)
+    for (fname, xml), (lang, variant, fmt_id, name) in zip(feed_objects(version), FORMATS):
+        out = os.path.join(HERE, fname)
         # newline="\n": the same bytes on every OS (text mode on Windows would
         # write CRLF, and the working copy would stop matching the CI's build).
         with open(out, "w", encoding="utf-8", newline="\n") as fh:
             fh.write(xml)
-        print("wrote %s  (%s, %d bytes)" % (os.path.basename(out), name, os.path.getsize(out)))
+        digest = hashlib.sha256(xml.encode("utf-8")).hexdigest()[:12]
+        print("wrote %s  (%s, %d bytes, sha256 %s)" % (fname, name, os.path.getsize(out), digest))
     with open(MANIFEST, "wb") as fh:
         fh.write(manifest_bytes())
     print("wrote %s  (%d combinations)" % (os.path.basename(MANIFEST), len(FORMATS)))
     with open(REFERENCE, "wb") as fh:
-        fh.write(reference_descriptor())
+        fh.write(reference_descriptor(version))
     print("wrote suricatoos-premium-pdf/report_format.xml  (reference descriptor, EN technical)")
 
 
