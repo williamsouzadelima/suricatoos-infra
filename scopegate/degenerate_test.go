@@ -46,6 +46,12 @@ var degenerateHosts = []string{
 	// mapeada, ou que cobre o bloco ::ffff:0:0/96, nunca é alvo legítimo.
 	"::ffff:127.0.0.1", "::ffff:169.254.169.254",
 	"::ffff:127.0.0.0/104", "::ffff:192.0.2.0/120", "::fffe:0:0/95",
+	// IPv6 que carrega um IPv4 por tradução: um tradutor entregaria o pacote ao
+	// IPv4 embutido, que o deny-list recusaria (ex.: 127.0.0.1, o IP do nó).
+	"64:ff9b::7f00:1", "64:ff9b::c000:20a", "64:ff9b::/96", "64:ff9b::/32", // NAT64
+	"64:ff9b:1::1", "64:ff9b:1:2::/64", // NAT64 de uso local
+	"2002:7f00:1::1", "2002:c000:200::/40", "2002::/16", // 6to4
+	"::ffff:0:7f00:1", "::ffff:0:0:0/96", // IPv4-traduzido (SIIT)
 }
 
 func TestDegenerateSpaceDeniedEvenWithBroadAllow(t *testing.T) {

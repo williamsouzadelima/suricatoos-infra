@@ -4,9 +4,10 @@ import "net/netip"
 
 // degenerateNets are ranges a scan target must never reach, whatever the
 // allow-set says: the stricter union of the old sensor set and
-// ingest/scanlaunch's denyReason. RFC1918/ULA/CGNAT are NOT here — they are
-// legitimate internal targets, gated only by the allow-set. The first match gives
-// the reason.
+// ingest/scanlaunch's denyReason, plus the IPv6 forms that carry an IPv4 through
+// a translator (NAT64, 6to4, SIIT) — the embedded IPv4 could be one the deny-list
+// refuses. RFC1918/ULA/CGNAT are NOT here — they are legitimate internal targets,
+// gated only by the allow-set. The first match gives the reason.
 var degenerateNets = []struct {
 	net    netip.Prefix
 	reason string
@@ -20,6 +21,10 @@ var degenerateNets = []struct {
 	{netip.MustParsePrefix("::1/128"), "loopback"},
 	{netip.MustParsePrefix("::/96"), "IPv6 compatível-IPv4 (::a.b.c.d, depreciado)"},
 	{netip.MustParsePrefix("::ffff:0:0/96"), "forma IPv4-mapeada (::ffff:0:0/96; use o IPv4)"},
+	{netip.MustParsePrefix("::ffff:0:0:0/96"), "IPv4-traduzido SIIT (::ffff:0:0:0/96)"},
+	{netip.MustParsePrefix("64:ff9b::/96"), "NAT64 (64:ff9b::/96, carrega IPv4)"},
+	{netip.MustParsePrefix("64:ff9b:1::/48"), "NAT64 de uso local (64:ff9b:1::/48, carrega IPv4)"},
+	{netip.MustParsePrefix("2002::/16"), "6to4 (2002::/16, carrega IPv4)"},
 	{netip.MustParsePrefix("fe80::/10"), "link-local"},
 	{netip.MustParsePrefix("ff00::/8"), "multicast"},
 	{netip.MustParsePrefix("fd00:ec2::254/128"), "metadata da cloud (IPv6)"},
