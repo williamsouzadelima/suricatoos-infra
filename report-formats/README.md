@@ -9,7 +9,8 @@ suricatoos-premium-pdf/   o bundle: latex.xsl, .sty, generate, catálogos de NVT
 build-feed-xml.py         gera os 9 objetos de feed, o manifest.json e o descritor de referência
 manifest.json             (versionado) format/lang/variant -> UUID: o conector da frota lê
 Dockerfile                a imagem de feed (copia os 9 XMLs para cada diretório de release)
-ci/                       portões e scripts do CI (compile.sh, gates.sh, check-*.py, lib.sh)
+ci/                       portões e scripts do CI (compile.sh, gates.sh, check-*.py, lib.sh,
+                          stable-gate.sh e os vigias gvmd-drift.sh e base-drift.sh)
 tests/                    fixtures, test_*.py (rodam no CI), mutantes-*.py (ferramentas de dev)
 sample/sample-report.xml  a entrada de amostra (só dado inventado)
 ```
@@ -57,6 +58,8 @@ ID da imagem — nenhum dos dois lê a VERSION. Prova: `tests/test_feed.py`
   republica a imagem: dispare o publish a mão.
 - **`report-formats-gvmd-stable`** (toda segunda-feira, e a mão depois do merge): vigia a deriva
   entre o gvmd fixado e a `stable` (abaixo). Não bloqueia nada.
+- **`report-formats-base-drift`** (idem): vigia a base do feed fixada no `Dockerfile` (abaixo). Não
+  bloqueia nada.
 - **`report-formats-publish`** roda **depois do `report-formats-ci`**: só quando o CI de um push na
   `main` termina com `success` (`workflow_run`), e constrói a imagem do commit que o CI aprovou. O
   disparo manual (`workflow_dispatch`) continua e não espera o CI (o log avisa). O checkout traz o
@@ -107,6 +110,22 @@ uma combinação (`en/technical`, todas as fixtures e portões) nela, dizendo se
 reprovou. Não bloqueia nada: sai 0 sempre e o veredito fica no resumo do job. O workflow só roda
 (agendado ou manual) depois do merge na `main`.
 
+## Base do feed (`Dockerfile`): fixada por digest
+
+A imagem do feed parte de `registry.community.greenbone.net/community/report-formats`, **fixada por
+digest no `FROM` do `Dockerfile`**: a tag `latest` anda quando a Greenbone atualiza os report formats
+padrão, e sem o pin dois builds do mesmo commit entregariam relatórios padrão diferentes, e uma mudança
+de layout deles quebraria o publish (o único lugar que constrói a imagem) em vez de um PR. Origem:
+`report-formats:latest` resolvida em 2026-10-12. **Para atualizar**, num PR próprio: o comentário do
+`Dockerfile` tem os comandos, com e sem docker. Rode
+`python3 report-formats/build-feed-xml.py && docker build report-formats` antes de abrir o PR: nada no
+CI constrói essa imagem, o publish a constrói depois do merge.
+
+Toda segunda-feira `report-formats-base-drift.yml` (`ci/base-drift.sh`) confere se o digest fixado
+ainda baixa do registro (senão o publish falharia no `FROM`) e se a `latest` de hoje ainda é ele
+(senão, **avisa**, com a data da base nova). Não bloqueia nada. `tests/test_base_drift.py` trava que o
+`FROM` seja único e fixado por digest e que o vigia o entenda.
+
 ## Prévias visuais (para revisão humana)
 
 O repo não guarda PDF nem PNG de amostra (ficavam velhos). O CI publica, de cada edição ×
@@ -117,5 +136,6 @@ todas as fixtures em `report-formats-<idioma>-<edição>`.
 
 ## Provas de mutação (dev, fora do CI)
 
-`python3 report-formats/tests/mutantes-variantes.py [xslt|tex|feed|versao|todos]` (precisa de
-`lxml`): cada defeito que um portão deve pegar, reprovado; os controles passam.
+`python3 report-formats/tests/mutantes-variantes.py [xslt|tex|feed|versao|scripts|todos]` (precisa de
+`lxml`): cada defeito que um portão deve pegar, reprovado; os controles passam. O modo `scripts` quebra,
+um por vez, as regras do portão da `stable`, dos dois vigias e da fiação do publish (o workflow).

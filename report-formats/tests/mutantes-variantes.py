@@ -590,6 +590,46 @@ SCRIPT_MUTANTES = [
      "gvmd-drift.sh", [('if ! [[ "$pin" =~ @sha256:[0-9a-f]{64}$ ]]; then', "if false; then")]),
     ("test_gvmd_drift", "combinacao-fixa", "DRIFT_LANG e DRIFT_VARIANT sao ignorados",
      "gvmd-drift.sh", [("lang=${DRIFT_LANG:-en}", "lang=en")]),
+    # --- o vigia da base do feed (test_base_drift): ci/base-drift.sh, o workflow semanal e o FROM do Dockerfile ---
+    ("test_base_drift", "controle", "nenhuma troca", "base-drift.sh", []),
+    ("test_base_drift", "pin-ignorado", "o digest da tag nunca e' comparado com o fixado: sempre ha' deriva",
+     "base-drift.sh", [('if [ "$float_digest" = "$pin_digest" ]; then', "if false; then")]),
+    ("test_base_drift", "deriva-nunca", "a tag mudar nao e' deriva: sempre 'sem deriva'",
+     "base-drift.sh", [('if [ "$float_digest" = "$pin_digest" ]; then', "if true; then")]),
+    ("test_base_drift", "deriva-sem-aviso", "a deriva nao gera a anotacao ::warning::",
+     "base-drift.sh", [('echo "::warning::A base do feed (', ': "::warning::A base do feed (')]),
+    ("test_base_drift", "deriva-bloqueia", "a deriva faz o script sair com 1 (bloqueia)",
+     "base-drift.sh", [('  cat "$report"\n  exit 0\n', '  cat "$report"\n  exit "${drift_rc:-0}"\n'),
+                       ('echo "::warning::A base do feed (', 'drift_rc=1; echo "::warning::A base do feed (')]),
+    ("test_base_drift", "pin-sumido-sem-aviso", "o digest fixado que nao baixa mais nao gera o ::warning::",
+     "base-drift.sh", [('echo "::warning::A base fixada no report-formats/Dockerfile (', ': "::warning::A base fixada no report-formats/Dockerfile (')]),
+    ("test_base_drift", "pin-nao-conferido", "o digest fixado nunca e' baixado: o sumico dele passa despercebido",
+     "base-drift.sh", [('pull "$pinned" "$out/pull-fixada.log" || pin_ok=false', "true")]),
+    ("test_base_drift", "sem-retentativa", "o pull tenta uma vez so' (o registry da Greenbone oscila)",
+     "base-drift.sh", [("for i in 1 2 3; do", "for i in 1; do")]),
+    ("test_base_drift", "tag-fixa", "a tag do FROM e' ignorada: sempre latest",
+     "base-drift.sh", [("tag=${last##*:}", "tag=latest")]),
+    ("test_base_drift", "porta-vira-tag", "a porta do registro (host:5000/x/y) e' lida como tag",
+     "base-drift.sh", [("last=${name_tag##*/}", "last=$name_tag")]),
+    ("test_base_drift", "base-sem-digest-segue", "uma base sem digest nao e' tratada",
+     "base-drift.sh", [('if ! [[ "$ref" =~ ^(.+)@(sha256:[0-9a-f]{64})$ ]]; then', "if false; then")]),
+    ("test_base_drift", "varios-from-aceitos", "o Dockerfile pode ter varios FROM (vale o ultimo)",
+     "base-drift.sh", [('if [ "${n:-0}" -ne 1 ] || ! [[ "${ref:-}"', 'if ! [[ "${ref:-}"')]),
+    ("test_base_drift", "tag-que-nao-baixa-segue", "a tag que nao baixa nao e' tratada (compara o que sobrou)",
+     "base-drift.sh", [('pull "$floating" "$out/pull-tag.log" || float_ok=false', "true")]),
+    ("test_base_drift", "referencia-sem-validar", "a referencia do FROM nao passa pelo filtro de caracteres (vai ao resumo e as anotacoes)",
+     "base-drift.sh", [(' || ! [[ "${ref:-}" =~ ^[A-Za-z0-9][A-Za-z0-9._:/@-]*$ ]]; then', "; then")]),
+    ("test_base_drift", "digest-ilegivel-segue", "o digest ilegivel da tag nao e' tratado",
+     "base-drift.sh", [('if ! [[ "$float_digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then', "if false; then")]),
+    ("test_base_drift", "wf-dispara-no-pr", "o workflow semanal passa a rodar tambem em pull request",
+     ".github/workflows/report-formats-base-drift.yml", [("  workflow_dispatch:\n\npermissions:", "  workflow_dispatch:\n  pull_request:\n\npermissions:")]),
+    ("test_base_drift", "wf-bloqueia", "o job do workflow semanal deixa de ser continue-on-error",
+     ".github/workflows/report-formats-base-drift.yml", [("    continue-on-error: true\n", "")]),
+    ("test_base_drift", "wf-script-errado", "o workflow semanal chama outro script",
+     ".github/workflows/report-formats-base-drift.yml", [('run: report-formats/ci/base-drift.sh "$RUNNER_TEMP/deriva-base"',
+                                                          'run: report-formats/ci/gvmd-drift.sh "$RUNNER_TEMP/deriva-base"')]),
+    ("test_base_drift", "dockerfile-sem-digest", "o FROM do Dockerfile volta a ser uma tag flutuante",
+     "report-formats/Dockerfile", [("report-formats:latest@sha256:", "report-formats:latest # sha256:")]),
     # --- a fiacao do publish: como o workflow USA o portao (test_publish_wiring) ---
     ("test_publish_wiring", "controle", "nenhuma troca", PUBLISH_YML, []),
     ("test_publish_wiring", "stable-sem-o-if", "a stable e' movida sempre: o resultado do portao nao decide",
@@ -910,6 +950,7 @@ def modo_scripts(work, only):
         # O desenho do repo (os testes de fiacao leem os dois): <d>/report-formats/ci e <d>/.github/workflows.
         shutil.copytree(CI, os.path.join(d, "report-formats", "ci"), ignore=shutil.ignore_patterns("__pycache__"))
         shutil.copytree(workflows, os.path.join(d, ".github", "workflows"))
+        shutil.copy(os.path.join(RF, "Dockerfile"), os.path.join(d, "report-formats"))
         p = os.path.join(d, alvo if "/" in alvo else "report-formats/ci/" + alvo)
         s = open(p, "rb").read().decode("utf-8")
         for a, b in subs:

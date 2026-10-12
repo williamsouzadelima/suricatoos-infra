@@ -37,7 +37,36 @@
 #   python3 build-feed-xml.py   # GENERATE the nine embedded XMLs (and manifest.json)
 #   docker build -t ghcr.io/williamsouzadelima/suricatoos-report-formats:stable \
 #       report-formats
-FROM registry.community.greenbone.net/community/report-formats
+#
+# THE BASE IS PINNED BY DIGEST (the FROM below, and only there). Its floating tag, `latest' --
+# the only one Greenbone publishes for this image --, moves whenever they refresh the stock
+# report formats, so two builds of the same commit could ship different stock formats, and an
+# upstream layout change would break the publish (the only place this image is built) instead
+# of a reviewed pull request. The pin is the digest of the multi-arch manifest list (linux/amd64
+# and linux/arm64), which is what `docker pull' reports in RepoDigests.
+#
+#   origin:    registry.community.greenbone.net/community/report-formats:latest
+#   resolved:  2026-10-12 (image created 2026-10-12T05:10Z)
+#
+# To UPDATE (a pull request of its own: a new base is a deliberate change):
+#   1. resolve the digest `latest' has now. With docker:
+#        docker pull registry.community.greenbone.net/community/report-formats:latest
+#        docker image inspect --format '{{index .RepoDigests 0}}' \
+#          registry.community.greenbone.net/community/report-formats:latest
+#      Without docker (anonymous token + HEAD of the manifest; the digest comes back in
+#      Docker-Content-Digest):
+#        T=$(curl -s 'https://registry.community.greenbone.net/service/token?service=harbor-registry&scope=repository:community/report-formats:pull' | python3 -c 'import sys,json; print(json.load(sys.stdin)["token"])')
+#        curl -sI -H "Authorization: Bearer $T" -H 'Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json' \
+#          https://registry.community.greenbone.net/v2/community/report-formats/manifests/latest | grep -i docker-content-digest
+#   2. replace the digest below and the date above;
+#   3. build it BEFORE opening the PR -- nothing in the CI builds this image, the publish does
+#      it after the merge:   python3 build-feed-xml.py && docker build report-formats
+#   4. the next publish ships the stock report formats of the new base (the layers above it are
+#      ours, the rest is Greenbone's): that is what the review of the PR is for.
+# Drift is watched every Monday, without blocking anything, by
+# .github/workflows/report-formats-base-drift.yml (ci/base-drift.sh): it warns when `latest'
+# is no longer this digest and when this digest stops resolving in the registry.
+FROM registry.community.greenbone.net/community/report-formats:latest@sha256:031c67736795d3766731aa89946866cbb0aebba5878cb4df8b989fbc13022198
 
 USER root
 COPY pdf-suricatoos-*.xml /tmp/suricatoos-formats/

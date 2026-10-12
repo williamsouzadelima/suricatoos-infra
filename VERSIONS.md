@@ -23,6 +23,14 @@ O CI e a medicao do Suricatoos Premium PDF rodam na imagem do gvmd FIXADA por di
 Como atualizar: o comentario de `report-formats/ci/lib.sh`. A deriva em relacao a `stable` (a que a
 producao puxa) e' vigiada toda semana, sem bloquear, por `.github/workflows/report-formats-gvmd-stable.yml`.
 
+## Feed do relatorio (report-formats/Dockerfile) — base fixada por digest
+A imagem `suricatoos-report-formats` parte de `report-formats:latest` da Greenbone FIXADA por digest no
+`FROM` de `report-formats/Dockerfile` (a tag flutuante troca os report formats padrao por baixo do publish).
+Origem `registry.community.greenbone.net/community/report-formats:latest`, resolvida em 2026-10-12:
+`...@sha256:031c67736795d3766731aa89946866cbb0aebba5878cb4df8b989fbc13022198`. Como atualizar: o comentario do
+`Dockerfile`. A deriva (a `latest` andou, ou o digest fixado saiu do registro) e' vigiada toda semana, sem
+bloquear, por `.github/workflows/report-formats-base-drift.yml`.
+
 ## Feed (Greenbone, NAO forkado) — FEED_RELEASE=24.10
 vulnerability-tests, notus-data, scap-data, cert-bund-data, dfn-cert-data,
 data-objects, report-formats, gpg-data

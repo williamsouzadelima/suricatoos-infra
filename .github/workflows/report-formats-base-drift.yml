@@ -1,0 +1,50 @@
+name: report-formats-base-drift
+
+# Vigia a DERIVA da BASE do feed: a imagem de que report-formats/Dockerfile parte
+# (registry.community.greenbone.net/community/report-formats), FIXADA por digest no `FROM',
+# contra a tag flutuante dela (`latest') de hoje.
+#
+# O pin existe para o publish nao trocar, sem ninguem pedir, os report formats padrao da
+# Greenbone que a imagem leva (nem quebrar no dia em que o layout deles mudar). O custo e' o
+# inverso: quando a Greenbone atualiza a base, nada avisava que o pin ficou para tras, e um
+# digest antigo pode sair do registro. Toda segunda-feira este workflow confere:
+#   - o digest fixado ainda baixa? Senao, AVISA em ::warning:: e no resumo: o proximo publish
+#     falharia no build (a imagem so' e' construida la', depois do merge);
+#   - a tag de hoje e' o mesmo digest? Igual: sem deriva. Diferente: AVISA (com a data de
+#     criacao da base nova). Trocar o pin e' um PR proprio: o comentario do Dockerfile tem os
+#     comandos, com e sem docker.
+# NAO BLOQUEIA nada (agendado, informativo, `continue-on-error'; o script sai 0 sempre).
+# Irmao do report-formats-gvmd-stable.yml, que faz o mesmo com o gvmd do CI.
+#
+# Agendamento so' roda na branch padrao e o GitHub o desliga depois de 60 dias sem
+# atividade no repositorio; o disparo manual (Actions > Run workflow) tambem so' aparece
+# depois do merge na main.
+on:
+  schedule:
+    - cron: '41 6 * * 1'     # segundas, 06:41 UTC (depois do vigia do gvmd, 06:23)
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  base:
+    name: base do feed x base fixada (nao bloqueia)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Comparar a base de hoje com a fixada no Dockerfile
+        run: report-formats/ci/base-drift.sh "$RUNNER_TEMP/deriva-base"
+
+      - name: Publicar o veredito e os logs dos pulls
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: deriva-base-do-feed
+          path: ${{ runner.temp }}/deriva-base/
+          if-no-files-found: ignore
+          retention-days: 30
