@@ -152,6 +152,16 @@ func (c *Collector) collectKind(ctx context.Context, cyc *cycle, kind contract.S
 		return c.collectSchedules(ctx, cyc)
 	case contract.KindReports:
 		return c.collectReports(ctx, cyc)
+	case contract.KindAgents:
+		return cpList(c, ctx, cyc, agentSpec, c.cfg.ControlPlane.Agents)
+	case contract.KindTokens:
+		return cpList(c, ctx, cyc, tokenSpec, c.cfg.ControlPlane.Tokens)
+	case contract.KindSensors:
+		return cpList(c, ctx, cyc, sensorSpec, c.cfg.ControlPlane.Sensors)
+	case contract.KindScanRequests:
+		return cpList(c, ctx, cyc, scanRequestSpec, c.cfg.ControlPlane.ScanRequests)
+	case contract.KindRemediation:
+		return cpList(c, ctx, cyc, remediationSpec, c.cfg.ControlPlane.Remediation)
 	}
 	return nil, fmt.Errorf("state: kind %s ainda sem coletor", kind)
 }
