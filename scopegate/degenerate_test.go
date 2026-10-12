@@ -83,6 +83,10 @@ func TestLegitimateTargetsPassBroadAllow(t *testing.T) {
 		{"2001:DB8:0:0::/64", "2001:db8::/64"},         // forma canônica
 		{"fd12:3456:789a::/48", "fd12:3456:789a::/48"}, // ULA interna legítima
 		{"fd00:ec2::253", "fd00:ec2::253"},             // vizinho da metadata: só o /128 é negado
+		{"2003::1", "2003::1"},                         // vizinho do 6to4 (2002::/16)
+		{"64:ff9c::1", "64:ff9c::1"},                   // vizinho do NAT64 (64:ff9b::/96)
+		{"64:ff9b:2::1", "64:ff9b:2::1"},               // vizinho do NAT64 de uso local (64:ff9b:1::/48)
+		{"::ffff:1:0:0", "::ffff:1:0:0"},               // vizinho do SIIT (::ffff:0:0:0/96)
 	} {
 		got, err := s.CheckHost(c.in)
 		if err != nil || got != c.want {

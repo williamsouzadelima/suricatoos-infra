@@ -77,7 +77,7 @@ func OnIgnoredSelfDeny(warn func(quotedToken string)) Option {
 // addresses + the cloud endpoints — never scan targets). Both may be empty; an
 // empty allow spec denies everything (deny-all).
 //
-// A self-deny token is a single IP, or a /32 or /128 (the address itself). Any
+// A self-deny token is a single IP, or an IPv4 /32 or an IPv6 /128 (the address itself). Any
 // other token is IGNORED — reported through OnIgnoredSelfDeny — so the sensor
 // keeps starting on a sloppy SCAN_SELF_DENY_IPS. That leniency makes New unfit
 // for FLEET_SELF_DENY_IPS: parse it with ParseSelfDeny and add it with
@@ -186,7 +186,7 @@ func (s *Scope) gate(p netip.Prefix, bare bool) (canonical string, containsSelf 
 	if !s.containsDenied(p) {
 		return canonicalForm(p, bare), false, nil
 	}
-	if p.IsSingleIP() { // a /32 or /128 IS the self-deny address
+	if p.IsSingleIP() { // an IPv4 /32 or an IPv6 /128 IS the self-deny address
 		return "", false, fmt.Errorf("CIDR %s negado: é IP do self-deny", p)
 	}
 	return canonicalForm(p, bare), true, nil

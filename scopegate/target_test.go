@@ -186,9 +186,9 @@ func TestCheckTargetRefusesNonCanonicalPrefix(t *testing.T) {
 func TestCheckTargetRefusesNonASCII(t *testing.T) {
 	s := fleetScope(t)
 	for _, c := range []struct{ hosts, excl []string }{
-		{[]string{"192.0.2.5 "}, nil},
-		{[]string{" 192.0.2.5"}, nil},
-		{[]string{"192.0.2.128/25"}, []string{"192.0.2.200 "}},
+		{[]string{"192.0.2.5\u00a0"}, nil},
+		{[]string{"\u00a0192.0.2.5"}, nil},
+		{[]string{"192.0.2.128/25"}, []string{"192.0.2.200\u00a0"}},
 	} {
 		if got, _, err := s.CheckTarget(c.hosts, c.excl); err == nil {
 			t.Errorf("hosts=%+q exclude_hosts=%+q: byte não-ASCII deveria ser recusado, passou como %q", c.hosts, c.excl, got)
