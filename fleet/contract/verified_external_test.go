@@ -1,7 +1,7 @@
 package contract_test
 
 // An EXTERNAL test package: it sees Verified exactly as the connector and the commandcenter will. The attack it
-// pins (re-review of F2.1, D2): a package holding a *Verified copies it, changes node_id or not_after and calls
+// pins: a package holding a *Verified copies it, changes node_id or not_after and calls
 // CheckAt on the copy. Verified exposes no field, so the copy can only change what the accessors hand out (fresh
 // copies), and CheckAt keeps judging the values Verify authenticated.
 
