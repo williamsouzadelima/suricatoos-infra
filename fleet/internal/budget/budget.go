@@ -98,6 +98,7 @@ type Ledger struct {
 	// set once by Open, never changed afterwards
 	blockedUntil int64 // Unix ns; 0 = not blocked
 	lost         error
+	writeFile    func(path string, data []byte) error // fsutil.WriteAtomic; a field only so that a test can fail it
 }
 
 // Options are the facts about the node that only the caller knows.
@@ -139,7 +140,7 @@ func Open(stateDir string, boot time.Time, opts Options) (*Ledger, error) {
 	path := filepath.Join(stateDir, FileName)
 	// leftovers of a Consume that a crash interrupted; best effort: a file that will not go does not stop the boot
 	_, _ = fsutil.RemoveOrphanTemps(path)
-	l := &Ledger{path: path}
+	l := &Ledger{path: path, writeFile: fsutil.WriteAtomic}
 	data, err := fsutil.ReadBounded(path, maxFileBytes)
 	switch {
 	case errors.Is(err, fs.ErrNotExist) && opts.FirstBoot:
@@ -295,7 +296,7 @@ func (l *Ledger) write(total, sens []int64) error {
 	if err != nil {
 		return err // unreachable: a struct of ints
 	}
-	return fsutil.WriteAtomic(l.path, append(b, '\n'))
+	return l.writeFile(l.path, append(b, '\n'))
 }
 
 // usageAt returns how many instants each window holds at t. It does not apply the block that follows an unusable

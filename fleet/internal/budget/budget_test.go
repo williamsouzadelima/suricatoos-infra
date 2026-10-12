@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/williamsouzadelima/suricatoos-infra/fleet/contract"
+	"github.com/williamsouzadelima/suricatoos-infra/fleet/internal/fsutil"
 )
 
 var t0 = time.Date(2026, 10, 11, 12, 0, 0, 0, time.UTC)
@@ -757,6 +758,45 @@ func TestFalhaDeGravacaoEErroENadaFicaContado(t *testing.T) {
 	// a gravação nova leva o estado da memória (t0, sensível, e t0+2s) e nunca o consumo que falhou (t0+1s)
 	if u := re.usageAt(t0.Add(3 * time.Second)); u != (usage{Total: 2, Sensitive: 1}) {
 		t.Fatalf("Usage depois de reabrir: %+v", u)
+	}
+}
+
+// Quando só a durabilidade do rename não se confirma (fsutil.ErrNotDurable), o arquivo já tem o estado novo, mas o
+// consumo não conta: o chamador responde unavailable e o hub reentrega. A tentativa seguinte regrava o estado a
+// partir da memória, então o comando é contado uma vez só, e o que ficou no arquivo sem ter contado some.
+func TestConsumeComErrNotDurableNaoContaERegravaDepois(t *testing.T) {
+	l, dir := openAt(t, t0)
+	consume(t, l, t0, plain, wide)
+	real := l.writeFile
+	l.writeFile = func(path string, data []byte) error {
+		if err := real(path, data); err != nil {
+			return err
+		}
+		return fmt.Errorf("%w: simulado", fsutil.ErrNotDurable) // gravou, mas não confirmou a durabilidade
+	}
+
+	err := l.Consume(t0.Add(time.Second), sens, wide)
+	if !errors.Is(err, fsutil.ErrNotDurable) || errors.Is(err, ErrOverBudget) {
+		t.Fatalf("esperava ErrNotDurable (e não ErrOverBudget), deu %v", err)
+	}
+	if u := l.usageAt(t0.Add(time.Second)); u != (usage{Total: 1}) {
+		t.Fatalf("o consumo não confirmado não conta na memória: %+v", u)
+	}
+	// no arquivo o estado novo já está (o rename aconteceu)
+	afterFailed := stateJSON([]int64{t0.UnixNano(), t0.Add(time.Second).UnixNano()}, []int64{t0.Add(time.Second).UnixNano()}) + "\n"
+	if got := readState(t, dir); got != afterFailed {
+		t.Fatalf("arquivo:\n got %s\nwant %s", got, afterFailed)
+	}
+
+	// a reentrega: o disco responde, e o arquivo volta a ser exatamente a memória mais este consumo
+	l.writeFile = real
+	consume(t, l, t0.Add(2*time.Second), sens, wide)
+	afterRetry := stateJSON([]int64{t0.UnixNano(), t0.Add(2 * time.Second).UnixNano()}, []int64{t0.Add(2 * time.Second).UnixNano()}) + "\n"
+	if got := readState(t, dir); got != afterRetry {
+		t.Fatalf("depois da nova tentativa:\n got %s\nwant %s", got, afterRetry)
+	}
+	if u := l.usageAt(t0.Add(2 * time.Second)); u != (usage{Total: 2, Sensitive: 1}) {
+		t.Fatalf("o comando conta uma vez só: %+v", u)
 	}
 }
 
