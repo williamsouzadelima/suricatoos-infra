@@ -8,7 +8,7 @@ essa prova quando o latex.xsl, o build-feed-xml.py ou os checadores mudarem.
 Roda com python3 e lxml (o libxslt do lxml e' o do `xsltproc` do generate);
 nao precisa de TeX.
 
-Quatro modos:
+Cinco modos:
 
   xslt  cada mutante troca um trecho do latex.xsl numa COPIA do bundle, gera o
         .tex das fixtures da edicao nos 3 idiomas e roda os dois checadores com
@@ -29,6 +29,10 @@ Quatro modos:
         marcador sem preencher...) numa COPIA do builder e roda o
         tests/test_feed.py contra ela: algum teste tem de reprovar. O mutante
         tem de rodar (um que nao roda e' invalido, nao reprovado).
+  scripts cada mutante quebra uma regra do portao da tag `stable' (ci/stable-gate.sh) ou do
+        vigia da deriva do gvmd (ci/gvmd-drift.sh) numa COPIA de ci/ e roda o
+        tests/test_stable_gate.py ou o tests/test_gvmd_drift.py contra ela: algum teste tem
+        de reprovar; o mutante tem de ser bash valido.
 
 E um modo a parte, fora de `todos':
 
@@ -38,7 +42,7 @@ E um modo a parte, fora de `todos':
 
 Uso (de qualquer diretorio; os caminhos saem da posicao deste arquivo):
 
-  python3 report-formats/tests/mutantes-variantes.py [xslt|tex|feed|versao|todos]
+  python3 report-formats/tests/mutantes-variantes.py [xslt|tex|feed|versao|scripts|todos]
           [--so NOME ...] [--trabalho DIR] [--manter]
   python3 report-formats/tests/mutantes-variantes.py regressao --base <commit>
 
@@ -504,6 +508,61 @@ VERSAO_MUTANTES = [
      [('    return {\n        "report_formats": [', '    return {\n        "version": derive_version(),\n        "report_formats": [')]),
 ]
 
+# ---------------------------------------------------------------------------
+# Mutantes dos scripts de CI: o test_stable_gate.py (portao da tag `stable') e o
+# test_gvmd_drift.py (vigia da deriva do gvmd) rodam contra uma COPIA de ci/ com UM
+# script mutado (REPORT_FORMATS_DIR). Cada mutante quebra uma regra; algum teste tem de
+# reprovar. O mutante tem de ser bash valido (bash -n): um que nao e' e' invalido.
+# ---------------------------------------------------------------------------
+GATE_RELEVANT = ("RELEVANT=(report-formats .github/workflows/report-formats-ci.yml "
+                 ".github/workflows/report-formats-publish.yml)")
+# (modulo de teste, nome, o que quebra, script em ci/, [(trecho, troca)])
+SCRIPT_MUTANTES = [
+    ("test_stable_gate", "controle", "nenhuma troca", "stable-gate.sh", []),
+    ("test_stable_gate", "sem-ancestralidade", "o commit nao precisa ser ancestral da main (um branch de feature move)",
+     "stable-gate.sh", [('git merge-base --is-ancestor "$src" "$tip" || rc=$?', "rc=0")]),
+    ("test_stable_gate", "nao-ancestral-move", "um commit fora da main (disparo de branch) move a stable",
+     "stable-gate.sh", [('  1) decide false "', '  1) decide true "')]),
+    ("test_stable_gate", "ignora-commits-mais-novos", "commit mais novo do relatorio na main nao importa (o re-run velho move)",
+     "stable-gate.sh", [('if [ -n "$newer" ]; then', "if false; then")]),
+    ("test_stable_gate", "sem-os-workflows-do-relatorio", "so' report-formats/ conta; os workflows dele nao",
+     "stable-gate.sh", [(GATE_RELEVANT, "RELEVANT=(report-formats)")]),
+    ("test_stable_gate", "vigia-agendado-conta", "o workflow do vigia de deriva tambem bloqueia a stable",
+     "stable-gate.sh", [(GATE_RELEVANT, GATE_RELEVANT[:-1] + " .github/workflows/report-formats-gvmd-stable.yml)")]),
+    ("test_stable_gate", "sem-full-history", "history simplification do git: o merge que descarta a mudanca esconde o commit",
+     "stable-gate.sh", [("git log --full-history --format=", "git log --format=")]),
+    ("test_stable_gate", "ignora-arquivo-apagado", "commit que so' apaga arquivo do relatorio nao conta",
+     "stable-gate.sh", [("git log --full-history --format=", "git log --full-history --diff-filter=AM --format=")]),
+    ("test_stable_gate", "aceita-clone-raso", "clone raso nao e' erro (a ancestralidade nao e' confiavel)",
+     "stable-gate.sh", [('[ "$(git rev-parse --is-shallow-repository)" = false ]', "true")]),
+    ("test_stable_gate", "sem-cd-na-raiz", "os caminhos do relatorio valem a partir da pasta onde se roda, nao da raiz",
+     "stable-gate.sh", [('cd "$root"\n', "")]),
+    ("test_stable_gate", "main-fixa", "o segundo argumento (o ref da main) e' ignorado",
+     "stable-gate.sh", [("main_ref=${2:-origin/main}", "main_ref=origin/main")]),
+    ("test_gvmd_drift", "controle", "nenhuma troca", "gvmd-drift.sh", []),
+    ("test_gvmd_drift", "pin-herdado-do-ambiente", "um GVMD_IMAGE do ambiente esconde o pin (compara a stable com ela mesma)",
+     "gvmd-drift.sh", [("pin=$(env -u GVMD_IMAGE bash -c", "pin=$(bash -c")]),
+    ("test_gvmd_drift", "sempre-compila", "sem deriva tambem compila (o digest igual nao e' comparado)",
+     "gvmd-drift.sh", [('if [ "$stable_digest" = "$pin_digest" ]; then', "if false; then")]),
+    ("test_gvmd_drift", "compila-no-pin", "a compilacao roda no gvmd fixado, nao na stable (o teste de deriva testa o que ja' passa)",
+     "gvmd-drift.sh", [('GVMD_IMAGE="$STABLE_IMAGE" "$CI_DIR/compile.sh"', 'GVMD_IMAGE="$pin" "$CI_DIR/compile.sh"')]),
+    ("test_gvmd_drift", "reprovacao-bloqueia", "a compilacao que reprova faz o script sair com o exit dela (bloqueia)",
+     "gvmd-drift.sh", [('  cat "$report"\n  exit 0\n', '  cat "$report"\n  exit "${rc:-0}"\n')]),
+    ("test_gvmd_drift", "deriva-sem-aviso", "a deriva nao gera a anotacao ::warning::",
+     "gvmd-drift.sh", [('echo "::warning::A gvmd:stable (', ': "::warning::A gvmd:stable (')]),
+    ("test_gvmd_drift", "reprovacao-sem-aviso", "a compilacao que reprova nao gera o ::warning:: mais alto",
+     "gvmd-drift.sh", [('echo "::warning::A compilacao do relatorio ($lang/$variant) REPROVOU',
+                        ': "::warning::A compilacao do relatorio ($lang/$variant) REPROVOU')]),
+    ("test_gvmd_drift", "pull-que-falha-segue", "a stable que nao baixa nao e' tratada (o script segue e compara lixo)",
+     "gvmd-drift.sh", [('if ! gvmd_pull > "$out/pull.log" 2>&1; then', "if false; then")]),
+    ("test_gvmd_drift", "digest-ilegivel-segue", "digest ilegivel da stable nao e' tratado",
+     "gvmd-drift.sh", [('if ! [[ "$stable_digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then', "if false; then")]),
+    ("test_gvmd_drift", "pin-sem-digest-segue", "um pin que nao e' digest nao e' tratado",
+     "gvmd-drift.sh", [('if ! [[ "$pin" =~ @sha256:[0-9a-f]{64}$ ]]; then', "if false; then")]),
+    ("test_gvmd_drift", "combinacao-fixa", "DRIFT_LANG e DRIFT_VARIANT sao ignorados",
+     "gvmd-drift.sh", [("lang=${DRIFT_LANG:-en}", "lang=en")]),
+]
+
 
 # ---------------------------------------------------------------------------
 def transform(xsl, src, lang, variant, out):
@@ -734,6 +793,47 @@ def modo_versao(work, only):
     return bad
 
 
+def modo_scripts(work, only):
+    """Roda o test_stable_gate.py e o test_gvmd_drift.py contra uma COPIA de ci/ com um
+    script mutado: cada mutante quebra uma regra do portao da tag `stable' ou do vigia da
+    deriva e algum teste tem de reprovar. O mutante tem de ser bash valido: um que nao e'
+    e' invalido, nao reprovado."""
+    bad = 0
+    for modulo, name, what, script, subs in SCRIPT_MUTANTES:
+        if only and name not in only and name != "controle":
+            continue
+        d = os.path.join(work, "script-%s-%s" % (modulo, name))
+        shutil.rmtree(d, ignore_errors=True)
+        shutil.copytree(CI, os.path.join(d, "ci"), ignore=shutil.ignore_patterns("__pycache__"))
+        p = os.path.join(d, "ci", script)
+        s = open(p, "rb").read().decode("utf-8")
+        for a, b in subs:
+            n = s.count(a)
+            if n != 1:
+                raise SystemExit("mutante %s/%s: trecho achado %d vez(es), esperado 1: %r" % (modulo, name, n, a[:90]))
+            s = s.replace(a, b)
+        open(p, "wb").write(s.encode("utf-8"))
+        label = "%s/%s" % (modulo[5:], name)
+        sintaxe = subprocess.run(["bash", "-n", p.replace("\\", "/")], capture_output=True)
+        if sintaxe.returncode != 0:
+            print("%-44s %s\n    MUTANTE INVALIDO (nao e' bash valido): %s"
+                  % (label, what, sintaxe.stderr.decode("utf-8", "replace").strip()[:140]), flush=True)
+            bad += 1
+            continue
+        r = subprocess.run([sys.executable, "-X", "utf8", "-m", "unittest", modulo], cwd=HERE,
+                           env=dict(os.environ, REPORT_FORMATS_DIR=d), capture_output=True)
+        err = r.stderr.decode("utf-8", "replace").splitlines()
+        reprovados = [l.split()[1] for l in err if l.startswith(("FAIL:", "ERROR:"))]
+        failed = r.returncode != 0
+        msg = ("%d teste(s): %s" % (len(reprovados), ", ".join(dict.fromkeys(reprovados[:4])) + (", ..." if len(reprovados) > 4 else ""))
+               if reprovados else (err[-1] if err else ""))
+        ok = (not failed) if name == "controle" else failed
+        bad += not ok
+        print("%-44s %s\n    %s %s" % (label, what, "OK  " if ok else "ERRO",
+                                       ("reprovado em " + msg[:170]) if failed else "passou"), flush=True)
+    return bad
+
+
 def modo_regressao(work, base):
     """A edicao tecnica sai IDENTICA, byte a byte, a do latex.xsl de `base' (um
     commit do git): o mesmo XML, o mesmo idioma, na mesma execucao (a data do
@@ -778,7 +878,7 @@ def modo_regressao(work, base):
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("modo", nargs="?", default="todos",
-                    choices=("xslt", "tex", "feed", "versao", "regressao", "todos"))
+                    choices=("xslt", "tex", "feed", "versao", "scripts", "regressao", "todos"))
     ap.add_argument("--so", nargs="*", default=[])
     ap.add_argument("--trabalho")
     ap.add_argument("--manter", action="store_true")
@@ -805,6 +905,9 @@ def main():
         if a.modo in ("versao", "todos"):
             print("== mutantes da VERSION por conteudo (tests/test_feed.py)", flush=True)
             bad += modo_versao(work, set(a.so))
+        if a.modo in ("scripts", "todos"):
+            print("== mutantes do portao da tag stable e do vigia da deriva (ci/stable-gate.sh, ci/gvmd-drift.sh)", flush=True)
+            bad += modo_scripts(work, set(a.so))
     finally:
         if not a.manter and not a.trabalho:
             shutil.rmtree(work, ignore_errors=True)
