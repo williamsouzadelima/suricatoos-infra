@@ -103,6 +103,10 @@ const (
 var (
 	// ErrRecorded: the canonical form is already recorded. An entry is never overwritten.
 	ErrRecorded = errors.New("replay: forma canônica já gravada (uma entrada gravada nunca é sobrescrita)")
+	// ErrKeyTaken: an accepted decision under a nonce or a command_id that a live entry of ANOTHER canonical form
+	// already holds — a replay that the caller's Lookup did not see (two verifiers over one store, say). Never two
+	// accepted under one key, whatever the order of the callers: the pipeline answers unavailable.
+	ErrKeyTaken = errors.New("replay: nonce ou command_id já gravado com outra forma canônica: aceite recusado")
 	// ErrFull: the store is at one of its ceilings; nothing new is recorded (unavailable).
 	ErrFull = errors.New("replay: store no teto de entradas ou de bytes")
 	// ErrNoJob: no live accepted command under that key.
@@ -525,6 +529,26 @@ func (s *Store) findLocked(canon, nonce [32]byte, cmd [16]byte, t time.Time) int
 
 func hasKey[K comparable](m map[K]int32, k K) bool { _, ok := m[k]; return ok }
 
+// keyTakenLocked reports whether a live entry of another canonical form holds the nonce or the command_id: the
+// replay an accepted decision must never share a key with (linear in the chains).
+func (s *Store) keyTakenLocked(canon, nonce [32]byte, cmd [16]byte, t time.Time) bool {
+	if i, ok := s.byNonce[nonce]; ok {
+		for ; i >= 0; i = s.entries[i].nextNonce {
+			if e := &s.entries[i]; e.canon != canon && alive(e, t) {
+				return true
+			}
+		}
+	}
+	if i, ok := s.byCmd[cmd]; ok {
+		for ; i >= 0; i = s.entries[i].nextCmd {
+			if e := &s.entries[i]; e.canon != canon && alive(e, t) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // insertLocked adds e to memory and to both indexes: the index keeps pointing to the first entry of a key, and a
 // later one is chained right after it.
 func (s *Store) insertLocked(e entry) int32 {
@@ -587,7 +611,8 @@ func checkDecision(d Decision) error {
 // Record records the final decision d on the authenticated envelope v at the verification clock t, under its
 // canonical form, its nonce and its command_id — the pipeline calls it BEFORE the ack. It returns only once the record
 // is durable (fsync); then the memory has it. ErrRecorded: the canonical form is already recorded (never
-// overwritten). ErrFull: a ceiling. ErrInvalid: a decision the ADR does not record (line 3, deferred, lines 0–2), an
+// overwritten). ErrKeyTaken: an accepted decision under a nonce or command_id that a live entry of another canonical
+// form holds — never two accepted under one key, whatever the order of the callers. ErrFull: a ceiling. ErrInvalid: a decision the ADR does not record (line 3, deferred, lines 0–2), an
 // envelope Verify did not produce or whose window is invalid, an accepted type outside the catalog. Any other error
 // is a write that did not happen — the pipeline answers unavailable.
 func (s *Store) Record(v *contract.Verified, d Decision, t time.Time) (Entry, error) {
@@ -629,6 +654,9 @@ func (s *Store) Record(v *contract.Verified, d Decision, t time.Time) (Entry, er
 	defer s.mu.Unlock()
 	if s.findLocked(e.canon, e.nonce, e.cmd, t) >= 0 {
 		return Entry{}, ErrRecorded
+	}
+	if d.Decision == contract.DecisionAccepted && s.keyTakenLocked(e.canon, e.nonce, e.cmd, t) {
+		return Entry{}, ErrKeyTaken
 	}
 	if len(s.entries) >= s.cfg.maxEntries && s.hasDeadLocked(t) {
 		if err := s.rewriteLocked(t); err != nil && !errors.Is(err, fsutil.ErrNotDurable) {

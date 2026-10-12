@@ -429,3 +429,31 @@ func expiringEnv(t *testing.T, name, notAfter string) *contract.Verified {
 	c.NotAfter = notAfter
 	return verified(t, c, taskPayload)
 }
+
+// O store mesmo garante "nunca dois aceitos sob uma chave": um accepted sob um nonce ou um command_id que outra forma
+// canônica viva já ocupa é recusado (ErrKeyTaken), seja qual for a ordem em que os chamadores consultaram o store.
+// Gravar o replay (rejected) sob a chave ocupada continua normal, e depois da vida da primeira a chave é livre.
+func TestRecordAcceptedNuncaDivideAChave(t *testing.T) {
+	s, dir := firstBoot(t)
+	first := env(t, "original")
+	mustRecord(t, s.Store, first, accepted, t0)
+	sameCmd := command("original")
+	sameCmd.Nonce = nonceOf("outro nonce")
+	sameNonce := command("outro command_id")
+	sameNonce.Nonce = nonceOf("original")
+	before := storeBytes(t, dir)
+	for name, c := range map[string]contract.Command{"command_id": sameCmd, "nonce": sameNonce} {
+		if _, err := s.Record(verified(t, c, taskPayload), accepted, t0); !errors.Is(err, ErrKeyTaken) {
+			t.Fatalf("%s: esperava ErrKeyTaken, deu %v", name, err)
+		}
+	}
+	if string(storeBytes(t, dir)) != string(before) {
+		t.Fatal("a recusa gravou")
+	}
+	mustRecord(t, s.Store, verified(t, sameCmd, taskPayload), rejected(contract.ReasonReplay), t0)
+	// depois da vida da primeira (13:00 + 7 dias), o command_id está livre
+	later := time.Date(2026, 10, 18, 13, 0, 1, 0, time.UTC)
+	c := command("original")
+	c.Nonce, c.IssuedAt, c.NotAfter = nonceOf("bem depois"), "2026-10-18T12:00:00Z", "2026-10-18T14:00:00Z"
+	mustRecord(t, s.Store, verified(t, c, taskPayload), accepted, later)
+}

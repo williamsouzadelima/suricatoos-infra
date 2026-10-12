@@ -269,3 +269,27 @@ func TestStoreNaoConfirmadoEUnavailableAteNaReentrega(t *testing.T) {
 		t.Fatal("não houve reentrega servida")
 	}
 }
+
+// staleStore answers Lookup as it was BEFORE any recording: a second verifier whose look at the store predates the
+// first one's decision.
+type staleStore struct{ Store }
+
+func (staleStore) Lookup(*contract.Verified, time.Time) replay.Lookup { return replay.Lookup{} }
+
+// Dois verificadores sobre o mesmo estado (um New de novo num reload, com o antigo ainda processando): mesmo que o
+// segundo tenha consultado o store antes de o primeiro gravar, o par re-assinado sob o mesmo command_id não é aceito
+// duas vezes — o store recusa e o segundo responde unavailable.
+func TestDoisVerificadoresNuncaAceitamOParReassinado(t *testing.T) {
+	a := newNode(t)
+	b := &node{t: t, st: a.st, dir: a.dir, scope: a.scope, formats: a.formats, logs: a.logs, cfg: a.cfg, d: a.d}
+	b.d.store = staleStore{a.d.store}
+	b.build()
+	expectAck(t, a.process(env("original", contract.TypeTaskStart), tv), Ack, contract.DecisionAccepted, "")
+	c := command("original", contract.TypeTaskStart)
+	c.Nonce = nonceOf("re-assinado")
+	o := b.process(signed(c, payloads[contract.TypeTaskStart]), tv)
+	expectAck(t, o, Ack, contract.DecisionDeferred, contract.ReasonUnavailable)
+	if o.Accepted != nil {
+		t.Fatal("o par re-assinado foi aceito")
+	}
+}
