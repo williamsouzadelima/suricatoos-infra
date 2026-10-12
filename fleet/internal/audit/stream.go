@@ -106,6 +106,7 @@ type stream struct {
 	size     int64      // size of the current file as this stream left it
 	tail     []tailLine // the last TailLines lines, the oldest first
 	poisoned error      // non-nil: every append is refused until the next Open
+	recovery Recovery   // what Open found; never changes afterwards
 }
 
 // newStream is a stream with no line yet over dir; Open fills it from the files (recover) instead.
@@ -113,13 +114,16 @@ func newStream(dir string, spec streamSpec, ops fileOps, log *slog.Logger) *stre
 	return &stream{spec: spec, dir: dir, ops: ops, log: log}
 }
 
-// path is the current file (i == 0) or the rotated file i.
-func (s *stream) path(i int) string {
+// name is the name of the current file (i == 0) or of the rotated file i, as Break and the logs report it.
+func (s *stream) name(i int) string {
 	if i == 0 {
-		return filepath.Join(s.dir, s.spec.file)
+		return s.spec.file
 	}
-	return filepath.Join(s.dir, s.spec.file+"."+strconv.Itoa(i))
+	return s.spec.file + "." + strconv.Itoa(i)
 }
+
+// path is the path of the current file (i == 0) or of the rotated file i.
+func (s *stream) path(i int) string { return filepath.Join(s.dir, s.name(i)) }
 
 // rotatedIndex reports whether name is a rotated file of this stream — the name of the current file, a dot and a
 // number from 1 written without leading zeros (at most 6 digits) — and its number.
