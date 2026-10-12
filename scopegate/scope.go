@@ -110,7 +110,11 @@ func (s *Scope) Empty() bool { return len(s.allow) == 0 }
 // off-scope IP, or a CIDR not fully within the allow-set all fail, and so does a
 // CIDR that contains a self-deny address unless LogSelfDenyCIDR is set.
 func (s *Scope) CheckHost(host string) (string, error) {
-	canonical, containsSelf, err := s.gate(host)
+	p, bare, ok := literal(strings.TrimSpace(host))
+	if !ok {
+		return "", fmt.Errorf("%s não é IP/CIDR literal", echo(host))
+	}
+	canonical, containsSelf, err := s.gate(p, bare)
 	if err != nil {
 		return "", err
 	}
@@ -123,15 +127,11 @@ func (s *Scope) CheckHost(host string) (string, error) {
 	return canonical, nil
 }
 
-// gate runs every check on one host and returns its canonical form, except the
-// decision on a CIDR that CONTAINS a self-deny IP: that one is reported in
+// gate runs every check on one parsed host and returns its canonical form, except
+// the decision on a CIDR that CONTAINS a self-deny IP: that one is reported in
 // containsSelf for the caller (CheckHost per mode, CheckTarget always denies). A
 // single address equal to a self-deny IP — bare, /32 or /128 — is an error here.
-func (s *Scope) gate(host string) (canonical string, containsSelf bool, err error) {
-	p, bare, ok := literal(strings.TrimSpace(host))
-	if !ok {
-		return "", false, fmt.Errorf("%s não é IP/CIDR literal", echo(host))
-	}
+func (s *Scope) gate(p netip.Prefix, bare bool) (canonical string, containsSelf bool, err error) {
 	// Individual IP: full degenerate + self-deny + allow-membership checks.
 	if bare {
 		ip := p.Addr()
@@ -144,7 +144,7 @@ func (s *Scope) gate(host string) (canonical string, containsSelf bool, err erro
 		if !s.allowed(p) {
 			return "", false, fmt.Errorf("host %s fora do escopo autorizado", ip)
 		}
-		return ip.String(), false, nil
+		return canonicalForm(p, bare), false, nil
 	}
 	// CIDR subnet: must not overlap degenerate space and must be FULLY within one
 	// allow CIDR.
@@ -155,12 +155,21 @@ func (s *Scope) gate(host string) (canonical string, containsSelf bool, err erro
 		return "", false, fmt.Errorf("CIDR %s fora do escopo autorizado", p)
 	}
 	if !s.containsDenied(p) {
-		return p.String(), false, nil
+		return canonicalForm(p, bare), false, nil
 	}
 	if p.IsSingleIP() { // a /32 or /128 IS the self-deny address
 		return "", false, fmt.Errorf("CIDR %s negado: é IP do self-deny", p)
 	}
-	return p.String(), true, nil
+	return canonicalForm(p, bare), true, nil
+}
+
+// canonicalForm is the form handed to gvmd: the address of a bare IP (an
+// IPv4-mapped one as IPv4), or the masked CIDR.
+func canonicalForm(p netip.Prefix, bare bool) string {
+	if bare {
+		return p.Addr().String()
+	}
+	return p.String()
 }
 
 // Filter splits targets into canonical in-scope IPs (kept) and rejected (dropped).
