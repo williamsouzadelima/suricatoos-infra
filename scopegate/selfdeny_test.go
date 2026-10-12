@@ -331,3 +331,16 @@ func TestWithSelfDenySkipsAddressesAlreadyPresent(t *testing.T) {
 		t.Fatal("o hub segue negado")
 	}
 }
+
+// TestNewIgnoresNilOption: uma Option montada condicionalmente pode chegar nil;
+// New a ignora, sem pânico, e a regra segue imposta.
+func TestNewIgnoresNilOption(t *testing.T) {
+	var conditional Option
+	s, err := New(lanAllow, nodeIPs, nil, conditional)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, err := s.CheckHost("192.0.2.0/24"); err == nil {
+		t.Fatalf("sem opção de log a regra segue imposta, passou como %q", got)
+	}
+}

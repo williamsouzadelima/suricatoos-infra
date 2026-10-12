@@ -83,7 +83,9 @@ func OnIgnoredSelfDeny(warn func(quotedToken string)) Option {
 func New(allowSpec, selfDenySpec string, opts ...Option) (*Scope, error) {
 	var o options
 	for _, opt := range opts {
-		opt(&o)
+		if opt != nil { // an Option built conditionally may be nil
+			opt(&o)
+		}
 	}
 	s := &Scope{warnSelfDenyCIDR: o.warnSelfDenyCIDR}
 	for _, tok := range fields(allowSpec) {
