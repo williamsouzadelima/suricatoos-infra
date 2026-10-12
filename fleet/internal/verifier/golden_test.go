@@ -147,6 +147,7 @@ func TestNewConfereAConfiguracao(t *testing.T) {
 		"node_kind":     func(c *Config) { c.NodeKind = "hub" },
 		"skew negativo": func(c *Config) { c.Skew = -time.Second },
 		"skew > 10 min": func(c *Config) { c.Skew = contract.MaxClockSkew + time.Second },
+		"skew fração":   func(c *Config) { c.Skew = 2*time.Minute + 500*time.Millisecond },
 		"sem state dir": func(c *Config) { c.StateDir = "" },
 		"sem tenants":   func(c *Config) { c.Tenants = nil },
 		"sem formatos":  func(c *Config) { c.ReportFormats = nil },
@@ -164,8 +165,13 @@ func TestNewConfereAConfiguracao(t *testing.T) {
 	if _, err := New(n.cfg, n.st); err != nil {
 		t.Fatalf("configuração válida: %v", err)
 	}
-	if !errors.Is(func() error { c := n.cfg; c.Skew = 11 * time.Minute; _, err := New(c, n.st); return err }(), contract.ErrInvalidSkew) {
-		t.Error("skew acima do teto é ErrInvalidSkew")
+	// acima do teto, ou fora dos segundos inteiros em que o piso de replay é comparado
+	for _, skew := range []time.Duration{11 * time.Minute, 2*time.Minute + 500*time.Millisecond, time.Nanosecond} {
+		c := n.cfg
+		c.Skew = skew
+		if _, err := New(c, n.st); !errors.Is(err, contract.ErrInvalidSkew) {
+			t.Errorf("skew %v: %v, esperava ErrInvalidSkew", skew, err)
+		}
 	}
 }
 

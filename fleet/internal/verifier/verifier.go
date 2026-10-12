@@ -63,7 +63,8 @@ type Config struct {
 	NodeID string
 	// NodeKind is this node's kind (line 7).
 	NodeKind contract.NodeKind
-	// Skew is FLEET_CLOCK_SKEW (clock.ParseSkew): 0 to 10 min.
+	// Skew is FLEET_CLOCK_SKEW (clock.ParseSkew): 0 to 10 min, in whole seconds — the replay floor is compared in whole
+	// seconds (line 5), so a fraction would move it below the instant it marks.
 	Skew time.Duration
 	// StateDir is FLEET_STATE_DIR, where policy.json is read for every command (lines 6–7).
 	StateDir string
@@ -235,6 +236,8 @@ func newVerifier(cfg Config, d deps, allowGoldenKey bool) (*Verifier, error) {
 		return nil, fmt.Errorf("verifier: node_kind %.16q inválido", cfg.NodeKind)
 	case cfg.Skew < 0 || cfg.Skew > contract.MaxClockSkew:
 		return nil, contract.ErrInvalidSkew
+	case cfg.Skew%time.Second != 0:
+		return nil, fmt.Errorf("%w: %v não é um número inteiro de segundos", contract.ErrInvalidSkew, cfg.Skew)
 	case cfg.StateDir == "":
 		return nil, errors.New("verifier: FLEET_STATE_DIR vazio")
 	case cfg.Tenants == nil || cfg.ReportFormats == nil || cfg.Scope == nil:
