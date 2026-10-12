@@ -2,6 +2,7 @@ package contract
 
 import (
 	"encoding/json"
+	"fmt"
 	"reflect"
 	"slices"
 	"sort"
@@ -122,7 +123,7 @@ type enumUse struct {
 }
 
 type typeParity struct {
-	t     *testing.T
+	t     testing.TB
 	docs  map[string]*ordObj
 	byPtr map[string]reflect.Type
 	enums map[string][]enumUse // Go type name -> uses
@@ -169,10 +170,16 @@ func (p *typeParity) object(file string, node *ordObj, t reflect.Type, loc strin
 			p.t.Errorf("%s: objeto com properties sem additionalProperties:false — o decode estrito do Go seria mais estrito que o schema", loc)
 		}
 	}
-	// every exported field must carry a json tag: an untagged one would be (de)serialized under its Go name,
-	// matched case-insensitively by encoding/json — a member the schema does not have
+	// no embedded field: encoding/json promotes the exported fields of an embedded struct into the object (even
+	// when the embedded type is unexported), out of sight of the comparison below. And every exported field must
+	// carry a json tag: an untagged one would be (de)serialized under its Go name, matched case-insensitively by
+	// encoding/json — a member the schema does not have
 	for i := 0; i < t.NumField(); i++ {
-		if f := t.Field(i); f.IsExported() && f.Tag.Get("json") == "" {
+		f := t.Field(i)
+		switch {
+		case f.Anonymous:
+			p.t.Errorf("%s: campo embutido %s.%s: o encoding/json promoveria os campos exportados dele", loc, t.Name(), f.Name)
+		case f.IsExported() && f.Tag.Get("json") == "":
 			p.t.Errorf("%s: campo exportado %s.%s sem tag json", loc, t.Name(), f.Name)
 		}
 	}
@@ -409,6 +416,71 @@ func TestParityTypes(t *testing.T) {
 		}
 		if len(consts[name]) == 0 {
 			t.Errorf("tipo Go %s sem constantes", name)
+		}
+	}
+}
+
+// errorRecorder is a testing.TB that only records Errorf, to run the parity checker itself on synthetic types.
+type errorRecorder struct {
+	testing.TB
+	errs []string
+}
+
+func (r *errorRecorder) Errorf(format string, args ...any) {
+	r.errs = append(r.errs, fmt.Sprintf(format, args...))
+}
+
+// TestParityTypesFieldRules: the checker refuses what encoding/json would (de)serialize out of its sight — an
+// exported field without a json tag (read and written under its Go name) and any embedded struct, whose exported
+// fields encoding/json promotes into the object even when the embedded type is unexported.
+func TestParityTypesFieldRules(t *testing.T) {
+	v, err := parseOrdered([]byte(`{"type":"object","additionalProperties":false,"properties":{"task_id":{"type":"string"}},"required":["task_id"]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	node := v.(*ordObj)
+	type promoted struct {
+		X string `json:"x"`
+	}
+	type Promoted struct {
+		Y string `json:"y"`
+	}
+	type plain struct {
+		TaskID string `json:"task_id"`
+	}
+	type untagged struct {
+		TaskID string `json:"task_id"`
+		Extra  string
+	}
+	type embedsUnexported struct {
+		TaskID string `json:"task_id"`
+		promoted
+	}
+	type embedsExported struct {
+		TaskID string `json:"task_id"`
+		Promoted
+	}
+	type embedsPointer struct {
+		TaskID string `json:"task_id"`
+		*Promoted
+	}
+	cases := []struct {
+		name string
+		typ  reflect.Type
+		bad  bool
+	}{
+		{"sem defeito", reflect.TypeFor[plain](), false},
+		{"campo exportado sem tag", reflect.TypeFor[untagged](), true},
+		{"struct embutida de tipo não exportado", reflect.TypeFor[embedsUnexported](), true},
+		{"struct embutida de tipo exportado", reflect.TypeFor[embedsExported](), true},
+		{"ponteiro embutido", reflect.TypeFor[embedsPointer](), true},
+	}
+	for _, c := range cases {
+		rec := &errorRecorder{}
+		p := &typeParity{t: rec, docs: map[string]*ordObj{}, byPtr: map[string]reflect.Type{}, enums: map[string][]enumUse{}}
+		p.object("sintetico.json", node, c.typ, "sintetico.json#/x")
+		if got := len(rec.errs) > 0; got != c.bad {
+			t.Errorf("%s: recusado = %v, esperado %v %v", c.name, got, c.bad, rec.errs)
 		}
 	}
 }
