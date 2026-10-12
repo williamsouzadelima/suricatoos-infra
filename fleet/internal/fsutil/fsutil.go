@@ -123,8 +123,10 @@ const tempInfix = ".tmp-"
 
 // RemoveOrphanTemps removes the temporary files an interrupted WriteAtomic(path, ...) left behind — a crash between
 // creating the temporary file and renaming it — and returns how many it removed. Only the files that are named
-// exactly like WriteAtomic names them for this path (the name of path, ".tmp-", a suffix) go; the directory is
-// shared with the other state files of the connector, whose leftovers belong to them. Directories are never
+// exactly like WriteAtomic names them for this path go: the name of path, ".tmp-" and the suffix os.CreateTemp
+// generates, which is decimal digits only (TestCreateTempGeraSufixoDeDigitosQueALimpezaReconhece pins it). The
+// directory is shared with the other state files of the connector, whose leftovers belong to them, and a file of
+// the operator's that merely shares the prefix ("budget.json.tmp-old") is not a temporary. Directories are never
 // touched. It assumes no WriteAtomic of the same path is running. A directory that does not exist has nothing to
 // clean; a file that cannot be removed is reported in the error (all the others are still removed).
 func RemoveOrphanTemps(path string) (removed int, err error) {
@@ -138,7 +140,8 @@ func RemoveOrphanTemps(path string) (removed int, err error) {
 	}
 	var errs []error
 	for _, e := range entries {
-		if e.IsDir() || !strings.HasPrefix(e.Name(), prefix) {
+		suffix, ok := strings.CutPrefix(e.Name(), prefix)
+		if e.IsDir() || !ok || !decimalDigits(suffix) {
 			continue
 		}
 		if rerr := os.Remove(filepath.Join(dir, e.Name())); rerr != nil && !errors.Is(rerr, fs.ErrNotExist) {
@@ -148,6 +151,19 @@ func RemoveOrphanTemps(path string) (removed int, err error) {
 		removed++
 	}
 	return removed, errors.Join(errs...)
+}
+
+// decimalDigits reports whether s is a non-empty run of the ASCII digits 0-9 (and nothing else).
+func decimalDigits(s string) bool {
+	if s == "" {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		if s[i] < '0' || s[i] > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 // ErrNotDurable: WriteAtomic renamed the new content into place, but could not confirm that the directory entry
