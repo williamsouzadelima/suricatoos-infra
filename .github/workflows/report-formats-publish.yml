@@ -149,7 +149,7 @@ jobs:
             docker push "$IMG:stable"
             echo "PUSHED_STABLE=true" >> "$GITHUB_ENV"
           else
-            echo "::notice::A tag stable NAO foi movida: $STABLE_REASON"
+            echo "::warning::A tag stable NAO foi movida (so' a <sha12> foi empurrada): $STABLE_REASON"
           fi
 
       - name: Resumo
