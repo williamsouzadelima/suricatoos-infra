@@ -72,8 +72,9 @@ GRUPOS = [V3, V4, V8, V22, V26]
 SORT = '<xsl:sort select="@%s" data-type="%s" order="%s"/>'
 # O card de um NVT (1o passo, acts-rtf)
 N_LOOP = '<!-- O card de um NVT. -->\n      <xsl:for-each select="$rows-conf">'
+N_EPSS = 'math:max($inst[number(severity) &gt;= 0.1]/nvt/epss/max_epss/score[number(.) = number(.)])'
 N_IF = ('<xsl:if test="$smax &gt;= 0.1">\n          <xsl:variable name="emax" '
-        'select="math:max($inst/nvt/epss/max_epss/score[number(.) = number(.)])"/>')
+        'select="' + N_EPSS + '"/>')
 N_H = ('h="{count($inst[number(severity) &gt;= 0.1][string-length(normalize-space(host/text())) &gt; 0]\n'
        '                            [generate-id() = generate-id(key(\'by-prio-host\', '
        'concat(nvt/@oid, \'|\', normalize-space(host/text())))[1])])}"')
@@ -93,9 +94,9 @@ G_LOOP = ('<xsl:for-each select="$grp-reps">\n'
           '        <xsl:variable name="members" select="gvm:grp-members($g)"/>\n'
           '        <xsl:variable name="smax" select="gvm:sev-max($members)"/>')
 G_GNUM = '<xsl:variable name="gnum" select="position()"/>'
+G_EPSS = 'math:max($members[number(severity) &gt;= 0.1]/nvt/epss/max_epss/score[number(.) = number(.)])'
 G_IF = ('<xsl:if test="$smax &gt;= 0.1">\n          <xsl:variable name="emax" '
-        'select="math:max($members/nvt/epss/max_epss/score[number(.) = number(.)])"/>')
-G_EPSS = 'math:max($members/nvt/epss/max_epss/score[number(.) = number(.)])'
+        'select="' + G_EPSS + '"/>')
 G_HFILTER = ('<xsl:for-each select="$members[number(severity) &gt;= 0.1]'
              '[string-length(normalize-space(host/text())) &gt; 0]">')
 G_A = '          <a o="{nvt/@oid}" n="{$g}" k="{$g}" s="{$smax}"'
@@ -160,7 +161,9 @@ MUTANTES = [
        'h="{count($inst[number(severity) &gt;= 0.1][not(qod/value and number(qod/value) '
        '&lt; number($qod-min))][string-length')], NOVAS),
     ("epss-do-max-severity", "EPSS do CVE de maior severidade (max_severity), nao o max_epss",
-     [("$inst/nvt/epss/max_epss/score", "$inst/nvt/epss/max_severity/score")], NOVAS),
+     [(N_EPSS, N_EPSS.replace("/nvt/epss/max_epss/", "/nvt/epss/max_severity/"))], NOVAS),
+    ("epss-do-nvt-com-falso-positivo", "EPSS de um NVT: o maior de TODA instancia, falso positivo e Log inclusive",
+     [(N_EPSS, N_EPSS.replace("$inst[number(severity) &gt;= 0.1]", "$inst"))], NOVAS),
     ("indicador-no-plano", "o indicador (QoD abaixo do piso) entra no plano",
      [(N_LOOP, N_LOOP.replace('"$rows-conf"', '"$rows-conf | $nvt-low"'))], NOVAS + ANTIGAS),
     ("log-no-plano", "Log e falso positivo entram no plano",
@@ -197,11 +200,14 @@ MUTANTES = [
             'host/text())) &gt; 0][generate-id() = generate-id(key(\'by-prio-ghost\', '
             'concat($g, \'|\', normalize-space(host/text())))[1])])}"')], GRUPOS),
     ("epss-do-representante", "EPSS do grupo so' do representante",
-     [(G_EPSS, "math:max(key('by-nvt', nvt/@oid)/nvt/epss/max_epss/score[number(.) = number(.)])")],
-     GRUPOS),
+     [(G_EPSS, "math:max(key('by-nvt', nvt/@oid)[number(severity) &gt;= 0.1]/nvt/epss/max_epss/score"
+               "[number(.) = number(.)])")], GRUPOS),
     ("epss-do-mais-severo", "EPSS do grupo so' do membro mais severo",
      [(G_EPSS, "math:max($members[number(severity) = $smax]/nvt/epss/max_epss/score"
                "[number(.) = number(.)])")], GRUPOS),
+    ("epss-do-grupo-com-falso-positivo",
+     "EPSS do grupo: o maior de TODA instancia dos membros, falso positivo e Log inclusive",
+     [(G_EPSS, G_EPSS.replace("$members[number(severity) &gt;= 0.1]", "$members"))], GRUPOS),
     ("acao-do-representante", "acao do grupo: a do representante, nao a do membro mais severo",
      [(G_GNUM, REP),
       (G_ACT, G_ACT.replace("nvt/solution", "$rep/nvt/solution"))], GRUPOS),
@@ -442,9 +448,11 @@ CASOS_TEX = [
     # o card consolidado
     ("grupo com a acao do representante", V4, "en", in_row(1, "ory 2.\\surjb{}}", "ory 1.\\surjb{}}")),
     ("grupo com hosts somados", V26, "en", in_row(0, "}{3}{critico}", "}{7}{critico}")),
-    ("grupo com os hosts do chip do card", V26, "en", in_row(0, "}{3}{critico}", "}{5}{critico}")),
+    ("grupo com os hosts do chip do card", V26, "en", in_row(0, "}{3}{critico}", "}{6}{critico}")),
     ("grupo com o EPSS do representante", V26, "en", in_row(0, "{42.0\\%}", "{---}")),
     ("grupo com o EPSS do mais severo", V26, "en", in_row(0, "{42.0\\%}", "{12.0\\%}")),
+    ("grupo com o EPSS do membro so' falso positivo", V26, "en", in_row(0, "{42.0\\%}", "{77.0\\%}")),
+    ("NVT com o EPSS da instancia falso positivo", V26, "en", in_row(1, "{30.0\\%}", "{95.0\\%}")),
     ("grupo com o CVSS do representante", V26, "en", in_row(0, "{critico}{9.6}", "{critico}{7.4}")),
     ("grupo com o nome do representante", V26, "en",
      in_row(0, "{Outstanding update: Fabrikam Portal}", "{Fabrikam Portal Advisory (FB-01)}")),

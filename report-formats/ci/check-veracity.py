@@ -1540,8 +1540,9 @@ class PrioOracle:
     piso de QoD) fica fora do plano e e' contado numa nota. Ordem: classe de
     severidade (decrescente), hosts afetados (distintos -- num grupo, a uniao
     --, entre as instancias com severidade >= 0.1; decrescente), EPSS
-    (max_epss/score, o maior entre as instancias; decrescente, sem EPSS por
-    ultimo), maior CVSS (decrescente), nome (o do NVT como no feed,
+    (max_epss/score, o maior entre as mesmas instancias com severidade >= 0.1;
+    decrescente, sem EPSS por ultimo), maior CVSS (decrescente), nome (o do
+    NVT como no feed,
     normalizado; num grupo, a chave do produto) crescente e OID (o do NVT, ou
     o do representante do grupo, o 1o membro) crescente -- texto comparado
     ponto de codigo a ponto de codigo, como o xsl:sort do libxslt sem @lang.
@@ -1571,9 +1572,12 @@ class PrioOracle:
                 self.cards[c["anchor"]] = c["num"]
 
         def card(kind, insts, sev, name, oid):
-            """Os valores de ordem de uma acao, a partir das instancias dela."""
+            """Os valores de ordem de uma acao, a partir das instancias dela.
+            Hosts e EPSS so' das instancias que sao achado (>= 0.1): falso
+            positivo e Log nao contam -- num grupo, o advisory so' com falso
+            positivo continua membro, mas o EPSS dele nao entra."""
             hits = [r for r in insts if isnum(r.sev) and r.sev >= 0.1]
-            scores = [v for v in (xnum(s) for r in insts for s in r.epss) if isnum(v)]
+            scores = [v for v in (xnum(s) for r in hits for s in r.epss) if isnum(v)]
             return {"kind": kind, "sev": sev, "name": name, "oid": oid,
                     "rank": 1 + (sev >= 4.0) + (sev >= 7.0) + (sev >= 9.0),
                     "hosts": len({r.host for r in hits if r.host}),

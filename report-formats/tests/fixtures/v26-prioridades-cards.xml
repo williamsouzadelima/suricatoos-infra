@@ -10,22 +10,27 @@ e percentile com 5 casas); nenhum dado de scan real.
 Secao 2 (prioridades e proximos passos): a unidade de acao e' o CARD, como a
 secao de achados detalhados o mostra; o card consolidado (atualizacao
 pendente) e' UMA acao.
-- 23 acoes por card (36 NVTs confirmados com severidade >= 0.1; os 5
-  advisories do Fabrikam Portal, os 6 do Contoso Gateway e os 5 do Woodgrove
-  Router viram 3 acoes): a tabela mostra as 20 primeiras e declara "+ 3"; a
+- 23 acoes por card (36 NVTs confirmados com severidade >= 0.1, mais um
+  membro so' com falso positivo; os 6 advisories confirmados do Fabrikam
+  Portal, os 6 do Contoso Gateway e os 5 do Woodgrove Router viram 3 acoes):
+  a tabela mostra as 20 primeiras e declara "+ 3"; a
   frase diz que as 20 tratam 32 de 33 achados criticos e altos confirmados (o
   grupo conta as instancias de todos os membros; o Woodgrove Router, alto,
   fica alem das 20, e a instancia alta dele so' entra no Y);
 - Fabrikam Portal (critico, acao #1): o representante (o 1o membro
   confirmado, dono da ancora grp-) e' o FB-01 (7.4); o membro mais severo e'
   o FB-03 (9.6), e a acao e o CVSS da linha sao os dele; o EPSS e' o MAIOR
-  entre os membros (42%, do FB-02, que nao e' o representante nem o mais
-  severo, cujo EPSS e' 12%), e e' ele que poe o grupo antes do critico
-  avulso em 3 hosts com EPSS 30% e CVSS 9.8; hosts afetados = a UNIAO dos
-  hosts com instancia >= 0.1 dos membros (3), nao a soma por membro (7); a
-  instancia Log do FB-04 e a falso positivo do FB-05, cada uma num host que
-  nenhum outro membro alcanca, nao contam (o chip do card conta toda
-  instancia e diz 5 hosts);
+  entre as instancias >= 0.1 dos membros (42%, do FB-02, que nao e' o
+  representante nem o mais severo, cujo EPSS e' 12%), e e' ele que poe o
+  grupo antes do critico avulso em 3 hosts com EPSS 30% e CVSS 9.8; o FB-07,
+  membro so' com falso positivo, traz o maior EPSS entre os membros (77%),
+  que nao conta, como nao conta o EPSS de 95% que a instancia falso positivo
+  do critico avulso traz so' aqui (o gvmd escreve o mesmo EPSS em todo
+  resultado de um NVT; a diferenca pina a regra no card de NVT); hosts
+  afetados = a UNIAO dos hosts com instancia >= 0.1 dos membros (3), nao a
+  soma por membro (7); a instancia Log do FB-04 e as falso positivo do FB-05
+  e do FB-07, cada uma num host que nenhum outro membro alcanca, nao contam
+  (o chip do card conta toda instancia e diz 6 hosts);
 - o FB-06, do mesmo produto e de QoD 30 (indicador), vem antes de todo
   membro no documento, num host que tres membros alcancam: nao e' membro,
   nao mexe nos hosts, no CVSS (9.9), no EPSS (99%) nem na acao do grupo, e
@@ -58,7 +63,7 @@ pendente) e' UMA acao.
   <scan_start>2026-09-01T09:00:00Z</scan_start>
   <scan_end>2026-09-01T10:12:00Z</scan_end>
   <hosts><count>6</count></hosts>
-  <result_count>51<full>51</full><filtered>51</filtered><critical><full>6</full><filtered>6</filtered></critical><high><full>28</full><filtered>28</filtered></high><medium><full>8</full><filtered>8</filtered></medium><low><full>2</full><filtered>2</filtered></low><log><full>4</full><filtered>4</filtered></log><false_positive><full>3</full><filtered>3</filtered></false_positive></result_count>
+  <result_count>53<full>53</full><filtered>53</filtered><critical><full>6</full><filtered>6</filtered></critical><high><full>28</full><filtered>28</filtered></high><medium><full>8</full><filtered>8</filtered></medium><low><full>2</full><filtered>2</filtered></low><log><full>4</full><filtered>4</filtered></log><false_positive><full>5</full><filtered>5</filtered></false_positive></result_count>
   <filters id="00000000-0000-4000-8000-000000000002">
     <term>apply_overrides=1 levels=chmlgf rows=-1 min_qod=1 first=1 sort-reverse=severity</term>
   </filters>
@@ -236,15 +241,15 @@ pendente) e' UMA acao.
     </result>
     <result id="p-0016">
       <host>198.51.100.71<hostname>gw74.example.com</hostname></host>
-      <port>3260/tcp</port>
-      <nvt oid="1.3.6.1.4.1.25623.1.0.992611"><type>nvt</type><name>Example Storage Controller Command Injection</name><family>Synthetic</family><cvss_base>9.8</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Workaround</tags><solution type="Workaround">Block the management port of the storage controller at the network edge.</solution><epss><max_severity><score>0.30000</score><percentile>0.90000</percentile><cve id="CVE-2099-2611"><severity>9.8</severity></cve></max_severity><max_epss><score>0.30000</score><percentile>0.90000</percentile><cve id="CVE-2099-2611"><severity>9.8</severity></cve></max_epss></epss><refs><ref type="cve" id="CVE-2099-2611"/></refs></nvt>
-      <threat>Critical</threat>
-      <severity>9.8</severity>
+      <port>8443/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992607"><type>nvt</type><name>Fabrikam Portal Advisory (FB-07)</name><family>Synthetic</family><cvss_base>-1.0</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=VendorFix</tags><solution type="VendorFix">Upgrade Fabrikam Portal to version 8.7 or later.</solution><epss><max_severity><score>0.77000</score><percentile>0.90000</percentile><cve id="CVE-2099-2607"><severity>9.1</severity></cve></max_severity><max_epss><score>0.77000</score><percentile>0.90000</percentile><cve id="CVE-2099-2607"><severity>9.1</severity></cve></max_epss></epss><refs><ref type="cve" id="CVE-2099-2607"/></refs></nvt>
+      <threat>False Positive</threat>
+      <severity>-1.0</severity>
       <qod><value>98</value><type>remote_banner</type></qod>
-      <description>Synthetic detection output for Example Storage Controller Command Injection.</description>
+      <description>Synthetic detection output for Fabrikam Portal Advisory (FB-07).</description>
     </result>
     <result id="p-0017">
-      <host>198.51.100.72<hostname>gw75.example.com</hostname></host>
+      <host>198.51.100.71<hostname>gw74.example.com</hostname></host>
       <port>3260/tcp</port>
       <nvt oid="1.3.6.1.4.1.25623.1.0.992611"><type>nvt</type><name>Example Storage Controller Command Injection</name><family>Synthetic</family><cvss_base>9.8</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Workaround</tags><solution type="Workaround">Block the management port of the storage controller at the network edge.</solution><epss><max_severity><score>0.30000</score><percentile>0.90000</percentile><cve id="CVE-2099-2611"><severity>9.8</severity></cve></max_severity><max_epss><score>0.30000</score><percentile>0.90000</percentile><cve id="CVE-2099-2611"><severity>9.8</severity></cve></max_epss></epss><refs><ref type="cve" id="CVE-2099-2611"/></refs></nvt>
       <threat>Critical</threat>
@@ -253,7 +258,7 @@ pendente) e' UMA acao.
       <description>Synthetic detection output for Example Storage Controller Command Injection.</description>
     </result>
     <result id="p-0018">
-      <host>203.0.113.71<hostname>edge76.example.com</hostname></host>
+      <host>198.51.100.72<hostname>gw75.example.com</hostname></host>
       <port>3260/tcp</port>
       <nvt oid="1.3.6.1.4.1.25623.1.0.992611"><type>nvt</type><name>Example Storage Controller Command Injection</name><family>Synthetic</family><cvss_base>9.8</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Workaround</tags><solution type="Workaround">Block the management port of the storage controller at the network edge.</solution><epss><max_severity><score>0.30000</score><percentile>0.90000</percentile><cve id="CVE-2099-2611"><severity>9.8</severity></cve></max_severity><max_epss><score>0.30000</score><percentile>0.90000</percentile><cve id="CVE-2099-2611"><severity>9.8</severity></cve></max_epss></epss><refs><ref type="cve" id="CVE-2099-2611"/></refs></nvt>
       <threat>Critical</threat>
@@ -262,6 +267,24 @@ pendente) e' UMA acao.
       <description>Synthetic detection output for Example Storage Controller Command Injection.</description>
     </result>
     <result id="p-0019">
+      <host>203.0.113.71<hostname>edge76.example.com</hostname></host>
+      <port>3260/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992611"><type>nvt</type><name>Example Storage Controller Command Injection</name><family>Synthetic</family><cvss_base>9.8</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Workaround</tags><solution type="Workaround">Block the management port of the storage controller at the network edge.</solution><epss><max_severity><score>0.30000</score><percentile>0.90000</percentile><cve id="CVE-2099-2611"><severity>9.8</severity></cve></max_severity><max_epss><score>0.30000</score><percentile>0.90000</percentile><cve id="CVE-2099-2611"><severity>9.8</severity></cve></max_epss></epss><refs><ref type="cve" id="CVE-2099-2611"/></refs></nvt>
+      <threat>Critical</threat>
+      <severity>9.8</severity>
+      <qod><value>98</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Storage Controller Command Injection.</description>
+    </result>
+    <result id="p-0020">
+      <host>192.0.2.71<hostname>portal71.example.com</hostname></host>
+      <port>3260/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992611"><type>nvt</type><name>Example Storage Controller Command Injection</name><family>Synthetic</family><cvss_base>-1.0</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Workaround</tags><solution type="Workaround">Block the management port of the storage controller at the network edge.</solution><epss><max_severity><score>0.95000</score><percentile>0.90000</percentile><cve id="CVE-2099-2611"><severity>9.8</severity></cve></max_severity><max_epss><score>0.95000</score><percentile>0.90000</percentile><cve id="CVE-2099-2611"><severity>9.8</severity></cve></max_epss></epss><refs><ref type="cve" id="CVE-2099-2611"/></refs></nvt>
+      <threat>False Positive</threat>
+      <severity>-1.0</severity>
+      <qod><value>98</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Storage Controller Command Injection.</description>
+    </result>
+    <result id="p-0021">
       <host>198.51.100.72<hostname>gw75.example.com</hostname></host>
       <port>443/tcp</port>
       <nvt oid="1.3.6.1.4.1.25623.1.0.992630"><type>nvt</type><name>Contoso Gateway Banner</name><family>Synthetic</family><cvss_base>8.1</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Workaround</tags><solution type="Workaround">Disable the version banner of the gateway.</solution><refs></refs></nvt>
@@ -270,7 +293,7 @@ pendente) e' UMA acao.
       <qod><value>98</value><type>remote_banner</type></qod>
       <description>Synthetic detection output for Contoso Gateway Banner.</description>
     </result>
-    <result id="p-0020">
+    <result id="p-0022">
       <host>203.0.113.71<hostname>edge76.example.com</hostname></host>
       <port>443/tcp</port>
       <nvt oid="1.3.6.1.4.1.25623.1.0.992630"><type>nvt</type><name>Contoso Gateway Banner</name><family>Synthetic</family><cvss_base>8.1</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Workaround</tags><solution type="Workaround">Disable the version banner of the gateway.</solution><refs></refs></nvt>
@@ -279,7 +302,7 @@ pendente) e' UMA acao.
       <qod><value>98</value><type>remote_banner</type></qod>
       <description>Synthetic detection output for Contoso Gateway Banner.</description>
     </result>
-    <result id="p-0021">
+    <result id="p-0023">
       <host>198.51.100.71<hostname>gw74.example.com</hostname></host>
       <port>443/tcp</port>
       <nvt oid="1.3.6.1.4.1.25623.1.0.992631"><type>nvt</type><name>Contoso Gateway Advisory (CG-01)</name><family>Synthetic</family><cvss_base>7.2</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=VendorFix</tags><solution type="VendorFix">Upgrade Contoso Gateway to version 3.1 or later.</solution><refs><ref type="cve" id="CVE-2099-2631"/></refs></nvt>
@@ -288,7 +311,7 @@ pendente) e' UMA acao.
       <qod><value>98</value><type>remote_banner</type></qod>
       <description>Synthetic detection output for Contoso Gateway Advisory (CG-01).</description>
     </result>
-    <result id="p-0022">
+    <result id="p-0024">
       <host>198.51.100.72<hostname>gw75.example.com</hostname></host>
       <port>443/tcp</port>
       <nvt oid="1.3.6.1.4.1.25623.1.0.992637"><type>nvt</type><name>Contoso Gateway Advisory (CG-02)</name><family>Synthetic</family><cvss_base>8.1</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=VendorFix</tags><solution type="VendorFix"/><refs><ref type="cve" id="CVE-2099-2637"/></refs></nvt>
@@ -297,7 +320,7 @@ pendente) e' UMA acao.
       <qod><value>98</value><type>remote_banner</type></qod>
       <description>Synthetic detection output for Contoso Gateway Advisory (CG-02).</description>
     </result>
-    <result id="p-0023">
+    <result id="p-0025">
       <host>198.51.100.71<hostname>gw74.example.com</hostname></host>
       <port>443/tcp</port>
       <nvt oid="1.3.6.1.4.1.25623.1.0.992632"><type>nvt</type><name>Contoso Gateway Advisory (CG-03)</name><family>Synthetic</family><cvss_base>7.0</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=VendorFix</tags><solution type="VendorFix">Upgrade Contoso Gateway to version 3.3 or later.</solution><refs><ref type="cve" id="CVE-2099-2632"/></refs></nvt>
@@ -306,7 +329,7 @@ pendente) e' UMA acao.
       <qod><value>98</value><type>remote_banner</type></qod>
       <description>Synthetic detection output for Contoso Gateway Advisory (CG-03).</description>
     </result>
-    <result id="p-0024">
+    <result id="p-0026">
       <host>198.51.100.72<hostname>gw75.example.com</hostname></host>
       <port>443/tcp</port>
       <nvt oid="1.3.6.1.4.1.25623.1.0.992633"><type>nvt</type><name>Contoso Gateway Advisory (CG-04)</name><family>Synthetic</family><cvss_base>6.8</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=VendorFix</tags><solution type="VendorFix">Upgrade Contoso Gateway to version 3.4 or later.</solution><refs><ref type="cve" id="CVE-2099-2633"/></refs></nvt>
@@ -315,7 +338,7 @@ pendente) e' UMA acao.
       <qod><value>98</value><type>remote_banner</type></qod>
       <description>Synthetic detection output for Contoso Gateway Advisory (CG-04).</description>
     </result>
-    <result id="p-0025">
+    <result id="p-0027">
       <host>198.51.100.71<hostname>gw74.example.com</hostname></host>
       <port>443/tcp</port>
       <nvt oid="1.3.6.1.4.1.25623.1.0.992634"><type>nvt</type><name>Contoso Gateway Advisory (CG-05)</name><family>Synthetic</family><cvss_base>5.0</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=VendorFix</tags><solution type="VendorFix">Upgrade Contoso Gateway to version 3.5 or later.</solution><refs><ref type="cve" id="CVE-2099-2634"/></refs></nvt>
@@ -324,7 +347,7 @@ pendente) e' UMA acao.
       <qod><value>98</value><type>remote_banner</type></qod>
       <description>Synthetic detection output for Contoso Gateway Advisory (CG-05).</description>
     </result>
-    <result id="p-0026">
+    <result id="p-0028">
       <host>198.51.100.71<hostname>gw74.example.com</hostname></host>
       <port>443/tcp</port>
       <nvt oid="1.3.6.1.4.1.25623.1.0.992636"><type>nvt</type><name>Contoso Gateway Advisory (CG-06)</name><family>Synthetic</family><cvss_base>8.1</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=VendorFix</tags><solution type="VendorFix">Upgrade Contoso Gateway to version 3.6 or later.</solution><refs><ref type="cve" id="CVE-2099-2636"/></refs></nvt>
@@ -333,7 +356,7 @@ pendente) e' UMA acao.
       <qod><value>98</value><type>remote_banner</type></qod>
       <description>Synthetic detection output for Contoso Gateway Advisory (CG-06).</description>
     </result>
-    <result id="p-0027">
+    <result id="p-0029">
       <host>198.51.100.71<hostname>gw74.example.com</hostname></host>
       <port>8080/tcp</port>
       <nvt oid="1.3.6.1.4.1.25623.1.0.992635"><type>nvt</type><name>Contoso Gateway</name><family>Synthetic</family><cvss_base>8.1</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">Restrict the gateway administration page to the management network.</solution><refs></refs></nvt>
@@ -342,7 +365,7 @@ pendente) e' UMA acao.
       <qod><value>98</value><type>remote_banner</type></qod>
       <description>Synthetic detection output for Contoso Gateway.</description>
     </result>
-    <result id="p-0028">
+    <result id="p-0030">
       <host>203.0.113.71<hostname>edge76.example.com</hostname></host>
       <port>8080/tcp</port>
       <nvt oid="1.3.6.1.4.1.25623.1.0.992635"><type>nvt</type><name>Contoso Gateway</name><family>Synthetic</family><cvss_base>8.1</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">Restrict the gateway administration page to the management network.</solution><refs></refs></nvt>
@@ -351,7 +374,7 @@ pendente) e' UMA acao.
       <qod><value>98</value><type>remote_banner</type></qod>
       <description>Synthetic detection output for Contoso Gateway.</description>
     </result>
-    <result id="p-0029">
+    <result id="p-0031">
       <host>192.0.2.71<hostname>portal71.example.com</hostname></host>
       <port>30000/tcp</port>
       <nvt oid="1.3.6.1.4.1.25623.1.0.992641"><type>nvt</type><name>Example High Finding 01</name><family>Synthetic</family><cvss_base>7.9</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">Apply the configuration change for high finding 01.</solution><refs></refs></nvt>
@@ -360,7 +383,7 @@ pendente) e' UMA acao.
       <qod><value>98</value><type>remote_banner</type></qod>
       <description>Synthetic detection output for Example High Finding 01.</description>
     </result>
-    <result id="p-0030">
+    <result id="p-0032">
       <host>192.0.2.72<hostname>portal72.example.com</hostname></host>
       <port>30001/tcp</port>
       <nvt oid="1.3.6.1.4.1.25623.1.0.992642"><type>nvt</type><name>Example High Finding 02</name><family>Synthetic</family><cvss_base>7.9</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">Apply the configuration change for high finding 02.</solution><refs></refs></nvt>
@@ -369,7 +392,7 @@ pendente) e' UMA acao.
       <qod><value>98</value><type>remote_banner</type></qod>
       <description>Synthetic detection output for Example High Finding 02.</description>
     </result>
-    <result id="p-0031">
+    <result id="p-0033">
       <host>192.0.2.73<hostname>app73.example.com</hostname></host>
       <port>30002/tcp</port>
       <nvt oid="1.3.6.1.4.1.25623.1.0.992643"><type>nvt</type><name>Example High Finding 03</name><family>Synthetic</family><cvss_base>7.8</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">Apply the configuration change for high finding 03.</solution><refs></refs></nvt>
@@ -378,7 +401,7 @@ pendente) e' UMA acao.
       <qod><value>98</value><type>remote_banner</type></qod>
       <description>Synthetic detection output for Example High Finding 03.</description>
     </result>
-    <result id="p-0032">
+    <result id="p-0034">
       <host>198.51.100.71<hostname>gw74.example.com</hostname></host>
       <port>30003/tcp</port>
       <nvt oid="1.3.6.1.4.1.25623.1.0.992644"><type>nvt</type><name>Example High Finding 04</name><family>Synthetic</family><cvss_base>7.8</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">Apply the configuration change for high finding 04.</solution><refs></refs></nvt>
@@ -387,7 +410,7 @@ pendente) e' UMA acao.
       <qod><value>98</value><type>remote_banner</type></qod>
       <description>Synthetic detection output for Example High Finding 04.</description>
     </result>
-    <result id="p-0033">
+    <result id="p-0035">
       <host>198.51.100.72<hostname>gw75.example.com</hostname></host>
       <port>30004/tcp</port>
       <nvt oid="1.3.6.1.4.1.25623.1.0.992645"><type>nvt</type><name>Example High Finding 05</name><family>Synthetic</family><cvss_base>7.7</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">Apply the configuration change for high finding 05.</solution><refs></refs></nvt>
@@ -396,7 +419,7 @@ pendente) e' UMA acao.
       <qod><value>98</value><type>remote_banner</type></qod>
       <description>Synthetic detection output for Example High Finding 05.</description>
     </result>
-    <result id="p-0034">
+    <result id="p-0036">
       <host>203.0.113.71<hostname>edge76.example.com</hostname></host>
       <port>30005/tcp</port>
       <nvt oid="1.3.6.1.4.1.25623.1.0.992646"><type>nvt</type><name>Example High Finding 06</name><family>Synthetic</family><cvss_base>7.7</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">Apply the configuration change for high finding 06.</solution><refs></refs></nvt>
@@ -405,7 +428,7 @@ pendente) e' UMA acao.
       <qod><value>98</value><type>remote_banner</type></qod>
       <description>Synthetic detection output for Example High Finding 06.</description>
     </result>
-    <result id="p-0035">
+    <result id="p-0037">
       <host>192.0.2.71<hostname>portal71.example.com</hostname></host>
       <port>30006/tcp</port>
       <nvt oid="1.3.6.1.4.1.25623.1.0.992647"><type>nvt</type><name>Example High Finding 07</name><family>Synthetic</family><cvss_base>7.6</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">Apply the configuration change for high finding 07.</solution><refs></refs></nvt>
@@ -414,7 +437,7 @@ pendente) e' UMA acao.
       <qod><value>98</value><type>remote_banner</type></qod>
       <description>Synthetic detection output for Example High Finding 07.</description>
     </result>
-    <result id="p-0036">
+    <result id="p-0038">
       <host>192.0.2.72<hostname>portal72.example.com</hostname></host>
       <port>30007/tcp</port>
       <nvt oid="1.3.6.1.4.1.25623.1.0.992648"><type>nvt</type><name>Example High Finding 08</name><family>Synthetic</family><cvss_base>7.6</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">Apply the configuration change for high finding 08.</solution><refs></refs></nvt>
@@ -423,7 +446,7 @@ pendente) e' UMA acao.
       <qod><value>98</value><type>remote_banner</type></qod>
       <description>Synthetic detection output for Example High Finding 08.</description>
     </result>
-    <result id="p-0037">
+    <result id="p-0039">
       <host>192.0.2.73<hostname>app73.example.com</hostname></host>
       <port>30008/tcp</port>
       <nvt oid="1.3.6.1.4.1.25623.1.0.992649"><type>nvt</type><name>Example High Finding 09</name><family>Synthetic</family><cvss_base>7.5</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">Apply the configuration change for high finding 09.</solution><refs></refs></nvt>
@@ -432,7 +455,7 @@ pendente) e' UMA acao.
       <qod><value>98</value><type>remote_banner</type></qod>
       <description>Synthetic detection output for Example High Finding 09.</description>
     </result>
-    <result id="p-0038">
+    <result id="p-0040">
       <host>198.51.100.71<hostname>gw74.example.com</hostname></host>
       <port>30009/tcp</port>
       <nvt oid="1.3.6.1.4.1.25623.1.0.992650"><type>nvt</type><name>Example High Finding 10</name><family>Synthetic</family><cvss_base>7.5</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">Apply the configuration change for high finding 10.</solution><refs></refs></nvt>
@@ -441,7 +464,7 @@ pendente) e' UMA acao.
       <qod><value>98</value><type>remote_banner</type></qod>
       <description>Synthetic detection output for Example High Finding 10.</description>
     </result>
-    <result id="p-0039">
+    <result id="p-0041">
       <host>198.51.100.72<hostname>gw75.example.com</hostname></host>
       <port>30010/tcp</port>
       <nvt oid="1.3.6.1.4.1.25623.1.0.992651"><type>nvt</type><name>Example High Finding 11</name><family>Synthetic</family><cvss_base>7.4</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">Apply the configuration change for high finding 11.</solution><refs></refs></nvt>
@@ -450,7 +473,7 @@ pendente) e' UMA acao.
       <qod><value>98</value><type>remote_banner</type></qod>
       <description>Synthetic detection output for Example High Finding 11.</description>
     </result>
-    <result id="p-0040">
+    <result id="p-0042">
       <host>203.0.113.71<hostname>edge76.example.com</hostname></host>
       <port>30011/tcp</port>
       <nvt oid="1.3.6.1.4.1.25623.1.0.992652"><type>nvt</type><name>Example High Finding 12</name><family>Synthetic</family><cvss_base>7.4</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">Apply the configuration change for high finding 12.</solution><refs></refs></nvt>
@@ -459,7 +482,7 @@ pendente) e' UMA acao.
       <qod><value>98</value><type>remote_banner</type></qod>
       <description>Synthetic detection output for Example High Finding 12.</description>
     </result>
-    <result id="p-0041">
+    <result id="p-0043">
       <host>192.0.2.71<hostname>portal71.example.com</hostname></host>
       <port>30012/tcp</port>
       <nvt oid="1.3.6.1.4.1.25623.1.0.992653"><type>nvt</type><name>Example High Finding 13</name><family>Synthetic</family><cvss_base>7.3</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">Apply the configuration change for high finding 13.</solution><refs></refs></nvt>
@@ -468,7 +491,7 @@ pendente) e' UMA acao.
       <qod><value>98</value><type>remote_banner</type></qod>
       <description>Synthetic detection output for Example High Finding 13.</description>
     </result>
-    <result id="p-0042">
+    <result id="p-0044">
       <host>192.0.2.72<hostname>portal72.example.com</hostname></host>
       <port>30013/tcp</port>
       <nvt oid="1.3.6.1.4.1.25623.1.0.992654"><type>nvt</type><name>Example High Finding 14</name><family>Synthetic</family><cvss_base>7.3</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">Apply the configuration change for high finding 14.</solution><refs></refs></nvt>
@@ -477,7 +500,7 @@ pendente) e' UMA acao.
       <qod><value>98</value><type>remote_banner</type></qod>
       <description>Synthetic detection output for Example High Finding 14.</description>
     </result>
-    <result id="p-0043">
+    <result id="p-0045">
       <host>192.0.2.73<hostname>app73.example.com</hostname></host>
       <port>30014/tcp</port>
       <nvt oid="1.3.6.1.4.1.25623.1.0.992655"><type>nvt</type><name>Example High Finding 15</name><family>Synthetic</family><cvss_base>7.2</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">Apply the configuration change for high finding 15.</solution><refs></refs></nvt>
@@ -486,7 +509,7 @@ pendente) e' UMA acao.
       <qod><value>98</value><type>remote_banner</type></qod>
       <description>Synthetic detection output for Example High Finding 15.</description>
     </result>
-    <result id="p-0044">
+    <result id="p-0046">
       <host>192.0.2.71<hostname>portal71.example.com</hostname></host>
       <port>10200/tcp</port>
       <nvt oid="1.3.6.1.4.1.25623.1.0.992681"><type>nvt</type><name>Example Medium Configuration Weakness</name><family>Synthetic</family><cvss_base>5.0</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">Apply the configuration change for the medium finding.</solution><refs></refs></nvt>
@@ -495,7 +518,7 @@ pendente) e' UMA acao.
       <qod><value>98</value><type>remote_banner</type></qod>
       <description>Synthetic detection output for Example Medium Configuration Weakness.</description>
     </result>
-    <result id="p-0045">
+    <result id="p-0047">
       <host>192.0.2.72<hostname>portal72.example.com</hostname></host>
       <port>10200/tcp</port>
       <nvt oid="1.3.6.1.4.1.25623.1.0.992681"><type>nvt</type><name>Example Medium Configuration Weakness</name><family>Synthetic</family><cvss_base>5.0</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">Apply the configuration change for the medium finding.</solution><refs></refs></nvt>
@@ -504,7 +527,7 @@ pendente) e' UMA acao.
       <qod><value>98</value><type>remote_banner</type></qod>
       <description>Synthetic detection output for Example Medium Configuration Weakness.</description>
     </result>
-    <result id="p-0046">
+    <result id="p-0048">
       <host>192.0.2.73<hostname>app73.example.com</hostname></host>
       <port>10201/tcp</port>
       <nvt oid="1.3.6.1.4.1.25623.1.0.992682"><type>nvt</type><name>Example Low Information Disclosure</name><family>Synthetic</family><cvss_base>3.1</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">Remove the information from the public page.</solution><refs></refs></nvt>
@@ -513,7 +536,7 @@ pendente) e' UMA acao.
       <qod><value>98</value><type>remote_banner</type></qod>
       <description>Synthetic detection output for Example Low Information Disclosure.</description>
     </result>
-    <result id="p-0047">
+    <result id="p-0049">
       <host>192.0.2.71<hostname>portal71.example.com</hostname></host>
       <port>9000/tcp</port>
       <nvt oid="1.3.6.1.4.1.25623.1.0.992671"><type>nvt</type><name>Tailspin Toys Advisory (TT-01)</name><family>Synthetic</family><cvss_base>0.0</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=VendorFix</tags><solution type="VendorFix">Upgrade Tailspin Toys to version 4.1 or later.</solution><refs></refs></nvt>
@@ -522,7 +545,7 @@ pendente) e' UMA acao.
       <qod><value>98</value><type>remote_banner</type></qod>
       <description>Synthetic detection output for Tailspin Toys Advisory (TT-01).</description>
     </result>
-    <result id="p-0048">
+    <result id="p-0050">
       <host>192.0.2.72<hostname>portal72.example.com</hostname></host>
       <port>9001/tcp</port>
       <nvt oid="1.3.6.1.4.1.25623.1.0.992672"><type>nvt</type><name>Tailspin Toys Advisory (TT-02)</name><family>Synthetic</family><cvss_base>0.0</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=VendorFix</tags><solution type="VendorFix">Upgrade Tailspin Toys to version 4.2 or later.</solution><refs></refs></nvt>
@@ -531,7 +554,7 @@ pendente) e' UMA acao.
       <qod><value>98</value><type>remote_banner</type></qod>
       <description>Synthetic detection output for Tailspin Toys Advisory (TT-02).</description>
     </result>
-    <result id="p-0049">
+    <result id="p-0051">
       <host>192.0.2.73<hostname>app73.example.com</hostname></host>
       <port>9002/tcp</port>
       <nvt oid="1.3.6.1.4.1.25623.1.0.992673"><type>nvt</type><name>Tailspin Toys Advisory (TT-03)</name><family>Synthetic</family><cvss_base>-1.0</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=VendorFix</tags><solution type="VendorFix">Upgrade Tailspin Toys to version 4.3 or later.</solution><refs></refs></nvt>
@@ -540,7 +563,7 @@ pendente) e' UMA acao.
       <qod><value>98</value><type>remote_banner</type></qod>
       <description>Synthetic detection output for Tailspin Toys Advisory (TT-03).</description>
     </result>
-    <result id="p-0050">
+    <result id="p-0052">
       <host>192.0.2.73<hostname>app73.example.com</hostname></host>
       <port>9003/tcp</port>
       <nvt oid="1.3.6.1.4.1.25623.1.0.992674"><type>nvt</type><name>Tailspin Toys Advisory (TT-04)</name><family>Synthetic</family><cvss_base>0.0</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=VendorFix</tags><solution type="VendorFix">Upgrade Tailspin Toys to version 4.4 or later.</solution><refs></refs></nvt>
@@ -549,7 +572,7 @@ pendente) e' UMA acao.
       <qod><value>98</value><type>remote_banner</type></qod>
       <description>Synthetic detection output for Tailspin Toys Advisory (TT-04).</description>
     </result>
-    <result id="p-0051">
+    <result id="p-0053">
       <host>198.51.100.71<hostname>gw74.example.com</hostname></host>
       <port>9004/tcp</port>
       <nvt oid="1.3.6.1.4.1.25623.1.0.992675"><type>nvt</type><name>Tailspin Toys Advisory (TT-05)</name><family>Synthetic</family><cvss_base>-1.0</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=VendorFix</tags><solution type="VendorFix">Upgrade Tailspin Toys to version 4.5 or later.</solution><refs></refs></nvt>

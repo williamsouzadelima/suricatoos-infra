@@ -31,7 +31,7 @@ acao:
   lista com " - " sem ponto nenhum (a solucao inteira);
 - tipos de solucao: os cinco do feed, um desconhecido (sai como esta') e um
   ausente (travessao); caracteres especiais do LaTeX na acao; nome de NVT longo;
-- EPSS so' em parte das acoes (nota do travessao), e export parcial (26 de 40
+- EPSS so' em parte das acoes (nota do travessao), e export parcial (27 de 40
   resultados: nota de export parcial).
 -->
 <report extension="pdf" content_type="application/pdf" id="00000000-0000-4000-8000-000000000221">
