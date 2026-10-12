@@ -65,16 +65,9 @@ func (c *central) Credentials(name string) (Credentials, error) {
 
 // lookup reads the registry now. A registry file that does not exist knows no tenant.
 func (c *central) lookup(name string) (entry, error) {
-	data, err := fsutil.ReadBounded(c.tenantsFile, maxRegistryBytes)
-	if errors.Is(err, fs.ErrNotExist) {
-		return entry{}, nil
-	}
+	recs, err := c.records()
 	if err != nil {
-		return entry{}, fmt.Errorf("tenant: ler registro %s: %w", c.tenantsFile, err)
-	}
-	recs, err := parseRegistry(data)
-	if err != nil {
-		return entry{}, fmt.Errorf("tenant: registro %s: %w", c.tenantsFile, err)
+		return entry{}, err
 	}
 	if name == "" {
 		return entry{}, nil
@@ -87,25 +80,76 @@ func (c *central) lookup(name string) (entry, error) {
 	return entry{}, nil
 }
 
+// records reads the registry now: nil when the file does not exist.
+func (c *central) records() ([]record, error) {
+	data, err := fsutil.ReadBounded(c.tenantsFile, maxRegistryBytes)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("tenant: ler registro %s: %w", c.tenantsFile, err)
+	}
+	recs, err := parseRegistry(data)
+	if err != nil {
+		return nil, fmt.Errorf("tenant: registro %s: %w", c.tenantsFile, err)
+	}
+	return recs, nil
+}
+
+func (c *central) List() ([]Listing, error) {
+	recs, err := c.records()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]Listing, 0, len(recs))
+	for _, r := range recs {
+		out = append(out, Listing{Name: r.Name, Enabled: r.Enabled, Scope: r.Scope, GVMUser: r.GmpUser})
+	}
+	return out, nil
+}
+
+func (c *central) WithPassword() (map[string]bool, error) {
+	secrets, err := c.secrets()
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]bool, len(secrets))
+	for name, pw := range secrets {
+		if pw != "" {
+			out[name] = true
+		}
+	}
+	return out, nil
+}
+
 // password reads the secrets file now and returns the tenant's password, "" if there is none: no path, no file,
 // or no entry. A file that exists and cannot be read or parsed is an error, and so is an entry that is not a
 // string. The error text carries member names at most, never a value.
 func (c *central) password(name string) (string, error) {
+	secrets, err := c.secrets()
+	if err != nil {
+		return "", err
+	}
+	return secrets[name], nil
+}
+
+// secrets reads the whole secrets file now: nil when there is no path or no file (see password for the errors).
+func (c *central) secrets() (map[string]string, error) {
 	if c.secretsFile == "" {
-		return "", nil
+		return nil, nil
 	}
 	data, err := fsutil.ReadBounded(c.secretsFile, maxSecretsBytes)
 	if errors.Is(err, fs.ErrNotExist) {
-		return "", nil
+		return nil, nil
 	}
 	if err != nil {
-		return "", fmt.Errorf("tenant: ler segredos %s: %w", c.secretsFile, err)
+		return nil, fmt.Errorf("tenant: ler segredos %s: %w", c.secretsFile, err)
 	}
 	var secrets map[string]string
 	if err := contract.DecodeStrict(data, &secrets); err != nil {
-		return "", fmt.Errorf("tenant: segredos %s: %w", c.secretsFile, err)
+		return nil, fmt.Errorf("tenant: segredos %s: %w", c.secretsFile, err)
 	}
-	return secrets[name], nil
+	return secrets, nil
 }
 
 func (c *central) SecretFileWarnings() []string {

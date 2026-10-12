@@ -24,9 +24,14 @@
 // # Where the password goes
 //
 // The password never sits in the Source or in a Standing, never appears in an error, a log or a JSON, and
-// Resolve only checks that one exists. The single way out of the package is Credentials: it reads the secret
-// at that moment and returns it inside a Secret, which prints as "[redacted]" with every fmt verb, as JSON and
-// as text. The executor (slice F2.6) calls Secret.Reveal at the one place where it authenticates to gvmd.
+// Resolve only checks that one exists — as does WithPassword, which the fleet state (slice F2.5) uses to say
+// whether a tenant can write, and which returns names only. The single way out of the package is Credentials: it
+// reads the secret at that moment and returns it inside a Secret, which prints as "[redacted]" with every fmt
+// verb, as JSON and as text. The executor (slice F2.6) calls Secret.Reveal at the one place where it authenticates
+// to gvmd.
+//
+// List, for the same state, returns every tenant the node knows with its scope and the name of its gvmd user
+// (which maps a gvmd object's owner to its tenant), and never reads a password.
 //
 // The connector also logs SecretFileWarnings at startup: a secrets file that its group or others can reach (it
 // should be 0600) is a warning, never a refusal, so that read-only mounts with another owner keep working.
@@ -99,6 +104,27 @@ type Source interface {
 	// be 0600). It only warns: a read-only mount that carries another owner's mode must keep working. The text
 	// has the name of the setting, the path and the mode — never anything from inside the file.
 	SecretFileWarnings() []string
+	// List returns every tenant the node knows, for the fleet state (slice F2.5): on the central node every record
+	// of TENANTS_FILE, in file order — disabled ones and ones whose name is not a valid tenant included, as they
+	// are: the caller decides what they become (the state only counts the invalid ones); on standalone and sensor
+	// the single FLEET_TENANT, always enabled. It never reads a password. Errors as in Resolve: an unreadable or
+	// malformed registry is an error, a registry file that does not exist is no tenant.
+	List() ([]Listing, error)
+	// WithPassword returns the set of tenant names that have a gvmd password now (SENSOR_TENANT_SECRETS on the
+	// central node, FLEET_TENANT_GMP_PASSWORD_FILE on standalone and sensor), read at that moment. Only names
+	// leave the package, never a password. A file that exists and cannot be read or parsed is an error (whose
+	// text carries no value); no file, no entry or an empty password is no password.
+	WithPassword() (map[string]bool, error)
+}
+
+// Listing is one tenant as the node's configuration holds it (Source.List).
+type Listing struct {
+	Name    string // as configured; it may not match the tenant pattern (the caller checks)
+	Enabled bool
+	Scope   string // the scope as text, uninterpreted (see Standing.Scope)
+	// GVMUser is the name of the tenant's gvmd user ("" = none). The state uses it to map the owner of a gvmd object
+	// to its tenant; the name itself is never sent anywhere.
+	GVMUser string
 }
 
 // Config is the environment of the node that this package reads (ADR "Configuração do nó"). Open uses the
