@@ -19979,6 +19979,150 @@ index 47cd15e..ba43693 100644
    });
  
    test('can edit and save Auto Cache Rebuild', async () => {
+diff --git a/src/web/testing/__tests__/unhandledErrors.test.ts b/src/web/testing/__tests__/unhandledErrors.test.ts
+new file mode 100644
+index 0000000..4404d14
+--- /dev/null
++++ b/src/web/testing/__tests__/unhandledErrors.test.ts
+@@ -0,0 +1,138 @@
++/* SPDX-FileCopyrightText: 2026 Suricatoos
++ *
++ * SPDX-License-Identifier: AGPL-3.0-or-later
++ */
++
++// `vitest run` exits 1 on any unhandled error, even when every test passes. One kind
++// of them is not a failure of any test: Mantine's useTransition can leave a timer
++// behind when a Transition is closed in the frame that opened it (its first
++// animation frame calls flushSync, and the close runs inside it and starts a second
++// chain of frames that the cleanup on unmount does not cancel). The timer fires
++// after the test file ended and the jsdom window is gone, and setStatus of an
++// unmounted component reaches `window` in react-dom: "ReferenceError: window is not
++// defined". vitest.config.ts lets exactly that error through (onUnhandledError) and
++// nothing else: the rest of the unhandled errors, the ones of the patch's own
++// async code included, still fail the run.
++
++/// <reference types="node" />
++
++import {describe, expect, test} from '@gsa/testing';
++import config from '../../../../vitest.config';
++
++const onUnhandledError = config.test?.onUnhandledError;
++
++interface Unhandled {
++  name: string;
++  message: string;
++  stack?: string;
++  type: string;
++}
++
++const unhandled = (
++  name: string,
++  message: string,
++  stack: string | undefined,
++): Unhandled => ({name, message, stack, type: 'Uncaught Exception'});
++
++// the stack as CI printed it (run of the PR #155)
++const TRANSITION_STACK = [
++  'ReferenceError: window is not defined',
++  ' ❯ getCurrentEventPriority node_modules/react-dom/cjs/react-dom.development.js:8168:25',
++  ' ❯ requestUpdateLane node_modules/react-dom/cjs/react-dom.development.js:25421:30',
++  ' ❯ dispatchSetState node_modules/react-dom/cjs/react-dom.development.js:16408:18',
++  ' ❯ Timeout._onTimeout node_modules/@mantine/core/esm/components/Transition/use-transition.mjs:61:13',
++  ' ❯ listOnTimeout node:internal/timers:588:17',
++  ' ❯ processTimers node:internal/timers:523:7',
++].join('\n');
++
++const REACT_STACK = TRANSITION_STACK.split('\n')
++  .filter(line => !line.includes('use-transition'))
++  .join('\n');
++
++// what the callback says: false is "ignore it"
++const ignored = (error: Unhandled): boolean =>
++  (onUnhandledError as (e: Unhandled) => boolean | void)(error) === false;
++
++describe('unhandled errors of the test run', () => {
++  test('the config has the callback and does not switch the report off', () => {
++    expect(typeof onUnhandledError).toBe('function');
++    expect(config.test?.dangerouslyIgnoreUnhandledErrors).toBeFalsy();
++  });
++
++  test('"window is not defined" from the timer of a Mantine Transition is let through', () => {
++    expect(
++      ignored(
++        unhandled('ReferenceError', 'window is not defined', TRANSITION_STACK),
++      ),
++    ).toBe(true);
++  });
++
++  test('it is let through with the path as Windows or Linux prints it', () => {
++    for (const stack of [
++      TRANSITION_STACK.replace(
++        'node_modules/@mantine',
++        'file:///C:/work/gsa-src/node_modules/@mantine',
++      ),
++      TRANSITION_STACK.replace(
++        'node_modules/@mantine',
++        '/home/runner/work/suricatoos-infra/gsa-src/node_modules/@mantine',
++      ),
++    ]) {
++      expect(
++        ignored(unhandled('ReferenceError', 'window is not defined', stack)),
++      ).toBe(true);
++    }
++  });
++
++  test.each([
++    [
++      'the same stack, another kind of error',
++      unhandled('TypeError', 'window is not defined', TRANSITION_STACK),
++    ],
++    [
++      'the same stack, another message',
++      unhandled('ReferenceError', 'document is not defined', TRANSITION_STACK),
++    ],
++    [
++      'the same error from somewhere else in react-dom (not the Transition)',
++      unhandled('ReferenceError', 'window is not defined', REACT_STACK),
++    ],
++    [
++      'the same error from another Mantine file',
++      unhandled(
++        'ReferenceError',
++        'window is not defined',
++        TRANSITION_STACK.replace(
++          'components/Transition/use-transition.mjs',
++          'components/Popover/use-popover.mjs',
++        ),
++      ),
++    ],
++    [
++      'the same error from the code of the patch',
++      unhandled(
++        'ReferenceError',
++        'window is not defined',
++        'ReferenceError: window is not defined\n ❯ copyCommand src/web/pages/downloads/DownloadsPage.tsx:181:7',
++      ),
++    ],
++    [
++      'an error that only talks about the Transition',
++      unhandled(
++        'Error',
++        'use-transition.mjs: window is not defined',
++        'Error: use-transition.mjs: window is not defined\n ❯ somewhere src/web/foo.ts:1:1',
++      ),
++    ],
++    [
++      'an error with no stack',
++      unhandled('ReferenceError', 'window is not defined', undefined),
++    ],
++    [
++      'an unrelated error',
++      unhandled('Error', 'boom', 'Error: boom\n ❯ src/web/foo.ts:1:1'),
++    ],
++  ])('%s is still reported', (_label, error) => {
++    expect(ignored(error)).toBe(false);
++  });
++});
 diff --git a/src/web/utils/__tests__/suricatoosContrast.test.ts b/src/web/utils/__tests__/suricatoosContrast.test.ts
 new file mode 100644
 index 0000000..7534f0d
@@ -21202,3 +21346,33 @@ index 0000000..077508c
 +  offline: '#c83814',
 +  unknown: '#666666',
 +} as const;
+diff --git a/vitest.config.ts b/vitest.config.ts
+index 125ba33..4283e9b 100644
+--- a/vitest.config.ts
++++ b/vitest.config.ts
+@@ -1,7 +1,25 @@
+ import {defineConfig} from 'vitest/config';
+ 
++// Suricatoos: `vitest run` exits 1 on any unhandled error, even when every test
++// passes. One kind is let through, and only it: the timer that a Mantine Transition
++// leaves behind (closed in the frame that opened it), which fires after the test
++// file ended and the jsdom window is gone. The reason, and what must still be
++// reported, is in src/web/testing/__tests__/unhandledErrors.test.ts.
++const isMantineTransitionAfterTeardown = (error: {
++  name?: string;
++  message?: string;
++  stack?: string;
++}) =>
++  error.name === 'ReferenceError' &&
++  error.message === 'window is not defined' &&
++  /@mantine\/core\/esm\/components\/Transition\/use-transition\.mjs/.test(
++    error.stack ?? '',
++  );
++
+ export default defineConfig({
+   test: {
++    onUnhandledError: error =>
++      isMantineTransitionAfterTeardown(error) ? false : undefined,
+     projects: [
+       {
+         extends: './vite.config.ts',
