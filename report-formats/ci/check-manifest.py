@@ -225,7 +225,10 @@ def check(rf_dir):
         cats = sorted(n for n in files if n.startswith("nvt-i18n-"))
         if cats != ["nvt-i18n-%s.xml" % lang]:
             fails.append("%s: catalogo(s) embutido(s) %s, esperado o do idioma" % (where, cats))
-        fails.extend(_members_are_the_bundle(where, root, files, gen, lang, bundle_dir, b))
+        # Idioma ou edicao fora do contrato ja' reprovou acima (combinacoes, UUID, nome); o build
+        # nao sabe montar um objeto deles, entao nao ha o que comparar com o bundle.
+        if lang in LANGS and variant in VARIANTS:
+            fails.extend(_members_are_the_bundle(where, root, files, gen, lang, bundle_dir, b))
     ref = os.path.join(bundle_dir, "report_format.xml")
     if not os.path.exists(ref):
         fails.append("falta suricatoos-premium-pdf/report_format.xml (descritor de referencia: gerado, "

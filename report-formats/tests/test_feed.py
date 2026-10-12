@@ -312,6 +312,24 @@ class GeracaoDoFeed(unittest.TestCase):
                             "--dir", self.dir], capture_output=True)
         self.assertEqual(r.returncode, 0, r.stdout.decode("utf-8", "replace"))
 
+    def test_check_manifest_reprova_idioma_fora_do_contrato_sem_quebrar(self):
+        # Um manifesto adulterado deve cair na lista de FALHAs (exit 1), nao numa excecao do
+        # builder que nao sabe montar o objeto de um idioma que nao existe.
+        d = os.path.join(self.tmp, "manifesto-adulterado")
+        shutil.copytree(self.dir, d)
+        path = os.path.join(d, "manifest.json")
+        with open(path, "rb") as fh:
+            data = fh.read()
+        self.assertEqual(data.count(b'"lang": "es"'), 3)
+        with open(path, "wb") as fh:
+            fh.write(data.replace(b'"lang": "es"', b'"lang": "xx"', 1))
+        r = subprocess.run([sys.executable, "-X", "utf8", os.path.join(RF, "ci", "check-manifest.py"),
+                            "--dir", d], capture_output=True)
+        out = r.stdout.decode("utf-8", "replace")
+        self.assertEqual(r.returncode, 1, out + r.stderr.decode("utf-8", "replace"))
+        self.assertIn("check-manifest: FALHA", out)
+        self.assertIn("combinacoes", out)
+
 
 def dentro_de_um_checkout_git():
     """Falso numa copia de pasta (os mutantes) ou num `git archive': nao ha indice para conferir."""
