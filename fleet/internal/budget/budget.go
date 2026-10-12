@@ -25,7 +25,10 @@
 //     window is treated as FULL for one hour from boot, so that losing the file never reopens the door. Lost
 //     tells the caller why (to log and count it) and BlockedUntil until when. The bad file is left as it is —
 //     removing it would make the next boot start with an empty budget — and the first Consume after the block
-//     replaces it. A file that does not exist is a first boot: an empty budget.
+//     replaces it. A file that does not exist is a first boot (an empty budget) only if the caller says so
+//     (Options.FirstBoot, true while the node has no identity yet); on a node that already has one, a missing file
+//     is a loss and gets the same block. The first boot writes the empty state at once, so that absence later means
+//     loss.
 //   - A failed write of the consumption is an error (not ErrOverBudget) and the consumption is not counted: the
 //     caller answers unavailable (deferred, nothing recorded).
 package budget
@@ -93,12 +96,33 @@ type Ledger struct {
 	lost         error
 }
 
+// Options are the facts about the node that only the caller knows.
+type Options struct {
+	// FirstBoot is true when this is the very first start of the node: it has no identity yet (no enroll has ever
+	// happened in this FLEET_STATE_DIR), so there is nothing to lose and a missing budget.json is normal.
+	//
+	// The zero value is the safe one. For a node that already has its identity, a missing budget.json cannot be a
+	// first boot: it means the state was lost (the file deleted, the volume rolled back), and that counts as a lost
+	// window, exactly like a corrupt file. A caller derives it from the identity (`FirstBoot: !identityExists`);
+	// forgetting it makes the ledger stricter, never looser. It only matters when the file is missing: it does not
+	// excuse a file that exists and is unusable.
+	FirstBoot bool
+}
+
 // Open reads the ledger in stateDir/budget.json (FLEET_STATE_DIR). boot is the verification clock at start: it
 // dates the block that follows an unusable state, so it must be a real instant: a zero or out-of-range boot is
-// refused, because the end of the block would wrap around and the "full" window would end in the past. The only
-// errors are programming ones (an empty stateDir, an invalid boot); see the package comment for what an
-// unreadable or corrupt file does.
-func Open(stateDir string, boot time.Time) (*Ledger, error) {
+// refused, because the end of the block would wrap around and the "full" window would end in the past.
+//
+// What a missing budget.json means depends on opts.FirstBoot. On the first boot the ledger starts empty and WRITES
+// the initial (empty) state at once, so that from then on the file's absence is detectable: a node that is
+// enrolled but has never accepted a command would otherwise have no file at all, and every restart would look like
+// a loss. If that first write fails, Open fails: the connector could not keep a budget. On any later boot, a
+// missing file is a lost state (Lost explains it) and nothing is written: the first Consume after the block creates
+// the file.
+//
+// The only errors are therefore programming ones (an empty stateDir, an invalid boot) and the failure of the first
+// boot's write; see the package comment for what an unreadable or corrupt file does.
+func Open(stateDir string, boot time.Time, opts Options) (*Ledger, error) {
 	if stateDir == "" {
 		return nil, errors.New("budget: FLEET_STATE_DIR vazio")
 	}
@@ -108,10 +132,15 @@ func Open(stateDir string, boot time.Time) (*Ledger, error) {
 	path := filepath.Join(stateDir, FileName)
 	l := &Ledger{path: path}
 	data, err := fsutil.ReadBounded(path, maxFileBytes)
-	if errors.Is(err, fs.ErrNotExist) {
-		return l, nil // first boot
-	}
-	if err == nil {
+	switch {
+	case errors.Is(err, fs.ErrNotExist) && opts.FirstBoot:
+		if werr := l.write(nil, nil); werr != nil {
+			return nil, fmt.Errorf("budget: gravar o estado inicial: %w", werr)
+		}
+		return l, nil
+	case errors.Is(err, fs.ErrNotExist):
+		err = errors.New("budget.json ausente num nó que já tem identidade (apagado ou volume revertido)")
+	case err == nil:
 		err = l.load(data)
 	}
 	if err != nil {
@@ -200,15 +229,26 @@ func (l *Ledger) Consume(t time.Time, sensitive bool, lim Limits) error {
 	if sensitive {
 		sens = append(sens, now)
 	}
-	b, err := json.Marshal(state{Version: fileVersion, TotalNS: total, SensitiveNS: sens})
-	if err != nil {
-		return fmt.Errorf("budget: serializar: %w", err) // unreachable: a struct of ints
-	}
-	if err := fsutil.WriteAtomic(l.path, append(b, '\n')); err != nil {
+	if err := l.write(total, sens); err != nil {
 		return fmt.Errorf("budget: gravar %s: %w", l.path, err)
 	}
 	l.total, l.sensitive = total, sens
 	return nil
+}
+
+// write persists a state (nil lists are written as empty ones).
+func (l *Ledger) write(total, sens []int64) error {
+	if total == nil {
+		total = []int64{}
+	}
+	if sens == nil {
+		sens = []int64{}
+	}
+	b, err := json.Marshal(state{Version: fileVersion, TotalNS: total, SensitiveNS: sens})
+	if err != nil {
+		return err // unreachable: a struct of ints
+	}
+	return fsutil.WriteAtomic(l.path, append(b, '\n'))
 }
 
 // usageAt returns how many instants each window holds at t. It does not apply the block that follows an unusable

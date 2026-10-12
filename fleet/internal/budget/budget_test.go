@@ -22,7 +22,7 @@ var wide = Limits{Total: MaxTotal, Sensitive: MaxSensitive}
 func openAt(t *testing.T, boot time.Time) (*Ledger, string) {
 	t.Helper()
 	dir := t.TempDir()
-	l, err := Open(dir, boot)
+	l, err := Open(dir, boot, Options{FirstBoot: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -114,6 +114,7 @@ func TestSensivelContaNosDoisOrcamentos(t *testing.T) {
 
 func TestFitsSoPerguntaENadaGrava(t *testing.T) {
 	l, dir := openAt(t, t0)
+	before := readState(t, dir)
 	for i := 0; i < 5; i++ {
 		if !l.Fits(t0, true, wide) {
 			t.Fatal("deveria caber")
@@ -122,13 +123,14 @@ func TestFitsSoPerguntaENadaGrava(t *testing.T) {
 	if u := l.usageAt(t0); u != (usage{}) {
 		t.Fatalf("perguntar não consome: %+v", u)
 	}
-	if _, err := os.Stat(stateFile(dir)); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("perguntar não grava arquivo: %v", err)
+	if after := readState(t, dir); after != before {
+		t.Fatalf("perguntar não grava: o arquivo mudou de\n%s\npara\n%s", before, after)
 	}
 }
 
 func TestLimiteZeroNaoAceitaNadaDaquelaClasse(t *testing.T) {
 	l, dir := openAt(t, t0)
+	before := readState(t, dir)
 
 	noTotal := Limits{Total: 0, Sensitive: 30}
 	if l.Fits(t0, false, noTotal) || l.Fits(t0, true, noTotal) {
@@ -147,8 +149,8 @@ func TestLimiteZeroNaoAceitaNadaDaquelaClasse(t *testing.T) {
 	if err := l.Consume(t0, false, noTotal); !errors.Is(err, ErrOverBudget) {
 		t.Fatalf("Consume com total 0: %v", err)
 	}
-	if _, err := os.Stat(stateFile(dir)); !errors.Is(err, os.ErrNotExist) {
-		t.Fatal("o que não coube não pode ser gravado")
+	if after := readState(t, dir); after != before {
+		t.Fatalf("o que não coube não pode ser gravado: o arquivo mudou de\n%s\npara\n%s", before, after)
 	}
 	consume(t, l, t0, false, noSensitive) // o não sensível passa
 }
@@ -253,7 +255,7 @@ func TestPersistenciaIdaEVolta(t *testing.T) {
 		t.Fatalf("Usage antes de reabrir: %+v", want)
 	}
 
-	re, err := Open(dir, at)
+	re, err := Open(dir, at, Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -319,22 +321,116 @@ func TestArquivoSoGuardaOQueEstaNaJanela(t *testing.T) {
 	}
 }
 
-func TestArquivoAusenteComecaVazio(t *testing.T) {
-	l, dir := openAt(t, t0)
+// readState returns the text of budget.json and checks that nothing else (a temporary file, say) sits next to it.
+func readState(t *testing.T, dir string) string {
+	t.Helper()
+	b, err := os.ReadFile(stateFile(dir))
+	if err != nil {
+		t.Fatalf("budget.json deveria existir: %v", err)
+	}
+	if entries, err := os.ReadDir(dir); err != nil || len(entries) != 1 {
+		t.Fatalf("o diretório deveria ter só o budget.json: %v %v", entries, err)
+	}
+	return string(b)
+}
+
+// Primeiro boot de verdade (o nó ainda não tem identidade): não há o que perder, o orçamento começa vazio. Mas
+// Open grava o estado inicial já, porque só assim a ausência do arquivo, num boot seguinte, significa perda — um
+// nó parado, sem nenhum aceite, não teria arquivo nenhum e todo reinício seria lido como perda.
+func TestPrimeiroBootComecaVazioEGravaOEstadoInicial(t *testing.T) {
+	dir := t.TempDir()
+	l, err := Open(dir, t0, Options{FirstBoot: true})
+	if err != nil {
+		t.Fatal(err)
+	}
 	if l.Lost() != nil || !l.BlockedUntil().IsZero() {
 		t.Fatalf("primeiro boot não é perda: %v %v", l.Lost(), l.BlockedUntil())
 	}
 	if u := l.usageAt(t0); u != (usage{}) || !l.Fits(t0, true, Limits{Total: 1, Sensitive: 1}) {
 		t.Fatalf("deveria começar vazio: %+v", u)
 	}
-	if _, err := os.Stat(stateFile(dir)); !errors.Is(err, os.ErrNotExist) {
-		t.Fatal("Open não cria o arquivo")
+	if got, want := readState(t, dir), stateJSON(nil, nil)+"\n"; got != want {
+		t.Fatalf("estado inicial:\n got %s\nwant %s", got, want)
 	}
+
+	// o nó se inscreve (ganha identidade) e reinicia sem nunca ter aceito um comando: o arquivo está lá, nada se perdeu
+	re, err := Open(dir, t0.Add(time.Minute), Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if re.Lost() != nil || !re.BlockedUntil().IsZero() {
+		t.Fatalf("reinício de um nó parado não é perda: %v", re.Lost())
+	}
+}
+
+// O sinal do chamador (a identidade do nó existe) transforma a ausência do arquivo em perda: apagar o
+// budget.json, ou voltar o volume, não pode zerar o orçamento no reinício. O valor zero de Options é o seguro.
+func TestAusenteNumNoQueJaTemIdentidadeContaComoPerda(t *testing.T) {
+	dir := t.TempDir() // sem budget.json
+	boot := t0.Add(7 * time.Minute)
+	l, err := Open(dir, boot, Options{}) // FirstBoot falso: o nó já tem identidade
+	if err != nil {
+		t.Fatalf("perda não é erro de Open: %v", err)
+	}
+	assertBlockedUntilBootPlusHour(t, l, boot)
+	if !strings.Contains(l.Lost().Error(), "identidade") {
+		t.Fatalf("a causa deveria dizer que o nó já tem identidade: %v", l.Lost())
+	}
+	// Open não inventa o arquivo: se a ausência valesse como "criado agora", o reinício seguinte abriria a porta
+	if _, err := os.Stat(stateFile(dir)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("Open não pode criar o arquivo de um nó que perdeu o estado: %v", err)
+	}
+
+	// passada a hora, volta a aceitar, e a primeira gravação cria o arquivo: dali em diante o reinício lê o estado
+	after := boot.Add(Window)
+	consume(t, l, after, false, wide)
+	re, err := Open(dir, after, Options{})
+	if err != nil || re.Lost() != nil {
+		t.Fatalf("depois de uma gravação o arquivo existe e está íntegro: %v %v", err, re.Lost())
+	}
+	if u := re.usageAt(after); u != (usage{Total: 1}) {
+		t.Fatalf("usageAt = %+v", u)
+	}
+}
+
+// FirstBoot só vale para "arquivo ausente": não desculpa um arquivo que existe e não presta.
+func TestPrimeiroBootNaoDesculpaArquivoCorrompido(t *testing.T) {
+	boot := t0.Add(3 * time.Minute)
+	l, err := Open(seedDir(t, "lixo"), boot, Options{FirstBoot: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertBlockedUntilBootPlusHour(t, l, boot)
+}
+
+func TestPrimeiroBootComArquivoValidoLeOArquivo(t *testing.T) {
+	run := []int64{t0.UnixNano() - int64(time.Minute)}
+	l, err := Open(seedDir(t, stateJSON(run, run)), t0, Options{FirstBoot: true})
+	if err != nil || l.Lost() != nil {
+		t.Fatalf("%v %v", err, l.Lost())
+	}
+	if u := l.usageAt(t0); u != (usage{Total: 1, Sensitive: 1}) {
+		t.Fatalf("o estado do arquivo deveria valer: %+v", u)
+	}
+}
+
+// Primeiro boot que não consegue gravar o estado inicial: o conector não teria como guardar orçamento nenhum.
+func TestPrimeiroBootSemComoGravarEErro(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "nao-existe")
+	if _, err := Open(dir, t0, Options{FirstBoot: true}); err == nil {
+		t.Fatal("primeiro boot sem diretório gravável tinha de ser erro")
+	}
+	// já a perda (sem FirstBoot) não escreve nada, então não depende do diretório
+	l, err := Open(dir, t0, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertBlockedUntilBootPlusHour(t, l, t0)
 }
 
 func TestOpenStateDirVazioEErro(t *testing.T) {
 	// "" viraria ./budget.json: o diretório de trabalho nunca guarda o orçamento
-	if _, err := Open("", t0); err == nil {
+	if _, err := Open("", t0, Options{FirstBoot: true}); err == nil {
 		t.Fatal("FLEET_STATE_DIR vazio deveria ser erro")
 	}
 }
@@ -351,7 +447,7 @@ func TestOpenRecusaBootQueNaoERelogioDeVerificacao(t *testing.T) {
 	for name, boot := range cases {
 		t.Run(name, func(t *testing.T) {
 			dir := seedDir(t, "lixo") // estado corrompido: o caso em que o bloqueio é o que protege
-			l, err := Open(dir, boot)
+			l, err := Open(dir, boot, Options{})
 			if err == nil {
 				t.Fatalf("Open aceitou boot %v; Lost=%v BlockedUntil=%v e Fits(2026-10-11)=%v (Fits=true é porta aberta)",
 					boot, l.Lost() != nil, l.BlockedUntil(), l.Fits(t0, false, wide))
@@ -360,16 +456,16 @@ func TestOpenRecusaBootQueNaoERelogioDeVerificacao(t *testing.T) {
 				t.Fatalf("com erro, nenhum ledger: veio %+v", l)
 			}
 			// sem arquivo nenhum também: o boot é inválido, não importa o que haja no disco
-			if _, err := Open(t.TempDir(), boot); err == nil {
+			if _, err := Open(t.TempDir(), boot, Options{FirstBoot: true}); err == nil {
 				t.Fatal("boot inválido sem arquivo também tinha de ser erro")
 			}
 		})
 	}
 	// o que um relógio de verificação de verdade produz continua valendo, inclusive com o relógio monotônico
-	if _, err := Open(t.TempDir(), time.Now()); err != nil {
+	if _, err := Open(t.TempDir(), time.Now(), Options{FirstBoot: true}); err != nil {
 		t.Fatalf("time.Now() deveria ser aceito: %v", err)
 	}
-	if _, err := Open(t.TempDir(), t0); err != nil {
+	if _, err := Open(t.TempDir(), t0, Options{FirstBoot: true}); err != nil {
 		t.Fatalf("%v", err)
 	}
 }
@@ -403,7 +499,7 @@ func TestEstadoIlegivelOuCorrompidoTrataJanelaComoCheiaPorUmaHora(t *testing.T) 
 		t.Run(c.name, func(t *testing.T) {
 			dir := seedDir(t, c.content)
 			path := stateFile(dir)
-			l, err := Open(dir, boot)
+			l, err := Open(dir, boot, Options{})
 			if err != nil {
 				t.Fatalf("estado perdido não é erro de Open: %v", err)
 			}
@@ -417,7 +513,7 @@ func TestEstadoIlegivelOuCorrompidoTrataJanelaComoCheiaPorUmaHora(t *testing.T) 
 			// passada a hora, volta a aceitar e a primeira gravação cura o arquivo
 			after := boot.Add(Window)
 			consume(t, l, after, false, wide)
-			re, err := Open(dir, after)
+			re, err := Open(dir, after, Options{})
 			if err != nil || re.Lost() != nil {
 				t.Fatalf("depois de uma gravação o arquivo deveria estar íntegro: %v %v", err, re.Lost())
 			}
@@ -434,7 +530,7 @@ func TestEstadoIlegivelPorSerDiretorio(t *testing.T) {
 		t.Fatal(err)
 	}
 	boot := t0
-	l, err := Open(dir, boot)
+	l, err := Open(dir, boot, Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -443,7 +539,7 @@ func TestEstadoIlegivelPorSerDiretorio(t *testing.T) {
 
 func TestEstadoGrandeDemaisContaComoPerdido(t *testing.T) {
 	dir := seedDir(t, stateJSON(nil, nil)+strings.Repeat(" ", maxFileBytes))
-	l, err := Open(dir, t0)
+	l, err := Open(dir, t0, Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -480,7 +576,7 @@ func TestFalhaDeGravacaoEErroENadaFicaContado(t *testing.T) {
 	if err := os.Mkdir(dir, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	l, err := Open(dir, t0)
+	l, err := Open(dir, t0, Options{FirstBoot: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -506,7 +602,7 @@ func TestFalhaDeGravacaoEErroENadaFicaContado(t *testing.T) {
 		t.Fatal(err)
 	}
 	consume(t, l, t0.Add(2*time.Second), false, wide)
-	re, err := Open(dir, t0.Add(3*time.Second))
+	re, err := Open(dir, t0.Add(3*time.Second), Options{})
 	if err != nil || re.Lost() != nil {
 		t.Fatalf("%v %v", err, re.Lost())
 	}
@@ -569,7 +665,7 @@ func TestTetoDeMemoriaNaoDependeDoLimitePedido(t *testing.T) {
 
 	// MaxTotal instantes na janela (a lista está no teto): nem com um limite absurdo entra mais um
 	dir := seedDir(t, stateJSON(nsRun(at.UnixNano()-int64(time.Minute), MaxTotal), nil))
-	l, err := Open(dir, at)
+	l, err := Open(dir, at, Options{})
 	if err != nil || l.Lost() != nil {
 		t.Fatalf("%v %v", err, l.Lost())
 	}
@@ -585,7 +681,7 @@ func TestTetoDeMemoriaNaoDependeDoLimitePedido(t *testing.T) {
 
 	// MaxSensitive sensíveis: nenhum sensível a mais, mas o não sensível ainda cabe no global
 	run := nsRun(at.UnixNano()-int64(time.Minute), MaxSensitive)
-	l2, err := Open(seedDir(t, stateJSON(run, run)), at)
+	l2, err := Open(seedDir(t, stateJSON(run, run)), at, Options{})
 	if err != nil || l2.Lost() != nil {
 		t.Fatalf("%v %v", err, l2.Lost())
 	}

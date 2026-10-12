@@ -405,7 +405,7 @@ func TestPortaComOsPacotesReais(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ledger, err := budget.Open(dir, t0)
+	ledger, err := budget.Open(dir, t0, budget.Options{FirstBoot: true})
 	if err != nil {
 		t.Fatal(err)
 	}
