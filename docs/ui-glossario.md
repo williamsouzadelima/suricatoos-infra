@@ -15,6 +15,8 @@
 - A escolha explícita do usuário (configurações ou seletor de idioma) continua
   valendo; o idioma detectado ao abrir a página não vira configuração salva.
 - Chave sem tradução cai no **inglês** (o texto da chave), nunca no padrão.
+- A primeira pintura espera o catálogo do idioma detectado (no máximo 2 s) e o
+  `<html lang>` acompanha o idioma da UI (`pt-BR`, `es`, `en`).
 
 ## Termos
 
@@ -82,7 +84,13 @@ Europeia) é UE nos dois idiomas.
 
 - **Suricatoos** só em nome de produto nas strings visíveis que o patch
   controla (ex.: título, telas da Suricatoos, "Suricatoos Vulnerability
-  Manager", "sensor Suricatoos").
+  Manager"). O nome de produto é o mesmo nos três idiomas: quando a string do
+  upstream nomeia o produto (ex.: o erro de login "The Suricatoos Vulnerability
+  Manager service is not responding…"), muda a chave em inglês e os valores
+  pt_BR/es junto.
+- **"Greenbone Sensor" fica "Greenbone Sensor"** em todos os idiomas: é o tipo de
+  scanner do upstream (gvmd), não o sensor da Suricatoos (ADR-0007), e trocar o
+  nome confundiria os dois.
 - **Greenbone fica** em licença, copyright, atribuição, "sobre"/créditos, avisos
   legais, na origem de dados que vêm do feed da Greenbone (ex.: a origem de
   severidade "Greenbone", o formato "Greenbone Compliance Report"), na licença e
@@ -93,9 +101,11 @@ Europeia) é UE nos dois idiomas.
 
 - Data/hora absoluta: os formatadores do próprio GSA
   (`web/utils/user-setting-time-date-formatters`), que usam o fuso e o formato
-  de data/hora do usuário. Data sem fuso (ex.: `last_run` do feed-updater) é
-  formatada sem conversão de fuso.
-- Tempo relativo ("há 5 minutos"): o dayjs do GSA (`gmp/models/date`,
+  de data/hora do usuário — nas telas da Suricatoos, por
+  `web/utils/suricatoosDate` (`formatApiDate`). Data sem fuso (ex.: `last_run`
+  do feed-updater) é formatada sem conversão de fuso; valor que não é data
+  aparece como veio, nunca "Invalid Date".
+- Tempo relativo ("há 5 minutos"): o dayjs do GSA (`formatApiRelativeTime`,
   `fromNow()`).
 - O locale do dayjs acompanha o idioma da UI desde a primeira detecção
   (`pt_BR` → `pt-br`, `es` → `es`, `en` → `en`).

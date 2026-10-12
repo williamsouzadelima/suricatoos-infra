@@ -5349,7 +5349,7 @@ index eaff647..d6e39ef 100644
 \ No newline at end of file
 diff --git a/public/locales/gsa-es.json b/public/locales/gsa-es.json
 new file mode 100644
-index 0000000..701c66e
+index 0000000..ea0404a
 --- /dev/null
 +++ b/public/locales/gsa-es.json
 @@ -0,0 +1,2488 @@
@@ -6412,7 +6412,7 @@ index 0000000..701c66e
 +  "Grant": "Conceder",
 +  "Green": "Verde",
 +  "Greenbone": "Greenbone",
-+  "Greenbone Sensor": "Sensor Suricatoos",
++  "Greenbone Sensor": "Greenbone Sensor",
 +  "Group": "Grupo",
 +  "Group ID": "ID del grupo",
 +  "Group Name": "Nombre del grupo",
@@ -7104,7 +7104,7 @@ index 0000000..701c66e
 +  "Report Details": "Detalles del informe",
 +  "Report download not available": "Descarga del informe no disponible",
 +  "Report Export File Name": "Nombre de archivo de exportación del informe",
-+  "Report for Suricatoos Sensor": "Informe del sensor Suricatoos",
++  "Report for Greenbone Sensor": "Informe para Greenbone Sensor",
 +  "Report for Last": "Informe del último",
 +  "Report for Last Day": "Informe del último día",
 +  "Report for Last Hour": "Informe de la última hora",
@@ -7518,7 +7518,7 @@ index 0000000..701c66e
 +  "The Greenbone Enterprise License for this system is invalid. You can still use the system without restrictions, but you will not receive updates anymore. Please contact your administrator.": "La licencia Greenbone Enterprise de este sistema no es válida. Aún puede usar el sistema sin restricciones, pero ya no recibirá actualizaciones. Comuníquese con su administrador.",
 +  "The Greenbone Enterprise License for this system will expire in {{days}} days. After that your appliance remains valid and you can still use the system without restrictions, but you will not receive updates anymore. Please contact your administrator for extending the license.": "La licencia Greenbone Enterprise de este sistema expirará en {{days}} días. Después de eso, su appliance seguirá siendo válido y aún podrá usar el sistema sin restricciones, pero ya no recibirá actualizaciones. Comuníquese con su administrador para extender la licencia.",
 +  "The Greenbone Enterprise License for this system will expire in {{days}} days. After that your appliance remains valid and you can still use the system without restrictions, but you will not receive updates anymore. You can find information about extending your license on the": "La licencia Greenbone Enterprise de este sistema expirará en {{days}} días. Después de eso, su appliance seguirá siendo válido y aún podrá usar el sistema sin restricciones, pero ya no recibirá actualizaciones. Puede encontrar información sobre cómo extender su licencia en el",
-+  "The Greenbone Vulnerability Manager service is not responding. This could be due to system maintenance. Please try again later, check the system status, or contact your system administrator.": "El servicio Suricatoos Vulnerability Manager no responde. Esto podría deberse a un mantenimiento del sistema. Vuelva a intentarlo más tarde, verifique el estado del sistema o comuníquese con su administrador del sistema.",
++  "The Suricatoos Vulnerability Manager service is not responding. This could be due to system maintenance. Please try again later, check the system status, or contact your system administrator.": "El servicio Suricatoos Vulnerability Manager no responde. Esto podría deberse a un mantenimiento del sistema. Vuelva a intentarlo más tarde, verifique el estado del sistema o comuníquese con su administrador del sistema.",
 +  "The last": "El último",
 +  "The Last": "El último",
 +  "The last {{weekday}} every {{interval}} months": "El último {{weekday}} cada {{interval}} meses",
@@ -7843,7 +7843,7 @@ index 0000000..701c66e
 +}
 \ No newline at end of file
 diff --git a/public/locales/gsa-pt_BR.json b/public/locales/gsa-pt_BR.json
-index 10e592f..8dd1b9e 100644
+index 10e592f..761694c 100644
 --- a/public/locales/gsa-pt_BR.json
 +++ b/public/locales/gsa-pt_BR.json
 @@ -1,216 +1,2488 @@
@@ -8983,7 +8983,7 @@ index 10e592f..8dd1b9e 100644
 +  "Grant": "Conceder",
 +  "Green": "Verde",
 +  "Greenbone": "Greenbone",
-+  "Greenbone Sensor": "Sensor Suricatoos",
++  "Greenbone Sensor": "Greenbone Sensor",
 +  "Group": "Grupo",
 +  "Group ID": "ID do grupo",
 +  "Group Name": "Nome do grupo",
@@ -9741,7 +9741,7 @@ index 10e592f..8dd1b9e 100644
 +  "Report Details": "Detalhes do relatório",
 +  "Report download not available": "Download do relatório não disponível",
 +  "Report Export File Name": "Nome do arquivo de exportação do relatório",
-+  "Report for Suricatoos Sensor": "Relatório do sensor Suricatoos",
++  "Report for Greenbone Sensor": "Relatório para o Greenbone Sensor",
 +  "Report for Last": "Relatório para o último",
 +  "Report for Last Day": "Relatório para o último dia",
 +  "Report for Last Hour": "Relatório da Última Hora",
@@ -10212,7 +10212,7 @@ index 10e592f..8dd1b9e 100644
 +  "The Greenbone Enterprise License for this system is invalid. You can still use the system without restrictions, but you will not receive updates anymore. Please contact your administrator.": "A licença Greenbone Enterprise para este sistema é inválida. Você ainda pode usar o sistema sem restrições, mas não receberá mais atualizações. Entre em contato com seu administrador.",
 +  "The Greenbone Enterprise License for this system will expire in {{days}} days. After that your appliance remains valid and you can still use the system without restrictions, but you will not receive updates anymore. Please contact your administrator for extending the license.": "A licença Greenbone Enterprise para este sistema expirará em {{days}} dias. Depois disso, seu appliance permanece válido e você ainda pode usar o sistema sem restrições, mas não receberá mais atualizações. Entre em contato com seu administrador para estender a licença.",
 +  "The Greenbone Enterprise License for this system will expire in {{days}} days. After that your appliance remains valid and you can still use the system without restrictions, but you will not receive updates anymore. You can find information about extending your license on the": "A licença Greenbone Enterprise para este sistema expirará em {{days}} dias. Depois disso, seu appliance permanece válido e você ainda pode usar o sistema sem restrições, mas não receberá mais atualizações. Você pode encontrar informações sobre como estender sua licença em",
-+  "The Greenbone Vulnerability Manager service is not responding. This could be due to system maintenance. Please try again later, check the system status, or contact your system administrator.": "O serviço Suricatoos Vulnerability Manager não está respondendo. Isso pode ser devido à manutenção do sistema. Tente novamente mais tarde, verifique o status do sistema ou entre em contato com o administrador do sistema.",
++  "The Suricatoos Vulnerability Manager service is not responding. This could be due to system maintenance. Please try again later, check the system status, or contact your system administrator.": "O serviço Suricatoos Vulnerability Manager não está respondendo. Isso pode ser devido à manutenção do sistema. Tente novamente mais tarde, verifique o status do sistema ou entre em contato com o administrador do sistema.",
 +  "The last": "O último",
 +  "The Last": "O Último",
 +  "The last {{weekday}} every {{interval}} months": "O último {{weekday}} a cada {{interval}} meses",
@@ -11658,10 +11658,10 @@ index a057cf9..409c93b 100644
    },
 diff --git a/src/web/pages/downloads/DownloadsPage.tsx b/src/web/pages/downloads/DownloadsPage.tsx
 new file mode 100644
-index 0000000..49a43ce
+index 0000000..92c84e8
 --- /dev/null
 +++ b/src/web/pages/downloads/DownloadsPage.tsx
-@@ -0,0 +1,249 @@
+@@ -0,0 +1,245 @@
 +/* SPDX-FileCopyrightText: 2024 Greenbone AG
 + *
 + * SPDX-License-Identifier: AGPL-3.0-or-later
@@ -11688,8 +11688,8 @@ index 0000000..49a43ce
 +  isSessionExpired,
 +  SuricatoosApiError,
 +} from 'web/utils/suricatoosApi';
++import {formatApiDate} from 'web/utils/suricatoosDate';
 +import Theme from 'web/utils/Theme';
-+import {formattedUserSettingDateTimeWithTimeZone} from 'web/utils/user-setting-time-date-formatters';
 +
 +interface EnrollResponse {
 +  tenant: string;
@@ -11894,11 +11894,7 @@ index 0000000..49a43ce
 +                {resp.expires_at
 +                  ? ' · ' +
 +                    _('expires on {{- date}}', {
-+                      date:
-+                        formattedUserSettingDateTimeWithTimeZone(
-+                          resp.expires_at,
-+                          timezone,
-+                        ) ?? resp.expires_at,
++                      date: formatApiDate(resp.expires_at, timezone),
 +                    })
 +                  : ''}
 +              </p>
@@ -11913,10 +11909,10 @@ index 0000000..49a43ce
 +export default DownloadsPage;
 diff --git a/src/web/pages/endpoint-agents/EndpointAgentsPage.tsx b/src/web/pages/endpoint-agents/EndpointAgentsPage.tsx
 new file mode 100644
-index 0000000..13787ae
+index 0000000..92e75a5
 --- /dev/null
 +++ b/src/web/pages/endpoint-agents/EndpointAgentsPage.tsx
-@@ -0,0 +1,348 @@
+@@ -0,0 +1,333 @@
 +/* SPDX-FileCopyrightText: 2024 Greenbone AG
 + *
 + * SPDX-License-Identifier: AGPL-3.0-or-later
@@ -11931,7 +11927,6 @@ index 0000000..13787ae
 +
 +import React, {useState, useEffect, useCallback, useMemo, useRef} from 'react';
 +import {showSuccessNotification} from '@greenbone/ui-lib';
-+import date from 'gmp/models/date';
 +import SeverityBar from 'web/components/bar/SeverityBar';
 +import Button from 'web/components/form/Button';
 +import Layout from 'web/components/layout/Layout';
@@ -11953,6 +11948,7 @@ index 0000000..13787ae
 +  isSessionExpired,
 +  usePolling,
 +} from 'web/utils/suricatoosApi';
++import {formatApiRelativeTime as relTime} from 'web/utils/suricatoosDate';
 +import Theme from 'web/utils/Theme';
 +
 +interface Agent {
@@ -11973,21 +11969,6 @@ index 0000000..13787ae
 +  online: boolean;
 +  status: string;
 +}
-+
-+// How long ago, in the language of the UI: the dayjs of the GSA follows it
-+// ("há 5 minutos", "hace 5 minutos", "5 minutes ago"). A time ahead of this
-+// clock counts as now; '—' when there is no valid time.
-+const relTime = (iso: string): string => {
-+  if (!iso) {
-+    return '—';
-+  }
-+  const t = date(iso);
-+  if (!t.isValid()) {
-+    return '—';
-+  }
-+  const now = date();
-+  return (t.isAfter(now) ? now : t).fromNow();
-+};
 +
 +const badgeStyle = (bg: string): React.CSSProperties => ({
 +  display: 'inline-block',
@@ -12287,10 +12268,10 @@ index b995df4..be67f0d 100644
              <TableRow>
 diff --git a/src/web/pages/extras/FeedUpdateSection.tsx b/src/web/pages/extras/FeedUpdateSection.tsx
 new file mode 100644
-index 0000000..e0af31f
+index 0000000..d3a69b9
 --- /dev/null
 +++ b/src/web/pages/extras/FeedUpdateSection.tsx
-@@ -0,0 +1,319 @@
+@@ -0,0 +1,318 @@
 +/* SPDX-FileCopyrightText: 2026 Suricatoos
 + *
 + * SPDX-License-Identifier: AGPL-3.0-or-later
@@ -12306,7 +12287,7 @@ index 0000000..e0af31f
 +  type ApiRequestInit,
 +  usePolling,
 +} from 'web/utils/suricatoosApi';
-+import {formattedUserSettingDateTimeWithTimeZone} from 'web/utils/user-setting-time-date-formatters';
++import {formatApiDate} from 'web/utils/suricatoosDate';
 +
 +const API = '/feed-sync';
 +
@@ -12463,7 +12444,8 @@ index 0000000..e0af31f
 +  // Com erro de leitura, NAO afirmar "nunca": nunca e' um fato sobre o feed, e
 +  // aqui o que houve foi nao conseguir perguntar.
 +  // last_run vem sem fuso (o relogio do container do feed-updater): formatado
-+  // no idioma e no formato de data do usuario, sem conversao de fuso.
++  // no idioma e no formato de data do usuario, sem conversao de fuso; o que
++  // nao for data aparece como veio.
 +  const lastLine =
 +    erro !== null
 +      ? _('Status unavailable')
@@ -12471,9 +12453,7 @@ index 0000000..e0af31f
 +        ? _('Updating feeds...')
 +        : status?.last_run
 +          ? _('Last update: {{- time}} — {{- detail}}', {
-+              time:
-+                formattedUserSettingDateTimeWithTimeZone(status.last_run) ??
-+                status.last_run,
++              time: formatApiDate(status.last_run),
 +              detail,
 +            })
 +          : _('Last update: never');
@@ -12659,19 +12639,6 @@ index ee487c7..4345cf6 100644
    flex-direction: column;
    justify-content: center;
    align-items: center;
-diff --git a/src/web/pages/performance/PerformancePage.tsx b/src/web/pages/performance/PerformancePage.tsx
-index 83df316..aea5f19 100644
---- a/src/web/pages/performance/PerformancePage.tsx
-+++ b/src/web/pages/performance/PerformancePage.tsx
-@@ -287,7 +287,7 @@ const PerformancePage = () => {
-             </FormGroup>
- 
-             {gmp.settings.enableGreenboneSensor && (
--              <FormGroup title={_('Report for Greenbone Sensor')}>
-+              <FormGroup title={_('Report for Suricatoos Sensor')}>
-                 <Select
-                   items={renderSelectItems(
-                     sensors as Array<{id: string; name: string}>,
 diff --git a/src/web/pages/reports/AuditDeltaReportDetailsPage.jsx b/src/web/pages/reports/AuditDeltaReportDetailsPage.jsx
 index 21579eb..d5dd186 100644
 --- a/src/web/pages/reports/AuditDeltaReportDetailsPage.jsx
@@ -12869,7 +12836,7 @@ index dd0b390..9316ed8 100644
    Layers: {
 diff --git a/src/web/pages/ai-providers/AiProvidersPage.tsx b/src/web/pages/ai-providers/AiProvidersPage.tsx
 new file mode 100644
-index 0000000..555aa0a
+index 0000000..7bc97f5
 --- /dev/null
 +++ b/src/web/pages/ai-providers/AiProvidersPage.tsx
 @@ -0,0 +1,1073 @@
@@ -12903,7 +12870,7 @@ index 0000000..555aa0a
 +  type ApiRequestInit,
 +  SuricatoosApiError,
 +} from 'web/utils/suricatoosApi';
-+import {formattedUserSettingDateTimeWithTimeZone} from 'web/utils/user-setting-time-date-formatters';
++import {formatApiDate} from 'web/utils/suricatoosDate';
 +
 +interface Provider {
 +  id: string;
@@ -13365,7 +13332,7 @@ index 0000000..555aa0a
 +    const date =
 +      at === ''
 +        ? ''
-+        : (formattedUserSettingDateTimeWithTimeZone(at, timezone) ?? at);
++        : formatApiDate(at, timezone);
 +    if (date === '') {
 +      ackLine = _('Acknowledgement recorded');
 +    } else if (by === '' || by === UNKNOWN_OPERATOR) {
@@ -15796,10 +15763,10 @@ index a417b0b..ff2d1a4 100644
          }
 diff --git a/src/web/utils/__tests__/suricatoosLocale.test.ts b/src/web/utils/__tests__/suricatoosLocale.test.ts
 new file mode 100644
-index 0000000..81fecf3
+index 0000000..0eacd90
 --- /dev/null
 +++ b/src/web/utils/__tests__/suricatoosLocale.test.ts
-@@ -0,0 +1,239 @@
+@@ -0,0 +1,278 @@
 +/* SPDX-FileCopyrightText: 2026 Suricatoos
 + *
 + * SPDX-License-Identifier: AGPL-3.0-or-later
@@ -15821,6 +15788,8 @@ index 0000000..81fecf3
 +} from 'gmp/locale/lang';
 +import {getCatalogLanguage} from 'gmp/locale/languages';
 +import date from 'gmp/models/date';
++import {formatApiDate, formatApiRelativeTime} from 'web/utils/suricatoosDate';
++import {formattedUserSettingDateTimeWithTimeZone} from 'web/utils/user-setting-time-date-formatters';
 +
 +interface DetectInput {
 +  stored?: string;
@@ -15967,6 +15936,43 @@ index 0000000..81fecf3
 +    expect(document.documentElement.lang).toEqual('es');
 +    await i18next.changeLanguage('en');
 +    expect(document.documentElement.lang).toEqual('en');
++  });
++});
++
++describe('dates of the Suricatoos APIs', () => {
++  test('a valid date goes through the formatter of the GSA', async () => {
++    await i18next.changeLanguage('pt_BR');
++    const iso = '2026-10-12T18:30:00Z';
++    expect(formatApiDate(iso, 'America/Sao_Paulo')).toEqual(
++      formattedUserSettingDateTimeWithTimeZone(date(iso), 'America/Sao_Paulo'),
++    );
++    expect(formatApiDate(iso, 'America/Sao_Paulo')).toMatch(/out/);
++    // no time zone: the wall clock of the value, in the language of the UI
++    expect(formatApiDate('2026-10-11 02:00:05')).toMatch(/11 de out/);
++    expect(formatApiDate('2026-10-11 02:00:05')).toMatch(/02:00/);
++  });
++
++  test('what is not a date is shown as it came', () => {
++    expect(formatApiDate('soon')).toEqual('soon');
++    expect(formatApiDate('n/a')).toEqual('n/a');
++    expect(formatApiDate('')).toEqual('');
++  });
++
++  test('relative time: in the language of the UI, never in the future', async () => {
++    await i18next.changeLanguage('pt_BR');
++    expect(
++      formatApiRelativeTime(date().subtract(3, 'hour').toISOString()),
++    ).toEqual('há 3 horas');
++    // ahead of this clock (another clock): now
++    expect(formatApiRelativeTime(date().add(1, 'hour').toISOString())).toEqual(
++      date().fromNow(),
++    );
++    expect(formatApiRelativeTime('')).toEqual('—');
++    expect(formatApiRelativeTime('not a date')).toEqual('—');
++    await i18next.changeLanguage('es');
++    expect(
++      formatApiRelativeTime(date().subtract(3, 'hour').toISOString()),
++    ).toEqual('hace 3 horas');
 +  });
 +});
 +
@@ -16333,3 +16339,65 @@ index 0000000..b28c715
 +    expect(Date.now() - start).toBeLessThan(1000);
 +  });
 +});
+diff --git a/src/gmp/commands/login.ts b/src/gmp/commands/login.ts
+index 4df600b..bf6c88e 100644
+--- a/src/gmp/commands/login.ts
++++ b/src/gmp/commands/login.ts
+@@ -45,9 +45,10 @@ class LoginCommand extends HttpCommand {
+             rej.setMessage(_('GMP error during authentication'));
+             break;
+           case 503:
++            // Suricatoos: the product name of the UI, in every language.
+             rej.setMessage(
+               _(
+-                'The Greenbone Vulnerability Manager service is not ' +
++                'The Suricatoos Vulnerability Manager service is not ' +
+                   'responding. This could be due to system maintenance. ' +
+                   'Please try again later, check the system status, or ' +
+                   'contact your system administrator.',
+diff --git a/src/web/utils/suricatoosDate.ts b/src/web/utils/suricatoosDate.ts
+new file mode 100644
+index 0000000..1052f1e
+--- /dev/null
++++ b/src/web/utils/suricatoosDate.ts
+@@ -0,0 +1,40 @@
++/* SPDX-FileCopyrightText: 2026 Suricatoos
++ *
++ * SPDX-License-Identifier: AGPL-3.0-or-later
++ */
++
++/* Suricatoos: dates that the APIs of the Suricatoos pages send, shown with the
++ * date utilities of the GSA, in the language of the UI. */
++
++import date from 'gmp/models/date';
++import {formattedUserSettingDateTimeWithTimeZone} from 'web/utils/user-setting-time-date-formatters';
++
++/**
++ * Date and time in the language and in the date/time format of the user, and
++ * in the time zone `tz` when given (none: the wall clock of the value). A value
++ * that is not a date is shown as it came, never as "Invalid Date".
++ */
++export const formatApiDate = (value: string, tz?: string): string => {
++  const parsed = date(value);
++  if (!parsed.isValid()) {
++    return value;
++  }
++  return formattedUserSettingDateTimeWithTimeZone(parsed, tz) ?? value;
++};
++
++/**
++ * How long ago, in the language of the UI ("há 5 minutos", "hace 5 minutos",
++ * "5 minutes ago"). A time ahead of this clock counts as now; '—' when there is
++ * no valid time.
++ */
++export const formatApiRelativeTime = (value: string): string => {
++  if (!value) {
++    return '—';
++  }
++  const parsed = date(value);
++  if (!parsed.isValid()) {
++    return '—';
++  }
++  const now = date();
++  return (parsed.isAfter(now) ? now : parsed).fromNow();
++};
