@@ -182,11 +182,15 @@ func syncDir(dir string) error {
 		return err
 	}
 	defer d.Close()
-	if err := d.Sync(); err != nil && !dirSyncUnsupported(err) {
+	if err := syncHandle(d); err != nil && !dirSyncUnsupported(err) {
 		return err
 	}
 	return nil
 }
+
+// syncHandle is (*os.File).Sync on the directory syncDir opened. It is a variable only so that a test can make a
+// real directory's sync fail (an fsync EIO cannot be provoked on demand).
+var syncHandle = (*os.File).Sync
 
 // dirSyncUnsupported reports whether err only says that this filesystem cannot sync a directory: EINVAL, or ENOTSUP
 // (EOPNOTSUPP is the same errno on Linux and the name the BSDs and macOS use). Nothing else is tolerated.

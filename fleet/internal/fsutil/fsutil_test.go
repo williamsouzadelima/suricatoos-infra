@@ -264,6 +264,51 @@ func TestWriteAtomicSemErroNoSyncDoDiretorioDevolveNil(t *testing.T) {
 	}
 }
 
+// swapSyncHandle troca, durante o teste, o Sync do descritor do diretório que o syncDir abriu.
+func swapSyncHandle(t *testing.T, fn func(*os.File) error) {
+	t.Helper()
+	old := syncHandle
+	syncHandle = fn
+	t.Cleanup(func() { syncHandle = old })
+}
+
+// O erro do Sync() de um diretório aberto de verdade só é engolido quando diz que o sistema de arquivos não
+// sincroniza diretório (EINVAL, ENOTSUP); EIO e os demais voltam ao chamador, e o WriteAtomic os entrega como
+// ErrNotDurable. No Windows o syncDir sai antes de abrir o diretório, então este teste só morde fora dele (CI).
+func TestSyncDirDevolveOErroDoSyncDoDescritor(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("no Windows o diretório não é sincronizado")
+	}
+	dir := t.TempDir()
+	cases := []struct {
+		name      string
+		err, want error
+	}{
+		{"EIO volta", syscall.EIO, syscall.EIO},
+		{"ENOSPC volta", syscall.ENOSPC, syscall.ENOSPC},
+		{"EIO em *PathError volta", &fs.PathError{Op: "sync", Path: dir, Err: syscall.EIO}, syscall.EIO},
+		{"EINVAL é tolerado", syscall.EINVAL, nil},
+		{"ENOTSUP é tolerado", syscall.ENOTSUP, nil},
+		{"sem erro", nil, nil},
+	}
+	for _, c := range cases {
+		var synced string
+		swapSyncHandle(t, func(d *os.File) error { synced = d.Name(); return c.err })
+		err := syncDir(dir)
+		if c.want == nil && err != nil || c.want != nil && !errors.Is(err, c.want) {
+			t.Errorf("%s: syncDir devolveu %v", c.name, err)
+		}
+		if synced != dir {
+			t.Errorf("%s: sincronizou %q, esperava o diretório %q", c.name, synced, dir)
+		}
+	}
+	swapSyncHandle(t, func(*os.File) error { return syscall.EIO })
+	err := WriteAtomic(filepath.Join(dir, "estado.json"), []byte("x"))
+	if !errors.Is(err, ErrNotDurable) || !errors.Is(err, syscall.EIO) {
+		t.Fatalf("o WriteAtomic tem de entregar o EIO do Sync do diretório como ErrNotDurable, deu %v", err)
+	}
+}
+
 // Só "este sistema de arquivos não sincroniza diretório" é tolerado; qualquer outro erro de E/S não é.
 func TestDirSyncToleraSoONaoSuportado(t *testing.T) {
 	tolerated := map[string]error{
