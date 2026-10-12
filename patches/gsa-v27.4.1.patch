@@ -11739,10 +11739,10 @@ index 6958f21..b4f378a 100644
        username={username}
      />
 diff --git a/src/web/components/structure/LanguageSwitch.tsx b/src/web/components/structure/LanguageSwitch.tsx
-index 7f74728..de42221 100644
+index 7f74728..35b96c0 100644
 --- a/src/web/components/structure/LanguageSwitch.tsx
 +++ b/src/web/components/structure/LanguageSwitch.tsx
-@@ -3,64 +3,135 @@
+@@ -3,64 +3,136 @@
   * SPDX-License-Identifier: AGPL-3.0-or-later
   */
  
@@ -11787,7 +11787,9 @@ index 7f74728..de42221 100644
 +    <circle cx="14" cy="10" fill="#002776" r="4.2" />
 +  </svg>
 +);
-+
+ 
+-const getNextLanguage = (language: LanguageCode): LanguageCode =>
+-  language === LANGUAGES.EN ? LANGUAGES.DE : LANGUAGES.EN;
 +const FlagES: React.FC = () => (
 +  <svg {...flagProps}>
 +    <rect fill="#aa151b" height="20" width="28" />
@@ -11827,9 +11829,7 @@ index 7f74728..de42221 100644
 +    </g>
 +  </svg>
 +);
- 
--const getNextLanguage = (language: LanguageCode): LanguageCode =>
--  language === LANGUAGES.EN ? LANGUAGES.DE : LANGUAGES.EN;
++
 +interface LangDef {
 +  code: string;
 +  // BCP 47 tag of the label: each name is written in its own language
@@ -11848,13 +11848,13 @@ index 7f74728..de42221 100644
    const [language, setLanguage] = useLanguage();
    const [_] = useTranslation();
 -  const [isChangingLanguage, setIsChangingLanguage] = useState<boolean>(false);
- 
+-
 -  const nextLanguage: LanguageCode = getNextLanguage(language as LanguageCode);
 -  const titles: Record<LanguageCode, string> = {
 -    en: _('Switch language to English'),
 -    de: _('Switch language to German'),
 -  };
--
+ 
 -  const handleLanguageChange = async (): Promise<void> => {
 -    if (isChangingLanguage) {
 -      return;
@@ -11869,10 +11869,12 @@ index 7f74728..de42221 100644
 -      throw new Error(error instanceof Error ? error.message : String(error));
 -    } finally {
 -      setIsChangingLanguage(false);
+-    }
++  // Choosing the language that is shown is a choice too when it was only detected;
++  // setLanguage (the provider) tells that and does nothing when it already is the
++  // choice of the user.
 +  const handleSelect = async (code: string): Promise<void> => {
-+    if (code !== language) {
-+      await setLanguage(code);
-     }
++    await setLanguage(code);
    };
  
    return (
@@ -16368,7 +16370,7 @@ index 44176d5..5fb6807 100644
  import 'dayjs/locale/pt-br';
  import 'dayjs/locale/ru';
 diff --git a/src/web/components/provider/LanguageProvider.tsx b/src/web/components/provider/LanguageProvider.tsx
-index a417b0b..f2d9c91 100644
+index a417b0b..b1e0cbc 100644
 --- a/src/web/components/provider/LanguageProvider.tsx
 +++ b/src/web/components/provider/LanguageProvider.tsx
 @@ -9,7 +9,7 @@ import {
@@ -16431,12 +16433,38 @@ index a417b0b..f2d9c91 100644
  
            return newLang;
          }
+@@ -81,12 +92,20 @@ const LanguageProvider = ({children}: LanguageProviderProps) => {
+ 
+   const setLanguage = useCallback(
+     async (newLang: string) => {
+-      if (newLang !== languageState) {
+-        // Set locale in gmp
+-        changeGmpLocale(newLang);
++      // Suricatoos: the language that is shown may only have been detected (the
++      // browser's, or the default), which is not kept in the session. Choosing it
++      // is then a choice of the user and is saved, so the language stops following
++      // the browser. When the session already has it (the choice of the user),
++      // choosing it again does nothing.
++      const changes = newLang !== languageState;
++      if (changes || session.locale !== newLang) {
++        if (changes) {
++          // Set locale in gmp
++          changeGmpLocale(newLang);
+ 
+-        // Explicitly set date locale
+-        setDateLocale(newLang);
++          // Explicitly set date locale
++          setDateLocale(newLang);
++        }
+ 
+         // store language in the session
+         session.setLocale(newLang);
 diff --git a/src/web/utils/__tests__/suricatoosLocale.test.ts b/src/web/utils/__tests__/suricatoosLocale.test.ts
 new file mode 100644
-index 0000000..2b2094a
+index 0000000..2e4fe98
 --- /dev/null
 +++ b/src/web/utils/__tests__/suricatoosLocale.test.ts
-@@ -0,0 +1,380 @@
+@@ -0,0 +1,464 @@
 +/* SPDX-FileCopyrightText: 2026 Suricatoos
 + *
 + * SPDX-License-Identifier: AGPL-3.0-or-later
@@ -16798,6 +16826,90 @@ index 0000000..2b2094a
 +          await i18n.changeLanguage('en');
 +        });
 +        expect(localStorage.getItem('locale')).toEqual('en');
++      } finally {
++        unmount();
++      }
++    });
++
++    // Choosing the language that is shown: a choice when what is shown was only
++    // detected (nothing in the session), nothing to do when it already is the choice
++    // of the user.
++    const SETTING = '6765549a-934e-11e3-b358-406186ea4fc5';
++
++    test('choosing the language that is shown but was only detected saves it as the choice of the user', async () => {
++      const session = await loggedInSession();
++      const saveSetting = testing.fn().mockResolvedValue(undefined);
++      const {act, chosen, i18n, unmount} = await mountProvider({
++        user: {saveSetting},
++        session,
++      });
++
++      try {
++        // the detection: shown, not kept
++        await act(async () => {
++          await i18n.changeLanguage('pt_BR');
++        });
++        expect(session.locale).toBeUndefined();
++        expect(saveSetting).not.toHaveBeenCalled();
++
++        // the user picks the language that is already shown
++        await act(async () => {
++          await chosen.setLanguage?.('pt_BR');
++        });
++        expect(localStorage.getItem('locale')).toEqual('pt_BR');
++        expect(saveSetting).toHaveBeenCalledTimes(1);
++        expect(saveSetting).toHaveBeenCalledWith(SETTING, 'pt_BR');
++      } finally {
++        unmount();
++      }
++    });
++
++    test('choosing the language that already is the choice of the user does nothing', async () => {
++      const session = await loggedInSession();
++      // the choice of a previous visit: what the detector reads first and shows
++      localStorage.setItem('locale', 'pt_BR');
++      const saveSetting = testing.fn().mockResolvedValue(undefined);
++      const setLocale = testing.spyOn(session, 'setLocale');
++      const {act, chosen, i18n, unmount} = await mountProvider({
++        user: {saveSetting},
++        session,
++      });
++
++      try {
++        await act(async () => {
++          await i18n.changeLanguage('pt_BR');
++        });
++        await act(async () => {
++          await chosen.setLanguage?.('pt_BR');
++        });
++        expect(saveSetting).not.toHaveBeenCalled();
++        expect(setLocale).not.toHaveBeenCalled();
++        expect(localStorage.getItem('locale')).toEqual('pt_BR');
++      } finally {
++        unmount();
++      }
++    });
++
++    test('and so does choosing again the language that the user picked in this page', async () => {
++      const session = await loggedInSession();
++      const saveSetting = testing.fn().mockResolvedValue(undefined);
++      const {act, chosen, unmount} = await mountProvider({
++        user: {saveSetting},
++        session,
++      });
++
++      try {
++        await act(async () => {
++          await chosen.setLanguage?.('es');
++        });
++        expect(session.locale).toEqual('es');
++        saveSetting.mockClear();
++
++        await act(async () => {
++          await chosen.setLanguage?.('es');
++        });
++        expect(saveSetting).not.toHaveBeenCalled();
++        expect(localStorage.getItem('locale')).toEqual('es');
 +      } finally {
 +        unmount();
 +      }
@@ -19785,11 +19897,16 @@ index 7ab6967..2b1bef2 100644
      await waitFor(() => {
        const logo = screen.getByTestId('Enterprise150');
 diff --git a/src/web/components/structure/__tests__/LanguageSwitch.test.tsx b/src/web/components/structure/__tests__/LanguageSwitch.test.tsx
-index 9a8b4b9..6263c39 100644
+index 9a8b4b9..2cddb4f 100644
 --- a/src/web/components/structure/__tests__/LanguageSwitch.test.tsx
 +++ b/src/web/components/structure/__tests__/LanguageSwitch.test.tsx
-@@ -7,6 +7,12 @@ import {describe, test, expect, testing} from '@gsa/testing';
- import {rendererWith, fireEvent, screen} from 'web/testing';
+@@ -4,9 +4,16 @@
+  */
+ 
+ import {describe, test, expect, testing} from '@gsa/testing';
+-import {rendererWith, fireEvent, screen} from 'web/testing';
++import {rendererWith, fireEvent, screen, wait} from 'web/testing';
++import LanguageProvider from 'web/components/provider/LanguageProvider';
  import LanguageSwitch from 'web/components/structure/LanguageSwitch';
  
 +// Suricatoos: the switch of the fork is a menu with the three languages of the
@@ -19801,7 +19918,7 @@ index 9a8b4b9..6263c39 100644
  describe('LanguageSwitch', () => {
    test('should switch language and update settings', async () => {
      const mockSetLanguage = testing.fn().mockResolvedValue(undefined);
-@@ -20,27 +26,65 @@ describe('LanguageSwitch', () => {
+@@ -20,27 +27,118 @@ describe('LanguageSwitch', () => {
  
      render(<LanguageSwitch />);
  
@@ -19823,7 +19940,11 @@ index 9a8b4b9..6263c39 100644
    });
  
 -  test('should show English option when current language is German', async () => {
-+  test('should not set the language that is already the current one', async () => {
++  // Suricatoos: choosing the language that is shown is still a choice when it was only
++  // detected (the browser's), so the switch hands it to setLanguage too; whether it
++  // is saved (detected) or does nothing (already the choice of the user) is for the
++  // provider to say (suricatoosLocale.test.ts).
++  test('should hand the language that is already the current one to setLanguage, which tells if it is a choice', async () => {
      const mockSetLanguage = testing.fn().mockResolvedValue(undefined);
  
      const {render} = rendererWith({
@@ -19842,7 +19963,8 @@ index 9a8b4b9..6263c39 100644
 +      await screen.findByRole('menuitem', {name: 'English', ...hidden}),
 +    );
 +
-+    expect(mockSetLanguage).not.toHaveBeenCalled();
++    expect(mockSetLanguage).toHaveBeenCalledTimes(1);
++    expect(mockSetLanguage).toHaveBeenCalledWith('en');
 +  });
 +
 +  test('should show English option when current language is Spanish', async () => {
@@ -19872,6 +19994,54 @@ index 9a8b4b9..6263c39 100644
 +
 +    fireEvent.click(english);
 +    expect(mockSetLanguage).toHaveBeenCalledWith('en');
++  });
++
++  // The switch inside the real provider, choosing the language that is shown (the
++  // unit tests of the provider are in suricatoosLocale.test.ts).
++  describe('choosing the language that is shown, inside the real provider', () => {
++    const SETTING = '6765549a-934e-11e3-b358-406186ea4fc5';
++
++    // the session has the locale when the language is the choice of the user
++    const renderSwitch = (sessionLocale: string | undefined) => {
++      const saveSetting = testing.fn().mockResolvedValue(undefined);
++      const setLocale = testing.fn();
++      const {render} = rendererWith({
++        gmp: {user: {saveSetting}, session: {locale: sessionLocale, setLocale}},
++      });
++      render(
++        <LanguageProvider>
++          <LanguageSwitch />
++        </LanguageProvider>,
++      );
++      return {saveSetting, setLocale};
++    };
++
++    const chooseEnglish = async () => {
++      fireEvent.click(screen.getByRole('button', {name: 'Select language'}));
++      fireEvent.click(
++        await screen.findByRole('menuitem', {name: 'English', ...hidden}),
++      );
++      await wait();
++    };
++
++    test('saves it as the choice of the user when it was only detected', async () => {
++      // English is what the setup of the tests detects: it is shown, not in the session
++      const {saveSetting, setLocale} = renderSwitch(undefined);
++
++      await chooseEnglish();
++
++      expect(setLocale).toHaveBeenCalledWith('en');
++      expect(saveSetting).toHaveBeenCalledWith(SETTING, 'en');
++    });
++
++    test('does nothing when it already is the choice of the user', async () => {
++      const {saveSetting, setLocale} = renderSwitch('en');
++
++      await chooseEnglish();
++
++      expect(setLocale).not.toHaveBeenCalled();
++      expect(saveSetting).not.toHaveBeenCalled();
++    });
    });
  });
 diff --git a/src/web/pages/scanconfigs/__tests__/ScanConfigComponent.test.tsx b/src/web/pages/scanconfigs/__tests__/ScanConfigComponent.test.tsx
