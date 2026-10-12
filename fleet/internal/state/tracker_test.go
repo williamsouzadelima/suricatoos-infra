@@ -177,9 +177,9 @@ func TestReinicioNaoReenviaSemNecessidade(t *testing.T) {
 	}
 
 	again := openTestTracker(t, dir, localKinds)
-	again.update(tasks)                                 // igual ao enviado
-	again.update(snap(t, contract.KindScope, "outro"))  // mudou durante a parada
-	again.update(audit)                                 // o resync antes da parada continua valendo
+	again.update(tasks)                                  // igual ao enviado
+	again.update(snap(t, contract.KindScope, "outro"))   // mudou durante a parada
+	again.update(audit)                                  // o resync antes da parada continua valendo
 	again.update(snap(t, contract.KindNode, "primeiro")) // nunca enviado
 	want := []contract.StateKind{contract.KindNode, contract.KindScope, contract.KindAuditTail}
 	if p := again.pending(); !slices.Equal(p, want) {
@@ -190,7 +190,7 @@ func TestReinicioNaoReenviaSemNecessidade(t *testing.T) {
 func TestArquivoInutilizavelReenviaTudo(t *testing.T) {
 	good := sha([]byte("x"))
 	cases := map[string]string{
-		"não é JSON":         `{`,
+		"não é JSON":          `{`,
 		"versão desconhecida": `{"version":2,"sent":{}}`,
 		"membro desconhecido": `{"version":1,"sent":{},"extra":1}`,
 		"hash inválido":       `{"version":1,"sent":{"tasks":"abc"}}`,

@@ -143,7 +143,8 @@ func Open(cfg Config) (*Collector, error) {
 		now = time.Now
 	}
 	if rec.Lost != nil {
-		logger.Warn("estado: arquivo do que o hub já tem inutilizável; todo kind será reenviado", "erro", rec.Lost.Error())
+		logger.Warn("estado: arquivo do que o hub já tem inutilizável; todo kind será reenviado",
+			"erro", rec.Lost.Error())
 	}
 	return &Collector{cfg: cfg, interval: interval, kinds: kinds, tracker: tr, recovery: rec, log: logger, now: now,
 		dataLimit: maxDataBytes, newTicker: realTicker, logged: map[contract.StateKind]string{}}, nil
@@ -225,7 +226,8 @@ func (c *Collector) order() []contract.StateKind {
 }
 
 // collectKind returns the data of one kind; warn is a failure that did not prevent a new snapshot.
-func (c *Collector) collectKind(ctx context.Context, cyc *cycle, kind contract.StateKind) (data []byte, warn, err error) {
+func (c *Collector) collectKind(ctx context.Context, cyc *cycle, kind contract.StateKind) (
+	data []byte, warn, err error) {
 	if kind == contract.KindNode {
 		return c.collectNode(ctx)
 	}
@@ -277,7 +279,9 @@ func (c *Collector) note(kind contract.StateKind, err error) {
 }
 
 // Kinds returns the state kinds of this node, in the schema's order.
-func (c *Collector) Kinds() []contract.StateKind { return append([]contract.StateKind(nil), c.kinds...) }
+func (c *Collector) Kinds() []contract.StateKind {
+	return append([]contract.StateKind(nil), c.kinds...)
+}
 
 // Recovery is what Open found in state-sent.json.
 func (c *Collector) Recovery() Recovery { return c.recovery }
@@ -287,7 +291,9 @@ func (c *Collector) Recovery() Recovery { return c.recovery }
 func (c *Collector) Pending() []contract.StateKind { return c.tracker.pending() }
 
 // Current returns the kind's current snapshot (its own copy of the bytes); false when it has none yet.
-func (c *Collector) Current(kind contract.StateKind) (Snapshot, bool) { return c.tracker.snapshot(kind) }
+func (c *Collector) Current(kind contract.StateKind) (Snapshot, bool) {
+	return c.tracker.snapshot(kind)
+}
 
 // MarkSent records that the hub accepted (2xx) the PUT of kind whose content_sha256 was sha256 — the hash of the
 // snapshot that was actually sent, which may be older than the current one (then the kind stays pending). It counts

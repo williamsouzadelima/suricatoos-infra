@@ -89,7 +89,7 @@ func TestCentralWithPasswordSemArquivoOuSemConfiguracaoEVazio(t *testing.T) {
 		t.Fatal(err)
 	}
 	for name, src := range map[string]Source{
-		"arquivo ausente":              e.open(t),
+		"arquivo ausente":             e.open(t),
 		"SENSOR_TENANT_SECRETS vazio": mustOpen(t, contract.NodeCentral, Config{TenantsFile: e.tenants}),
 	} {
 		got, err := src.WithPassword()

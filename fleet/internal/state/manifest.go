@@ -10,9 +10,11 @@ import (
 
 // The enums of report.export in the schema's order: the order capabilities.report_formats is sent in.
 var (
-	formatOrder  = []contract.ReportFormat{contract.FormatSuricatoosPDF, contract.FormatGVMXML, contract.FormatGVMCSVResults, contract.FormatGVMPDF}
+	formatOrder = []contract.ReportFormat{contract.FormatSuricatoosPDF, contract.FormatGVMXML,
+		contract.FormatGVMCSVResults, contract.FormatGVMPDF}
 	langOrder    = []contract.ReportLang{contract.LangEN, contract.LangPTBR, contract.LangES}
-	variantOrder = []contract.ReportVariant{contract.VariantTechnical, contract.VariantClient, contract.VariantExecutive}
+	variantOrder = []contract.ReportVariant{contract.VariantTechnical, contract.VariantClient,
+		contract.VariantExecutive}
 )
 
 const maxManifestBytes = 1 << 20
@@ -45,7 +47,9 @@ type manifestEntry struct {
 }
 
 // isGVMFormat: the gvm-* formats are gvmd's own (python-gvm ReportFormatType); they exist only in en + technical.
-func isGVMFormat(f contract.ReportFormat) bool { return f != contract.FormatSuricatoosPDF && slices.Contains(formatOrder, f) }
+func isGVMFormat(f contract.ReportFormat) bool {
+	return f != contract.FormatSuricatoosPDF && slices.Contains(formatOrder, f)
+}
 
 // ParseManifest reads a manifest strictly (contract.DecodeStrict: no unknown or repeated member): a version, and
 // entries whose format, lang and variant are the schema's, with a UUID each, no combination and no UUID twice, and
@@ -63,7 +67,8 @@ func ParseManifest(data []byte) (*Manifest, error) {
 	for i, e := range f.ReportFormats {
 		k := formatKey{e.Format, e.Lang, e.Variant}
 		switch {
-		case !slices.Contains(formatOrder, e.Format) || !slices.Contains(langOrder, e.Lang) || !slices.Contains(variantOrder, e.Variant):
+		case !slices.Contains(formatOrder, e.Format) || !slices.Contains(langOrder, e.Lang) ||
+			!slices.Contains(variantOrder, e.Variant):
 			return nil, fmt.Errorf("state: manifesto: entrada %d fora dos enums de report.export", i)
 		case isGVMFormat(e.Format) && (e.Lang != contract.LangEN || e.Variant != contract.VariantTechnical):
 			return nil, fmt.Errorf("state: manifesto: entrada %d: gvm-* só existe em en + technical", i)

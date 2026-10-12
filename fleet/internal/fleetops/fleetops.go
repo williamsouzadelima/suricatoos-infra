@@ -189,7 +189,8 @@ func decode(out []byte, waitErr error, password string) (Result, error) {
 	var resp response
 	if err := contract.DecodeStrict(out, &resp); err != nil {
 		if waitErr != nil {
-			return Result{}, fail(contract.ErrorInternal, "o fleet_ops terminou com erro (%s) sem resposta válida", exitText(waitErr))
+			return Result{}, fail(contract.ErrorInternal, "o fleet_ops terminou com erro (%s) sem resposta válida",
+				exitText(waitErr))
 		}
 		return Result{}, fail(contract.ErrorInternal, "resposta do fleet_ops fora do protocolo")
 	}

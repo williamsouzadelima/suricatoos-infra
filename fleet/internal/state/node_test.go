@@ -154,21 +154,57 @@ func TestNodeDescartaMedidasForaDaFaixa(t *testing.T) {
 // formatos. O erro fica exposto.
 func TestNodeSemOGVMSaiComoDown(t *testing.T) {
 	bad := map[string]func(NodeRequest) (contract.DataNode, error){
-		"erro":            func(NodeRequest) (contract.DataNode, error) { return contract.DataNode{}, errFonte },
-		"outro node_kind": func(r NodeRequest) (contract.DataNode, error) { d, _ := echoNode(r); d.NodeKind = contract.NodeCentral; return d, nil },
+		"erro": func(NodeRequest) (contract.DataNode, error) { return contract.DataNode{}, errFonte },
+		"outro node_kind": func(r NodeRequest) (contract.DataNode, error) {
+			d, _ := echoNode(r)
+			d.NodeKind = contract.NodeCentral
+			return d, nil
+		},
 		"outra política": func(r NodeRequest) (contract.DataNode, error) {
 			d, _ := echoNode(r)
 			d.Policy.Allow = append(d.Policy.Allow, contract.TypeTaskCreate)
 			return d, nil
 		},
-		"outro piso":      func(r NodeRequest) (contract.DataNode, error) { d, _ := echoNode(r); d.ReplayFloor = "2026-10-11T08:00:00Z"; return d, nil },
-		"outra versão":    func(r NodeRequest) (contract.DataNode, error) { d, _ := echoNode(r); d.ConnectorVersion = "9.9.9"; return d, nil },
-		"outros tipos":    func(r NodeRequest) (contract.DataNode, error) { d, _ := echoNode(r); d.Capabilities.SupportedTypes = nil; return d, nil },
-		"outros kinds":    func(r NodeRequest) (contract.DataNode, error) { d, _ := echoNode(r); d.Capabilities.StateKinds = d.Capabilities.StateKinds[1:]; return d, nil },
-		"outro gvmd":      func(r NodeRequest) (contract.DataNode, error) { d, _ := echoNode(r); d.Versions.GVMD = strp("1.0"); return d, nil },
-		"outro disco":     func(r NodeRequest) (contract.DataNode, error) { d, _ := echoNode(r); d.Health.DiskFreePct = nil; return d, nil },
-		"saúde inválida":  func(r NodeRequest) (contract.DataNode, error) { d, _ := echoNode(r); d.Health.Status = "talvez"; return d, nil },
-		"sha divergente":  func(r NodeRequest) (contract.DataNode, error) { d, _ := echoNode(r); d.PolicySHA256 = sha([]byte("x")); return d, nil },
+		"outro piso": func(r NodeRequest) (contract.DataNode, error) {
+			d, _ := echoNode(r)
+			d.ReplayFloor = "2026-10-11T08:00:00Z"
+			return d, nil
+		},
+		"outra versão": func(r NodeRequest) (contract.DataNode, error) {
+			d, _ := echoNode(r)
+			d.ConnectorVersion = "9.9.9"
+			return d, nil
+		},
+		"outros tipos": func(r NodeRequest) (contract.DataNode, error) {
+			d, _ := echoNode(r)
+			d.Capabilities.SupportedTypes = nil
+			return d, nil
+		},
+		"outros kinds": func(r NodeRequest) (contract.DataNode, error) {
+			d, _ := echoNode(r)
+			d.Capabilities.StateKinds = d.Capabilities.StateKinds[1:]
+			return d, nil
+		},
+		"outro gvmd": func(r NodeRequest) (contract.DataNode, error) {
+			d, _ := echoNode(r)
+			d.Versions.GVMD = strp("1.0")
+			return d, nil
+		},
+		"outro disco": func(r NodeRequest) (contract.DataNode, error) {
+			d, _ := echoNode(r)
+			d.Health.DiskFreePct = nil
+			return d, nil
+		},
+		"saúde inválida": func(r NodeRequest) (contract.DataNode, error) {
+			d, _ := echoNode(r)
+			d.Health.Status = "talvez"
+			return d, nil
+		},
+		"sha divergente": func(r NodeRequest) (contract.DataNode, error) {
+			d, _ := echoNode(r)
+			d.PolicySHA256 = sha([]byte("x"))
+			return d, nil
+		},
 	}
 	for name, node := range bad {
 		f := newFakes()
@@ -184,7 +220,7 @@ func TestNodeSemOGVMSaiComoDown(t *testing.T) {
 		pol := contract.DefaultPolicy(contract.NodeStandalone)
 		want := &contract.DataNode{NodeKind: contract.NodeStandalone, ConnectorVersion: "1.0.0",
 			Versions: contract.NodeVersions{GVMD: strp("26.31.1")}, Feeds: []contract.FeedStatus{},
-			Health:       contract.NodeHealth{Status: contract.HealthDown, GVMDUp: false, DiskFreePct: &disk},
+			Health: contract.NodeHealth{Status: contract.HealthDown, GVMDUp: false, DiskFreePct: &disk},
 			Capabilities: contract.NodeCapabilities{SupportedTypes: contract.SupportedTypes(contract.NodeStandalone),
 				StateKinds: KindsOf(contract.NodeStandalone), ReportFormats: []contract.ReportFormatCapability{}},
 			Policy: pol, PolicySHA256: contract.PolicySHA256(pol), ReplayFloor: testFloor}

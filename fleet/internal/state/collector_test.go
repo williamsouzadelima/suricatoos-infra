@@ -42,14 +42,14 @@ func TestOpenValidaAConfiguracao(t *testing.T) {
 		t.Fatalf("intervalo padrão %v", c.interval)
 	}
 	bad := map[string]func(*Config){
-		"node_kind":           func(c *Config) { c.NodeKind = "hub" },
-		"connector_version":   func(c *Config) { c.ConnectorVersion = "1.0 beta" },
-		"sem FLEET_STATE_DIR": func(c *Config) { c.StateDir = "" },
-		"sem GVM":             func(c *Config) { c.GVM = nil },
-		"sem tenants":         func(c *Config) { c.Tenants = nil },
-		"sem auditoria":       func(c *Config) { c.Audit = nil },
-		"sem piso":            func(c *Config) { c.Floor = nil },
-		"intervalo de 29 s":   func(c *Config) { c.Interval = 29 * time.Second },
+		"node_kind":            func(c *Config) { c.NodeKind = "hub" },
+		"connector_version":    func(c *Config) { c.ConnectorVersion = "1.0 beta" },
+		"sem FLEET_STATE_DIR":  func(c *Config) { c.StateDir = "" },
+		"sem GVM":              func(c *Config) { c.GVM = nil },
+		"sem tenants":          func(c *Config) { c.Tenants = nil },
+		"sem auditoria":        func(c *Config) { c.Audit = nil },
+		"sem piso":             func(c *Config) { c.Floor = nil },
+		"intervalo de 29 s":    func(c *Config) { c.Interval = 29 * time.Second },
 		"intervalo com fração": func(c *Config) { c.Interval = 30*time.Second + time.Millisecond },
 	}
 	for name, mutate := range bad {
@@ -65,11 +65,11 @@ func TestOpenValidaAConfiguracao(t *testing.T) {
 // o node fica degradado.
 func TestFalhaDeUmaFonteIsolada(t *testing.T) {
 	sources := map[string]func(f *fakes){
-		"tasks":     func(f *fakes) { f.gvm.errs[contract.KindTasks] = errFonte },
-		"agents":    func(f *fakes) { f.cp.errs[contract.KindAgents] = errFonte },
-		"audit":     func(f *fakes) { f.audit.tail.Exec.FirstSeq = i64p(1) }, // sem linhas: incoerente
-		"senhas":    func(f *fakes) { f.tenants.pwErr = errFonte },
-		"política":  nil, // tratada abaixo
+		"tasks":    func(f *fakes) { f.gvm.errs[contract.KindTasks] = errFonte },
+		"agents":   func(f *fakes) { f.cp.errs[contract.KindAgents] = errFonte },
+		"audit":    func(f *fakes) { f.audit.tail.Exec.FirstSeq = i64p(1) }, // sem linhas: incoerente
+		"senhas":   func(f *fakes) { f.tenants.pwErr = errFonte },
+		"política": nil, // tratada abaixo
 	}
 	for name, breakIt := range sources {
 		f := newFakes()

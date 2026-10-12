@@ -85,7 +85,8 @@ func (s Snapshot) Body(nodeID string) ([]byte, error) {
 	body = append(body, s.Data...)
 	body = append(body, '}')
 	if len(body) > contract.MaxStateBytes {
-		return nil, fmt.Errorf("state: corpo de %s com %d bytes, acima do teto de %d", s.Kind, len(body), contract.MaxStateBytes)
+		return nil, fmt.Errorf("state: corpo de %s com %d bytes, acima do teto de %d", s.Kind, len(body),
+			contract.MaxStateBytes)
 	}
 	return body, nil
 }

@@ -59,9 +59,10 @@ var agentSpec = listSpec[contract.AgentItem]{
 	max:    maxAgents,
 	tenant: func(i *contract.AgentItem) string { return i.Tenant },
 	valid: func(i *contract.AgentItem) bool {
-		return ruleAgentID.ok(i.AgentID) &&
-			(i.Policy == nil || *i.Policy == contract.PolicyAgentEndpoint || *i.Policy == contract.PolicyScannerSensor) &&
-			ruleOSArch.opt(i.OS) && ruleOSArch.opt(i.Arch) && ruleVersion.opt(i.AgentVersion) && ruleUTC.opt(i.LastSeen)
+		policyOK := i.Policy == nil || *i.Policy == contract.PolicyAgentEndpoint ||
+			*i.Policy == contract.PolicyScannerSensor
+		return ruleAgentID.ok(i.AgentID) && policyOK && ruleOSArch.opt(i.OS) && ruleOSArch.opt(i.Arch) &&
+			ruleVersion.opt(i.AgentVersion) && ruleUTC.opt(i.LastSeen)
 	},
 	key: func(i *contract.AgentItem) string { return idTenant(i.AgentID, i.Tenant) },
 	wrap: func(items []contract.AgentItem, tr bool, u int64) any {

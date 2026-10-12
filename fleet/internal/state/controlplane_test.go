@@ -40,7 +40,11 @@ func TestItensDoControlPlaneForaDoSchemaSoContados(t *testing.T) {
 		fullAgent("ok", "acme"),
 		func() contract.AgentItem { a := fullAgent("a,b", "acme"); return a }(),
 		func() contract.AgentItem { a := fullAgent("p", "acme"); a.Policy = &badPolicy; return a }(),
-		func() contract.AgentItem { a := fullAgent("o", "acme"); a.OS = strp("windows 11 pro for workstations x64"); return a }(),
+		func() contract.AgentItem {
+			a := fullAgent("o", "acme")
+			a.OS = strp("windows 11 pro for workstations x64")
+			return a
+		}(),
 		func() contract.AgentItem { a := fullAgent("v", "acme"); a.AgentVersion = strp("1.0 beta"); return a }(),
 		func() contract.AgentItem { a := fullAgent("l", "acme"); a.LastSeen = strp("ontem"); return a }(),
 	}

@@ -213,7 +213,8 @@ func fallbackNode(req NodeRequest) contract.DataNode {
 		ReplayFloor:  req.ReplayFloor,
 	}
 	if v := req.Versions; v != nil {
-		d.Versions = contract.NodeVersions{GVMD: v.GVMD, OpenVASScanner: v.OpenVASScanner, GSA: v.GSA, ControlPlane: v.ControlPlane}
+		d.Versions = contract.NodeVersions{GVMD: v.GVMD, OpenVASScanner: v.OpenVASScanner, GSA: v.GSA,
+			ControlPlane: v.ControlPlane}
 	}
 	if h := req.Health; h != nil {
 		d.Health.ScannerUp, d.Health.DiskFreePct, d.Health.ActiveTasks, d.Health.ClockOffsetS = h.ScannerUp,
@@ -225,8 +226,7 @@ func fallbackNode(req NodeRequest) contract.DataNode {
 // checkNode is the last guard of the node against the schema: nothing outside it is sent.
 func checkNode(d contract.DataNode) error {
 	v := d.Versions
-	ok := slices.Contains([]contract.NodeKind{contract.NodeCentral, contract.NodeStandalone, contract.NodeSensor}, d.NodeKind) &&
-		ruleVersion.ok(d.ConnectorVersion) && ruleVersion.opt(v.GVMD) && ruleVersion.opt(v.GMPProtocol) &&
+	ok := KindsOf(d.NodeKind) != nil && ruleVersion.ok(d.ConnectorVersion) && ruleVersion.opt(v.GVMD) && ruleVersion.opt(v.GMPProtocol) &&
 		ruleVersion.opt(v.PythonGVM) && ruleVersion.opt(v.OpenVASScanner) && ruleVersion.opt(v.GSA) &&
 		ruleVersion.opt(v.ControlPlane) && d.Feeds != nil && len(d.Feeds) <= maxFeeds && all(d.Feeds, validFeed) &&
 		slices.Contains(healthStates, d.Health.Status) &&

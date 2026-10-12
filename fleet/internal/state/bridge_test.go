@@ -130,13 +130,13 @@ func TestBridgeNodeMandaOsMembrosDoConector(t *testing.T) {
 func TestBridgeDecodificaEstrito(t *testing.T) {
 	item := `{"task_id":"` + uuidTask1 + `","tenant":"acme","name":"t","status":"Done","report_count":0`
 	cases := map[string]string{
-		"comment no item":          `{"items":[` + item + `,"comment":"segredo do cliente"}],"truncated":false,"unattributed_count":0}`,
-		"membro extra":             `{"items":[],"truncated":false,"unattributed_count":0,"hosts":["srv01.acme.example"]}`,
-		"sem unattributed_count":   `{"items":[],"truncated":false}`,
-		"null":                     `{"items":null,"truncated":false,"unattributed_count":0}`,
-		"inteiro com fração":       `{"items":[],"truncated":false,"unattributed_count":1.0}`,
-		"caixa diferente":          `{"Items":[],"truncated":false,"unattributed_count":0}`,
-		"chave repetida":           `{"items":[],"items":[],"truncated":false,"unattributed_count":0}`,
+		"comment no item":        `{"items":[` + item + `,"comment":"segredo do cliente"}],"truncated":false,"unattributed_count":0}`,
+		"membro extra":           `{"items":[],"truncated":false,"unattributed_count":0,"hosts":["srv01.acme.example"]}`,
+		"sem unattributed_count": `{"items":[],"truncated":false}`,
+		"null":                   `{"items":null,"truncated":false,"unattributed_count":0}`,
+		"inteiro com fração":     `{"items":[],"truncated":false,"unattributed_count":1.0}`,
+		"caixa diferente":        `{"Items":[],"truncated":false,"unattributed_count":0}`,
+		"chave repetida":         `{"items":[],"items":[],"truncated":false,"unattributed_count":0}`,
 	}
 	for name, out := range cases {
 		r := &fakeRunner{out: map[string]fleetops.Result{"state.tasks": output(out)}}
@@ -215,10 +215,10 @@ func TestBridgeSenhaLidaACadaChamada(t *testing.T) {
 				t.Fatal(err)
 			}
 		},
-		"diretório":          func(b *Bridge) { b.PasswordFile = t.TempDir() },
-		"sem caminho":        func(b *Bridge) { b.PasswordFile = "" },
-		"sem usuário":        func(b *Bridge) { b.User = "" },
-		"sem executor":       func(b *Bridge) { b.Runner = nil },
+		"diretório":    func(b *Bridge) { b.PasswordFile = t.TempDir() },
+		"sem caminho":  func(b *Bridge) { b.PasswordFile = "" },
+		"sem usuário":  func(b *Bridge) { b.User = "" },
+		"sem executor": func(b *Bridge) { b.Runner = nil },
 	} {
 		r := &fakeRunner{}
 		b, _ := newBridge(t, r)

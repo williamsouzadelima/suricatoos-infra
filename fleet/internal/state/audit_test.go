@@ -90,13 +90,13 @@ func TestAuditTailIncoerenteNuncaSai(t *testing.T) {
 	}
 	bad := map[string]contract.AuditStreamTail{
 		"cabeça que não é a da última linha": func() contract.AuditStreamTail { s := good(); s.HeadSHA256 = strp(sha([]byte("x"))); return s }(),
-		"linhas sem seq":                    {Lines: []string{line}},
-		"seq sem linhas":                    {Lines: []string{}, FirstSeq: i64p(1)},
-		"último antes do primeiro":          func() contract.AuditStreamTail { s := good(); s.FirstSeq = i64p(2); return s }(),
-		"seq zero":                          func() contract.AuditStreamTail { s := good(); s.FirstSeq, s.LastSeq = i64p(0), i64p(0); return s }(),
-		"mais de 200 linhas":                many,
-		"linha com controle":                func() contract.AuditStreamTail { s := good(); s.Lines = []string{line + "\x01"}; return s }(),
-		"linha curta":                       {Lines: []string{"{"}, FirstSeq: i64p(1), LastSeq: i64p(1), HeadSHA256: strp(sha([]byte("{")))},
+		"linhas sem seq":                     {Lines: []string{line}},
+		"seq sem linhas":                     {Lines: []string{}, FirstSeq: i64p(1)},
+		"último antes do primeiro":           func() contract.AuditStreamTail { s := good(); s.FirstSeq = i64p(2); return s }(),
+		"seq zero":                           func() contract.AuditStreamTail { s := good(); s.FirstSeq, s.LastSeq = i64p(0), i64p(0); return s }(),
+		"mais de 200 linhas":                 many,
+		"linha com controle":                 func() contract.AuditStreamTail { s := good(); s.Lines = []string{line + "\x01"}; return s }(),
+		"linha curta":                        {Lines: []string{"{"}, FirstSeq: i64p(1), LastSeq: i64p(1), HeadSHA256: strp(sha([]byte("{")))},
 	}
 	for name, stream := range bad {
 		f := newFakes()

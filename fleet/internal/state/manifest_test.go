@@ -72,16 +72,16 @@ func TestManifestoInvalidoEErro(t *testing.T) {
 		return `{"version":"x","report_formats":[` + strings.Join(entries, ",") + `]}`
 	}
 	cases := map[string]string{
-		"não é JSON":          `{`,
-		"sem version":         `{"report_formats":[]}`,
-		"version vazia":       `{"version":"","report_formats":[]}`,
-		"membro desconhecido": `{"version":"x","report_formats":[],"extra":1}`,
-		"formato fora do enum": doc(entry("pdf", "en", "technical", uuidN(1))),
-		"idioma fora do enum":  doc(entry("suricatoos-pdf", "fr", "technical", uuidN(1))),
-		"edição fora do enum":  doc(entry("suricatoos-pdf", "en", "full", uuidN(1))),
-		"uuid inválido":        doc(entry("suricatoos-pdf", "en", "technical", "X")),
-		"combinação repetida":  doc(entry("suricatoos-pdf", "en", "technical", uuidN(1)), entry("suricatoos-pdf", "en", "technical", uuidN(2))),
-		"uuid repetido":        doc(entry("suricatoos-pdf", "en", "technical", uuidN(1)), entry("suricatoos-pdf", "es", "technical", uuidN(1))),
+		"não é JSON":                 `{`,
+		"sem version":                `{"report_formats":[]}`,
+		"version vazia":              `{"version":"","report_formats":[]}`,
+		"membro desconhecido":        `{"version":"x","report_formats":[],"extra":1}`,
+		"formato fora do enum":       doc(entry("pdf", "en", "technical", uuidN(1))),
+		"idioma fora do enum":        doc(entry("suricatoos-pdf", "fr", "technical", uuidN(1))),
+		"edição fora do enum":        doc(entry("suricatoos-pdf", "en", "full", uuidN(1))),
+		"uuid inválido":              doc(entry("suricatoos-pdf", "en", "technical", "X")),
+		"combinação repetida":        doc(entry("suricatoos-pdf", "en", "technical", uuidN(1)), entry("suricatoos-pdf", "en", "technical", uuidN(2))),
+		"uuid repetido":              doc(entry("suricatoos-pdf", "en", "technical", uuidN(1)), entry("suricatoos-pdf", "es", "technical", uuidN(1))),
 		"gvm-* fora de en technical": doc(entry("gvm-xml", "es", "technical", uuidN(1))),
 	}
 	for name, content := range cases {

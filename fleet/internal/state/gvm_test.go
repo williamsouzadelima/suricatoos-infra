@@ -112,11 +112,11 @@ func TestTargetsSoComHostsLiterais(t *testing.T) {
 	good := fullTarget(uuidTarget1, "acme", "192.0.2.0/24", "198.51.100.3", "2001:db8::/32")
 	f.gvm.targets = contract.DataTargets{Items: []contract.TargetItem{
 		good,
-		fullTarget(uuidTarget2, "acme", "192.0.2.10", "cafe.be"),        // hostname só de hex
-		fullTarget(uuidN(3), "acme", "srv01.exemplo.com.br"),             // hostname
-		fullTarget(uuidN(4), "acme", "192.0.2.1-192.0.2.9"),              // faixa
-		fullTarget(uuidN(5), "acme", strings.Repeat("1", 300)),           // longo demais
-		fullTarget(uuidN(6), "globex"),                                    // sem hosts literais: lista vazia
+		fullTarget(uuidTarget2, "acme", "192.0.2.10", "cafe.be"), // hostname só de hex
+		fullTarget(uuidN(3), "acme", "srv01.exemplo.com.br"),     // hostname
+		fullTarget(uuidN(4), "acme", "192.0.2.1-192.0.2.9"),      // faixa
+		fullTarget(uuidN(5), "acme", strings.Repeat("1", 300)),   // longo demais
+		fullTarget(uuidN(6), "globex"),                           // sem hosts literais: lista vazia
 	}}
 	c := collectOnce(t, f, contract.NodeStandalone)
 	s, _ := c.Current(contract.KindTargets)
@@ -184,7 +184,7 @@ func TestSchedulesMaisDe256TarefasCortaEMarcaTruncated(t *testing.T) {
 func fullReport(id, tenantName string) contract.ReportItem {
 	return contract.ReportItem{ReportID: id, TaskID: uuidTask1, Tenant: tenantName, ScanStatus: "Done",
 		ScanStart: strp("2026-10-10T02:00:05Z"), ScanEnd: strp("2026-10-10T03:10:00Z"),
-		Counts:     contract.SeverityCounts{Critical: 1, High: 2, Low: 1, Log: 4, FalsePositive: 1}, HostsCount: 3}
+		Counts: contract.SeverityCounts{Critical: 1, High: 2, Low: 1, Log: 4, FalsePositive: 1}, HostsCount: 3}
 }
 
 // reports sai na ordem da fonte (o mais recente primeiro, como o fleet_ops ordena) e só com contagens.
