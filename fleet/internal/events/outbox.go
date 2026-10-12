@@ -115,10 +115,12 @@ func open(cfg Config, ops fileOps, newID func() string) (*Outbox, error) {
 	if logger == nil {
 		logger = slog.New(slog.DiscardHandler)
 	}
-	o := &Outbox{path: filepath.Join(cfg.StateDir, FileName), dir: cfg.StateDir, nodeKind: cfg.NodeKind, kinds: kinds,
-		staleAfter: stale,
-		log:        logger, ops: ops, newID: newID, capacity: MaxOutbox, batchLimit: contract.MaxEventBatchBytes,
-		compactSlack: compactSlack, memo: map[contract.StateKind]string{}, base: newBaseline()}
+	o := &Outbox{
+		path: filepath.Join(cfg.StateDir, FileName), dir: cfg.StateDir, nodeKind: cfg.NodeKind, kinds: kinds,
+		staleAfter: stale, log: logger, ops: ops, newID: newID,
+		capacity: MaxOutbox, batchLimit: contract.MaxEventBatchBytes, compactSlack: compactSlack,
+		memo: map[contract.StateKind]string{}, base: newBaseline(),
+	}
 	// leftovers of a rewrite a crash interrupted; best effort (the lock of the directory says no one else writes here)
 	_, _ = fsutil.RemoveOrphanTemps(o.path)
 

@@ -572,6 +572,34 @@ func TestObservacaoQueNaoGravaNaoAvanca(t *testing.T) {
 	b.expect()
 }
 
+// Uma gravação que falha seguida de queda: se a linha foi cortada de volta, o reinício compara com a base antiga e a
+// transição sai uma vez; se a linha ficou inteira no arquivo (o fsync falhou, o corte também), o reinício a lê com a
+// base e os eventos juntos, e a transição também sai uma vez — nunca zero, nunca duas.
+func TestQuedaDepoisDeGravacaoQueFalhou(t *testing.T) {
+	for _, cutFails := range []bool{false, true} {
+		b := newBox(t)
+		w := newWorld(t)
+		w.tasks = []contract.TaskItem{task(uuidTask1, "acme", "Running")}
+		b.observe(w.obs())
+		w.tasks[0].Status = "Done"
+		o := w.obs()
+		b.faults.set(func(f *faults) {
+			f.syncErr = errDisco
+			if cutFails {
+				f.truncateErr = errDisco
+			}
+		})
+		if err := b.Observe(o); err == nil {
+			t.Fatal("a observação não gravou e não deu erro")
+		}
+		b.faults.set(func(f *faults) { f.syncErr, f.truncateErr = nil, nil })
+		b.restart() // a queda: a memória se perde, o arquivo fica
+		b.observe(o)
+		b.observe(w.obs())
+		b.expect(`task.status_changed acme {"task_id":"` + uuidTask1 + `","from":"Running","to":"Done","progress":-1}`)
+	}
+}
+
 // Um kind cuja coleta falhou não muda a base: a transição aparece na próxima coleta que der certo, contra a base de
 // antes da falha.
 func TestKindQueFalhouNaoMudaABase(t *testing.T) {
