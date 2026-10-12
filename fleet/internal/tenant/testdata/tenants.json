@@ -1,0 +1,30 @@
+[
+  {
+    "name": "acme",
+    "scope": "192.0.2.0/24, 198.51.100.0/24",
+    "gmp_user": "tenant-acme",
+    "enabled": true,
+    "updated_at": "2026-10-11T12:00:00Z"
+  },
+  {
+    "name": "globex",
+    "scope": "203.0.113.0/24",
+    "gmp_user": "",
+    "enabled": true,
+    "updated_at": "2026-10-11T12:00:00Z"
+  },
+  {
+    "name": "initech",
+    "scope": "192.0.2.0/25 198.51.100.0/25",
+    "gmp_user": "tenant-initech",
+    "enabled": false,
+    "updated_at": "2026-10-11T12:00:00Z"
+  },
+  {
+    "name": "umbrella",
+    "scope": "",
+    "gmp_user": "tenant-umbrella",
+    "enabled": true,
+    "updated_at": "2026-10-11T12:00:00Z"
+  }
+]
