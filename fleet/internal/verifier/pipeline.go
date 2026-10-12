@@ -172,8 +172,12 @@ func (c *check) refuse(reason contract.RejectReason, detail string) Outcome {
 		c.persistClock()
 		out := c.ack(contract.DecisionRejected, reason, detail)
 		if reason.PolicyEvent() {
-			d := out.Ack.Detail
-			out.PolicyEvent = &contract.DataCommandRejected{CommandID: c.cmd.CommandID, Type: c.cmd.Type, Reason: reason, Detail: d}
+			ev := &contract.DataCommandRejected{CommandID: c.cmd.CommandID, Type: c.cmd.Type, Reason: reason}
+			if out.Ack.Detail != nil {
+				d := *out.Ack.Detail // its own copy: the event and the ack travel apart
+				ev.Detail = &d
+			}
+			out.PolicyEvent = ev
 		}
 		return out
 	}
