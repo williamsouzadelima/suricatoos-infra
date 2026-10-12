@@ -159,8 +159,11 @@ def _pointer(parts):
 
 def export_filter_problem(flt):
     """None if a report.export filter pins apply_overrides, min_qod and levels explicitly (ADR-0011), else why not.
-    Tokens = the filter split on spaces (quotes do not group); a token belongs to a key when it starts with the key
-    followed by a relation (= < > ~ :); each key exactly once, with '=' and a valid value."""
+    No double quote at all (gvmd's split_filter groups a quoted part into one term, hiding the keywords). Tokens = the
+    filter split on spaces; a token belongs to a key when it is the key or starts with the key followed by a relation
+    (= < > ~ :); each key exactly once, with '=' and a valid value."""
+    if '"' in flt:
+        return "contains a double quote (gvmd would read a quoted part as one term)"
     seen = {}
     for token in flt.split(" "):
         key = re.split(r"[=<>~:]", token, maxsplit=1)[0]

@@ -257,6 +257,15 @@
       }
     },
     {
+      "file": "invalid/command/report-export-filter-bare-key.json",
+      "target": "fleet-command.schema.json",
+      "description": "a bare key belongs to the key (it would be a search term for gvmd): min_qod without '=' is refused",
+      "expect": {
+        "check": "export_filter",
+        "path": "/payload/filter"
+      }
+    },
+    {
       "file": "invalid/command/report-export-filter-blank.json",
       "target": "fleet-command.schema.json",
       "description": "the export filter pins apply_overrides, min_qod and levels explicitly (never gvmd's hidden defaults)",
@@ -278,6 +287,24 @@
       "file": "invalid/command/report-export-filter-min-qod-101.json",
       "target": "fleet-command.schema.json",
       "description": "min_qod is 0-100",
+      "expect": {
+        "check": "export_filter",
+        "path": "/payload/filter"
+      }
+    },
+    {
+      "file": "invalid/command/report-export-filter-quoted-levels.json",
+      "target": "fleet-command.schema.json",
+      "description": "no double quote in the export filter, not even around a value",
+      "expect": {
+        "check": "export_filter",
+        "path": "/payload/filter"
+      }
+    },
+    {
+      "file": "invalid/command/report-export-filter-quoted-phrase.json",
+      "target": "fleet-command.schema.json",
+      "description": "no double quote in the export filter: gvmd's split_filter reads this as ONE quoted phrase with none of the three keywords (hidden defaults + narrowing)",
       "expect": {
         "check": "export_filter",
         "path": "/payload/filter"
