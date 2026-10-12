@@ -15980,7 +15980,7 @@ index 44176d5..5fb6807 100644
  import 'dayjs/locale/pt-br';
  import 'dayjs/locale/ru';
 diff --git a/src/web/components/provider/LanguageProvider.tsx b/src/web/components/provider/LanguageProvider.tsx
-index a417b0b..ff2d1a4 100644
+index a417b0b..f2d9c91 100644
 --- a/src/web/components/provider/LanguageProvider.tsx
 +++ b/src/web/components/provider/LanguageProvider.tsx
 @@ -9,7 +9,7 @@ import {
@@ -15992,7 +15992,7 @@ index a417b0b..ff2d1a4 100644
  } from 'gmp/locale/lang';
  import useGmp from 'web/hooks/useGmp';
  
-@@ -39,12 +39,15 @@ export const LanguageContext = createContext<LanguageContextProps>({
+@@ -39,27 +39,38 @@ export const LanguageContext = createContext<LanguageContextProps>({
  const LanguageProvider = ({children}: LanguageProviderProps) => {
    const gmp = useGmp();
    const {session} = gmp;
@@ -16010,10 +16010,11 @@ index a417b0b..ff2d1a4 100644
        setLanguageState(currentLang => {
          if (currentLang !== newLang) {
            // Explicitly set date locale
-@@ -53,13 +56,17 @@ const LanguageProvider = ({children}: LanguageProviderProps) => {
-           // store language in the session
-           session.setLocale(newLang);
+           setDateLocale(newLang);
  
+-          // store language in the session
+-          session.setLocale(newLang);
+-
 -          void (async () => {
 -            try {
 -              await gmp.user.saveSetting(SETTING_ID_LOCALE, newLang);
@@ -16022,8 +16023,15 @@ index a417b0b..ff2d1a4 100644
 -            }
 -          })();
 +          // Suricatoos: the language detected at start (the browser's, or the
-+          // default pt-BR) is shown, not saved as the setting of the user.
++          // default pt-BR) is shown, not kept as the choice of the user: neither
++          // saved as the setting nor stored in the session. The session writes
++          // it to localStorage.locale, which the detector reads first on the
++          // next visit, so the language of the browser of today would stay
++          // after the browser changes.
 +          if (!initial) {
++            // store language in the session
++            session.setLocale(newLang);
++
 +            void (async () => {
 +              try {
 +                await gmp.user.saveSetting(SETTING_ID_LOCALE, newLang);
@@ -16037,10 +16045,10 @@ index a417b0b..ff2d1a4 100644
          }
 diff --git a/src/web/utils/__tests__/suricatoosLocale.test.ts b/src/web/utils/__tests__/suricatoosLocale.test.ts
 new file mode 100644
-index 0000000..0eacd90
+index 0000000..2b2094a
 --- /dev/null
 +++ b/src/web/utils/__tests__/suricatoosLocale.test.ts
-@@ -0,0 +1,278 @@
+@@ -0,0 +1,380 @@
 +/* SPDX-FileCopyrightText: 2026 Suricatoos
 + *
 + * SPDX-License-Identifier: AGPL-3.0-or-later
@@ -16251,34 +16259,56 @@ index 0000000..0eacd90
 +});
 +
 +describe('the language detected at start is not a choice of the user', () => {
-+  test('LanguageProvider saves the setting only on a later change', async () => {
-+    // Fresh modules: no language seen yet, as when the page loads.
++  // Fresh modules: no language seen yet, as when the page loads. The provider is
++  // mounted BEFORE the detection finishes, which is what happens when the catalog
++  // is slow (the first paint does not wait for it for more than 2 s).
++  const mountProvider = async (gmp: Record<string, unknown>) => {
 +    testing.resetModules();
 +    const {default: i18n} = await import('i18next');
 +    const {onLanguageChange} = await import('gmp/locale/lang');
-+    const {default: LanguageProvider} = await import(
-+      'web/components/provider/LanguageProvider'
-+    );
-+    const {default: GmpContext} = await import(
-+      'web/components/provider/GmpProvider'
-+    );
-+    const {createElement} = await import('react');
++    const {default: LanguageProvider, LanguageContext} =
++      await import('web/components/provider/LanguageProvider');
++    const {default: GmpContext} =
++      await import('web/components/provider/GmpProvider');
++    const {createElement, useContext} = await import('react');
 +    const {act, render} = await import('@testing-library/react');
 +
 +    const seen: Array<[string, boolean | undefined]> = [];
 +    const unsubscribe = onLanguageChange((lang, initial) => {
 +      seen.push([lang, initial]);
 +    });
-+    const saveSetting = testing.fn().mockResolvedValue(undefined);
-+    const setLocale = testing.fn();
-+    const gmp = {user: {saveSetting}, session: {setLocale}};
-+    render(
++    // what the page does when the user picks a language
++    const chosen: {setLanguage?: (lang: string) => Promise<void>} = {};
++    const Consumer = () => {
++      chosen.setLanguage = useContext(LanguageContext).setLanguage;
++      return null;
++    };
++    const view = render(
 +      createElement(
 +        GmpContext.Provider,
 +        {value: gmp as never},
-+        createElement(LanguageProvider, null, 'page'),
++        createElement(LanguageProvider, null, createElement(Consumer)),
 +      ),
 +    );
++    return {
++      act,
++      chosen,
++      i18n,
++      seen,
++      unmount: () => {
++        view.unmount();
++        unsubscribe();
++      },
++    };
++  };
++
++  test('LanguageProvider saves the setting only on a later change', async () => {
++    const saveSetting = testing.fn().mockResolvedValue(undefined);
++    const setLocale = testing.fn();
++    const {act, i18n, seen, unmount} = await mountProvider({
++      user: {saveSetting},
++      session: {setLocale},
++    });
 +
 +    try {
 +      // the detection (the browser language, or the default)
@@ -16286,8 +16316,11 @@ index 0000000..0eacd90
 +        await i18n.changeLanguage('es');
 +      });
 +      expect(seen).toEqual([['es', true]]);
-+      expect(setLocale).toHaveBeenCalledWith('es');
 +      expect(saveSetting).not.toHaveBeenCalled();
++      // not kept in the session either: the session is what the detector reads
++      // first on the next visit, so it would turn the language of the browser of
++      // today into the choice of the user
++      expect(setLocale).not.toHaveBeenCalled();
 +
 +      // a later change: the choice of the user, saved as before
 +      await act(async () => {
@@ -16301,9 +16334,86 @@ index 0000000..0eacd90
 +        '6765549a-934e-11e3-b358-406186ea4fc5',
 +        'en',
 +      );
++      expect(setLocale).toHaveBeenCalledTimes(1);
++      expect(setLocale).toHaveBeenCalledWith('en');
 +    } finally {
-+      unsubscribe();
++      unmount();
 +    }
++  });
++
++  describe('in the storage of the browser (localStorage.locale)', () => {
++    // A logged in session on the real storage: the writes of the session land in
++    // localStorage, where the language detector reads the language of the last
++    // visit before it looks at the browser.
++    const loggedInSession = async () => {
++      localStorage.clear();
++      const {default: DefaultSession} =
++        await import('gmp/session/default-session');
++      const {default: date} = await import('gmp/models/date');
++      localStorage.setItem('token', 'tok');
++      localStorage.setItem('username', 'ana');
++      localStorage.setItem(
++        'sessionTimeout',
++        date().add(1, 'hour').toISOString(),
++      );
++      const session = new DefaultSession(localStorage);
++      expect(session.isLoggedIn()).toBe(true);
++      return session;
++    };
++
++    afterEach(() => {
++      localStorage.clear();
++    });
++
++    test('the detected language is not written', async () => {
++      const session = await loggedInSession();
++      const saveSetting = testing.fn().mockResolvedValue(undefined);
++      const {act, i18n, unmount} = await mountProvider({
++        user: {saveSetting},
++        session,
++      });
++
++      try {
++        await act(async () => {
++          await i18n.changeLanguage('pt_BR');
++        });
++        expect(localStorage.getItem('locale')).toBeNull();
++        expect(session.locale).toBeUndefined();
++      } finally {
++        unmount();
++      }
++    });
++
++    test('the language the user picks is written, also when it is the first change', async () => {
++      const session = await loggedInSession();
++      const saveSetting = testing.fn().mockResolvedValue(undefined);
++      const {act, chosen, i18n, seen, unmount} = await mountProvider({
++        user: {saveSetting},
++        session,
++      });
++
++      try {
++        // before the detection ended: this change reaches the listeners as the
++        // first one, so as "initial", but it is a choice
++        await act(async () => {
++          await chosen.setLanguage?.('es');
++        });
++        expect(seen[0]).toEqual(['es', true]);
++        expect(localStorage.getItem('locale')).toEqual('es');
++        expect(saveSetting).toHaveBeenCalledWith(
++          '6765549a-934e-11e3-b358-406186ea4fc5',
++          'es',
++        );
++
++        // and a later one
++        await act(async () => {
++          await i18n.changeLanguage('en');
++        });
++        expect(localStorage.getItem('locale')).toEqual('en');
++      } finally {
++        unmount();
++      }
++    });
 +  });
 +});
 +
