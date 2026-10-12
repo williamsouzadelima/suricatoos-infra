@@ -133,8 +133,8 @@ jobs:
           # Logo antes do push e com a main de agora: "existe um commit mais novo do
           # relatorio" so' cresce, entao decidir aqui fecha a corrida com um publish
           # mais novo.
-          git fetch --no-tags origin main
-          decisao=$(bash report-formats/ci/stable-gate.sh "$SRC_SHA" origin/main)
+          git fetch --no-tags origin '+refs/heads/main:refs/remotes/origin/main'
+          decisao=$(bash report-formats/ci/stable-gate.sh "$SRC_SHA" refs/remotes/origin/main)
           echo "$decisao"
           echo "$decisao" >> "$GITHUB_ENV"
 
