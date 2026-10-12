@@ -25,6 +25,12 @@ dois commits com a mesma lista entregam o mesmo feed).
 `manifest.json` é o único gerado que fica no repo (o conector da frota o lê para anunciar
 `capabilities.report_formats`): o build tem de reescrevê-lo igual, e ele **não traz VERSION**.
 
+**Imagem local:** rode `python3 report-formats/build-feed-xml.py` **logo antes** do `docker build`.
+Os XMLs ignorados sobrevivem à troca de branch, e um `docker build` sem o build antes empacota os de
+outro branch. A guarda do `Dockerfile` é o `RUN` (exige exatamente 9 objetos; o `COPY` de um curinga
+vazio não falha sob o BuildKit) e **não distingue um conjunto velho de um novo**: o CI e o publish
+partem de um checkout limpo e rodam o `check-manifest`, que compara cada objeto com o bundle.
+
 ## VERSION por conteúdo
 
 Ninguém sobe a VERSION: o build a **deriva do conteúdo** — `sha256-` + 12 hex do sha256 dos 9

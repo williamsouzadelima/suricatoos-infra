@@ -331,6 +331,50 @@ class GeracaoDoFeed(unittest.TestCase):
         self.assertIn("combinacoes", out)
 
 
+@unittest.skipUnless(shutil.which("sh"), "sem sh para rodar a guarda do RUN")
+class GuardaDoDockerfile(unittest.TestCase):
+    """A guarda de "faltou objeto" e' o RUN do Dockerfile, nao o COPY: sob o BuildKit um COPY
+    cujo curinga nao casa nada nao falha. Aqui se EXECUTA a guarda de verdade (as linhas do RUN
+    ate' o laco de instalacao) contra 0, 8, 9 e 10 objetos; quem "simplificar" o RUN e perder a
+    unica guarda reprova aqui."""
+
+    def guarda(self, pasta):
+        with open(os.path.join(RF, "Dockerfile"), encoding="utf-8") as fh:
+            texto = fh.read()
+        try:
+            trecho = texto[texto.index("count=$(ls"):texto.index("    found=0")]
+        except ValueError:
+            self.fail("o RUN do Dockerfile perdeu a guarda (count=$(ls ...) antes do laco de instalacao)")
+        trecho = trecho.replace("\\\n", "\n")                  # desfaz a continuacao de linha do RUN
+        self.assertIn("/tmp/suricatoos-formats", trecho)
+        return "set -eu\n" + trecho.replace("/tmp/suricatoos-formats", pasta.replace("\\", "/"))
+
+    def roda(self, n):
+        with tempfile.TemporaryDirectory(prefix="rf-dockerfile-") as pasta:
+            for i in range(n):
+                with open(os.path.join(pasta, "pdf-suricatoos-%02d.xml" % i), "w") as fh:
+                    fh.write("<report_format/>\n")
+            r = subprocess.run(["sh", "-c", self.guarda(pasta)], capture_output=True)
+            return r.returncode, r.stderr.decode("utf-8", "replace")
+
+    def test_o_run_exige_exatamente_os_objetos_do_build(self):
+        n = len(load_builder(RF).FORMATS)
+        self.assertEqual(n, 9)
+        for achados, esperado in ((0, 1), (n - 1, 1), (n, 0), (n + 1, 1)):
+            with self.subTest(objetos=achados):
+                rc, err = self.roda(achados)
+                self.assertEqual(rc, esperado, err)
+                if esperado:
+                    self.assertIn("expected exactly %d feed XMLs" % n, err)
+                    self.assertIn("found %d" % achados, err)
+
+    def test_o_numero_do_dockerfile_e_o_do_build(self):
+        with open(os.path.join(RF, "Dockerfile"), encoding="utf-8") as fh:
+            achados = re.findall(r'\[ "\$count" -eq (\d+) \]', fh.read())
+        self.assertEqual(achados, [str(len(load_builder(RF).FORMATS))],
+                         "o Dockerfile e o build-feed-xml.py discordam sobre quantos objetos ha'")
+
+
 def dentro_de_um_checkout_git():
     """Falso numa copia de pasta (os mutantes) ou num `git archive': nao ha indice para conferir."""
     if not shutil.which("git"):
