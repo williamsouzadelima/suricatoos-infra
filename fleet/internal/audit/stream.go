@@ -107,6 +107,7 @@ type stream struct {
 	tail     []tailLine // the last TailLines lines, the oldest first
 	poisoned error      // non-nil: every append is refused until the next Open
 	recovery Recovery   // what Open found; never changes afterwards
+	flood    *flood     // the anti-flood state (reject stream only)
 }
 
 // newStream is a stream with no line yet over dir; Open fills it from the files (recover) instead.

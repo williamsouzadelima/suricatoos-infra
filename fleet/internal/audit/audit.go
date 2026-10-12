@@ -108,7 +108,8 @@ func open(stateDir string, boot time.Time, opts Options, cfg config) (*Log, erro
 	if stateDir == "" {
 		return nil, errors.New("audit: FLEET_STATE_DIR vazio")
 	}
-	if _, _, err := stamp(boot); err != nil {
+	bootAt, _, err := stamp(boot)
+	if err != nil {
 		return nil, errors.New("audit: boot não é um instante válido: precisa ser o relógio de verificação")
 	}
 	logger := opts.Logger
@@ -119,11 +120,14 @@ func open(stateDir string, boot time.Time, opts Options, cfg config) (*Log, erro
 		exec:   newStream(stateDir, cfg.exec, cfg.ops, logger),
 		reject: newStream(stateDir, cfg.reject, cfg.ops, logger),
 	}
-	for _, s := range []*stream{l.exec, l.reject} {
-		if _, err := s.recover(boot.UTC()); err != nil {
-			return nil, err
-		}
+	if _, err := l.exec.recover(boot.UTC()); err != nil {
+		return nil, err
 	}
+	sc, err := l.reject.recover(boot.UTC())
+	if err != nil {
+		return nil, err
+	}
+	l.reject.flood = newFlood(bootAt, sc.last)
 	return l, nil
 }
 
