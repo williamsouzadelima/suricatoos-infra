@@ -7,8 +7,8 @@
      own copy; the build never reads this file. -->
 <report_format id="c6482c1b-57bb-406b-a501-c97eed86ad05">
   <name>Suricatoos PDF — Technical (EN)</name>
-  <summary>Suricatoos PDF vulnerability report, technical edition: the complete report, with every finding, the port and IP exposure map and the per-host appendix (English). Version 20261012f.</summary>
-  <description>Technical edition of the premium, corporate vulnerability assessment report in PDF (English): branded cover, executive risk summary with a severity dashboard, priorities and next steps, a hexagonal PORT EXPOSURE MAP that shows every (transport, port) in the scope with its severity and the IP addresses mapped to it, a hosts and open-ports inventory, a findings summary table, detailed findings grouped by vulnerability (CVSS, CVEs, affected systems, remediation), scope, methodology and limitations, and a per-host appendix. Version 20261012f.</description>
+  <summary>Suricatoos PDF vulnerability report, technical edition: the complete report, with every finding, the port and IP exposure map and the per-host appendix (English). Version 20261012g.</summary>
+  <description>Technical edition of the premium, corporate vulnerability assessment report in PDF (English): branded cover, executive risk summary with a severity dashboard, priorities and next steps, a hexagonal PORT EXPOSURE MAP that shows every (transport, port) in the scope with its severity and the IP addresses mapped to it, a hosts and open-ports inventory, a findings summary table, detailed findings grouped by vulnerability (CVSS, CVEs, affected systems, remediation), scope, methodology and limitations, and a per-host appendix. Version 20261012g.</description>
   <extension>pdf</extension>
   <content_type>application/pdf</content_type>
   <report_type>all</report_type>
