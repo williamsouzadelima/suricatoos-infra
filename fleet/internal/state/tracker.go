@@ -177,6 +177,27 @@ func (t *tracker) snapshot(kind contract.StateKind) (Snapshot, bool) {
 	return s, ok
 }
 
+// beginSend comes BEFORE every PUT of kind: it makes the file stop saying that the hub has a snapshot of kind —
+// it drops the kind's accepted hash and rewrites the file —, so that a hub that accepts the PUT while the process
+// then dies (or its mark is lost) can never leave behind a file that suppresses a needed resend (the A→B→A case:
+// the file says A, B goes and is accepted, the mark of B is lost, the state goes back to A — without this, A would
+// not be pending after a restart while the hub holds B). Only after it returned nil may the PUT go; an error — a
+// write that failed or was not confirmed (fsutil.ErrNotDurable) — means not now: the kind stays pending and a later
+// beginSend rewrites the file before saying yes. It writes only when there is something to drop or the file is
+// behind the memory: one atomic write per change sent, then markSent restores the entry with the new hash.
+func (t *tracker) beginSend(kind contract.StateKind) error {
+	if !slices.Contains(t.kinds, kind) {
+		return fmt.Errorf("state: kind %.64q não existe neste nó", kind)
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if _, had := t.sent[kind]; !had && !t.dirty {
+		return nil
+	}
+	delete(t.sent, kind)
+	return t.persistLocked()
+}
+
 // markSent records that the hub accepted (2xx) the snapshot of kind whose content_sha256 is hash. The memory moves
 // at once — the hub has it, whatever the disk says —; then the file is rewritten. A write that fails (ErrNotDurable
 // included) is returned and leaves the file behind: the next write (flush, every cycle) redoes it whole, and until

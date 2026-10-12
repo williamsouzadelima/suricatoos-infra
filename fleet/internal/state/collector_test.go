@@ -152,10 +152,14 @@ func TestPendenteEnviadoSemPendenciaPeloCollector(t *testing.T) {
 	}
 }
 
-// sendAll faz o papel da F2.6: monta o corpo de cada kind pendente, confere-o como o hub conferiria e marca.
+// sendAll faz o papel da F2.6, na ordem BeginSend → Current → Body → PUT → MarkSent: monta o corpo de cada kind
+// pendente, confere-o como o hub conferiria e marca.
 func sendAll(t *testing.T, c *Collector) {
 	t.Helper()
 	for _, kind := range c.Pending() {
+		if err := c.BeginSend(kind); err != nil {
+			t.Fatal(err)
+		}
 		s, ok := c.Current(kind)
 		if !ok {
 			t.Fatalf("%s pendente sem retrato", kind)
@@ -172,6 +176,34 @@ func sendAll(t *testing.T, c *Collector) {
 		if err := c.MarkSent(kind, put.ContentSHA256); err != nil {
 			t.Fatal(err)
 		}
+	}
+}
+
+// O A→B→A pela API do Collector: o hub aceitou B, o processo caiu antes do MarkSent e o estado voltou para A; com
+// o BeginSend antes do PUT, o A de volta é reenviado depois do reinício.
+func TestBeginSendPeloCollectorNaoPerdeReenvio(t *testing.T) {
+	f := newFakes()
+	cfg := f.config(t, contract.NodeStandalone)
+	c := openCollector(t, cfg)
+	c.Collect(context.Background())
+	sendAll(t, c) // o hub tem A de todo kind
+	before := c.Hashes()[contract.KindTasks]
+
+	f.gvm.tasks.Items = append(f.gvm.tasks.Items, fullTask(uuidTask1, "acme")) // B
+	c.Collect(context.Background())
+	if err := c.BeginSend(contract.KindTasks); err != nil {
+		t.Fatal(err)
+	}
+	// PUT de B aceito pelo hub; o processo cai antes do MarkSent
+
+	f.gvm.tasks.Items = nil // de volta a A
+	again := openCollector(t, cfg)
+	again.Collect(context.Background())
+	if again.Hashes()[contract.KindTasks] != before {
+		t.Fatal("o estado não voltou para A")
+	}
+	if p := again.Pending(); !slices.Equal(p, []contract.StateKind{contract.KindTasks}) {
+		t.Fatalf("A de volta não ficou pendente: %v", p)
 	}
 }
 

@@ -51,16 +51,19 @@
 //
 // The Collector keeps, per kind, the current snapshot, the error of the last collection (a failing source keeps
 // its kind's last snapshot) and the last content_sha256 the hub accepted. Pending lists the kinds whose current
-// hash is not the accepted one; MarkSent records an accepted PUT (the hash actually sent); Resync forgets what the
-// hub has of some kinds; Hashes is the heartbeat's state_hashes; ReportFormats feeds verification line 8.
+// hash is not the accepted one; BeginSend comes before every PUT (below); MarkSent records an accepted PUT (the hash
+// actually sent); Resync forgets what the hub has of some kinds; Hashes is the heartbeat's state_hashes;
+// ReportFormats feeds verification line 8. The sender's order is BeginSend → Current → Body → PUT → MarkSent.
 //
 // Persistence: the accepted hashes, and only them, live in FLEET_STATE_DIR/state-sent.json, rewritten whole
 // (fsutil.WriteAtomic) whenever they change, so a restart does not send again what the hub already has. The memory
 // is the truth: MarkSent counts at once — the hub has it, whatever the disk says — and a failed write (ErrNotDurable
 // included) only leaves the file behind until the next write, which every cycle retries. The failure modes all lean
 // to sending again: an unusable file at Open is ignored (Recovery.Lost, everything goes again), and a file behind
-// the memory can only make a restart send a kind the hub has. The only hash the file can hold is one the hub
-// accepted; if the state then goes back to it while the hub holds a newer one, the heartbeat's state_hashes show the
-// difference and the hub's resync closes it. Snapshots themselves are not persisted: the first cycle after a start
-// rebuilds them.
+// the memory can only make a restart send a kind the hub has. And no resend is ever missed: BeginSend durably drops
+// the kind's entry BEFORE the PUT (one atomic write; an unconfirmed one means the PUT does not go), so whatever
+// happens between the hub's 2xx and MarkSent — a crash, a lost write —, the file never claims that the hub has an
+// older snapshot than the one it was sent (the A→B→A case: the file says A, B is accepted, its mark is lost, the
+// state goes back to A — A is pending after the restart, not taken for sent). Snapshots themselves are not
+// persisted: the first cycle after a start rebuilds them.
 package state

@@ -302,6 +302,96 @@ func TestGravacaoQueFalhaNaoMudaAVerdadeEmMemoria(t *testing.T) {
 	}
 }
 
+// O A→B→A atravessando uma queda: o arquivo diz que o hub tem A; o kind muda para B, B vai e o hub o aceita, mas a
+// marca de B se perde (o processo cai antes dela, ou a gravação falha); o estado volta para A antes do reinício.
+// Sem o BeginSend, o arquivo ainda diria A e o A de volta não seria reenviado, embora o hub tenha B. Com ele, o
+// arquivo deixou de dizer A antes do PUT, e o A de volta é reenviado.
+func TestBeginSendFechaOABAAtravesDeUmaQueda(t *testing.T) {
+	for _, lost := range []string{"queda antes da marca", "marca que não grava"} {
+		dir := t.TempDir()
+		tr := openTestTracker(t, dir, localKinds)
+		a, b := snap(t, contract.KindTasks, "a"), snap(t, contract.KindTasks, "b")
+		tr.update(a)
+		if err := tr.beginSend(contract.KindTasks); err != nil {
+			t.Fatal(err)
+		}
+		if err := tr.markSent(contract.KindTasks, a.SHA256); err != nil {
+			t.Fatal(err)
+		}
+
+		tr.update(b)
+		if err := tr.beginSend(contract.KindTasks); err != nil { // antes do PUT de B
+			t.Fatal(err)
+		}
+		// o hub aceita B; a marca se perde
+		if lost == "marca que não grava" {
+			tr.write = func(string, []byte) error { return fmt.Errorf("%w: disco", fsutil.ErrNotDurable) }
+			if err := tr.markSent(contract.KindTasks, b.SHA256); err == nil {
+				t.Fatal("a falha de gravação tem de ser informada")
+			}
+		}
+
+		again := openTestTracker(t, dir, localKinds) // reinício
+		again.update(a)                              // o estado voltou para A
+		if p := again.pending(); !slices.Equal(p, []contract.StateKind{contract.KindTasks}) {
+			t.Fatalf("%s: A de volta não ficou pendente (%v): o hub tem B", lost, p)
+		}
+	}
+}
+
+// Um BeginSend cuja gravação falha (inclusive sem confirmação, ErrNotDurable) é erro: o PUT não vai, e o kind
+// continua pendente. O próximo BeginSend regrava o arquivo — mesmo sem entrada nova para tirar — antes de dizer sim.
+func TestBeginSendQueNaoGravaNaoLiberaOEnvio(t *testing.T) {
+	dir := t.TempDir()
+	tr := openTestTracker(t, dir, localKinds)
+	a := snap(t, contract.KindTasks, "a")
+	tr.update(a)
+	if err := tr.markSent(contract.KindTasks, a.SHA256); err != nil {
+		t.Fatal(err)
+	}
+	tr.update(snap(t, contract.KindTasks, "b"))
+	failing := true
+	tr.write = func(path string, data []byte) error {
+		if failing {
+			return fmt.Errorf("%w: disco", fsutil.ErrNotDurable)
+		}
+		return fsutil.WriteAtomic(path, data)
+	}
+	if err := tr.beginSend(contract.KindTasks); err == nil {
+		t.Fatal("BeginSend sem gravação confirmada liberou o envio")
+	}
+	if p := tr.pending(); !slices.Equal(p, []contract.StateKind{contract.KindTasks}) {
+		t.Fatalf("pendentes %v", p)
+	}
+	failing = false
+	if err := tr.beginSend(contract.KindTasks); err != nil {
+		t.Fatal(err)
+	}
+	if again := openTestTracker(t, dir, localKinds); again.sent[contract.KindTasks] != "" {
+		t.Fatalf("o arquivo ainda diz que o hub tem %s", again.sent[contract.KindTasks])
+	}
+}
+
+// Um kind que o hub não tem (nunca enviado, ou já sem entrada) não custa gravação: só há o que tirar quando há
+// entrada.
+func TestBeginSendSemEntradaNaoGrava(t *testing.T) {
+	tr := openTestTracker(t, t.TempDir(), localKinds)
+	writes := 0
+	tr.write = func(path string, data []byte) error { writes++; return fsutil.WriteAtomic(path, data) }
+	tr.update(snap(t, contract.KindTasks, "a"))
+	for range 3 {
+		if err := tr.beginSend(contract.KindTasks); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if writes != 0 {
+		t.Fatalf("%d gravações sem entrada para tirar", writes)
+	}
+	if err := tr.beginSend(contract.KindAgents); err == nil {
+		t.Fatal("BeginSend de kind que o nó não tem")
+	}
+}
+
 func TestMarcarOMesmoHashNaoRegrava(t *testing.T) {
 	tr := openTestTracker(t, t.TempDir(), localKinds)
 	writes := 0

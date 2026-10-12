@@ -302,6 +302,14 @@ func (c *Collector) Current(kind contract.StateKind) (Snapshot, bool) {
 	return c.tracker.snapshot(kind)
 }
 
+// BeginSend must come before every PUT of kind; the PUT goes only if it returned nil. It makes
+// FLEET_STATE_DIR/state-sent.json stop saying that the hub has any snapshot of kind (one atomic write, only when
+// there is an entry to drop or the file is behind), so that no crash or lost mark between the hub's 2xx and MarkSent
+// can ever suppress a needed resend after a restart. An error (a write that failed or was not confirmed) means "not
+// now": the kind stays pending, and a later BeginSend writes the file again before saying yes. The sender's order is
+// BeginSend → Current → Body → PUT → MarkSent.
+func (c *Collector) BeginSend(kind contract.StateKind) error { return c.tracker.beginSend(kind) }
+
 // MarkSent records that the hub accepted (2xx) the PUT of kind whose content_sha256 was sha256 — the hash of the
 // snapshot that was actually sent, which may be older than the current one (then the kind stays pending). It counts
 // in memory at once; an error says only that FLEET_STATE_DIR/state-sent.json could not be written (the next cycle
