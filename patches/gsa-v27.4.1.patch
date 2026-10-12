@@ -11942,10 +11942,10 @@ index a057cf9..409c93b 100644
    },
 diff --git a/src/web/pages/downloads/DownloadsPage.tsx b/src/web/pages/downloads/DownloadsPage.tsx
 new file mode 100644
-index 0000000..d9961fe
+index 0000000..94e559a
 --- /dev/null
 +++ b/src/web/pages/downloads/DownloadsPage.tsx
-@@ -0,0 +1,352 @@
+@@ -0,0 +1,358 @@
 +/* SPDX-FileCopyrightText: 2024 Greenbone AG
 + *
 + * SPDX-License-Identifier: AGPL-3.0-or-later
@@ -11959,6 +11959,7 @@ index 0000000..d9961fe
 + * already embedded — the dynamic per-tenant token. Renders inside the GSA shell. */
 +
 +import React, {useState, useCallback, useEffect, useId, useRef} from 'react';
++import {flushSync} from 'react-dom';
 +import {VisuallyHidden} from '@mantine/core';
 +import Button from 'web/components/form/Button';
 +import Layout from 'web/components/layout/Layout';
@@ -12123,6 +12124,11 @@ index 0000000..d9961fe
 +    if (!resp?.command) {
 +      return;
 +    }
++    // The note of a second click is the same text in the same live region, and a
++    // text that stays there is not announced: empty the region now (flushSync puts
++    // it in the DOM before the copy below, which can end in the same task), so the
++    // result goes in again, as a new insertion.
++    flushSync(() => setCopy('idle'));
 +    // Select first: wherever the copy does not work the operator only has to
 +    // press Ctrl+C. A page opened over HTTP has no navigator.clipboard (the
 +    // browser gives it only to a secure context), and a browser may also refuse.
@@ -20929,10 +20935,10 @@ index 0000000..d60abf1
 +});
 diff --git a/src/web/utils/__tests__/suricatoosScreens.test.tsx b/src/web/utils/__tests__/suricatoosScreens.test.tsx
 new file mode 100644
-index 0000000..80c0f78
+index 0000000..35d0344
 --- /dev/null
 +++ b/src/web/utils/__tests__/suricatoosScreens.test.tsx
-@@ -0,0 +1,673 @@
+@@ -0,0 +1,731 @@
 +/* SPDX-FileCopyrightText: 2026 Suricatoos
 + *
 + * SPDX-License-Identifier: AGPL-3.0-or-later
@@ -21393,6 +21399,64 @@ index 0000000..80c0f78
 +
 +    await waitFor(() => expect(said('status')).toContain('Copied ✓'));
 +    expect(await navigator.clipboard.readText()).toEqual(ENROLL.command);
++  });
++
++  // What is put INTO a live region is announced; a note that is already there and
++  // stays there is silent. A second click that ends the same way has to put the note
++  // in again: the region is cleared when the copy starts.
++  describe('a second click with the same result says the note again', () => {
++    const noteLog = (status: HTMLElement) => {
++      const log: string[] = [];
++      const observer = new MutationObserver(records => {
++        for (const record of records) {
++          record.removedNodes.forEach(() => log.push('out'));
++          record.addedNodes.forEach(() => log.push('in'));
++        }
++      });
++      observer.observe(status, {childList: true, subtree: true});
++      return {log, stop: () => observer.disconnect()};
++    };
++
++    test.each([
++      [
++        'the note about Ctrl+C (no clipboard, the old command does not copy)',
++        'Press Ctrl+C to copy it.',
++        withoutClipboard,
++      ],
++      [
++        'the note that it was copied (the old command copies)',
++        'Copied ✓',
++        () => {
++          withoutClipboard();
++          Object.defineProperty(document, 'execCommand', {
++            value: testing.fn(() => true),
++            configurable: true,
++          });
++        },
++      ],
++      ['the note that it was copied (the clipboard)', 'Copied ✓', () => {}],
++    ])('%s', async (_label, text, setUp) => {
++      const view = await withCommand();
++      setUp();
++      const copy = screen.getByRole('button', {name: 'Copy'});
++      const status = within(copy.parentElement as HTMLElement).getByRole(
++        'status',
++      );
++      const {log, stop} = noteLog(status);
++
++      try {
++        await view.userEvent.click(copy);
++        await waitFor(() => expect(status).toHaveTextContent(text));
++        expect(log).toEqual(['in']);
++
++        // the same click again: the same note, but out and in again
++        await view.userEvent.click(copy);
++        await waitFor(() => expect(log).toEqual(['in', 'out', 'in']));
++        expect(status).toHaveTextContent(text);
++      } finally {
++        stop();
++      }
++    });
 +  });
 +});
 +
