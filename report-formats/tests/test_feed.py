@@ -343,5 +343,52 @@ class OQueOGitVersiona(unittest.TestCase):
         self.assertEqual(rc, 1, "manifest.json e' versionado (o conector da frota o le): fora do .gitignore")
 
 
+@unittest.skipUnless(dentro_de_um_checkout_git(), "sem checkout git: o .gitattributes nao se aplica")
+class GitAttributes(unittest.TestCase):
+    """O que o build e o CI leem e' TEXTO e LF em qualquer SO (.gitattributes do
+    repo): o feed embute estes arquivos em base64 e o generate roda dentro do gvmd,
+    entao um CR vira diferenca de bytes entre quem builda e o CI."""
+
+    def git(self, *args):
+        r = subprocess.run(["git", "-C", RF] + list(args), capture_output=True)
+        self.assertEqual(r.returncode, 0, r.stderr.decode("utf-8", "replace"))
+        return r.stdout.decode("utf-8", "replace")
+
+    def attrs(self, *caminhos):
+        out = {}
+        for linha in self.git("check-attr", "text", "eol", "--", *caminhos).splitlines():
+            caminho, attr, valor = linha.rsplit(": ", 2)
+            out.setdefault(caminho, {})[attr] = valor
+        return out
+
+    def rastreados(self, *padroes):
+        return [p for p in self.git("ls-files", "--", *padroes).split("\n") if p]
+
+    def test_o_que_o_build_e_o_ci_leem_e_texto_lf(self):
+        caminhos = self.rastreados("*.xsl", "*.sty", "*.py", "*.sh", "Dockerfile", "manifest.json",
+                                   "suricatoos-premium-pdf/generate", "suricatoos-premium-pdf/nvt-i18n-*.xml",
+                                   "tests/fixtures/*.xml", "sample/*.xml")
+        self.assertGreater(len(caminhos), 60)
+        for tipo in (".xsl", ".sty", ".py", ".sh", ".xml", "generate", "Dockerfile", "manifest.json"):
+            self.assertTrue(any(c.endswith(tipo) for c in caminhos), "nenhum arquivo %s no teste" % tipo)
+        for caminho, a in self.attrs(*caminhos).items():
+            self.assertEqual((a["text"], a["eol"]), ("set", "lf"), caminho)
+
+    def test_os_binarios_do_bundle_continuam_binarios(self):
+        for caminho, a in self.attrs("suricatoos-premium-pdf/plex-min.tar.gz",
+                                     "suricatoos-premium-pdf/suricatoos-mark-navy.pdf",
+                                     "suricatoos-premium-pdf/suricatoos-wordmark-white.pdf").items():
+            self.assertEqual(a["text"], "unset", caminho)
+
+    def test_o_resto_do_repo_fica_como_estava(self):
+        for caminho, a in self.attrs("../README.md", "../compose/compose.yaml", "../.github/workflows/hygiene.yml").items():
+            self.assertEqual((a["text"], a["eol"]), ("auto", "lf"), caminho)
+
+    def test_o_indice_nao_tem_cr_em_texto(self):
+        ruins = [l for l in self.git("ls-files", "--eol", "--", ".").splitlines()
+                 if l.split()[0] in ("i/crlf", "i/mixed")]
+        self.assertEqual(ruins, [])
+
+
 if __name__ == "__main__":
     unittest.main()

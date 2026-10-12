@@ -17,3 +17,21 @@
 *.msi binary
 *.ico binary
 *.svg text
+
+# report-formats/: tudo que o build (build-feed-xml.py) e o CI leem e' TEXTO sempre
+# (`text', nao o `text=auto' de cima, que adivinha pelo conteudo) e LF no checkout de
+# qualquer SO. O feed embute estes arquivos em base64 e o `generate' (sh) roda dentro do
+# gvmd: um CR vira diferenca de bytes entre quem builda e o CI -- e quebra o script em
+# producao. Cada linha e' por tipo de arquivo; o `*' do topo e o resto do repo ficam
+# como estao. Os binarios do bundle (plex-min.tar.gz, logos .pdf) seguem nas regras
+# `binary' acima. O teste tests/test_feed.py (GitAttributes) confere estas regras.
+report-formats/**/*.xsl text eol=lf
+report-formats/**/*.sty text eol=lf
+report-formats/**/*.py text eol=lf
+report-formats/**/*.sh text eol=lf
+report-formats/suricatoos-premium-pdf/generate text eol=lf
+report-formats/suricatoos-premium-pdf/nvt-i18n-*.xml text eol=lf
+report-formats/tests/fixtures/*.xml text eol=lf
+report-formats/sample/*.xml text eol=lf
+report-formats/manifest.json text eol=lf
+report-formats/Dockerfile text eol=lf
