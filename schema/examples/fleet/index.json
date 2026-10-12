@@ -149,6 +149,15 @@
       }
     },
     {
+      "file": "invalid/command/issued-at-year-0000.json",
+      "target": "fleet-command.schema.json",
+      "description": "times are real calendar instants: the year is 0001-9999 (Go would accept 0000, Python would not)",
+      "expect": {
+        "keyword": "pattern",
+        "path": "/issued_at"
+      }
+    },
+    {
       "file": "invalid/command/issued-by-email.json",
       "target": "fleet-command.schema.json",
       "description": "M12: issued_by is a pseudonymous operator id; an e-mail is refused",

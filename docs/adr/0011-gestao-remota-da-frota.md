@@ -344,9 +344,11 @@ mesmas nos exemplos, para Python e Go darem o mesmo veredito.
   padrão, terminando em `==`, com o caractere antes do padding com os 4 bits baixos zerados (`A`, `Q`, `g` ou
   `w`). Espaço, alfabeto URL-safe, padding omitido ou bits de padding diferentes de zero ⇒ `bad_envelope`. O
   schema codifica isso no padrão `^[A-Za-z0-9+/]{85}[AQgw]==$`.
-- **Instantes reais.** Todo tempo RFC 3339 é um instante que existe no calendário: sem 30/02, sem hora 24 e sem
-  segundo 60. O v1 não precisa de segundo bissexto, e o `time` do Go não o representa. O padrão de `utc_time`
-  fixa a faixa de cada campo, e o dia do mês é conferido como `format: date-time` (no envelope, `bad_envelope`).
+- **Instantes reais.** Todo tempo RFC 3339 é um instante que existe no calendário: ano de 0001 a 9999, sem
+  30/02, sem hora 24 e sem segundo 60. O ano 0000 fica fora porque o calendário do Python (e de quase toda
+  biblioteca) começa no ano 1, e o Go o aceitaria; o v1 não precisa de segundo bissexto, e o `time` do Go não o
+  representa. O padrão de `utc_time` fixa o ano e a faixa de cada campo, e o dia do mês é conferido como
+  `format: date-time` (no envelope, `bad_envelope`).
 - **Sem caractere de controle** nos textos do contrato, em especial nenhum `\n` final. No Python, o `$` de um
   padrão casa antes de uma quebra de linha final; no RE2 do Go, não. É o `no_control` do schema, que vale também
   para `token_id`, para o tipo como recebido (`command_type_any`) e para o kind como recebido (`state_kind_any`).
@@ -604,8 +606,9 @@ Na linha 0, `type` só precisa casar `^[a-z][a-z_]*\.[a-z][a-z_]*$` (`command_ty
 
 Procedimento:
 
-1. `fleet/contract` implementa `Canonical`, `Verify`, `VerifyAt` e as checagens 0–4 em Go, no molde de
-   `control-plane/remediation/canonical.go`, com o domínio `suricatoos-fleet-command-v1`.
+1. `fleet/contract` implementa em Go `Canonical`, `Verify`, `VerifyAt` e as checagens de contrato que os vetores
+   exercitam (item 5), no molde de `control-plane/remediation/canonical.go`, com o domínio
+   `suricatoos-fleet-command-v1`.
 2. Um gerador determinístico (`go test ./fleet/contract -run TestGolden -update`) escreve
    `fleet/contract/testdata/golden-v1.json`; sem `-update`, o teste regenera em memória e **falha** em qualquer
    byte de diferença (mesma trava de drift de `TestCanonicalGolden`).
@@ -615,6 +618,12 @@ Procedimento:
    exemplo acima. O conector **recusa pinar** essa pubkey no enroll; o hub nunca assina produção com ela.
 4. O commandcenter consome o **mesmo arquivo** (cópia com sha256 pinado) e tem de passar em todos os vetores
    antes de falar com um nó real.
+5. **Executor dos vetores.** Avalia as linhas 0–5 da verificação, com a 2a pelo `seen` do vetor, e a parte **de
+   contrato** das linhas 7–8: `unsupported` (tipo fora do catálogo v1) e `bad_payload` (payload inválido para o
+   tipo, inclusive as regras semânticas, como o filtro explícito do `report.export`). As checagens de **estado
+   local** contam como aprovadas: a linha 6 (tenant), o `node_kind`, a política e o orçamento da linha 7, a
+   capacidade `report_formats` da linha 8 e o escopo da linha 9. Um hub que não seja Go implementa o mesmo
+   executor, para chegar ao mesmo `expect`.
 
 Formato do arquivo (`golden-v1.json`, UTF-8, um objeto JSON):
 
