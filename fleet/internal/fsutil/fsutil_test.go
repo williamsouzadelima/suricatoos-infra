@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strings"
 	"syscall"
 	"testing"
 )
@@ -263,6 +264,51 @@ func TestWriteAtomicSemErroNoSyncDoDiretorioDevolveNil(t *testing.T) {
 	}
 }
 
+// swapSyncHandle troca, durante o teste, o Sync do descritor do diretório que o syncDir abriu.
+func swapSyncHandle(t *testing.T, fn func(*os.File) error) {
+	t.Helper()
+	old := syncHandle
+	syncHandle = fn
+	t.Cleanup(func() { syncHandle = old })
+}
+
+// O erro do Sync() de um diretório aberto de verdade só é engolido quando diz que o sistema de arquivos não
+// sincroniza diretório (EINVAL, ENOTSUP); EIO e os demais voltam ao chamador, e o WriteAtomic os entrega como
+// ErrNotDurable. No Windows o syncDir sai antes de abrir o diretório, então este teste só morde fora dele (CI).
+func TestSyncDirDevolveOErroDoSyncDoDescritor(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("no Windows o diretório não é sincronizado")
+	}
+	dir := t.TempDir()
+	cases := []struct {
+		name      string
+		err, want error
+	}{
+		{"EIO volta", syscall.EIO, syscall.EIO},
+		{"ENOSPC volta", syscall.ENOSPC, syscall.ENOSPC},
+		{"EIO em *PathError volta", &fs.PathError{Op: "sync", Path: dir, Err: syscall.EIO}, syscall.EIO},
+		{"EINVAL é tolerado", syscall.EINVAL, nil},
+		{"ENOTSUP é tolerado", syscall.ENOTSUP, nil},
+		{"sem erro", nil, nil},
+	}
+	for _, c := range cases {
+		var synced string
+		swapSyncHandle(t, func(d *os.File) error { synced = d.Name(); return c.err })
+		err := syncDir(dir)
+		if c.want == nil && err != nil || c.want != nil && !errors.Is(err, c.want) {
+			t.Errorf("%s: syncDir devolveu %v", c.name, err)
+		}
+		if synced != dir {
+			t.Errorf("%s: sincronizou %q, esperava o diretório %q", c.name, synced, dir)
+		}
+	}
+	swapSyncHandle(t, func(*os.File) error { return syscall.EIO })
+	err := WriteAtomic(filepath.Join(dir, "estado.json"), []byte("x"))
+	if !errors.Is(err, ErrNotDurable) || !errors.Is(err, syscall.EIO) {
+		t.Fatalf("o WriteAtomic tem de entregar o EIO do Sync do diretório como ErrNotDurable, deu %v", err)
+	}
+}
+
 // Só "este sistema de arquivos não sincroniza diretório" é tolerado; qualquer outro erro de E/S não é.
 func TestDirSyncToleraSoONaoSuportado(t *testing.T) {
 	tolerated := map[string]error{
@@ -298,31 +344,41 @@ func TestDirSyncToleraSoONaoSuportado(t *testing.T) {
 	}
 }
 
-// Uma queda entre criar o temporário e o rename deixa "<arquivo>.tmp-<sufixo>" para sempre. Só os do próprio
-// arquivo saem: o diretório é dividido com os outros arquivos de estado do conector.
+// Uma queda entre criar o temporário e o rename deixa "<arquivo>.tmp-<dígitos>" para sempre. Só os do próprio
+// arquivo saem, e só com o sufixo que o os.CreateTemp gera (dígitos decimais): o diretório é dividido com os
+// outros arquivos de estado do conector, e um arquivo do operador com o mesmo prefixo não é temporário.
 func TestRemoveOrphanTempsRemoveSoOsDoProprioArquivo(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "estado.json")
-	mine := []string{"estado.json.tmp-1", "estado.json.tmp-987654321", "estado.json.tmp-abc"}
+	mine := []string{"estado.json.tmp-1", "estado.json.tmp-987654321", "estado.json.tmp-4294967295"}
 	others := []string{
-		"estado.json",         // o próprio arquivo
-		"estado.json.bak",     // outro sufixo
-		"estado.json.tmp",     // sem o hífen do sufixo aleatório
-		"outro.json.tmp-1",    // temporário de outro arquivo de estado
-		"estado.jsonx.tmp-1",  // prefixo parecido, outro arquivo
-		"xestado.json.tmp-1",  // idem
-		"politica.json.tmp-7", // de outro módulo
+		"estado.json",                             // o próprio arquivo
+		"estado.json.bak",                         // outro sufixo
+		"estado.json.tmp",                         // sem o hífen do sufixo aleatório
+		"estado.json.tmp-",                        // sem sufixo
+		"estado.json.tmp-abc",                     // sufixo que o os.CreateTemp nunca gera: pode ser do operador
+		"estado.json.tmp-12a",                     // idem, dígitos e letra
+		"estado.json.tmp-1.bak",                   // cópia do operador de um temporário
+		"estado.json.tmp--1",                      // sinal não é dígito
+		"estado.json.tmp-+1",                      // idem
+		"estado.json.tmp-" + string(rune(0x0663)), // dígito Unicode (árabe-índico) não é dígito ASCII
+		"outro.json.tmp-1",                        // temporário de outro arquivo de estado
+		"estado.jsonx.tmp-1",                      // prefixo parecido, outro arquivo
+		"xestado.json.tmp-1",                      // idem
+		"politica.json.tmp-7",                     // de outro módulo
 	}
 	for _, name := range append(append([]string{}, mine...), others...) {
 		if err := os.WriteFile(filepath.Join(dir, name), []byte("x"), 0o600); err != nil {
 			t.Fatal(err)
 		}
 	}
-	// um diretório com o nome de um temporário não é um temporário
-	if err := os.Mkdir(filepath.Join(dir, "estado.json.tmp-dir"), 0o700); err != nil {
-		t.Fatal(err)
+	// um diretório com o nome exato de um temporário não é um temporário
+	for _, name := range []string{"estado.json.tmp-42", "estado.json.tmp-dir"} {
+		if err := os.Mkdir(filepath.Join(dir, name), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		others = append(others, name)
 	}
-	others = append(others, "estado.json.tmp-dir")
 
 	removed, err := RemoveOrphanTemps(path)
 	if err != nil || removed != len(mine) {
@@ -339,6 +395,28 @@ func TestRemoveOrphanTempsRemoveSoOsDoProprioArquivo(t *testing.T) {
 	slices.Sort(others)
 	if !slices.Equal(left, others) {
 		t.Fatalf("sobraram %v, esperava %v", left, others)
+	}
+}
+
+// A limpeza só reconhece sufixo de dígitos porque é o que o os.CreateTemp gera: se a biblioteca mudar isso, este
+// teste quebra antes que temporários reais passem a sobrar para sempre.
+func TestCreateTempGeraSufixoDeDigitosQueALimpezaReconhece(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "estado.json")
+	const n = 20
+	for range n {
+		f, err := os.CreateTemp(dir, filepath.Base(path)+tempInfix+"*")
+		if err != nil {
+			t.Fatal(err)
+		}
+		suffix := strings.TrimPrefix(filepath.Base(f.Name()), filepath.Base(path)+tempInfix)
+		f.Close()
+		if suffix == "" || strings.Trim(suffix, "0123456789") != "" {
+			t.Fatalf("os.CreateTemp gerou o sufixo %q: a limpeza só reconhece dígitos", suffix)
+		}
+	}
+	if removed, err := RemoveOrphanTemps(path); err != nil || removed != n {
+		t.Fatalf("removidos %d de %d, erro %v", removed, n, err)
 	}
 }
 

@@ -1,10 +1,14 @@
 // Package fsutil holds the file primitives the fleet connector's local state needs:
 //
 //   - ReadBounded: a bounded, race-free read of a file the operator (or another service) owns, telling "absent"
-//     from "present but unusable";
+//     from "present but unusable"; OpenRegular is the same open, for a file read as a stream, and
+//     OpenRegularNoFollow the one for a file the connector owns, which never goes through a symbolic link;
 //   - WriteAtomic: the atomic, durable replacement of a state file the connector owns (ADR-0011 "Anti-replay,
 //     idempotência e entrega": temp + rename with fsync, 0600), and RemoveOrphanTemps, which cleans what a crash
 //     in the middle of it leaves behind;
+//   - OpenAppend, TruncateDurable and SyncDir: what an append-only file the connector owns (the local audit) needs —
+//     the append-only open, the durable cut that undoes a failed append, and the directory sync after a file is
+//     created, renamed or removed;
 //   - LooseMode: whether a secrets file is open to its group or to others (a warning for the log, not a refusal).
 package fsutil
 
@@ -40,6 +44,50 @@ var (
 // between a check and the open for the path to turn into something else; where the OS supports it the open does
 // not block, so a FIFO swapped in at that very moment cannot hang the caller either.
 func ReadBounded(path string, limit int64) ([]byte, error) {
+	f, err := openExisting(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	return readRegular(f, path, limit)
+}
+
+// OpenRegular opens the file at path for reading under the rules of ReadBounded — symbolic links followed, an
+// absent path satisfies fs.ErrNotExist, a dangling link is ErrDanglingLink, the opened descriptor (not the path)
+// must be a regular file or it is ErrNotRegular, and the open does not block on a FIFO — but leaves the reading to
+// the caller, for a file read as a stream instead of held whole in memory. The caller closes it.
+func OpenRegular(path string) (*os.File, error) {
+	f, err := openExisting(path)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := regularInfo(f, path); err != nil {
+		f.Close()
+		return nil, err
+	}
+	return f, nil
+}
+
+// OpenRegularNoFollow is OpenRegular for a file the connector owns and reads in place (the local audit, at boot):
+// it never opens through a symbolic link at the last component — on unix the open itself refuses it (O_NOFOLLOW);
+// elsewhere an Lstat refuses it first —, so a link planted in place of the file cannot make the connector read, and
+// pass on, another file of the node. A path with nothing at it satisfies fs.ErrNotExist; a link, dangling or not,
+// is an error that does not; what is not a regular file is ErrNotRegular. The caller closes it.
+func OpenRegularNoFollow(path string) (*os.File, error) {
+	f, err := openReadNoFollow(path)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := regularInfo(f, path); err != nil {
+		f.Close()
+		return nil, err
+	}
+	return f, nil
+}
+
+// openExisting opens path with openRead and tells a dangling link (ErrDanglingLink) from a path with nothing at
+// it (fs.ErrNotExist).
+func openExisting(path string) (*os.File, error) {
 	f, err := openRead(path)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
@@ -49,18 +97,25 @@ func ReadBounded(path string, limit int64) ([]byte, error) {
 		}
 		return nil, err
 	}
-	defer f.Close()
-	return readRegular(f, path, limit)
+	return f, nil
 }
 
-// readRegular reads the open file f if, and only if, the descriptor is a regular file and fits in limit bytes.
-func readRegular(f *os.File, name string, limit int64) ([]byte, error) {
+// regularInfo returns the FileInfo of the open descriptor f, or ErrNotRegular when it is not a regular file.
+func regularInfo(f *os.File, name string) (fs.FileInfo, error) {
 	fi, err := f.Stat()
 	if err != nil {
 		return nil, err
 	}
 	if !fi.Mode().IsRegular() {
 		return nil, fmt.Errorf("%w: %s", ErrNotRegular, name)
+	}
+	return fi, nil
+}
+
+// readRegular reads the open file f if, and only if, the descriptor is a regular file and fits in limit bytes.
+func readRegular(f *os.File, name string, limit int64) ([]byte, error) {
+	if _, err := regularInfo(f, name); err != nil {
+		return nil, err
 	}
 	// one byte past the cap tells a file that grew while it was read from one that fits exactly
 	b, err := io.ReadAll(io.LimitReader(f, limit+1))
@@ -123,8 +178,10 @@ const tempInfix = ".tmp-"
 
 // RemoveOrphanTemps removes the temporary files an interrupted WriteAtomic(path, ...) left behind — a crash between
 // creating the temporary file and renaming it — and returns how many it removed. Only the files that are named
-// exactly like WriteAtomic names them for this path (the name of path, ".tmp-", a suffix) go; the directory is
-// shared with the other state files of the connector, whose leftovers belong to them. Directories are never
+// exactly like WriteAtomic names them for this path go: the name of path, ".tmp-" and the suffix os.CreateTemp
+// generates, which is decimal digits only (TestCreateTempGeraSufixoDeDigitosQueALimpezaReconhece pins it). The
+// directory is shared with the other state files of the connector, whose leftovers belong to them, and a file of
+// the operator's that merely shares the prefix ("budget.json.tmp-old") is not a temporary. Directories are never
 // touched. It assumes no WriteAtomic of the same path is running. A directory that does not exist has nothing to
 // clean; a file that cannot be removed is reported in the error (all the others are still removed).
 func RemoveOrphanTemps(path string) (removed int, err error) {
@@ -138,7 +195,8 @@ func RemoveOrphanTemps(path string) (removed int, err error) {
 	}
 	var errs []error
 	for _, e := range entries {
-		if e.IsDir() || !strings.HasPrefix(e.Name(), prefix) {
+		suffix, ok := strings.CutPrefix(e.Name(), prefix)
+		if e.IsDir() || !ok || !decimalDigits(suffix) {
 			continue
 		}
 		if rerr := os.Remove(filepath.Join(dir, e.Name())); rerr != nil && !errors.Is(rerr, fs.ErrNotExist) {
@@ -148,6 +206,19 @@ func RemoveOrphanTemps(path string) (removed int, err error) {
 		removed++
 	}
 	return removed, errors.Join(errs...)
+}
+
+// decimalDigits reports whether s is a non-empty run of the ASCII digits 0-9 (and nothing else).
+func decimalDigits(s string) bool {
+	if s == "" {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		if s[i] < '0' || s[i] > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 // ErrNotDurable: WriteAtomic renamed the new content into place, but could not confirm that the directory entry
@@ -166,16 +237,68 @@ func syncDir(dir string) error {
 		return err
 	}
 	defer d.Close()
-	if err := d.Sync(); err != nil && !dirSyncUnsupported(err) {
+	if err := syncHandle(d); err != nil && !dirSyncUnsupported(err) {
 		return err
 	}
 	return nil
 }
 
+// syncHandle is (*os.File).Sync on the directory syncDir opened. It is a variable only so that a test can make a
+// real directory's sync fail (an fsync EIO cannot be provoked on demand).
+var syncHandle = (*os.File).Sync
+
 // dirSyncUnsupported reports whether err only says that this filesystem cannot sync a directory: EINVAL, or ENOTSUP
 // (EOPNOTSUPP is the same errno on Linux and the name the BSDs and macOS use). Nothing else is tolerated.
 func dirSyncUnsupported(err error) bool {
 	return errors.Is(err, syscall.EINVAL) || errors.Is(err, syscall.ENOTSUP) || errors.Is(err, syscall.EOPNOTSUPP)
+}
+
+// SyncDir makes the entries of the directory dir durable: what the creation, rename or removal of a file inside it
+// needs to survive a power cut. It is WriteAtomic's directory sync, with its rules: skipped on Windows (a directory
+// cannot be opened for it), EINVAL and ENOTSUP tolerated (the filesystem only says it cannot sync a directory), any
+// other error returned.
+func SyncDir(dir string) error { return syncDirectory(dir) }
+
+// OpenAppend opens the file at path for appending — every write lands at the end, whatever the offset — creating
+// it with mode 0600 when it does not exist (an existing file keeps its mode and content). The opened descriptor must
+// be a regular file or it is ErrNotRegular, and nothing stays open. On unix it never opens through a symbolic link
+// at the last component, does not block on a FIFO and takes no controlling terminal. The caller writes, Syncs and
+// closes it; in a file it has just created, nothing written counts as durable before a SyncDir of its directory.
+func OpenAppend(path string) (*os.File, error) {
+	f, err := openAppend(path)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := regularInfo(f, path); err != nil {
+		f.Close()
+		return nil, err
+	}
+	return f, nil
+}
+
+// TruncateDurable cuts the existing regular file at path down to size bytes and fsyncs it, so that the cut survives
+// a power cut: it undoes an append that failed (whatever part of it reached the file goes) and discards a partial
+// last line. It only shrinks — a size beyond the end, which would fill the gap with zeros, is refused, and so is a
+// negative one — never creates the file, refuses what is not a regular file and, on unix, never goes through a
+// symbolic link. After an error the cut may or may not have happened, or may not be durable: the caller must not
+// rely on the content of the file.
+func TruncateDurable(path string, size int64) error {
+	f, err := openTruncate(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	fi, err := regularInfo(f, path)
+	if err != nil {
+		return err
+	}
+	if size < 0 || size > fi.Size() {
+		return fmt.Errorf("fsutil: corte para %d bytes num arquivo de %d: %s", size, fi.Size(), path)
+	}
+	if err := f.Truncate(size); err != nil {
+		return err
+	}
+	return f.Sync()
 }
 
 // LooseMode reports whether the file at path can be reached by its group or by others, that is, whether it has any
