@@ -356,6 +356,57 @@ func TestAtNoFuturoNaoSilenciaOAntiEnchente(t *testing.T) {
 	}
 }
 
+// A fronteira exata do clamp: um at de boot + 10 min ainda conta (os limites são retomados dele, nada no FutureAt);
+// boot + 10 min + 1 s já é do futuro, para os três eventos do anti-enchente. Uma janela mais larga ou mais estreita
+// que 10 min falha aqui.
+func TestFronteiraDoAtNoFuturoEDezMinutos(t *testing.T) {
+	kinds := []contract.AuditEvent{contract.AuditEventUnauthenticated, contract.AuditEventRedelivered, contract.AuditEventVersionMismatch}
+	write := func(t *testing.T, at string) string {
+		t.Helper()
+		dir := t.TempDir()
+		cfg := defaultConfig()
+		if err := os.WriteFile(filepath.Join(dir, RejectFileName), nil, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		appendChained(t, dir, cfg.reject, newUnauthenticated(at, contract.AuditUnauthenticated{Since: at, BadEnvelope: 1}))
+		appendChained(t, dir, cfg.reject, newRedelivered(at, contract.AuditRedelivered{Since: at, Count: 1}))
+		vm, err := newVersionMismatch(at, []string{"1.0"}, []string{"2.0"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		appendChained(t, dir, cfg.reject, vm)
+		return dir
+	}
+
+	edge := utcAt(VersionMismatchWindow) // boot + 10 min: ainda vale
+	l, sink := openAt(t, write(t, edge), defaultConfig())
+	if rec := l.Status().Reject.Recovery; len(rec.FutureAt) != 0 || len(sink.lines()) != 0 {
+		t.Fatalf("at = boot + 10 min não é do futuro: %+v, logs %v", rec.FutureAt, sink.lines())
+	}
+	// retomado: um version_mismatch 9 min 59 s depois da linha restaurada não sai
+	if err := l.VersionMismatch(boot(VersionMismatchWindow+VersionMismatchWindow-time.Second), []string{"1.0"}, []string{"2.0"}); err != nil {
+		t.Fatal(err)
+	}
+	if n := len(ofEvent(rejectEntries(t, l.reject.dir), contract.AuditEventVersionMismatch)); n != 1 {
+		t.Fatalf("o limite não foi retomado da linha de boot + 10 min: %d linhas version_mismatch", n)
+	}
+
+	past := utcAt(VersionMismatchWindow + time.Second) // boot + 10 min + 1 s: do futuro
+	l, sink = openAt(t, write(t, past), defaultConfig())
+	rec := l.Status().Reject.Recovery
+	if len(rec.FutureAt) != len(kinds) {
+		t.Fatalf("at = boot + 10 min + 1 s devia ser do futuro nos três eventos: %+v", rec.FutureAt)
+	}
+	for i, f := range rec.FutureAt {
+		if f.Event != kinds[i] || !f.At.Equal(at(t, past)) {
+			t.Fatalf("FutureAt[%d] = %+v", i, f)
+		}
+	}
+	if logs := sink.lines(); len(logs) != 1 || !strings.Contains(logs[0], "level=WARN") {
+		t.Fatalf("esperava um WARN, veio %v", logs)
+	}
+}
+
 // Um at restaurado até boot + 10 min (relógio que voltou um pouco no reinício) ainda vale: os limites seguem
 // atravessando o reinício, e nada vai para o FutureAt.
 func TestAtRestauradoDentroDaJanelaAindaVale(t *testing.T) {
