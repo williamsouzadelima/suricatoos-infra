@@ -131,8 +131,9 @@ func (c *Clock) load(data []byte) error {
 	if st.Version != fileVersion {
 		return fmt.Errorf("versão %d desconhecida", st.Version)
 	}
+	// the mark read is not durable yet: after a crash of the process the file may be a WriteAtomic whose directory
+	// sync never completed; the first Persist (the store's boot) writes it again
 	c.mark = time.Unix(0, st.MarkNS).UTC()
-	c.durable = c.mark
 	return nil
 }
 

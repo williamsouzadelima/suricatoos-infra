@@ -237,3 +237,27 @@ func TestOpenStateDirVazioEErro(t *testing.T) {
 		t.Fatal("FLEET_STATE_DIR vazio devia ser erro")
 	}
 }
+
+// A marca lida no Open só conta como durável depois de regravada: depois de uma queda do processo, o clock.json lido
+// pode ser um WriteAtomic cujo sync do diretório não terminou. O primeiro Persist a grava de novo (o boot do store faz
+// isso), mesmo sem marca nova; depois dele, sem marca nova, nada se regrava.
+func TestMarcaLidaSoContaComoDuravelDepoisDeRegravada(t *testing.T) {
+	dir := t.TempDir()
+	c := openClock(t, dir)
+	c.Now(t0)
+	if err := c.Persist(); err != nil {
+		t.Fatal(err)
+	}
+	c2 := openClock(t, dir)
+	w := &writes{}
+	w.install(c2)
+	if err := c2.Persist(); err != nil || w.n != 1 {
+		t.Fatalf("a marca lida devia ser regravada uma vez: err=%v gravações=%d", err, w.n)
+	}
+	if err := c2.Persist(); err != nil || w.n != 1 {
+		t.Fatalf("depois de confirmada, sem marca nova, nada se regrava: err=%v gravações=%d", err, w.n)
+	}
+	if got := openClock(t, dir).Mark(); !got.Equal(t0) {
+		t.Fatalf("marca %v", got)
+	}
+}
