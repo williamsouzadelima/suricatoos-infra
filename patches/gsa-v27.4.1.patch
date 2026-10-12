@@ -21672,10 +21672,10 @@ index 0000000..35d0344
 +});
 diff --git a/src/web/utils/suricatoosColors.ts b/src/web/utils/suricatoosColors.ts
 new file mode 100644
-index 0000000..077508c
+index 0000000..196f3d8
 --- /dev/null
 +++ b/src/web/utils/suricatoosColors.ts
-@@ -0,0 +1,38 @@
+@@ -0,0 +1,40 @@
 +/* SPDX-FileCopyrightText: 2026 Suricatoos
 + *
 + * SPDX-License-Identifier: AGPL-3.0-or-later
@@ -21686,8 +21686,10 @@ index 0000000..077508c
 + * which has a value for the light and another for the dark scheme, so the page
 + * follows the scheme. The fallback of each var() is the value of the light
 + * scheme, for a page that the theme does not reach (the test suricatoosContrast
-+ * keeps the fallbacks equal to the theme). All of them read on every surface of
-+ * the theme with 4.5:1 (WCAG 2.1 AA), as the same test measures. */
++ * keeps the fallbacks equal to the theme). The text colors (text, dimText,
++ * dangerText) read on every surface of the theme with 4.5:1 (WCAG 2.1 AA) and
++ * controlBorder, the boundary of a field, has 3:1 against its surroundings (WCAG
++ * 1.4.11), as the same test measures; the others are fills and decorative borders. */
 +
 +export const SurColors = {
 +  text: 'var(--sur-text, #0f1825)',
