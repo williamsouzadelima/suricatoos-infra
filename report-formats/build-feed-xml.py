@@ -37,7 +37,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 BUNDLE = os.path.join(HERE, "suricatoos-premium-pdf")
 MANIFEST = os.path.join(HERE, "manifest.json")
 
-VERSION = "20261012e"
+VERSION = "20261012f"
 
 # O `format' do contrato da frota (ADR-0011): o mesmo nos nove objetos.
 FORMAT = "suricatoos-pdf"
