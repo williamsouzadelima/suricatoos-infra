@@ -26,6 +26,7 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
+	"slices"
 	"strings"
 )
 
@@ -106,9 +107,10 @@ func New(allowSpec, selfDenySpec string, opts ...Option) (*Scope, error) {
 // connector adds the hub's addresses (resolved from FLEET_HUB_URL at start-up and
 // on every connection, plus each connection's remote IP) and swaps its pointer
 // atomically. s itself is never modified. An IPv4-mapped address counts as its
-// IPv4 and a zone is dropped, as targets are compared without them; an invalid
-// (zero) address is an error, since a deny that silently didn't happen would fail
-// open.
+// IPv4 and a zone is dropped, as targets are compared without them; an address
+// already present is skipped, so chaining WithSelfDeny on every connection keeps
+// the list bounded; an invalid (zero) address is an error, since a deny that
+// silently didn't happen would fail open.
 func (s *Scope) WithSelfDeny(ips ...netip.Addr) (*Scope, error) {
 	deny := make([]netip.Addr, len(s.deny), len(s.deny)+len(ips))
 	copy(deny, s.deny)
@@ -116,7 +118,9 @@ func (s *Scope) WithSelfDeny(ips ...netip.Addr) (*Scope, error) {
 		if !ip.IsValid() {
 			return nil, errors.New("self-deny: endereço inválido")
 		}
-		deny = append(deny, ip.Unmap().WithZone(""))
+		if ip = ip.Unmap().WithZone(""); !slices.Contains(deny, ip) {
+			deny = append(deny, ip)
+		}
 	}
 	n := *s
 	n.deny = deny

@@ -309,3 +309,25 @@ func TestParseSelfDenyStrict(t *testing.T) {
 		t.Errorf("spec vazio não tem token ruim: %v %v", got, err)
 	}
 }
+
+// TestWithSelfDenySkipsAddressesAlreadyPresent: o conector soma os IPs do hub a
+// cada conexão; encadeado, o self-deny não cresce com o que já está lá — nem
+// repetido na mesma chamada, nem na forma IPv4-mapeada.
+func TestWithSelfDenySkipsAddressesAlreadyPresent(t *testing.T) {
+	base, _ := New(hubAllow, "192.0.2.10")
+	hub := netip.MustParseAddr(hubIP)
+	s := base
+	for range 100 {
+		next, err := s.WithSelfDeny(hub, hub, netip.MustParseAddr("::ffff:"+hubIP), netip.MustParseAddr("192.0.2.10"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		s = next
+	}
+	if got, want := len(s.deny), len(base.deny)+1; got != want {
+		t.Fatalf("self-deny cresceu para %d endereços, quer %d (só o hub é novo)", got, want)
+	}
+	if _, err := s.CheckHost(hubIP); err == nil {
+		t.Fatal("o hub segue negado")
+	}
+}
