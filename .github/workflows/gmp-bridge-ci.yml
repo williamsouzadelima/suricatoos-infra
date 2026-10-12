@@ -3,10 +3,11 @@ name: gmp-bridge-ci
 on:
   push:
     branches: [main, "feat/**"]
-    # fleet_ops outputs are validated against the ADR-0011 schemas: a schema change re-runs it.
-    paths: ["gmp-bridge/**", "schema/fleet-*.json", ".github/workflows/gmp-bridge-ci.yml"]
+    # fleet_ops outputs are validated against the ADR-0011 schemas, and its request validation
+    # against the contract's command examples: a change to either re-runs it.
+    paths: ["gmp-bridge/**", "schema/fleet-*.json", "schema/examples/fleet/**", ".github/workflows/gmp-bridge-ci.yml"]
   pull_request:
-    paths: ["gmp-bridge/**", "schema/fleet-*.json", ".github/workflows/gmp-bridge-ci.yml"]
+    paths: ["gmp-bridge/**", "schema/fleet-*.json", "schema/examples/fleet/**", ".github/workflows/gmp-bridge-ci.yml"]
 
 permissions:
   contents: read
