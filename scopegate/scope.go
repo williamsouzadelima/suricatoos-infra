@@ -55,10 +55,12 @@ type options struct {
 // LogSelfDenyCIDR puts the rule "a CIDR that CONTAINS a self-deny IP" (e.g. the
 // /24 of the LAN where the node lives) in LOG mode for CheckHost and Filter: the
 // CIDR passes and warn is called once per check with the canonical CIDR and the
-// reason — never the self-deny IP — so the caller logs one line. It is how the
-// sensor rolls the rule out (ADR-0011 D7); without it, or with a nil warn, the
-// rule is enforced. A self-deny IP on its own — bare, /32 or /128 — is always
-// denied.
+// reason — never the self-deny IP — so the caller logs one line. warn is called
+// from whichever goroutine is checking, possibly several at once (a *Scope is
+// shared), so it must be safe for concurrent use: log.Printf is, appending to a
+// shared slice is not. It is how the sensor rolls the rule out (ADR-0011 D7);
+// without it, or with a nil warn, the rule is enforced. A self-deny IP on its own
+// — bare, /32 or /128 — is always denied.
 func LogSelfDenyCIDR(warn func(cidr, reason string)) Option {
 	return func(o *options) { o.warnSelfDenyCIDR = warn }
 }
