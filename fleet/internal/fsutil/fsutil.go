@@ -78,8 +78,7 @@ func readRegular(f *os.File, name string, limit int64) ([]byte, error) {
 // ErrNotDurable: the new content IS in place and readers see it, but nothing says it survives a power cut, so the
 // caller must not treat the replacement as recorded (it answers unavailable and tries again). The directory sync
 // is skipped on Windows, where a directory cannot be opened for it, and a filesystem that only says it cannot sync
-// a directory (EINVAL, or errors.ErrUnsupported: ENOTSUP, EOPNOTSUPP, ENOSYS) is tolerated; any other error,
-// such as EIO, is returned.
+// a directory (EINVAL or ENOTSUP) is tolerated; any other error, such as EIO, is returned.
 func WriteAtomic(path string, data []byte) (err error) {
 	dir := filepath.Dir(path)
 	f, err := os.CreateTemp(dir, filepath.Base(path)+tempInfix+"*") // created with mode 0600
@@ -168,9 +167,10 @@ func syncDir(dir string) error {
 	return nil
 }
 
-// dirSyncUnsupported reports whether err only says that this filesystem cannot sync a directory.
+// dirSyncUnsupported reports whether err only says that this filesystem cannot sync a directory: EINVAL, or ENOTSUP
+// (EOPNOTSUPP is the same errno on Linux and the name the BSDs and macOS use). Nothing else is tolerated.
 func dirSyncUnsupported(err error) bool {
-	return errors.Is(err, syscall.EINVAL) || errors.Is(err, errors.ErrUnsupported)
+	return errors.Is(err, syscall.EINVAL) || errors.Is(err, syscall.ENOTSUP) || errors.Is(err, syscall.EOPNOTSUPP)
 }
 
 // LooseMode reports whether the file at path can be reached by its group or by others, that is, whether it has any

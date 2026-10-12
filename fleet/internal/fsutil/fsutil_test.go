@@ -266,13 +266,11 @@ func TestWriteAtomicSemErroNoSyncDoDiretorioDevolveNil(t *testing.T) {
 // Só "este sistema de arquivos não sincroniza diretório" é tolerado; qualquer outro erro de E/S não é.
 func TestDirSyncToleraSoONaoSuportado(t *testing.T) {
 	tolerated := map[string]error{
-		"EINVAL":                       syscall.EINVAL,
-		"EINVAL embrulhado":            fmt.Errorf("sync: %w", syscall.EINVAL),
-		"ENOTSUP":                      syscall.ENOTSUP,
-		"EOPNOTSUPP":                   syscall.EOPNOTSUPP,
-		"ENOSYS":                       syscall.ENOSYS,
-		"errors.ErrUnsupported":        errors.ErrUnsupported,
-		"ErrUnsupported em *PathError": &fs.PathError{Op: "sync", Path: "/d", Err: errors.ErrUnsupported},
+		"EINVAL":                syscall.EINVAL,
+		"EINVAL embrulhado":     fmt.Errorf("sync: %w", syscall.EINVAL),
+		"ENOTSUP":               syscall.ENOTSUP,
+		"EOPNOTSUPP":            syscall.EOPNOTSUPP,
+		"ENOTSUP em *PathError": &fs.PathError{Op: "sync", Path: "/d", Err: syscall.ENOTSUP},
 	}
 	for name, err := range tolerated {
 		if !dirSyncUnsupported(err) {
@@ -280,14 +278,18 @@ func TestDirSyncToleraSoONaoSuportado(t *testing.T) {
 		}
 	}
 	refused := map[string]error{
-		"nil":               nil,
-		"EIO":               syscall.EIO,
-		"EIO embrulhado":    fmt.Errorf("sync: %w", syscall.EIO),
-		"EACCES":            syscall.EACCES,
-		"ENOSPC":            syscall.ENOSPC,
-		"não existe":        fs.ErrNotExist,
-		"erro qualquer":     errors.New("falhou"),
-		"EIO em *PathError": &fs.PathError{Op: "sync", Path: "/d", Err: syscall.EIO},
+		"nil": nil,
+		// só EINVAL e ENOTSUP/EOPNOTSUPP são "este sistema de arquivos não sincroniza diretório"; o resto não é
+		"ENOSYS":                       syscall.ENOSYS,
+		"errors.ErrUnsupported":        errors.ErrUnsupported,
+		"ErrUnsupported em *PathError": &fs.PathError{Op: "sync", Path: "/d", Err: errors.ErrUnsupported},
+		"EIO":                          syscall.EIO,
+		"EIO embrulhado":               fmt.Errorf("sync: %w", syscall.EIO),
+		"EACCES":                       syscall.EACCES,
+		"ENOSPC":                       syscall.ENOSPC,
+		"não existe":                   fs.ErrNotExist,
+		"erro qualquer":                errors.New("falhou"),
+		"EIO em *PathError":            &fs.PathError{Op: "sync", Path: "/d", Err: syscall.EIO},
 	}
 	for name, err := range refused {
 		if dirSyncUnsupported(err) {
