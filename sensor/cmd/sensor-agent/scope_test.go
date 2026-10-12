@@ -64,3 +64,24 @@ func TestScopeCIDRModeInvalidIsAnError(t *testing.T) {
 		t.Fatalf("valor inválido deveria falhar citando a variável, err=%v", err)
 	}
 }
+
+// TestScopeWarnsOncePerUnusableSelfDenyToken: token de SCAN_SELF_DENY_IPS que o
+// sensor não consegue usar vira UM aviso na subida, nunca erro (D7); um /32 vale
+// como o próprio IP.
+func TestScopeWarnsOncePerUnusableSelfDenyToken(t *testing.T) {
+	env := map[string]string{
+		"SCAN_SCOPE":         "192.0.2.0/24",
+		"SCAN_SELF_DENY_IPS": "192.0.2.10/32, 192.0.2.0/24, nope",
+	}
+	var logs logLines
+	sc, err := newScope(func(k string) string { return env[k] }, logs.printf)
+	if err != nil {
+		t.Fatalf("token inutilizável nunca impede a subida: %v", err)
+	}
+	if len(logs) != 2 || !strings.Contains(logs[0], `"192.0.2.0/24"`) || !strings.Contains(logs[1], `"nope"`) {
+		t.Fatalf("esperado UM aviso por token inutilizável, na ordem, veio %q", logs)
+	}
+	if _, err := sc.CheckHost("192.0.2.10"); err == nil {
+		t.Fatal("o /32 do self-deny vale como o próprio IP")
+	}
+}
