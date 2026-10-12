@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"strings"
 	"testing"
@@ -1922,10 +1923,13 @@ func TestReportOfAForeignOrNeverDeliveredJobIsNotFound(t *testing.T) {
 }
 
 // A final job is kept for the retention window counted from its LAST event — creation,
-// rejection, closure, the agent's result, the latest refused report — not from its
-// creation: closing an old APPLIED job, rejecting an old one, a result that comes in late
-// or a late refused report must restart the clock, or the data they just preserved (the
-// approver, the result, the rollback_token) is reaped by the very next Enqueue.
+// rejection, closure, verification, expiry, the agent's result, the latest refused
+// report — not from its creation: closing or verifying an old APPLIED job, rejecting an
+// old one, an expiry the sweep only finds out about when the agent next polls, a result
+// that comes in late or a late refused report must restart the clock, or the data they
+// just preserved (the approver, the result, the rollback_token) is reaped by the very
+// next Enqueue. (The clock has an absolute ceiling: see
+// TestFinalJobsAreNeverKeptBeyondTheAbsoluteCeiling.)
 func TestFinalJobsAreRetainedFromTheirLastEvent(t *testing.T) {
 	day := 24 * time.Hour
 	t0 := clockBase
@@ -1982,6 +1986,25 @@ func TestFinalJobsAreRetainedFromTheirLastEvent(t *testing.T) {
 			}
 			return j, t0.Add(8 * day)
 		}},
+		{"verified on day 10 (applied on day 0)", func(t *testing.T, r *Registry) (*RemediationJob, time.Time) {
+			r.now = at(t0)
+			j := reportedJob(t, r, appliedRun) // APPLIED, rollback_token on record: not final, so nothing reaps it while it waits for the re-scan...
+			r.now = at(t0.Add(10 * day))
+			if _, err := r.MarkVerified(j.JobID); err != nil { // ...and the verification must not hand it, result and rollback_token included, to the next Enqueue
+				t.Fatal(err)
+			}
+			return j, t0.Add(10 * day)
+		}},
+		{"swept to EXPIRED on day 8 (approved on day 0, agent offline since)", func(t *testing.T, r *Registry) (*RemediationJob, time.Time) {
+			r.now = at(t0)
+			j := jobIn(t, r, StateApproved) // 1h TTL; the sweep runs only when the agent polls
+			r.now = at(t0.Add(8 * day))
+			r.Poll("win1", "acme")
+			if got := stateOf(t, r, j.JobID); got != StateExpired {
+				t.Fatalf("the first poll after the deadline left the job %s, want EXPIRED", got)
+			}
+			return j, t0.Add(8 * day)
+		}},
 		{"control: nothing happened since day 0", func(t *testing.T, r *Registry) (*RemediationJob, time.Time) {
 			r.now = at(t0)
 			return jobIn(t, r, StateFailed), t0
@@ -1991,11 +2014,17 @@ func TestFinalJobsAreRetainedFromTheirLastEvent(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			r, _ := testReg(t)
 			j, last := tc.build(t, r)
-			// The reaper of the next Enqueue, an hour after the last event: still there...
+			built, _ := r.Get(j.JobID, "win1", "acme")
+			// The reaper of the next Enqueue, an hour after the last event: still there, and
+			// whole — the result and the rollback_token are what the retention is for...
 			r.now = at(last.Add(time.Hour))
 			enq(t, r, "win2", "acme")
-			if _, ok := r.Get(j.JobID, "win1", "acme"); !ok {
+			kept, ok := r.Get(j.JobID, "win1", "acme")
+			if !ok {
 				t.Fatal("the job was reaped an hour after its last event")
+			}
+			if !reflect.DeepEqual(kept, built) {
+				t.Errorf("the retained job is not the one that was built:\n got %+v\nwant %+v", kept, built)
 			}
 			// ...and gone only once a full retention has passed since that event.
 			r.now = at(last.Add(7*day + time.Hour))
@@ -2005,6 +2034,165 @@ func TestFinalJobsAreRetainedFromTheirLastEvent(t *testing.T) {
 			}
 		})
 	}
+}
+
+// MarkVerified and the expiry sweep stamp the moment they happened (verified_at,
+// expired_at): the retention clock reads them and the operator sees when. The stamps are
+// persisted, the expiry's is the moment the sweep ran (the first poll after the deadline,
+// which is when the queue learns of it), and a verification the disk refuses is undone
+// whole — state AND stamp — so memory and disk agree and the very same call goes through
+// once the write works again.
+func TestVerifiedAndExpiredAreStampedAndPersisted(t *testing.T) {
+	day := 24 * time.Hour
+	t0 := clockBase
+
+	t.Run("verified", func(t *testing.T) {
+		r, _ := testReg(t)
+		r.now = at(t0)
+		j := jobIn(t, r, StateApplied)
+		if got, _ := r.Get(j.JobID, "win1", "acme"); !got.VerifiedAt.IsZero() || !got.ExpiredAt.IsZero() {
+			t.Fatalf("a job APPLIED on day 0 already carries a stamp: verified_at=%v expired_at=%v", got.VerifiedAt, got.ExpiredAt)
+		}
+
+		// The write fails: the job stays APPLIED and carries no stamp.
+		r.now = at(t0.Add(10 * day))
+		failSaves(t, r)
+		if _, err := r.MarkVerified(j.JobID); err == nil || errors.Is(err, ErrNotFound) || errors.Is(err, ErrInvalidState) {
+			t.Fatalf("MarkVerified with a failing write: err = %v, want the write error", err)
+		}
+		if got, _ := r.Get(j.JobID, "win1", "acme"); got.State != StateApplied || !got.VerifiedAt.IsZero() {
+			t.Fatalf("a failed verification left state=%s verified_at=%v, want APPLIED and no stamp", got.State, got.VerifiedAt)
+		}
+
+		// The write works again: the same call goes through and stamps the moment it happens.
+		if err := os.Remove(r.path + ".tmp"); err != nil {
+			t.Fatal(err)
+		}
+		r.now = at(t0.Add(11 * day))
+		verified, err := r.MarkVerified(j.JobID)
+		if err != nil {
+			t.Fatalf("MarkVerified once the write works: %v", err)
+		}
+		check := func(where string, got *RemediationJob) {
+			t.Helper()
+			if got.State != StateVerified || !got.VerifiedAt.Equal(t0.Add(11*day)) || !got.ExpiredAt.IsZero() {
+				t.Errorf("%s: state=%s verified_at=%v expired_at=%v, want VERIFIED stamped on day 11 and no expiry", where, got.State, got.VerifiedAt, got.ExpiredAt)
+			}
+		}
+		check("answer", verified)
+		again, _ := r.Get(j.JobID, "win1", "acme")
+		check("memory", again)
+		disk, _ := onDisk(t, r).Get(j.JobID, "win1", "acme")
+		check("disk", disk)
+	})
+
+	t.Run("expired", func(t *testing.T) {
+		r, _ := testReg(t)
+		r.now = at(t0)
+		j := jobIn(t, r, StateApproved) // 1h TTL; nobody polls until day 8
+		r.now = at(t0.Add(8 * day))
+		if _, ok := r.Poll("win1", "acme"); ok {
+			t.Fatal("a job past its deadline must not be delivered")
+		}
+		check := func(where string, got *RemediationJob) {
+			t.Helper()
+			if got.State != StateExpired || !got.ExpiredAt.Equal(t0.Add(8*day)) || !got.VerifiedAt.IsZero() {
+				t.Errorf("%s: state=%s expired_at=%v verified_at=%v, want EXPIRED stamped on day 8, when the sweep ran (not the deadline)", where, got.State, got.ExpiredAt, got.VerifiedAt)
+			}
+		}
+		got, _ := r.Get(j.JobID, "win1", "acme")
+		check("memory", got)
+		disk, _ := onDisk(t, r).Get(j.JobID, "win1", "acme")
+		check("disk", disk)
+
+		// What is already expired is not swept (and so not re-stamped) by the next poll.
+		r.now = at(t0.Add(9 * day))
+		r.Poll("win1", "acme")
+		got, _ = r.Get(j.JobID, "win1", "acme")
+		check("after another poll", got)
+	})
+}
+
+// A final job's retention clock restarts with every event, and an authenticated agent
+// produces events at will: each DISTINCT report it sends for a job it was handed is
+// refused, kept, and counts as the latest event. Left at that, an agent rotating its
+// reports every few days would keep its own jobs — result, rollback_token and all — in
+// the queue for ever. So a final job is also capped to maxFinalAge (90 days) counted from
+// its CREATION, whatever happened since; a job that is not final is not touched by it
+// (nothing but an operator or the agent ends it).
+func TestFinalJobsAreNeverKeptBeyondTheAbsoluteCeiling(t *testing.T) {
+	day := 24 * time.Hour
+	t0 := clockBase
+
+	t.Run("rotating distinct late reports does not keep a final job for ever", func(t *testing.T) {
+		r, _ := testReg(t)
+		r.now = at(t0)
+		j := closedFrom(t, r, StateDelivered) // created and closed on day 0
+		present := func() bool { _, ok := r.Get(j.JobID, "win1", "acme"); return ok }
+
+		// A new report every 5 days, each followed by the Enqueue of somebody else's job
+		// (what runs the reaper): the latest event is never more than 5 days old, so the
+		// retention alone would never let go of the job.
+		for d := 5; d <= 90; d += 5 {
+			r.now = at(t0.Add(time.Duration(d) * day))
+			err := r.Report(j.JobID, "win1", "acme", &Result{Status: "applied", Detail: fmt.Sprintf("dia %d", d), RollbackToken: fmt.Sprintf("rb-%d", d)})
+			if !errors.Is(err, ErrInvalidState) {
+				t.Fatalf("day %d: report: err = %v, want ErrInvalidState (refused and kept)", d, err)
+			}
+			enq(t, r, "win2", "acme")
+			if !present() {
+				t.Fatalf("day %d: the job was reaped before the ceiling", d)
+			}
+		}
+		// Day 90 itself is not BEYOND the ceiling: the job was still there above, with a
+		// report from that very instant. A minute later it goes, report or no report.
+		r.now = at(t0.Add(90*day + time.Minute))
+		enq(t, r, "win2", "acme")
+		if present() {
+			t.Error("the job outlived CreatedAt + 90 days, kept alive by the reports it kept sending")
+		}
+		// Sending one more does not bring it back: the agent now hears 404, like for any
+		// job the queue no longer has.
+		r.now = at(t0.Add(95 * day))
+		if err := r.Report(j.JobID, "win1", "acme", &Result{Status: "applied", Detail: "dia 95", RollbackToken: "rb-95"}); !errors.Is(err, ErrNotFound) {
+			t.Errorf("report on the reaped job: err = %v, want ErrNotFound", err)
+		}
+	})
+
+	t.Run("an explicit retention longer than the ceiling does not outlive it", func(t *testing.T) {
+		r, _ := testReg(t)
+		r.now = at(t0)
+		j := jobIn(t, r, StateFailed)
+		r.now = at(t0.Add(89 * day))
+		if _, err := r.Close(j.JobID, "bob", "revisto"); err != nil { // an operator event, 1 day before the ceiling
+			t.Fatal(err)
+		}
+		r.now = at(t0.Add(90 * day))
+		if n := r.Reap(365 * day); n != 0 {
+			t.Errorf("Reap on day 90 removed %d: the ceiling is CreatedAt + 90 days, not before", n)
+		}
+		r.now = at(t0.Add(91 * day))
+		if n := r.Reap(365 * day); n != 1 {
+			t.Errorf("Reap on day 91 removed %d, want the job: no retention outlives the ceiling", n)
+		}
+	})
+
+	t.Run("a job that is not final is never reaped, however old", func(t *testing.T) {
+		r, _ := testReg(t)
+		r.now = at(t0)
+		applied := jobIn(t, r, StateApplied)
+		acked := jobIn(t, r, StateAcked)
+		r.now = at(t0.Add(200 * day))
+		enq(t, r, "win2", "acme")
+		if n := r.Reap(time.Hour); n != 0 {
+			t.Errorf("Reap removed %d jobs that are not final", n)
+		}
+		for _, j := range []*RemediationJob{applied, acked} {
+			if _, ok := r.Get(j.JobID, "win1", "acme"); !ok {
+				t.Errorf("the job %s, not final, was reaped on day 200", j.JobID)
+			}
+		}
+	})
 }
 
 // CLOSED is final: it never comes back to the agent — a DELIVERED job past the

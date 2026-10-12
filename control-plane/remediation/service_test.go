@@ -1439,6 +1439,75 @@ func TestListShowsRejectedAndClosedJobs(t *testing.T) {
 	}
 }
 
+// The status routes say WHEN a job was verified or expired: verified_at in the answer of
+// the verified route and in the listing, expired_at in the listing — each only on the job
+// it belongs to. A job that was neither carries neither key.
+func TestStatusRoutesShowWhenAJobWasVerifiedOrExpired(t *testing.T) {
+	srv, reg, _ := testService(t)
+	defer srv.Close()
+	day := 24 * time.Hour
+
+	reg.now = at(clockBase)
+	applied := jobIn(t, reg, StateApplied)
+	lapsing := jobIn(t, reg, StateApproved) // 1h TTL, never handed out
+
+	reg.now = at(clockBase.Add(8 * day)) // the agent's first poll after the deadline sweeps it
+	if _, ok := reg.Poll("win1", "acme"); ok {
+		t.Fatal("the poll must not deliver a job past its deadline")
+	}
+	plain := jobIn(t, reg, StatePendingApproval)
+
+	reg.now = at(clockBase.Add(9 * day))
+	resp := adminReq(t, "POST", srv.URL+"/api/v1/remediation/jobs/"+applied.JobID+"/verified", `{"verified_by":"alice"}`, "")
+	answer := decodeJob(t, resp)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK || answer == nil || answer.State != StateVerified || !answer.VerifiedAt.Equal(clockBase.Add(9*day)) {
+		t.Errorf("verified = %d, job %+v: want 200 and the VERIFIED job stamped on day 9", resp.StatusCode, answer)
+	}
+
+	code, raw, _ := getList(t, srv, "")
+	if code != http.StatusOK {
+		t.Fatalf("list = %d (%s)", code, raw)
+	}
+	var parsed struct {
+		Jobs []map[string]json.RawMessage `json:"jobs"`
+	}
+	if err := json.Unmarshal([]byte(raw), &parsed); err != nil {
+		t.Fatal(err)
+	}
+	byID := map[string]map[string]json.RawMessage{}
+	for _, j := range parsed.Jobs {
+		var id string
+		_ = json.Unmarshal(j["job_id"], &id)
+		byID[id] = j
+	}
+	for _, tc := range []struct {
+		name              string
+		id                string
+		verified, expired time.Time // the stamp the listing must show; zero = the key must be absent
+	}{
+		{"verified", applied.JobID, clockBase.Add(9 * day), time.Time{}},
+		{"expired", lapsing.JobID, time.Time{}, clockBase.Add(8 * day)},
+		{"neither", plain.JobID, time.Time{}, time.Time{}},
+	} {
+		for _, k := range []struct {
+			key  string
+			want time.Time
+		}{{"verified_at", tc.verified}, {"expired_at", tc.expired}} {
+			rawStamp, present := byID[tc.id][k.key]
+			switch {
+			case k.want.IsZero() && present:
+				t.Errorf("%s job: the listing should not carry %q, got %s", tc.name, k.key, rawStamp)
+			case !k.want.IsZero():
+				var got time.Time
+				if !present || json.Unmarshal(rawStamp, &got) != nil || !got.Equal(k.want) {
+					t.Errorf("%s job: %q = %s (present=%v), want %v", tc.name, k.key, rawStamp, present, k.want)
+				}
+			}
+		}
+	}
+}
+
 // A refused report is not lost: the operator finds it whole — rollback_token included —
 // in the listing and in the answer of close, next to the late_reports_total that the
 // audit line's "late_report #n" counts against. A job that never had a report refused
@@ -1576,9 +1645,9 @@ func TestRepeatedLateReportGetsTheSame409OverHTTP(t *testing.T) {
 }
 
 // The job the agent polls is the wire contract (schema/remediation-job.schema.json,
-// additionalProperties false): the fields of a rejection or a closure that never
-// happened, and of late reports that never came, stay off it instead of showing up as
-// year-1 timestamps or empty lists.
+// additionalProperties false): the fields of a rejection, a closure, a verification or
+// an expiry that never happened, and of late reports that never came, stay off it
+// instead of showing up as year-1 timestamps or empty lists.
 func TestPollBodyOmitsTheRejectAndCloseFieldsOfALiveJob(t *testing.T) {
 	srv, reg, _ := testService(t)
 	defer srv.Close()
@@ -1592,7 +1661,7 @@ func TestPollBodyOmitsTheRejectAndCloseFieldsOfALiveJob(t *testing.T) {
 	if resp.StatusCode != http.StatusOK || !strings.Contains(string(raw), `"approved_by":"op"`) {
 		t.Fatalf("poll = %d, want 200 with the approved job: %s", resp.StatusCode, raw)
 	}
-	for _, key := range []string{`"rejected_`, `"closed_`, `"late_reports`} {
+	for _, key := range []string{`"rejected_`, `"closed_`, `"late_reports`, `"verified_at`, `"expired_at`} {
 		if strings.Contains(string(raw), key) {
 			t.Errorf("the polled job should not carry %s... fields: %s", key, raw)
 		}

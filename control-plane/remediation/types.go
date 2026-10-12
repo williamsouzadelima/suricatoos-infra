@@ -153,6 +153,8 @@ type RemediationJob struct {
 	CreatedAt     time.Time       `json:"created_at"`
 	DeliveredAt   time.Time       `json:"delivered_at,omitempty"`
 	AckedAt       time.Time       `json:"acked_at,omitempty"`
+	VerifiedAt    time.Time       `json:"verified_at,omitzero"` // when an operator marked the APPLIED job VERIFIED (MarkVerified)
+	ExpiredAt     time.Time       `json:"expired_at,omitzero"`  // when the expiry sweep moved the job to EXPIRED (the poll that found the deadline lapsed)
 	Result        *Result         `json:"result,omitempty"`
 	// LateReports keeps the reports the queue refused (see Registry.Report) whole, so
 	// an operator can still reach their before/rollback_token: at most maxLateReports
@@ -177,11 +179,19 @@ type EnqueueRequest struct {
 }
 
 // lastEventAt is when something worth keeping last happened to the job: its creation, a
-// rejection, a closure, the agent's result or the latest report it refused. A final job
-// is reaped a retention AFTER this — not after its creation — so closing an old APPLIED
-// job, a result that arrives late or a late refused report restarts the clock instead of
-// handing the data they just preserved (approver, result, rollback_token) to the very
-// next Enqueue's reaper.
+// rejection, a closure, a verification, an expiry, the agent's result or the latest
+// report it refused. A final job is reaped a retention AFTER this — not after its
+// creation — so closing or verifying an old APPLIED job, an expiry that the sweep only
+// finds out about on the agent's next poll, a result that arrives late or a late refused
+// report restarts the clock instead of handing the data they just preserved (approver,
+// result, rollback_token) to the very next Enqueue's reaper. Every final state has a
+// stamp of its own here (VERIFIED: VerifiedAt, EXPIRED: ExpiredAt, REJECTED: RejectedAt,
+// CLOSED: ClosedAt, FAILED: the result's ReportedAt); jobs persisted before VerifiedAt
+// and ExpiredAt existed simply do not have those two, and fall back to the rest.
+//
+// The clock restarts, but not for ever: reapLocked also caps a final job's life to
+// maxFinalAge from its creation, because some of these events (a late report) are the
+// agent's to produce.
 func (j *RemediationJob) lastEventAt() time.Time {
 	last := j.CreatedAt
 	later := func(t time.Time) {
@@ -191,6 +201,8 @@ func (j *RemediationJob) lastEventAt() time.Time {
 	}
 	later(j.RejectedAt)
 	later(j.ClosedAt)
+	later(j.VerifiedAt)
+	later(j.ExpiredAt)
 	if j.Result != nil {
 		later(j.Result.ReportedAt)
 	}

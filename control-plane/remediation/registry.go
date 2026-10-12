@@ -96,11 +96,21 @@ func requiresSignature(s JobState) bool {
 // defaultReapRetention is how long terminal jobs are kept before Reap drops them.
 const defaultReapRetention = 7 * 24 * time.Hour
 
+// maxFinalAge is the absolute ceiling on a final job's life: it is never kept beyond
+// CreatedAt + maxFinalAge, whatever the retention says and whatever happened to it since.
+// Retention is counted from the job's last event (lastEventAt) and the agent can produce
+// events on its own jobs at will — every distinct report it sends for a job it was
+// handed is refused, kept and counts — so, without a ceiling, one that rotates its
+// reports every few days keeps the job (result, rollback_token) in the queue for ever.
+// Only final jobs have a ceiling: ACKED and APPLIED jobs are not reaped at all (see Reap).
+const maxFinalAge = 90 * 24 * time.Hour
+
 // Reap removes terminal jobs whose last event is older than retention — the last of the
-// job's creation, rejection, closure, result and refused reports, see lastEventAt, so
-// that closing an old job or a late report restarts the clock — bounding the queue
-// file's growth, and returns the count removed. Called opportunistically from Enqueue;
-// the wiring may also call it on a timer.
+// job's creation, rejection, closure, verification, expiry, result and refused reports,
+// see lastEventAt, so that closing or verifying an old job or a late report restarts the
+// clock — and those created more than maxFinalAge ago whatever their last event, bounding
+// the queue file's growth, and returns the count removed. Called opportunistically from
+// Enqueue; the wiring may also call it on a timer.
 //
 // Only TERMINAL states go (VERIFIED, FAILED, EXPIRED, REJECTED, CLOSED). ACKED and
 // APPLIED are not terminal and, since Poll no longer expires them by ExpiresAt,
@@ -122,15 +132,21 @@ func (r *Registry) Reap(retention time.Duration) int {
 }
 
 // reapLocked deletes terminal jobs whose last event (see lastEventAt) is older than
-// retention (caller holds the lock, caller persists). Returns the count removed.
+// retention, or that were created more than maxFinalAge ago (caller holds the lock,
+// caller persists). Returns the count removed.
 func (r *Registry) reapLocked(retention time.Duration) int {
 	if retention <= 0 {
 		retention = defaultReapRetention
 	}
-	cutoff := r.now().Add(-retention)
+	now := r.now()
+	cutoff := now.Add(-retention)
+	ceiling := now.Add(-maxFinalAge)
 	n := 0
 	for id, j := range r.jobs {
-		if j.State.terminal() && j.lastEventAt().Before(cutoff) {
+		if !j.State.terminal() {
+			continue
+		}
+		if j.lastEventAt().Before(cutoff) || j.CreatedAt.Before(ceiling) {
 			delete(r.jobs, id)
 			n++
 		}
@@ -376,6 +392,7 @@ func (r *Registry) Poll(agentID, tenant string) (*RemediationJob, bool) {
 		}
 		if j.State.expirable() && !j.ExpiresAt.IsZero() && now.After(j.ExpiresAt) {
 			j.State = StateExpired
+			j.ExpiredAt = now // when the queue learns of it (this poll), not the deadline: nobody saw it before
 			changed = true
 			continue
 		}
@@ -563,7 +580,9 @@ func sameReport(a, b Result) bool {
 // existing job is left unchanged and gets ErrInvalidState (a FAILED job must not
 // be resurrected, a VERIFIED one is not verified twice); an unknown id gets
 // ErrNotFound. APPLIED never expires by ExpiresAt, so a slow re-scan can still
-// close it.
+// close it. The moment is stamped on the job (VerifiedAt): a job can wait for its
+// re-scan far longer than the retention, and the retention of what it holds (result,
+// rollback_token) counts from here once it is VERIFIED.
 func (r *Registry) MarkVerified(jobID string) (*RemediationJob, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -575,8 +594,10 @@ func (r *Registry) MarkVerified(jobID string) (*RemediationJob, error) {
 		return nil, fmt.Errorf("%w: job %s não está em APPLIED (estado %s)", ErrInvalidState, jobID, j.State)
 	}
 	j.State = StateVerified
+	j.VerifiedAt = r.now().UTC()
 	if err := r.saveLocked(); err != nil {
 		j.State = StateApplied // memory and disk must agree
+		j.VerifiedAt = time.Time{}
 		return nil, err
 	}
 	return j.clone(), nil

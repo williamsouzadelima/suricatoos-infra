@@ -119,7 +119,9 @@ job no próximo poll, verifica a assinatura/janela e aplica **dentro da janela**
   `tenant`, `agent_id`; `limit` (padrão 200, máximo 1000). O `payload` e o `nonce` **não** são
   devolvidos (só o `payload_sha256`): a listagem é um resumo técnico e enxuto, **não** uma fronteira de
   confidencialidade — quem tem o bearer já vê o payload nas respostas de enqueue/approve, e o `result`
-  do agente (`detail`/`before`/`after`) pode repetir valores técnicos dele.
+  do agente (`detail`/`before`/`after`) pode repetir valores técnicos dele. Um job `VERIFIED` mostra quando
+  foi verificado (`verified_at`) e um `EXPIRED`, quando a varredura o marcou (`expired_at`); jobs gravados antes
+  desses campos existirem não os têm.
 
   ```bash
   curl -sS "https://scanner.suricatoos.com/agent/api/v1/remediation/jobs?state=APPLIED&tenant=<tenant>" \
@@ -139,10 +141,17 @@ job no próximo poll, verifica a assinatura/janela e aplica **dentro da janela**
   `APPROVED` ou `DELIVERED` sem ack viram `EXPIRED`). `ACKED` e `APPLIED` **não expiram**: o relatório
   do agente ainda é aceito depois do prazo e um job aplicado segue verificável. Jobs terminais
   (`VERIFIED`/`FAILED`/`EXPIRED`/`REJECTED`/`CLOSED`) saem da fila no próximo enfileiramento quando o
-  **último evento** deles tem mais de 7 dias — o último entre criação, rejeição, fechamento, resultado do
-  agente e último relatório recusado: fechar um job antigo, ou um relatório que chega tarde, reinicia a
-  contagem — **levando junto o `result` e os `late_reports`** (`before`/`rollback_token`), então anote o que
-  precisar antes; um job `ACKED`/`APPLIED` parado **não** é limpo sozinho — feche-o você, com cuidado:
+  **último evento** deles tem mais de 7 dias — o último entre criação, rejeição (`rejected_at`), fechamento
+  (`closed_at`), verificação (`verified_at`), expiração (`expired_at`: a hora em que o primeiro poll depois do
+  prazo varreu o job, não o `expires_at`), resultado do agente e último relatório recusado: verificar ou
+  fechar um job antigo, ou um relatório que chega tarde, reinicia a contagem — **levando junto o `result` e
+  os `late_reports`** (`before`/`rollback_token`), então anote o que precisar antes. **Teto absoluto:** um job
+  terminal nunca fica na fila além de **90 dias depois da criação** (`created_at`), aconteça o que acontecer
+  depois. Cada relatório recusado diferente reinicia a contagem de 7 dias e quem os manda é o agente; sem o
+  teto, um que os trocasse a cada poucos dias manteria os próprios jobs (e o `rollback_token` deles) na fila
+  para sempre. O teto vale para o job **terminal**: um `APPLIED` parado há mais de 90 dias continua na fila,
+  mas, se for verificado ou fechado depois disso, já nasce acima do teto e sai no próximo enfileiramento —
+  anote o `result` **antes**. Um job `ACKED`/`APPLIED` parado **não** é limpo sozinho — feche-o você, com cuidado:
   - `APPLIED`: **prefira `verified`** (preserva o aprovador e o resultado). Use `close` só se o job não vai
     ser verificado (ex.: o fix foi revertido à mão, ou o host saiu de operação).
   - `ACKED` (o agente recebeu e sumiu): hoje o agente dá o `ack` **depois** de aplicar, então um `ACKED`
@@ -248,8 +257,8 @@ job no próximo poll, verifica a assinatura/janela e aplica **dentro da janela**
   desinstalação de KB é documentada, não automática.
 - `before`/`rollback_token` só existem na nuvem no `result` do job ou, se o relatório foi recusado com `409`
   (§3), em `late_reports` (a listagem e a resposta do `close` mostram os dois); o journal do agente guarda só
-  status e horário. Saem da fila com o job terminal, 7 dias depois do último evento dele (§3): anote o que
-  precisar antes.
+  status e horário. Saem da fila com o job terminal, 7 dias depois do último evento dele e, de qualquer
+  jeito, 90 dias depois da criação (§3): anote o que precisar antes.
 - Config sob **GPO/Intune/WSUS** (`HKLM\SOFTWARE\Policies`) **não** é corrigida localmente (o domínio
   reverteria) — o achado recomenda mudar a **política**. Isso evita o fix "que não cola".
 

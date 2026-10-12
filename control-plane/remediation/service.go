@@ -418,13 +418,14 @@ func (s *Service) ListHandler() http.HandlerFunc {
 
 // jobView is what the status routes (list, close, verified) expose of a job: a compact,
 // technical summary, as an explicit allow-list (a field added to RemediationJob later
-// is NOT exposed by default — which is why rejected_*, closed_* and late_reports are
-// listed below by name). The payload (payload_sha256 identifies it) and the nonce are
-// left out to keep the listing small and technical — NOT as a confidentiality boundary:
-// the bearer holder already gets the payload in the enqueue/approve responses, and the
-// agent's result and late reports (detail/before/after/rollback_token) may repeat
-// technical values from it. The signature is public by nature. Unset timestamps are
-// omitted (omitzero) rather than printed as year 1.
+// is NOT exposed by default — which is why rejected_*, closed_*, verified_at, expired_at
+// and late_reports are listed below by name). The payload (payload_sha256 identifies it)
+// and the nonce are left out to keep the listing small and technical — NOT as a
+// confidentiality boundary: the bearer holder already gets the payload in the
+// enqueue/approve responses, and the agent's result and late reports
+// (detail/before/after/rollback_token) may repeat technical values from it. The
+// signature is public by nature. Unset timestamps are omitted (omitzero) rather than
+// printed as year 1.
 type jobView struct {
 	JobID         string    `json:"job_id"`
 	CorrelationID string    `json:"correlation_id"`
@@ -447,7 +448,9 @@ type jobView struct {
 	CreatedAt     time.Time `json:"created_at"`
 	DeliveredAt   time.Time `json:"delivered_at,omitzero"`
 	AckedAt       time.Time `json:"acked_at,omitzero"`
-	Result        *Result   `json:"result,omitempty"` // the agent's report (status/detail/before/after/rollback_token)
+	VerifiedAt    time.Time `json:"verified_at,omitzero"` // VERIFIED jobs: when an operator marked them verified
+	ExpiredAt     time.Time `json:"expired_at,omitzero"`  // EXPIRED jobs: when the sweep moved them there (the first poll past the deadline)
+	Result        *Result   `json:"result,omitempty"`     // the agent's report (status/detail/before/after/rollback_token)
 	// Reports the queue refused (409) because the job was final, or APPLIED with a
 	// different result, kept whole — rollback_token included, for the manual revert: the
 	// FIRST one (#1, pinned) and the two most recent. late_reports_total counts the ones
@@ -466,6 +469,7 @@ func newJobView(j *RemediationJob) jobView {
 		ClosedBy: j.ClosedBy, ClosedAt: j.ClosedAt, ClosedReason: j.ClosedReason,
 		NotBefore: j.NotBefore, NotAfter: j.NotAfter,
 		ExpiresAt: j.ExpiresAt, CreatedAt: j.CreatedAt, DeliveredAt: j.DeliveredAt, AckedAt: j.AckedAt,
+		VerifiedAt: j.VerifiedAt, ExpiredAt: j.ExpiredAt,
 		Result: j.Result, LateReports: j.LateReports, LateReportsTotal: j.LateReportsTotal,
 	}
 }
