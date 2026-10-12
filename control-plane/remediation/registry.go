@@ -10,6 +10,7 @@ import (
 	"log"
 	"os"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 )
@@ -95,44 +96,58 @@ func requiresSignature(s JobState) bool {
 // defaultReapRetention is how long terminal jobs are kept before Reap drops them.
 const defaultReapRetention = 7 * 24 * time.Hour
 
-// Reap removes terminal jobs older than retention (by CreatedAt), bounding the
-// queue file's growth, and returns the count removed. Called opportunistically
-// from Enqueue; the wiring may also call it on a timer.
+// Reap first sweeps to EXPIRED every job whose ExpiresAt passed before the agent took it
+// (PENDING_APPROVAL, APPROVED, DELIVERED without ack) — the rule Poll applies to the
+// polling agent's jobs, here to ALL of them, so those of an agent that never polls again
+// expire too — and then removes terminal jobs whose last event is older than retention:
+// the last of the job's creation, rejection, closure, verification, expiry, result and
+// refused reports, see lastEventAt, so that closing or verifying an old job or a late
+// report restarts the clock; the agent's late reports only up to maxLateReportAge after
+// the job's creation, so a job it alone keeps touching goes at CreatedAt +
+// maxLateReportAge + retention at the latest. That bounds the queue file's growth.
+// Returns the count removed (a job swept just now is not: it has only just become final
+// and stays a retention). Called opportunistically from Enqueue; the wiring may also call
+// it on a timer.
 //
-// Only TERMINAL states go (VERIFIED, FAILED, EXPIRED, REJECTED). ACKED and APPLIED
-// are not terminal and, since Poll no longer expires them by ExpiresAt, NOTHING
-// here removes them: an ACKED job leaves that state when the agent reports
-// (→ APPLIED/FAILED), an APPLIED one when an operator marks it verified
-// (→ VERIFIED) or rejects it. A job stuck there (agent gone, nobody verifies it)
-// stays in the queue until one of those happens — there is deliberately no
-// age-based policy for them yet.
+// Only TERMINAL states go (VERIFIED, FAILED, EXPIRED, REJECTED, CLOSED). ACKED and
+// APPLIED are not terminal and, since the sweep does not expire them by ExpiresAt,
+// NOTHING here removes them: an ACKED job leaves that state when the agent reports
+// (→ APPLIED/FAILED) or an operator closes it (→ CLOSED), an APPLIED one when an
+// operator marks it verified (→ VERIFIED) or closes it. A job stuck there (agent
+// gone, nobody verifies it) stays in the queue until one of those happens — there
+// is deliberately no age-based policy for them yet.
 func (r *Registry) Reap(retention time.Duration) int {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	n := r.reapLocked(retention)
-	if n > 0 {
+	removed, expired := r.reapLocked(retention)
+	if removed > 0 || expired > 0 {
 		if err := r.saveLocked(); err != nil {
 			log.Printf("remediation: saveLocked após reap: %v", err)
 		}
 	}
-	return n
+	return removed
 }
 
-// reapLocked deletes terminal jobs older than retention (caller holds the lock,
-// caller persists). Returns the count removed.
-func (r *Registry) reapLocked(retention time.Duration) int {
+// reapLocked sweeps to EXPIRED the jobs whose deadline lapsed (RemediationJob.expireIfLapsed)
+// and deletes the terminal ones whose last event (see lastEventAt) is older than retention
+// (caller holds the lock, caller persists). Returns how many jobs it removed and how many
+// it expired.
+func (r *Registry) reapLocked(retention time.Duration) (removed, expired int) {
 	if retention <= 0 {
 		retention = defaultReapRetention
 	}
-	cutoff := r.now().Add(-retention)
-	n := 0
+	now := r.now().UTC()
+	cutoff := now.Add(-retention)
 	for id, j := range r.jobs {
-		if j.State.terminal() && j.CreatedAt.Before(cutoff) {
+		if j.expireIfLapsed(now) {
+			expired++
+		}
+		if j.State.terminal() && j.lastEventAt().Before(cutoff) {
 			delete(r.jobs, id)
-			n++
+			removed++
 		}
 	}
-	return n
+	return removed, expired
 }
 
 // Enqueue creates a PENDING_APPROVAL job. It is NOT signed and NOT deliverable
@@ -203,9 +218,12 @@ func (r *Registry) Enqueue(req EnqueueRequest) (*RemediationJob, error) {
 // Approve records the operator's approval, sets issued_at, SIGNS the canonical
 // (binding agent/tenant/type/issued_at/expires_at/nonce/payload), and moves the
 // job to APPROVED — the first state in which it is deliverable. Only a job in
-// PENDING_APPROVAL can be approved.
+// PENDING_APPROVAL can be approved: an unknown id is ErrNotFound, any other state is
+// ErrInvalidState (and the job is left alone). Everything else — a missing signer, a
+// write that fails (which undoes the approval in memory) — is a plain error: the
+// server's problem, not a conflict with the job's state.
 func (r *Registry) Approve(jobID, approver string) (*RemediationJob, error) {
-	if approver == "" {
+	if blank(approver) {
 		return nil, fmt.Errorf("aprovador obrigatório")
 	}
 	r.mu.Lock()
@@ -215,7 +233,7 @@ func (r *Registry) Approve(jobID, approver string) (*RemediationJob, error) {
 		return nil, ErrNotFound
 	}
 	if j.State != StatePendingApproval {
-		return nil, fmt.Errorf("job %s não está em PENDING_APPROVAL (estado %s)", jobID, j.State)
+		return nil, fmt.Errorf("%w: job %s não está em PENDING_APPROVAL (estado %s)", ErrInvalidState, jobID, j.State)
 	}
 	if r.signer == nil {
 		return nil, fmt.Errorf("signer de remediação não configurado")
@@ -235,39 +253,118 @@ func (r *Registry) Approve(jobID, approver string) (*RemediationJob, error) {
 	return j.clone(), nil
 }
 
-// Reject terminally rejects a job (records who). Idempotent on terminal jobs.
+// Reject terminally rejects a job that the agent has NOT received yet — only
+// PENDING_APPROVAL or APPROVED qualify — and records who in RejectedBy/RejectedAt.
+// The approval (ApprovedBy/ApprovedAt, which the job's signature covers) is left
+// exactly as it was.
 //
-// It overwrites ApprovedBy/ApprovedAt with the rejecter — which erases the approver
-// of a signed (possibly already applied) change — so every effective rejection
-// writes ONE audit log line that keeps the previous state and the previous approver
-// (a no-op on a terminal job writes none). It does NOT recall a job already handed
-// to the agent: it only takes the job out of the queue (no redelivery; a late
-// Report is discarded). Which states may be rejected is unchanged here — any
-// non-terminal one; narrowing that is a tracked follow-up.
-func (r *Registry) Reject(jobID, approver string) error {
+// A job that is already REJECTED is a quiet success (a double click, a retried
+// request): there is nothing to do, so nothing changes — the first rejecter and time
+// stay on record — and nothing is audited. Any other existing job is ErrInvalidState
+// and is left alone: one the agent holds (DELIVERED, ACKED, APPLIED, FAILED) may be
+// applying, or may already have applied, a change, and "rejected" would be false about
+// it — Close is the operation for taking it out of the queue. An unknown id is
+// ErrNotFound. A write that fails undoes the change in memory (as Approve does) and
+// returns the error. Every effective rejection writes ONE audit line, values quoted.
+func (r *Registry) Reject(jobID, rejecter string) error {
+	if blank(rejecter) {
+		return fmt.Errorf("operador obrigatório")
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	j, ok := r.jobs[jobID]
 	if !ok {
 		return ErrNotFound
 	}
-	if j.State.terminal() {
+	if j.State == StateRejected {
 		return nil
 	}
-	prevState, prevBy, prevAt := j.State, j.ApprovedBy, j.ApprovedAt
+	if j.State != StatePendingApproval && j.State != StateApproved {
+		hint := "" // suggest close only where close would work
+		if closable(j.State) {
+			hint = "; um job já entregue ao agente se fecha com close"
+		}
+		return fmt.Errorf("%w: job %s não pode ser rejeitado em %s (só PENDING_APPROVAL ou APPROVED%s)", ErrInvalidState, jobID, j.State, hint)
+	}
+	prevState := j.State
 	j.State = StateRejected
-	j.ApprovedBy = approver
-	j.ApprovedAt = r.now().UTC()
+	j.RejectedBy, j.RejectedAt = rejecter, r.now().UTC()
 	if err := r.saveLocked(); err != nil {
+		j.State = prevState
+		j.RejectedBy, j.RejectedAt = "", time.Time{}
 		return err
 	}
-	prevWhen := "-"
-	if !prevAt.IsZero() {
-		prevWhen = prevAt.UTC().Format(time.RFC3339)
-	}
-	log.Printf("remediation: job %s rejeitado por %q (estado anterior %s; aprovador anterior %q em %s; tenant=%s agent=%s)",
-		jobID, approver, prevState, prevBy, prevWhen, j.Tenant, j.AgentID)
+	log.Printf("remediation: job %s rejeitado por %q (estado anterior %s; aprovador %q em %s; tenant=%q agent=%q)",
+		jobID, rejecter, prevState, j.ApprovedBy, whenOrDash(j.ApprovedAt), j.Tenant, j.AgentID)
 	return nil
+}
+
+// maxCloseReason caps the reason given to Close, in bytes: it goes into the audit line and
+// onto the job, so a longer one is refused instead of bloating either.
+const maxCloseReason = 1024
+
+// Close takes a job the agent has already received out of the queue without saying
+// anything untrue about it: a DELIVERED, ACKED, APPLIED or FAILED job becomes CLOSED,
+// recording WHO closed it, WHEN and (optionally) WHY, and everything else stays as it
+// was — the approver (the job's signature covers it), the delivery times and the
+// agent's Result with its before/rollback_token.
+//
+// This is what Reject cannot do. Reject is for a job nobody has received; a job in the
+// agent's hands may be applying, or may already have applied, a change. Closing it
+// stops the redelivery but claims nothing about the host: the change, if there was
+// one, is checked and reverted by hand (rollback_token). Any other existing state is
+// ErrInvalidState and the job is left alone; an unknown id is ErrNotFound; a write
+// that fails undoes the change in memory (as Approve does) and returns the error.
+// Every effective close writes ONE audit line, values quoted.
+func (r *Registry) Close(jobID, closer, reason string) (*RemediationJob, error) {
+	if blank(closer) {
+		return nil, fmt.Errorf("operador obrigatório")
+	}
+	if len(reason) > maxCloseReason {
+		return nil, fmt.Errorf("motivo muito longo (%d bytes; no máximo %d)", len(reason), maxCloseReason)
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	j, ok := r.jobs[jobID]
+	if !ok {
+		return nil, ErrNotFound
+	}
+	if !closable(j.State) {
+		return nil, fmt.Errorf("%w: job %s não pode ser fechado em %s (só DELIVERED, ACKED, APPLIED ou FAILED)", ErrInvalidState, jobID, j.State)
+	}
+	prevState := j.State
+	j.State = StateClosed
+	j.ClosedBy, j.ClosedAt, j.ClosedReason = closer, r.now().UTC(), reason
+	if err := r.saveLocked(); err != nil {
+		j.State = prevState
+		j.ClosedBy, j.ClosedAt, j.ClosedReason = "", time.Time{}, ""
+		return nil, err
+	}
+	log.Printf("remediation: job %s fechado por %q (estado anterior %s; aprovador %q em %s; motivo %q; tenant=%q agent=%q)",
+		jobID, closer, prevState, j.ApprovedBy, whenOrDash(j.ApprovedAt), reason, j.Tenant, j.AgentID)
+	return j.clone(), nil
+}
+
+// closable reports whether Close accepts a job in state s: the ones the agent holds.
+func closable(s JobState) bool {
+	switch s {
+	case StateDelivered, StateAcked, StateApplied, StateFailed:
+		return true
+	}
+	return false
+}
+
+// blank reports whether who names no one — empty or only whitespace. approve, reject and
+// close refuse such an operator themselves, so the audit trail never says "by nobody"
+// even for a caller that skipped the handler's check.
+func blank(who string) bool { return strings.TrimSpace(who) == "" }
+
+// whenOrDash renders t for an audit line: UTC RFC3339, or "-" when it was never set.
+func whenOrDash(t time.Time) string {
+	if t.IsZero() {
+		return "-"
+	}
+	return t.UTC().Format(time.RFC3339)
 }
 
 // Poll returns the next deliverable job for the agent identified by (agentID,
@@ -276,7 +373,9 @@ func (r *Registry) Reject(jobID, approver string) error {
 // maintenance window are held. Jobs whose ExpiresAt lapsed BEFORE the agent took
 // them (PENDING_APPROVAL, APPROVED, DELIVERED-unacked) are swept to EXPIRED; an
 // ACKED or APPLIED job is never expired here (see JobState.expirable), so a late
-// Report still lands and an applied job stays verifiable. A job for a DIFFERENT
+// Report still lands and an applied job stays verifiable. (The reaper runs the same
+// sweep on EVERY agent's jobs, see Reap, so those of an agent that stops polling expire
+// as well; this one makes the polling agent's expire at once.) A job for a DIFFERENT
 // agent or tenant is never returned.
 func (r *Registry) Poll(agentID, tenant string) (*RemediationJob, bool) {
 	r.mu.Lock()
@@ -289,8 +388,7 @@ func (r *Registry) Poll(agentID, tenant string) (*RemediationJob, bool) {
 		if j.AgentID != agentID || j.Tenant != tenant || j.State.terminal() {
 			continue
 		}
-		if j.State.expirable() && !j.ExpiresAt.IsZero() && now.After(j.ExpiresAt) {
-			j.State = StateExpired
+		if j.expireIfLapsed(now) { // ExpiredAt = this poll: when the queue learns of it, not the deadline
 			changed = true
 			continue
 		}
@@ -354,30 +452,72 @@ func (r *Registry) Ack(jobID, agentID, tenant string) bool {
 }
 
 // Report records the agent's apply result, moving the job to APPLIED (status
-// "applied") or FAILED (anything else). Scoped to (agentID, tenant). Terminal
-// jobs are left as-is (idempotent). APPLIED is NOT terminal — the server still
-// must verify by re-scan.
-func (r *Registry) Report(jobID, agentID, tenant string, res *Result) bool {
+// "applied") or FAILED (anything else). Scoped to (agentID, tenant): a foreign or
+// unknown id is ErrNotFound, silently. So is a job the agent was never handed
+// (DeliveredAt unset: pending, approved, or rejected or expired before the poll
+// delivered it), which has nothing to report — but that one is logged, on a line of its
+// own ("relatório de job nunca entregue"), and nothing is kept.
+//
+// A job the agent was handed that already holds its result — a FINAL one (VERIFIED,
+// FAILED, EXPIRED, REJECTED, CLOSED, the last three possibly without any) or APPLIED,
+// which is not final (the server still verifies by re-scan) but whose result is on
+// record all the same — takes no other. If the report is exactly the one it holds — a
+// retry — it is an idempotent success. Anything else is a late report the queue can no
+// longer honour: the agent applied (or says it tried) something on a job that was
+// closed or expired, or contradicts what it reported before. That is ErrInvalidState
+// (409, so the agent is told too); the stored Result and the state stay untouched; ONE
+// audit line records the job, its state, the status reported and the report's number
+// ("late_report #n") — the operator has to know a change may have reached a host — and
+// the report itself is kept WHOLE in LateReports (the first one, pinned, and the two
+// most recent, persisted), because its before/rollback_token are the only copy of how
+// to revert it: the audit line stays at status and state, the operator reads the rest
+// on the job. A report equal to one already kept gets the very same 409 and nothing
+// else: not stored again, not written, not audited again.
+func (r *Registry) Report(jobID, agentID, tenant string, res *Result) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	j, ok := r.jobs[jobID]
 	if !ok || j.AgentID != agentID || j.Tenant != tenant {
-		return false
-	}
-	// Idempotent / no-clobber: once a result is in (APPLIED) or the job is final,
-	// a repeated report must NOT overwrite the recorded Result (incl. before/
-	// rollback_token) nor flip the state.
-	if j.State == StateApplied || j.State.terminal() {
-		return true
-	}
-	// A report is only valid AFTER delivery: the agent must have actually received
-	// the job (DELIVERED, or ACKED). APPROVED/PENDING_APPROVAL were never handed
-	// out, so a report from those states is rejected (404) rather than trusted.
-	if j.State != StateDelivered && j.State != StateAcked {
-		return false
+		return ErrNotFound
 	}
 	if res == nil {
 		res = &Result{Status: "failed", Detail: "relatório vazio"}
+	}
+	// The agent can only report on a job it was handed. One it never received (still
+	// pending or approved, or rejected or expired before the poll delivered it) is not a
+	// late report — keeping it would lend such a claim an air of legitimacy — but it is
+	// not silent either: the agent is reporting on something it was never given.
+	if j.DeliveredAt.IsZero() {
+		log.Printf("remediation: relatório de job nunca entregue: job %s está %s e o agente reportou %q (tenant=%q agent=%q)",
+			jobID, j.State, res.Status, j.Tenant, j.AgentID)
+		return ErrNotFound
+	}
+	if j.State == StateApplied || j.State.terminal() {
+		if j.Result != nil && sameReport(*j.Result, *res) {
+			return nil
+		}
+		// A report the job already keeps is answered like the first time — same 409,
+		// naming the kept one — and stored, written and audited no second time: a
+		// retrying or hostile agent cannot push the genuine reports out of the three.
+		if i := j.lateReportIndex(*res); i >= 0 {
+			return fmt.Errorf("%w: job %s está %s e não aceita mais relatório (reportado %q; guardado como late_report #%d)", ErrInvalidState, jobID, j.State, res.Status, j.lateReportNumber(i))
+		}
+		n := recordLateReport(j, *res, r.now().UTC())
+		log.Printf("remediation: relatório tardio recusado: job %s está %s e o agente reportou %q (late_report #%d; tenant=%q agent=%q)",
+			jobID, j.State, res.Status, n, j.Tenant, j.AgentID)
+		// The refusal stands whatever the disk says, and the kept report is NOT undone
+		// on a failed write: it is the only copy of what the agent did, and the next
+		// persist that works carries it to disk.
+		if err := r.saveLocked(); err != nil {
+			log.Printf("remediation: saveLocked após relatório recusado job=%s: %v", jobID, err)
+		}
+		return fmt.Errorf("%w: job %s está %s e não aceita mais relatório (reportado %q; guardado como late_report #%d)", ErrInvalidState, jobID, j.State, res.Status, n)
+	}
+	// Only a job the agent holds takes a first report (DELIVERED, or ACKED). Defensive:
+	// one that was handed out yet sits in any other state — a hand-edited or corrupt
+	// queue file — is not trusted either (404).
+	if j.State != StateDelivered && j.State != StateAcked {
+		return ErrNotFound
 	}
 	res.ReportedAt = r.now().UTC()
 	j.Result = res
@@ -389,7 +529,45 @@ func (r *Registry) Report(jobID, agentID, tenant string, res *Result) bool {
 	if err := r.saveLocked(); err != nil {
 		log.Printf("remediation: saveLocked após report job=%s: %v", jobID, err)
 	}
-	return true
+	return nil
+}
+
+// maxLateReports is how many refused reports a job keeps: the FIRST one, pinned for
+// good — it is usually the genuine "applied", with the real before/rollback_token — and
+// the most recent ones, which rotate. A report's size is bounded by the 256 KiB cap on
+// the request body (before/rollback_token are never truncated), so a job holds at most
+// three of them however an agent behaves.
+const maxLateReports = 3
+
+// recordLateReport keeps a copy of a refused report on j, stamped with the time it
+// arrived (the agent's own reported_at is not trusted any more than a first report's
+// is), and returns the report's number among those stored for j: 1, 2, 3, ... Beyond
+// maxLateReports the oldest of the rotating ones is dropped — never the first, which is
+// pinned as #1. The number never repeats within a run, even after a report is dropped,
+// so a "late_report #n" in the log names one report (see RemediationJob.lateReportNumber
+// for finding it, and the runbook for the one case where a number can repeat: a crash
+// between a refused report and the next persist that works).
+func recordLateReport(j *RemediationJob, res Result, at time.Time) int {
+	res.ReportedAt = at
+	j.LateReports = append(j.LateReports, res)
+	if len(j.LateReports) > maxLateReports {
+		kept := make([]Result, 0, maxLateReports)
+		kept = append(kept, j.LateReports[0])
+		kept = append(kept, j.LateReports[len(j.LateReports)-(maxLateReports-1):]...)
+		j.LateReports = kept
+	}
+	j.LateReportsTotal++
+	return j.LateReportsTotal
+}
+
+// sameReport reports whether a and b carry the same content from the agent.
+// ReportedAt is the server's own stamp, so it does not count; every other field does.
+// Comparing the structs keeps a field added to Result later in the comparison by
+// default (and fails to compile if it makes Result incomparable) instead of letting
+// it be ignored.
+func sameReport(a, b Result) bool {
+	a.ReportedAt, b.ReportedAt = time.Time{}, time.Time{}
+	return a == b
 }
 
 // MarkVerified moves an APPLIED job to VERIFIED and returns it. This is
@@ -398,7 +576,9 @@ func (r *Registry) Report(jobID, agentID, tenant string, res *Result) bool {
 // existing job is left unchanged and gets ErrInvalidState (a FAILED job must not
 // be resurrected, a VERIFIED one is not verified twice); an unknown id gets
 // ErrNotFound. APPLIED never expires by ExpiresAt, so a slow re-scan can still
-// close it.
+// close it. The moment is stamped on the job (VerifiedAt): a job can wait for its
+// re-scan far longer than the retention, and the retention of what it holds (result,
+// rollback_token) counts from here once it is VERIFIED.
 func (r *Registry) MarkVerified(jobID string) (*RemediationJob, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -410,8 +590,10 @@ func (r *Registry) MarkVerified(jobID string) (*RemediationJob, error) {
 		return nil, fmt.Errorf("%w: job %s não está em APPLIED (estado %s)", ErrInvalidState, jobID, j.State)
 	}
 	j.State = StateVerified
+	j.VerifiedAt = r.now().UTC()
 	if err := r.saveLocked(); err != nil {
 		j.State = StateApplied // memory and disk must agree
+		j.VerifiedAt = time.Time{}
 		return nil, err
 	}
 	return j.clone(), nil

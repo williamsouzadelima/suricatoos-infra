@@ -61,6 +61,122 @@ func TestHeartbeat(t *testing.T) {
 	}
 }
 
+// O que o serviço loga sobre uma requisição vem de fora — o cert (cn, tenant), o header
+// do serial, o corpo do heartbeat (feed_version), a rota (tenant) e o pedido do operador
+// (os alvos fora de escopo): tudo entre aspas, para que nada comece uma linha de log
+// própria. Cada caso manda um valor com quebra de linha e uma linha "sensorjobs:" forjada.
+func TestServiceLogLinesQuoteWhatComesFromOutside(t *testing.T) {
+	evil := "x\nsensorjobs: linha forjada"
+	oneLine := func(t *testing.T, logs *lockedBuf) {
+		t.Helper()
+		if out := logs.String(); strings.Count(out, "\n") != 1 || !strings.Contains(out, "sensorjobs:") {
+			t.Errorf("a requisição deveria deixar exatamente UMA linha de log, got: %q", out)
+		}
+	}
+	withCN := func(req *http.Request) *http.Request {
+		req.Header.Set("X-Client-Cert-DN", "CN="+evil+",OU=scanner-sensor,O=acme")
+		return req
+	}
+
+	t.Run("heartbeat: feed_version no corpo", func(t *testing.T) {
+		logs := captureLog(t)
+		s, _ := testService(t)
+		w := httptest.NewRecorder()
+		s.HeartbeatHandler()(w, sensorReq("POST", "/v1/heartbeat", map[string]any{"feed_version": evil, "gvmd_up": true, "active_jobs": 2}))
+		if w.Code != http.StatusNoContent {
+			t.Fatalf("heartbeat deveria 204, got %d", w.Code)
+		}
+		oneLine(t, logs)
+	})
+	t.Run("heartbeat: cn do cert", func(t *testing.T) {
+		logs := captureLog(t)
+		s, _ := testService(t)
+		w := httptest.NewRecorder()
+		s.HeartbeatHandler()(w, withCN(sensorReq("POST", "/v1/heartbeat", map[string]any{"feed_version": "v42"})))
+		if w.Code != http.StatusNoContent {
+			t.Fatalf("heartbeat deveria 204, got %d", w.Code)
+		}
+		oneLine(t, logs)
+	})
+	t.Run("heartbeat: tenant (O) do cert", func(t *testing.T) {
+		logs := captureLog(t)
+		r, _ := NewRegistry(Config{})
+		s := NewService(r, nil, notRevoked) // sem lista de tenants: qualquer O não vazio vale
+		req := sensorReq("POST", "/v1/heartbeat", map[string]any{"feed_version": "v42"})
+		req.Header.Set("X-Client-Cert-DN", "CN=sensor-1,OU=scanner-sensor,O="+evil)
+		w := httptest.NewRecorder()
+		s.HeartbeatHandler()(w, req)
+		if w.Code != http.StatusNoContent {
+			t.Fatalf("heartbeat deveria 204, got %d", w.Code)
+		}
+		oneLine(t, logs)
+	})
+	t.Run("CRL negada: cn do cert", func(t *testing.T) {
+		logs := captureLog(t)
+		r, _ := NewRegistry(Config{ScopeOf: scopes(map[string]string{"acme": "10.20.0.0/16"})})
+		s := NewService(r, nil, func(string) bool { return true }) // todo serial revogado
+		w := httptest.NewRecorder()
+		s.PollHandler()(w, withCN(sensorReq("GET", "/v1/scan-jobs", nil)))
+		if w.Code != http.StatusForbidden {
+			t.Fatalf("serial revogado deveria 403, got %d", w.Code)
+		}
+		oneLine(t, logs)
+	})
+	t.Run("CRL negada: serial do header", func(t *testing.T) {
+		logs := captureLog(t)
+		r, _ := NewRegistry(Config{ScopeOf: scopes(map[string]string{"acme": "10.20.0.0/16"})})
+		s := NewService(r, nil, func(string) bool { return true }) // todo serial revogado
+		req := sensorReq("GET", "/v1/scan-jobs", nil)
+		req.Header.Set("X-Client-Cert-Serial", evil)
+		w := httptest.NewRecorder()
+		s.PollHandler()(w, req)
+		if w.Code != http.StatusForbidden {
+			t.Fatalf("serial revogado deveria 403, got %d", w.Code)
+		}
+		oneLine(t, logs)
+	})
+	t.Run("authz negada: header hostil", func(t *testing.T) {
+		logs := captureLog(t)
+		s, _ := testService(t)
+		req := sensorReq("GET", "/v1/scan-jobs", nil)
+		req.Header.Set("X-Client-Cert-Verify", evil)
+		w := httptest.NewRecorder()
+		s.PollHandler()(w, req)
+		if w.Code != http.StatusForbidden {
+			t.Fatalf("authz negada deveria 403, got %d", w.Code)
+		}
+		oneLine(t, logs)
+	})
+	t.Run("alvos fora de escopo: alvos hostis", func(t *testing.T) {
+		logs := captureLog(t)
+		s, _ := testService(t)
+		req := httptest.NewRequest("POST", "/api/v1/tenants/acme/scan-jobs",
+			bytes.NewReader(mustJSON(enqueueBody{Targets: []string{evil, "10.20.1.1"}})))
+		req.Header.Set("Authorization", "Bearer s3cret")
+		req.SetPathValue("t", "acme")
+		w := httptest.NewRecorder()
+		s.EnqueueHandler("s3cret")(w, req)
+		if w.Code != http.StatusCreated {
+			t.Fatalf("o alvo em escopo deveria criar o job (201), got %d (%s)", w.Code, w.Body.String())
+		}
+		oneLine(t, logs)
+	})
+	t.Run("alvos fora de escopo: tenant da rota hostil", func(t *testing.T) {
+		logs := captureLog(t)
+		s, _ := testService(t)
+		req := httptest.NewRequest("POST", "/api/v1/tenants/x/scan-jobs",
+			bytes.NewReader(mustJSON(enqueueBody{Targets: []string{"10.20.1.1"}})))
+		req.Header.Set("Authorization", "Bearer s3cret")
+		req.SetPathValue("t", evil) // tenant desconhecido: nega tudo e dropa o alvo
+		w := httptest.NewRecorder()
+		s.EnqueueHandler("s3cret")(w, req)
+		if w.Code != http.StatusUnprocessableEntity {
+			t.Fatalf("tenant desconhecido deveria 422, got %d", w.Code)
+		}
+		oneLine(t, logs)
+	})
+}
+
 func TestPollRevoked403(t *testing.T) {
 	r, _ := NewRegistry(Config{ScopeOf: scopes(map[string]string{"acme": "10.20.0.0/16"})})
 	s := NewService(r, nil, func(string) bool { return true }) // serial revogado

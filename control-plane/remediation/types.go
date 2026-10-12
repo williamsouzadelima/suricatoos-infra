@@ -43,6 +43,12 @@ func (t Type) valid() bool {
 // APPROVED) precedes any delivery, and APPLIED is NOT terminal — the server
 // still has to confirm the fix (→ VERIFIED) by re-scanning.
 //
+// An operator can take a job out of the queue in two ways, and which one depends on
+// whether the agent has it: REJECTED is for a job NOT delivered yet (PENDING_APPROVAL
+// or APPROVED) — nothing happened on any host; CLOSED is for one the agent already
+// received (DELIVERED, ACKED, APPLIED or FAILED), where a change may have reached the
+// host and the record of it (approver, result, rollback_token) has to be kept.
+//
 // ExpiresAt only bounds the states BEFORE the agent has effectively taken the job
 // (see expirable): once a job is ACKED or APPLIED the deadline no longer applies.
 type JobState string
@@ -57,12 +63,13 @@ const (
 	StateVerified        JobState = "VERIFIED"
 	StateExpired         JobState = "EXPIRED"
 	StateRejected        JobState = "REJECTED"
+	StateClosed          JobState = "CLOSED"
 )
 
 // terminal reports whether a job is in a final state (never delivered again).
 func (s JobState) terminal() bool {
 	switch s {
-	case StateVerified, StateFailed, StateExpired, StateRejected:
+	case StateVerified, StateFailed, StateExpired, StateRejected, StateClosed:
 		return true
 	}
 	return false
@@ -81,7 +88,8 @@ func (s JobState) terminal() bool {
 //
 // Caveat: today's agent runner acks AFTER applying (right before it reports), so
 // a job being applied is still DELIVERED here, and one whose ack/report never
-// arrives before ExpiresAt lapses can still be swept. Acking before applying, on
+// arrives before ExpiresAt lapses can still be swept — by the next Enqueue's reaper,
+// whoever's it is, as well as by that agent's next poll. Acking before applying, on
 // the agent side, would close that window.
 func (s JobState) expirable() bool {
 	switch s {
@@ -91,10 +99,24 @@ func (s JobState) expirable() bool {
 	return false
 }
 
+// expireIfLapsed moves a job whose ExpiresAt passed while it was still in an expirable
+// state to EXPIRED, stamping now as ExpiredAt — the moment the queue learned of it, which
+// is also when its retention starts — and reports whether it did. Poll runs it on the
+// polling agent's jobs and the reaper on every job (Registry.reapLocked), so the jobs of
+// an agent that never polls again expire, and age out, as well.
+func (j *RemediationJob) expireIfLapsed(now time.Time) bool {
+	if !j.State.expirable() || j.ExpiresAt.IsZero() || !now.After(j.ExpiresAt) {
+		return false
+	}
+	j.State = StateExpired
+	j.ExpiredAt = now
+	return true
+}
+
 // allStates lists every lifecycle state (the listing filter accepts exactly these).
 var allStates = []JobState{
 	StatePendingApproval, StateApproved, StateDelivered, StateAcked, StateApplied,
-	StateFailed, StateVerified, StateExpired, StateRejected,
+	StateFailed, StateVerified, StateExpired, StateRejected, StateClosed,
 }
 
 // valid reports whether s is one of the lifecycle states.
@@ -137,11 +159,26 @@ type RemediationJob struct {
 	ExpiresAt     time.Time       `json:"expires_at,omitempty"`
 	ApprovedBy    string          `json:"approved_by,omitempty"` // operator identity (audit)
 	ApprovedAt    time.Time       `json:"approved_at,omitempty"`
+	RejectedBy    string          `json:"rejected_by,omitempty"` // who rejected the job (REJECTED); ApprovedBy is never overwritten by it
+	RejectedAt    time.Time       `json:"rejected_at,omitzero"`
+	ClosedBy      string          `json:"closed_by,omitempty"` // who took a delivered job out of the queue (CLOSED)
+	ClosedAt      time.Time       `json:"closed_at,omitzero"`
+	ClosedReason  string          `json:"closed_reason,omitempty"`
 	Signature     string          `json:"signature,omitempty"` // base64 Ed25519 over the canonical; set on Approve
 	CreatedAt     time.Time       `json:"created_at"`
 	DeliveredAt   time.Time       `json:"delivered_at,omitempty"`
 	AckedAt       time.Time       `json:"acked_at,omitempty"`
+	VerifiedAt    time.Time       `json:"verified_at,omitzero"` // when an operator marked the APPLIED job VERIFIED (MarkVerified)
+	ExpiredAt     time.Time       `json:"expired_at,omitzero"`  // when the expiry sweep moved the job to EXPIRED (the poll or reap that found the deadline lapsed)
 	Result        *Result         `json:"result,omitempty"`
+	// LateReports keeps the reports the queue refused (see Registry.Report) whole, so
+	// an operator can still reach their before/rollback_token: at most maxLateReports
+	// of them — the FIRST one, pinned for good, and the most recent ones, which rotate.
+	// A report equal to a kept one is not stored again. LateReportsTotal counts the
+	// reports stored, so the pinned one is #1 and the newest kept is #LateReportsTotal
+	// (the number the audit line quotes).
+	LateReports      []Result `json:"late_reports,omitempty"`
+	LateReportsTotal int      `json:"late_reports_total,omitempty"`
 }
 
 // EnqueueRequest is the internal request to create a PENDING_APPROVAL job. The
@@ -156,6 +193,79 @@ type EnqueueRequest struct {
 	TTL       time.Duration // 0 → default
 }
 
+// lastEventAt is when something worth keeping last happened to the job: its creation, a
+// rejection, a closure, a verification, an expiry, the agent's result or the latest
+// report it refused. A final job is reaped a retention AFTER this — not after its
+// creation — so closing or verifying an old APPLIED job, an expiry that the sweep only
+// finds out about on the agent's next poll or the next Enqueue, a result that arrives
+// late or a late refused report restarts the clock instead of handing the data they
+// just preserved (approver, result, rollback_token) to the very next Enqueue's reaper.
+// Every final state has a stamp of its own here (VERIFIED: VerifiedAt, EXPIRED:
+// ExpiredAt, REJECTED: RejectedAt, CLOSED: ClosedAt, FAILED: the result's ReportedAt);
+// jobs persisted before VerifiedAt and ExpiredAt existed simply do not have those two,
+// and fall back to the rest.
+//
+// The clock restarts whenever something happens, with one limit, and only on what the
+// AGENT controls: its late reports (the first result is a single report) restart it only
+// until maxLateReportAge after the job's creation — it can send them at will, so past
+// that they would keep the job for ever. What an operator does (reject, close, verify)
+// or the queue's own expiry restart it whenever they happen, however old the job is.
+func (j *RemediationJob) lastEventAt() time.Time {
+	last := j.CreatedAt
+	later := func(t time.Time) {
+		if t.After(last) {
+			last = t
+		}
+	}
+	later(j.RejectedAt)
+	later(j.ClosedAt)
+	later(j.VerifiedAt)
+	later(j.ExpiredAt)
+	if j.Result != nil {
+		later(j.Result.ReportedAt)
+	}
+	lateLimit := j.CreatedAt.Add(maxLateReportAge)
+	for _, lr := range j.LateReports {
+		reported := lr.ReportedAt
+		if reported.After(lateLimit) {
+			reported = lateLimit
+		}
+		later(reported)
+	}
+	return last
+}
+
+// maxLateReportAge is how long after a job's creation a refused (late) report can still
+// restart its retention clock (lastEventAt). The agent sends late reports at will — every
+// distinct report for a job it was handed is refused, kept and would count as the latest
+// event — so one that rotated them every few days would keep the job (result,
+// rollback_token) in the queue for ever. Past this age a late report is still refused,
+// kept and audited, but adds no retention: a job nothing but the agent touches goes at
+// CreatedAt + maxLateReportAge + the retention at the latest. It limits the agent only:
+// the operator's own actions are never capped by the age of the job.
+const maxLateReportAge = 90 * 24 * time.Hour
+
+// lateReportIndex is the index in LateReports of the kept report with the same content
+// as res (everything the agent supplies; the server's timestamp does not count), or -1.
+func (j *RemediationJob) lateReportIndex(res Result) int {
+	for i, lr := range j.LateReports {
+		if sameReport(lr, res) {
+			return i
+		}
+	}
+	return -1
+}
+
+// lateReportNumber is the "late_report #n" of the kept report at index i: the pinned
+// first one is #1, and the rest are the most recent ones, so the last is
+// #LateReportsTotal, the one before it #LateReportsTotal-1.
+func (j *RemediationJob) lateReportNumber(i int) int {
+	if i == 0 {
+		return 1
+	}
+	return j.LateReportsTotal - (len(j.LateReports) - 1 - i)
+}
+
 func (j *RemediationJob) clone() *RemediationJob {
 	cp := *j
 	cp.Payload = append(json.RawMessage(nil), j.Payload...)
@@ -163,5 +273,6 @@ func (j *RemediationJob) clone() *RemediationJob {
 		r := *j.Result
 		cp.Result = &r
 	}
+	cp.LateReports = append([]Result(nil), j.LateReports...)
 	return &cp
 }

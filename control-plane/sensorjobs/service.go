@@ -52,7 +52,7 @@ func (s *Service) auth(w http.ResponseWriter, r *http.Request) (Identity, bool) 
 	}
 	serial := normalizeSerial(r.Header.Get("X-Client-Cert-Serial"))
 	if s.revoked == nil || s.revoked(serial) {
-		log.Printf("sensorjobs: CRL negada (cn=%s serial=%s wired=%v)", id.CN, serial, s.revoked != nil)
+		log.Printf("sensorjobs: CRL negada (cn=%q serial=%q wired=%v)", id.CN, serial, s.revoked != nil)
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return Identity{}, false
 	}
@@ -116,7 +116,9 @@ func (s *Service) HeartbeatHandler() http.HandlerFunc {
 			ActiveJobs  int    `json:"active_jobs"`
 		}
 		_ = json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&hb)
-		log.Printf("sensorjobs: heartbeat tenant=%s cn=%s feed=%s gvmd_up=%v jobs=%d",
+		// Everything but the numbers and the flag comes from outside (the cert and the
+		// body), so it is quoted: a hostile feed_version cannot start a log line.
+		log.Printf("sensorjobs: heartbeat tenant=%q cn=%q feed=%q gvmd_up=%v jobs=%d",
 			id.O, id.CN, hb.FeedVersion, hb.GvmdUp, hb.ActiveJobs)
 		w.WriteHeader(http.StatusNoContent)
 	}
@@ -166,7 +168,7 @@ func (s *Service) EnqueueHandler(adminSecret string) http.HandlerFunc {
 			ScanConfig: body.ScanConfig, AliveTest: body.AliveTest, MaxDuration: body.MaxDuration, TTL: ttl,
 		})
 		if len(dropped) > 0 {
-			log.Printf("sensorjobs: tenant=%s %d alvo(s) fora de escopo dropados: %v", tenant, len(dropped), dropped)
+			log.Printf("sensorjobs: tenant=%q %d alvo(s) fora de escopo dropados: %q", tenant, len(dropped), dropped)
 		}
 		if err != nil {
 			writeJSON(w, http.StatusUnprocessableEntity, map[string]any{"error": err.Error(), "dropped": dropped})

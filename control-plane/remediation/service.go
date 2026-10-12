@@ -19,7 +19,7 @@ type RevokedFunc func(serialHex string) bool
 
 // Service serves the remediation routes. Agent routes (poll/ack/report) are mTLS
 // + CRL gated and scoped to the agent's own CN+O; the operator routes
-// (enqueue/approve/reject/verified/list) are bearer gated.
+// (enqueue/approve/reject/close/verified/list) are bearer gated.
 type Service struct {
 	reg     *Registry
 	known   TenantKnown
@@ -58,7 +58,7 @@ func (s *Service) auth(w http.ResponseWriter, r *http.Request) (Identity, bool) 
 	}
 	serial := normalizeSerial(r.Header.Get("X-Client-Cert-Serial"))
 	if s.revoked == nil || s.revoked(serial) {
-		log.Printf("remediation: CRL negada (cn=%s serial=%s wired=%v)", id.CN, serial, s.revoked != nil)
+		log.Printf("remediation: CRL negada (cn=%q serial=%q wired=%v)", id.CN, serial, s.revoked != nil)
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return Identity{}, false
 	}
@@ -115,8 +115,15 @@ func (s *Service) AckHandler() http.HandlerFunc {
 
 // ReportHandler serves POST /v1/remediation-jobs/{id}/report: the agent reports
 // its apply result (applied/failed + before/after/rollback_token). Scoped to
-// CN+O; foreign/unknown id → 404. APPLIED is not terminal — the server verifies
-// later by re-scan.
+// CN+O; foreign/unknown id → 404, and so is a job the agent was never handed — pending,
+// approved, or rejected or expired BEFORE the poll delivered it (that one is also logged,
+// and nothing is kept). APPLIED is not terminal — the server verifies later by re-scan.
+// A report on a job the agent WAS handed that already holds its result (final, or
+// APPLIED), or that was taken out of the queue after the delivery — CLOSED, EXPIRED after
+// the poll handed it out, or a legacy REJECTED one (rejecting a delivered job was refused
+// from P1.11 on, but a queue file written before can still hold one) — is a 409, unless
+// it repeats the result already on record (204); the refused one is kept on the job
+// (late_reports): see Registry.Report.
 func (s *Service) ReportHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id, ok := s.auth(w, r)
@@ -137,11 +144,18 @@ func (s *Service) ReportHandler() http.HandlerFunc {
 			http.Error(w, "status deve ser applied|failed", http.StatusBadRequest)
 			return
 		}
-		if !s.reg.Report(jobID, id.CN, id.O, &res) {
+		err := s.reg.Report(jobID, id.CN, id.O, &res)
+		switch {
+		case err == nil:
+			w.WriteHeader(http.StatusNoContent)
+		case errors.Is(err, ErrNotFound):
 			http.Error(w, "not found", http.StatusNotFound)
-			return
+		case errors.Is(err, ErrInvalidState):
+			writeJSON(w, http.StatusConflict, map[string]any{"error": err.Error()})
+		default:
+			log.Printf("remediation: report job=%s: %v", jobID, err)
+			http.Error(w, "erro interno", http.StatusInternalServerError)
 		}
-		w.WriteHeader(http.StatusNoContent)
 	}
 }
 
@@ -201,7 +215,11 @@ func (s *Service) EnqueueHandler() http.HandlerFunc {
 // ApproveHandler serves POST /api/v1/remediation/jobs/{id}/approve (admin bearer):
 // the human approval gate — it SIGNS the job and makes it deliverable. The
 // approver identity (X-Operator, set by nginx from the gsad session, or a body
-// field) is REQUIRED and recorded for audit. Nothing is signed without it.
+// field) is REQUIRED and recorded for audit. Nothing is signed without it. It answers
+// by the kind of failure, like reject and close: 400 without an approver, 404 for an
+// unknown job, 409 for a job that is not PENDING_APPROVAL, 500 for anything else (a
+// write that fails — the job goes back to PENDING_APPROVAL — or a signer that is not
+// configured).
 func (s *Service) ApproveHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if !s.adminOK(w, r) {
@@ -218,24 +236,29 @@ func (s *Service) ApproveHandler() http.HandlerFunc {
 			return
 		}
 		job, err := s.reg.Approve(jobID, approver)
-		if err != nil {
-			if err == ErrNotFound {
-				http.Error(w, "not found", http.StatusNotFound)
-				return
-			}
+		switch {
+		case err == nil:
+			log.Printf("remediation: job %s aprovado por %q (tenant=%q agent=%q)", job.JobID, approver, job.Tenant, job.AgentID)
+			writeJSON(w, http.StatusOK, map[string]any{"job": job})
+		case errors.Is(err, ErrNotFound):
+			http.Error(w, "not found", http.StatusNotFound)
+		case errors.Is(err, ErrInvalidState):
 			writeJSON(w, http.StatusConflict, map[string]any{"error": err.Error()})
-			return
+		default:
+			log.Printf("remediation: approve job=%s: %v", jobID, err)
+			http.Error(w, "erro interno", http.StatusInternalServerError)
 		}
-		log.Printf("remediation: job %s aprovado por %q (tenant=%s agent=%s)", job.JobID, approver, job.Tenant, job.AgentID)
-		writeJSON(w, http.StatusOK, map[string]any{"job": job})
 	}
 }
 
-// RejectHandler serves POST /api/v1/remediation/jobs/{id}/reject (admin bearer).
-// The operator is REQUIRED and recorded: X-Operator, or — because nginx clears that
-// header on /agent/api/ — rejected_by in the body (approved_by is still accepted
-// for compatibility with the older runbook). See Registry.Reject for what a
-// rejection overwrites (the approver) and what it does not do (recall a delivered job).
+// RejectHandler serves POST /api/v1/remediation/jobs/{id}/reject (admin bearer): the
+// way to drop a job BEFORE the agent has it (PENDING_APPROVAL or APPROVED). The
+// operator is REQUIRED and recorded as rejected_by: X-Operator, or — because nginx
+// clears that header on /agent/api/ — rejected_by in the body (approved_by is still
+// accepted for compatibility with the older runbook); the job's approver is left
+// untouched. 404 when the job does not exist; 204, without any change, when it is
+// already REJECTED; 409 when it is in any other state — a job already handed to the
+// agent is taken out of the queue with close instead. See Registry.Reject.
 func (s *Service) RejectHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if !s.adminOK(w, r) {
@@ -256,15 +279,66 @@ func (s *Service) RejectHandler() http.HandlerFunc {
 			http.Error(w, "operador obrigatório (X-Operator ou rejected_by)", http.StatusBadRequest)
 			return
 		}
-		if err := s.reg.Reject(jobID, rejecter); err != nil {
-			if err == ErrNotFound {
-				http.Error(w, "not found", http.StatusNotFound)
-				return
-			}
+		err := s.reg.Reject(jobID, rejecter)
+		switch {
+		case err == nil:
+			w.WriteHeader(http.StatusNoContent)
+		case errors.Is(err, ErrNotFound):
+			http.Error(w, "not found", http.StatusNotFound)
+		case errors.Is(err, ErrInvalidState):
+			writeJSON(w, http.StatusConflict, map[string]any{"error": err.Error()})
+		default:
+			log.Printf("remediation: reject job=%s: %v", jobID, err)
 			http.Error(w, "erro interno", http.StatusInternalServerError)
+		}
+	}
+}
+
+// CloseHandler serves POST /api/v1/remediation/jobs/{id}/close (admin bearer): the way
+// out of the queue for a job the agent has already received (DELIVERED, ACKED, APPLIED
+// or FAILED), which reject refuses. The job becomes CLOSED — final — with who, when and
+// why recorded; its approver and the agent's result stay as they were. The operator is
+// REQUIRED (X-Operator, or closed_by in the body since nginx clears the header on
+// /agent/api/); the reason (reason in the body) is optional. 200 with the closed job
+// (its result and rollback_token included, for the manual revert); 400 without an
+// operator; 404 when the job does not exist; 409 when it is in any other state.
+// See Registry.Close.
+func (s *Service) CloseHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !s.adminOK(w, r) {
 			return
 		}
-		w.WriteHeader(http.StatusNoContent)
+		jobID := r.PathValue("id")
+		if jobID == "" {
+			http.Error(w, "job id obrigatório", http.StatusBadRequest)
+			return
+		}
+		body := readOperatorBody(w, r)
+		closer := headerOperator(r)
+		if closer == "" {
+			closer = strings.TrimSpace(body.ClosedBy)
+		}
+		if closer == "" {
+			http.Error(w, "operador obrigatório (X-Operator ou closed_by)", http.StatusBadRequest)
+			return
+		}
+		reason := strings.TrimSpace(body.Reason)
+		if len(reason) > maxCloseReason {
+			http.Error(w, "motivo deve ter no máximo "+strconv.Itoa(maxCloseReason)+" bytes", http.StatusBadRequest)
+			return
+		}
+		job, err := s.reg.Close(jobID, closer, reason)
+		switch {
+		case err == nil:
+			writeJSON(w, http.StatusOK, map[string]any{"job": newJobView(job)})
+		case errors.Is(err, ErrNotFound):
+			http.Error(w, "not found", http.StatusNotFound)
+		case errors.Is(err, ErrInvalidState):
+			writeJSON(w, http.StatusConflict, map[string]any{"error": err.Error()})
+		default:
+			log.Printf("remediation: close job=%s: %v", jobID, err)
+			http.Error(w, "erro interno", http.StatusInternalServerError)
+		}
 	}
 }
 
@@ -292,7 +366,7 @@ func (s *Service) VerifiedHandler() http.HandlerFunc {
 		job, err := s.reg.MarkVerified(jobID)
 		switch {
 		case err == nil:
-			log.Printf("remediation: job %s verificado por %q (tenant=%s agent=%s)", job.JobID, verifier, job.Tenant, job.AgentID)
+			log.Printf("remediation: job %s verificado por %q (tenant=%q agent=%q)", job.JobID, verifier, job.Tenant, job.AgentID)
 			writeJSON(w, http.StatusOK, map[string]any{"job": newJobView(job)})
 		case errors.Is(err, ErrNotFound):
 			http.Error(w, "not found", http.StatusNotFound)
@@ -346,14 +420,16 @@ func (s *Service) ListHandler() http.HandlerFunc {
 	}
 }
 
-// jobView is what the status routes (list, verified) expose of a job: a compact,
+// jobView is what the status routes (list, close, verified) expose of a job: a compact,
 // technical summary, as an explicit allow-list (a field added to RemediationJob later
-// is NOT exposed by default). The payload (payload_sha256 identifies it) and the
-// nonce are left out to keep the listing small and technical — NOT as a
+// is NOT exposed by default — which is why rejected_*, closed_*, verified_at, expired_at
+// and late_reports are listed below by name). The payload (payload_sha256 identifies it)
+// and the nonce are left out to keep the listing small and technical — NOT as a
 // confidentiality boundary: the bearer holder already gets the payload in the
-// enqueue/approve responses, and the agent's result (detail/before/after) may repeat
-// technical values from it. The signature is public by nature. Unset timestamps are
-// omitted (omitzero) rather than printed as year 1.
+// enqueue/approve responses, and the agent's result and late reports
+// (detail/before/after/rollback_token) may repeat technical values from it. The
+// signature is public by nature. Unset timestamps are omitted (omitzero) rather than
+// printed as year 1.
 type jobView struct {
 	JobID         string    `json:"job_id"`
 	CorrelationID string    `json:"correlation_id"`
@@ -363,15 +439,29 @@ type jobView struct {
 	State         JobState  `json:"state"`
 	PayloadSHA256 string    `json:"payload_sha256"`
 	Signature     string    `json:"signature,omitempty"`
-	ApprovedBy    string    `json:"approved_by,omitempty"` // who approved — or, for a REJECTED job, who rejected it
+	ApprovedBy    string    `json:"approved_by,omitempty"` // who approved; reject and close leave it as it was (empty if the job never was)
 	ApprovedAt    time.Time `json:"approved_at,omitzero"`
+	RejectedBy    string    `json:"rejected_by,omitempty"` // REJECTED jobs: who rejected it, and when
+	RejectedAt    time.Time `json:"rejected_at,omitzero"`
+	ClosedBy      string    `json:"closed_by,omitempty"` // CLOSED jobs: who closed it, when and why
+	ClosedAt      time.Time `json:"closed_at,omitzero"`
+	ClosedReason  string    `json:"closed_reason,omitempty"`
 	NotBefore     time.Time `json:"not_before,omitzero"`
 	NotAfter      time.Time `json:"not_after,omitzero"`
 	ExpiresAt     time.Time `json:"expires_at,omitzero"`
 	CreatedAt     time.Time `json:"created_at"`
 	DeliveredAt   time.Time `json:"delivered_at,omitzero"`
 	AckedAt       time.Time `json:"acked_at,omitzero"`
-	Result        *Result   `json:"result,omitempty"` // the agent's report (status/detail/before/after/rollback_token)
+	VerifiedAt    time.Time `json:"verified_at,omitzero"` // VERIFIED jobs: when an operator marked them verified
+	ExpiredAt     time.Time `json:"expired_at,omitzero"`  // EXPIRED jobs: when the sweep moved them there (the first poll or enqueue past the deadline)
+	Result        *Result   `json:"result,omitempty"`     // the agent's report (status/detail/before/after/rollback_token)
+	// Reports the queue refused (409) because the job was final, or APPLIED with a
+	// different result, kept whole — rollback_token included, for the manual revert: the
+	// FIRST one (#1, pinned) and the two most recent. late_reports_total counts the ones
+	// stored (the newest kept is #late_reports_total, the number in the audit line's
+	// "late_report #n"). Omitted when there are none.
+	LateReports      []Result `json:"late_reports,omitempty"`
+	LateReportsTotal int      `json:"late_reports_total,omitempty"`
 }
 
 // newJobView projects j (callers pass a clone, so Result is safe to share).
@@ -379,9 +469,12 @@ func newJobView(j *RemediationJob) jobView {
 	return jobView{
 		JobID: j.JobID, CorrelationID: j.CorrelationID, Tenant: j.Tenant, AgentID: j.AgentID,
 		Type: j.Type, State: j.State, PayloadSHA256: j.PayloadSHA256, Signature: j.Signature,
-		ApprovedBy: j.ApprovedBy, ApprovedAt: j.ApprovedAt, NotBefore: j.NotBefore, NotAfter: j.NotAfter,
+		ApprovedBy: j.ApprovedBy, ApprovedAt: j.ApprovedAt, RejectedBy: j.RejectedBy, RejectedAt: j.RejectedAt,
+		ClosedBy: j.ClosedBy, ClosedAt: j.ClosedAt, ClosedReason: j.ClosedReason,
+		NotBefore: j.NotBefore, NotAfter: j.NotAfter,
 		ExpiresAt: j.ExpiresAt, CreatedAt: j.CreatedAt, DeliveredAt: j.DeliveredAt, AckedAt: j.AckedAt,
-		Result: j.Result,
+		VerifiedAt: j.VerifiedAt, ExpiredAt: j.ExpiredAt,
+		Result: j.Result, LateReports: j.LateReports, LateReportsTotal: j.LateReportsTotal,
 	}
 }
 
@@ -393,6 +486,22 @@ type operatorBody struct {
 	ApprovedBy string `json:"approved_by"`
 	RejectedBy string `json:"rejected_by"`
 	VerifiedBy string `json:"verified_by"`
+	ClosedBy   string `json:"closed_by"`
+	Reason     string `json:"reason"` // close only: why the job leaves the queue (optional)
+}
+
+// headerOperator is the identity nginx sets in X-Operator from the gsad session,
+// trimmed; "" means the header carried none.
+func headerOperator(r *http.Request) string {
+	return strings.TrimSpace(r.Header.Get("X-Operator"))
+}
+
+// readOperatorBody decodes the JSON body of an operator route. It is capped, and a
+// malformed one simply yields the zero value (the caller then finds no operator in it).
+func readOperatorBody(w http.ResponseWriter, r *http.Request) operatorBody {
+	var b operatorBody
+	_ = json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&b)
+	return b
 }
 
 // operatorID returns the identity acting on an operator route: the X-Operator
@@ -401,12 +510,10 @@ type operatorBody struct {
 // one (empty or only whitespace) counts as none: "" means no operator was given —
 // the caller answers 400. The body is capped and a malformed one simply yields "".
 func operatorID(w http.ResponseWriter, r *http.Request, pick func(operatorBody) string) string {
-	if op := strings.TrimSpace(r.Header.Get("X-Operator")); op != "" {
+	if op := headerOperator(r); op != "" {
 		return op
 	}
-	var b operatorBody
-	_ = json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&b)
-	return strings.TrimSpace(pick(b))
+	return strings.TrimSpace(pick(readOperatorBody(w, r)))
 }
 
 // Register wires all remediation routes onto mux. Intended to be mounted DARK
@@ -421,6 +528,7 @@ func (s *Service) Register(mux *http.ServeMux) {
 	mux.Handle("GET /api/v1/remediation/jobs", s.ListHandler())
 	mux.Handle("POST /api/v1/remediation/jobs/{id}/approve", s.ApproveHandler())
 	mux.Handle("POST /api/v1/remediation/jobs/{id}/reject", s.RejectHandler())
+	mux.Handle("POST /api/v1/remediation/jobs/{id}/close", s.CloseHandler())
 	mux.Handle("POST /api/v1/remediation/jobs/{id}/verified", s.VerifiedHandler())
 }
 

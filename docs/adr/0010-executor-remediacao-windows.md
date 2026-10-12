@@ -42,10 +42,23 @@ pesam no desenho:
 
 3. **Fila durável na nuvem, com portão de aprovação e CRL fail-closed.** Estados super-set do
    `sensorjobs` ([ADR-0007]): `PENDING_APPROVAL→APPROVED→DELIVERED→ACKED→APPLIED→VERIFIED` (+`FAILED`/
-   `EXPIRED`/`REJECTED`). **`APPLIED` NÃO é terminal** — a nuvem confirma por re-scan e só então marca
+   `EXPIRED`/`REJECTED`/`CLOSED`). **`APPLIED` NÃO é terminal** — a nuvem confirma por re-scan e só então marca
    **`VERIFIED` (server-side)**; o agente nunca se auto-declara verificado. Todo poll/ack/report é
    escopado à identidade do cert: **`CN == agent_id` E `O == tenant`** (um agente só vê o job dele;
    fora do escopo → 404). `revoked == nil` → nega (fail-closed). Reaper expira/limpa e impõe a janela.
+   O operador tira um job da fila de duas formas, conforme o agente já o tenha: **`REJECTED`** — só
+   antes da entrega (`PENDING_APPROVAL`/`APPROVED`; nada aconteceu em host algum; rejeitar de novo um
+   `REJECTED` é um no-op) — e **`CLOSED`** — job já entregue (`DELIVERED`/`ACKED`/`APPLIED`/`FAILED`),
+   onde uma mudança pode ter chegado ao host: só tira da fila, não afirma nada sobre o host e
+   preserva o aprovador e o `result`. Nenhum dos dois apaga o aprovador (a assinatura o cobre) e ambos
+   deixam uma linha de auditoria. Um **relatório do agente que chega com o job já final** — ou diferente
+   do `result` de um `APPLIED` — nunca sobrescreve o `result`: responde `409`, deixa uma linha de
+   auditoria e fica guardado inteiro no job (`late_reports`: o primeiro, fixo, e os 2 mais recentes),
+   porque o `rollback_token` dele pode ser a única forma de reverter à mão; um relatório igual a um
+   guardado recebe o mesmo `409` sem ser guardado nem logado de novo. Já um **reenvio idêntico do
+   `result` gravado** é `204` (idempotente: nada muda, nada é logado), e um relatório de job que o
+   agente **nunca recebeu** é `404` com uma linha de log própria, sem guardar nada. Operação em
+   [remediation-operation](../runbooks/remediation-operation.md).
 
 4. **Executor ISOLADO no endpoint, com 3 portões antes de qualquer escrita.** O `agentd` continua
    poller/verificador: **verifica assinatura + janela de frescor (`VerifyAt`) ANTES de tudo**. A
@@ -62,7 +75,7 @@ pesam no desenho:
 5. **Transporte com gate dedicado; nasce DARK.** nginx expõe `/agent/v1/remediation-jobs` com **mTLS
    obrigatório**, encaminhando `X-Client-Cert-{DN,Verify,Serial}` (→ authz CN+O e CRL no
    control-plane) e **limpando qualquer `X-Operator`** forjado pelo cliente; as rotas de **operador**
-   (enqueue/approve/reject) são admin-bearer e, na UI, sessão gsad (`auth_request`). Tudo nasce
+   (enqueue/approve/reject/close/verified/listagem) são admin-bearer e, na UI, sessão gsad (`auth_request`). Tudo nasce
    desligado: `REMEDIATION_ENABLED` global (dark), consentimento por tenant (só admin liga), kill
    switch por-cert (CRL).
 

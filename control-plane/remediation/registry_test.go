@@ -3,8 +3,10 @@ package remediation
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"strings"
 	"testing"
@@ -122,8 +124,8 @@ func TestApplyThenServerVerifies(t *testing.T) {
 	if !r.Ack(j.JobID, "win1", "acme") {
 		t.Fatal("ack failed")
 	}
-	if !r.Report(j.JobID, "win1", "acme", &Result{Status: "applied", After: "patched"}) {
-		t.Fatal("report failed")
+	if err := r.Report(j.JobID, "win1", "acme", &Result{Status: "applied", After: "patched"}); err != nil {
+		t.Fatalf("report failed: %v", err)
 	}
 	if got, _ := r.Get(j.JobID, "win1", "acme"); got.State != StateApplied {
 		t.Fatalf("state = %s, want APPLIED", got.State)
@@ -251,12 +253,12 @@ func TestReportRequiresDeliveryAndNoClobber(t *testing.T) {
 	j := enq(t, r, "win1", "acme")
 	r.Approve(j.JobID, "op")
 	// Report before delivery (still APPROVED) → rejected (never handed out).
-	if r.Report(j.JobID, "win1", "acme", &Result{Status: "applied"}) {
-		t.Error("report before delivery must be rejected")
+	if err := r.Report(j.JobID, "win1", "acme", &Result{Status: "applied"}); !errors.Is(err, ErrNotFound) {
+		t.Errorf("report before delivery: err = %v, want ErrNotFound", err)
 	}
 	r.Poll("win1", "acme") // → DELIVERED (ACK is optional for Report)
-	if !r.Report(j.JobID, "win1", "acme", &Result{Status: "applied", After: "patched"}) {
-		t.Fatal("report after delivery must succeed")
+	if err := r.Report(j.JobID, "win1", "acme", &Result{Status: "applied", After: "patched"}); err != nil {
+		t.Fatalf("report after delivery must succeed: %v", err)
 	}
 	got, _ := r.Get(j.JobID, "win1", "acme")
 	if got.State != StateApplied || got.Result == nil || got.Result.After != "patched" {
@@ -311,10 +313,23 @@ func at(t time.Time) func() time.Time { return func() time.Time { return t } }
 // 1h TTL, so clockBase+2h is past ExpiresAt (and past the redeliver window).
 var clockBase = time.Date(2026, 10, 8, 0, 0, 0, 0, time.UTC)
 
+// lifecycle lists every state a job can be in. It is written out here rather than
+// taken from the package, so a state added to the lifecycle shows up as a missing
+// row (jobIn refuses it) instead of as a silently untested one.
+var lifecycle = []JobState{
+	StatePendingApproval, StateApproved, StateDelivered, StateAcked, StateApplied,
+	StateFailed, StateVerified, StateExpired, StateRejected, StateClosed,
+}
+
 // jobIn enqueues a win1/acme job (1h TTL, at the registry's current clock) and
-// drives it to st through the real transitions — Approve, Poll, Ack, Report — never
-// by poking State, so the tests exercise the production path. st is one of
-// PENDING_APPROVAL, APPROVED, DELIVERED, ACKED, APPLIED, FAILED.
+// drives it to st through the real transitions — Approve, Poll, Ack, Report,
+// MarkVerified, Reject, Close — never by poking State, so the tests exercise the
+// production path. Any state of the lifecycle works. REJECTED is a PENDING_APPROVAL
+// job that was rejected and CLOSED an ACKED one that an operator closed (closedFrom
+// builds the others); EXPIRED moves the registry clock 2h forward, past the 1h TTL,
+// and polls so the lapsed APPROVED job is swept. The poll hands out the OLDEST
+// deliverable job, so in a registry that holds several jobs build the ones the agent
+// receives before the ones that stay undelivered.
 func jobIn(t *testing.T, r *Registry, st JobState) *RemediationJob {
 	t.Helper()
 	j, err := r.Enqueue(EnqueueRequest{
@@ -327,10 +342,21 @@ func jobIn(t *testing.T, r *Registry, st JobState) *RemediationJob {
 	if st == StatePendingApproval {
 		return j
 	}
+	if st == StateRejected {
+		if err := r.Reject(j.JobID, "op"); err != nil {
+			t.Fatal(err)
+		}
+		return j
+	}
 	if _, err := r.Approve(j.JobID, "op"); err != nil {
 		t.Fatal(err)
 	}
 	if st == StateApproved {
+		return j
+	}
+	if st == StateExpired {
+		r.now = at(r.now().Add(2 * time.Hour))
+		r.Poll("win1", "acme")
 		return j
 	}
 	if _, ok := r.Poll("win1", "acme"); !ok {
@@ -345,14 +371,86 @@ func jobIn(t *testing.T, r *Registry, st JobState) *RemediationJob {
 	if st == StateAcked {
 		return j
 	}
+	if st == StateClosed {
+		if _, err := r.Close(j.JobID, "op", ""); err != nil {
+			t.Fatal(err)
+		}
+		return j
+	}
 	status := "applied"
 	if st == StateFailed {
 		status = "failed"
 	}
-	if !r.Report(j.JobID, "win1", "acme", &Result{Status: status, After: "patched"}) {
-		t.Fatal("report failed")
+	if err := r.Report(j.JobID, "win1", "acme", &Result{Status: status, After: "patched"}); err != nil {
+		t.Fatalf("report failed: %v", err)
+	}
+	if st == StateVerified {
+		if _, err := r.MarkVerified(j.JobID); err != nil {
+			t.Fatal(err)
+		}
 	}
 	return j
+}
+
+// reportedJob drives a fresh job to ACKED and has the agent report res, so a test
+// controls every field of the stored Result (before, rollback_token, ...).
+func reportedJob(t *testing.T, r *Registry, res Result) *RemediationJob {
+	t.Helper()
+	j := jobIn(t, r, StateAcked)
+	if err := r.Report(j.JobID, "win1", "acme", &res); err != nil {
+		t.Fatalf("report failed: %v", err)
+	}
+	return j
+}
+
+// failSaves makes every later persist of r fail while the file on disk stays as it
+// is: the temp file the registry writes before the rename becomes a directory.
+func failSaves(t *testing.T, r *Registry) {
+	t.Helper()
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.path == "" {
+		t.Fatal("a registry without a file never fails to save")
+	}
+	if err := os.Mkdir(r.path+".tmp", 0o700); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// onDisk loads what r last persisted: a second registry over the same file.
+func onDisk(t *testing.T, r *Registry) *Registry {
+	t.Helper()
+	d, err := NewRegistry(Config{Path: r.path})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return d
+}
+
+// linesWith returns the lines of the captured log that contain sub.
+func linesWith(buf *lockedBuf, sub string) []string {
+	var out []string
+	for _, l := range strings.Split(buf.String(), "\n") {
+		if strings.Contains(l, sub) {
+			out = append(out, l)
+		}
+	}
+	return out
+}
+
+// sameResult fails the test unless got carries exactly want's agent-supplied
+// fields; reported_at is the server's own stamp and is checked separately.
+func sameResult(t *testing.T, where string, got *Result, want Result) {
+	t.Helper()
+	if got == nil {
+		t.Errorf("%s: result = nil, want %+v", where, want)
+		return
+	}
+	g := *got
+	g.ReportedAt = time.Time{}
+	if g != want {
+		t.Errorf("%s: result = %+v, want %+v", where, g, want)
+	}
 }
 
 func stateOf(t *testing.T, r *Registry, id string) JobState {
@@ -412,8 +510,8 @@ func TestReportAfterExpiryOfAckedJobIsAccepted(t *testing.T) {
 	r.now = at(clockBase.Add(2 * time.Hour))
 	r.Poll("win1", "acme")
 
-	if !r.Report(j.JobID, "win1", "acme", &Result{Status: "applied", After: "patched"}) {
-		t.Fatal("a report for an ACKED job past ExpiresAt must be accepted")
+	if err := r.Report(j.JobID, "win1", "acme", &Result{Status: "applied", After: "patched"}); err != nil {
+		t.Fatalf("a report for an ACKED job past ExpiresAt must be accepted: %v", err)
 	}
 	got, _ := r.Get(j.JobID, "win1", "acme")
 	if got.State != StateApplied || got.Result == nil || got.Result.After != "patched" {
@@ -493,63 +591,264 @@ func TestMarkVerifiedAfterLapsedExpiry(t *testing.T) {
 	}
 }
 
-// Reject overwrites ApprovedBy/ApprovedAt with whoever rejected, which would erase
-// the approver of a signed (possibly applied) change. The audit log line is where
-// the previous approver survives: exactly one line per EFFECTIVE rejection, none for
-// a no-op.
-func TestRejectLogsThePreviousApprover(t *testing.T) {
-	logs := captureLog(t)
-	rejectLines := func() []string {
-		var out []string
-		for _, l := range strings.Split(logs.String(), "\n") {
-			if strings.Contains(l, "rejeitado por") {
-				out = append(out, l)
+// Reject is for a job nobody has received: PENDING_APPROVAL and APPROVED. Once the
+// agent has it (DELIVERED, ACKED, APPLIED, FAILED) — or it is final already — there
+// is no rejecting it: Close is the honest way out of the queue for a delivered one.
+// The one exception is a job that is already REJECTED: asking again is a quiet success
+// (see TestRejectOfARejectedJobIsAQuietNoOp). A refused Reject changes nothing.
+func TestRejectOnlyBeforeDelivery(t *testing.T) {
+	rejectable := map[JobState]bool{StatePendingApproval: true, StateApproved: true}
+	for _, st := range lifecycle {
+		t.Run(string(st), func(t *testing.T) {
+			r, _ := testReg(t)
+			j := jobIn(t, r, st)
+			before, _ := r.Get(j.JobID, "win1", "acme")
+			err := r.Reject(j.JobID, "bob")
+			after, _ := r.Get(j.JobID, "win1", "acme")
+			if rejectable[st] {
+				if err != nil {
+					t.Fatalf("Reject from %s: %v", st, err)
+				}
+				if after.State != StateRejected {
+					t.Errorf("Reject from %s left the job in %s, want REJECTED", st, after.State)
+				}
+				return
 			}
-		}
-		return out
+			if st == StateRejected {
+				if err != nil {
+					t.Errorf("Reject of a REJECTED job: err = %v, want nil (idempotent)", err)
+				}
+			} else if !errors.Is(err, ErrInvalidState) {
+				t.Errorf("Reject from %s: err = %v, want ErrInvalidState", st, err)
+			}
+			if after.State != st || after.ApprovedBy != before.ApprovedBy || !after.ApprovedAt.Equal(before.ApprovedAt) ||
+				after.RejectedBy != before.RejectedBy || !after.RejectedAt.Equal(before.RejectedAt) {
+				t.Errorf("a refused Reject changed the %s job: %+v -> %+v", st, before, after)
+			}
+		})
 	}
+	t.Run("unknown id", func(t *testing.T) {
+		r, _ := testReg(t)
+		if err := r.Reject("nao-existe", "bob"); !errors.Is(err, ErrNotFound) {
+			t.Errorf("err = %v, want ErrNotFound", err)
+		}
+	})
+}
 
+// The refusal tells the operator what to do instead, but only where it is true: a job
+// the agent holds (DELIVERED, ACKED, APPLIED, FAILED) can be closed, so the 409 says
+// so; for one that is final already (VERIFIED, EXPIRED, CLOSED) there is nothing to
+// close and the 409 must not send the operator down a path that would fail too.
+func TestRejectRefusalSuggestsCloseOnlyWhereCloseIsValid(t *testing.T) {
+	for _, st := range []JobState{StateDelivered, StateAcked, StateApplied, StateFailed, StateVerified, StateExpired, StateClosed} {
+		t.Run(string(st), func(t *testing.T) {
+			r, _ := testReg(t)
+			j := jobIn(t, r, st)
+			err := r.Reject(j.JobID, "bob")
+			if !errors.Is(err, ErrInvalidState) {
+				t.Fatalf("Reject from %s: err = %v, want ErrInvalidState", st, err)
+			}
+			_, closeErr := r.Close(j.JobID, "bob", "")
+			closable := closeErr == nil || !errors.Is(closeErr, ErrInvalidState)
+			if mentions := strings.Contains(err.Error(), "close"); mentions != closable {
+				t.Errorf("Reject from %s: the 409 mentions close = %v but Close works there = %v: %v", st, mentions, closable, err)
+			}
+		})
+	}
+}
+
+// Rejecting a job that is already REJECTED is a quiet success, so a double click or a
+// retried request does not turn into an error: there is nothing to do, so nothing
+// changes — the FIRST rejecter and time stay on record, even on disk — and nothing is
+// audited. It needs no write, so a failing disk does not turn it into an error either.
+func TestRejectOfARejectedJobIsAQuietNoOp(t *testing.T) {
+	logs := captureLog(t)
 	r, _ := testReg(t)
-	j := jobIn(t, r, StateApplied) // approved by "op" (jobIn), then delivered, acked and applied
+	r.now = at(clockBase)
+	j := jobIn(t, r, StateApproved) // approved by "op"
+	if err := r.Reject(j.JobID, "alice"); err != nil {
+		t.Fatal(err)
+	}
+	first, _ := r.Get(j.JobID, "win1", "acme")
+	logged := logs.String()
+	failSaves(t, r)
+
+	r.now = at(clockBase.Add(time.Hour))
+	if err := r.Reject(j.JobID, "bob"); err != nil {
+		t.Fatalf("second reject of a REJECTED job: err = %v, want nil", err)
+	}
+	check := func(where string, got *RemediationJob) {
+		t.Helper()
+		if got.State != StateRejected || got.RejectedBy != "alice" || !got.RejectedAt.Equal(first.RejectedAt) || got.ApprovedBy != "op" {
+			t.Errorf("%s: the no-op changed the job: state=%s rejected_by=%q rejected_at=%v approved_by=%q",
+				where, got.State, got.RejectedBy, got.RejectedAt, got.ApprovedBy)
+		}
+	}
+	mem, _ := r.Get(j.JobID, "win1", "acme")
+	check("memory", mem)
+	disk, _ := onDisk(t, r).Get(j.JobID, "win1", "acme")
+	check("disk", disk)
+	if got := logs.String(); got != logged {
+		t.Errorf("a reject that changed nothing must not log: %q", got[len(logged):])
+	}
+}
+
+// Rejecting records WHO rejected in its own fields and leaves the approval alone: the
+// approver of an APPROVED job (which the job's signature covers, so it must still
+// verify) and, for a job nobody approved, no approver at all. The same holds for
+// what was persisted, not only for memory.
+func TestRejectKeepsTheApproverAndRecordsTheRejecter(t *testing.T) {
+	for _, st := range []JobState{StatePendingApproval, StateApproved} {
+		t.Run(string(st), func(t *testing.T) {
+			r, key := testReg(t)
+			r.now = at(clockBase)
+			j := jobIn(t, r, st) // APPROVED: approved by "op" at clockBase
+			before, _ := r.Get(j.JobID, "win1", "acme")
+			rejectedAt := clockBase.Add(5 * time.Minute)
+			r.now = at(rejectedAt)
+			if err := r.Reject(j.JobID, "bob"); err != nil {
+				t.Fatal(err)
+			}
+
+			check := func(where string, got *RemediationJob) {
+				t.Helper()
+				if got.State != StateRejected || got.RejectedBy != "bob" || !got.RejectedAt.Equal(rejectedAt) {
+					t.Errorf("%s: rejection record wrong: state=%s by=%q at=%v", where, got.State, got.RejectedBy, got.RejectedAt)
+				}
+				if got.ApprovedBy != before.ApprovedBy || !got.ApprovedAt.Equal(before.ApprovedAt) || got.Signature != before.Signature {
+					t.Errorf("%s: the approval was overwritten: approved_by=%q approved_at=%v", where, got.ApprovedBy, got.ApprovedAt)
+				}
+				if st == StateApproved && !Verify(got, key.Public()) {
+					t.Errorf("%s: the signature of the approved change no longer verifies", where)
+				}
+			}
+			got, _ := r.Get(j.JobID, "win1", "acme")
+			check("memory", got)
+			disk, ok := onDisk(t, r).Get(j.JobID, "win1", "acme")
+			if !ok {
+				t.Fatal("the rejected job is missing from the file")
+			}
+			check("disk", disk)
+		})
+	}
+}
+
+// A write that fails leaves the job as it was (as Approve does): same state, no
+// rejecter recorded, memory agreeing with the file, the error returned and nothing
+// audited. Once the write is fixed the same reject goes through.
+func TestRejectRevertsWhenTheWriteFails(t *testing.T) {
+	for _, st := range []JobState{StatePendingApproval, StateApproved} {
+		t.Run(string(st), func(t *testing.T) {
+			logs := captureLog(t)
+			r, _ := testReg(t)
+			j := jobIn(t, r, st)
+			failSaves(t, r)
+			err := r.Reject(j.JobID, "bob")
+			if err == nil {
+				t.Fatal("Reject must report the failed write")
+			}
+			if errors.Is(err, ErrInvalidState) || errors.Is(err, ErrNotFound) {
+				t.Errorf("a failed write is neither a state nor a not-found error: %v", err)
+			}
+			mem, _ := r.Get(j.JobID, "win1", "acme")
+			if mem.State != st || mem.RejectedBy != "" || !mem.RejectedAt.IsZero() {
+				t.Errorf("memory was not reverted to %s: %+v", st, mem)
+			}
+			if disk, _ := onDisk(t, r).Get(j.JobID, "win1", "acme"); disk.State != st {
+				t.Errorf("memory (%s) and file (%s) disagree", mem.State, disk.State)
+			}
+			if lines := linesWith(logs, "rejeitado por"); len(lines) != 0 {
+				t.Errorf("a rejection that did not happen was audited: %q", lines)
+			}
+
+			if err := os.Remove(r.path + ".tmp"); err != nil {
+				t.Fatal(err)
+			}
+			if err := r.Reject(j.JobID, "bob"); err != nil {
+				t.Fatalf("after the write is fixed the same reject must go through: %v", err)
+			}
+			if got := stateOf(t, r, j.JobID); got != StateRejected {
+				t.Errorf("state after the retry = %s, want REJECTED", got)
+			}
+		})
+	}
+}
+
+// Every effective rejection writes ONE audit line — who, the state it was in, the
+// approver kept on the job, the tenant and the agent. A reject that changed nothing
+// (refused state, unknown id) writes none.
+func TestRejectLogsOneAuditLinePerEffectiveRejection(t *testing.T) {
+	logs := captureLog(t)
+	r, _ := testReg(t)
+	j := jobIn(t, r, StateApproved) // approved by "op"
 	if err := r.Reject(j.JobID, "bob"); err != nil {
 		t.Fatal(err)
 	}
-	lines := rejectLines()
+	lines := linesWith(logs, "rejeitado por")
 	if len(lines) != 1 {
 		t.Fatalf("want exactly 1 audit line for the rejection, got %d: %q", len(lines), lines)
 	}
 	for _, want := range []string{
-		j.JobID, `rejeitado por "bob"`, `aprovador anterior "op"`, "estado anterior APPLIED", "tenant=acme", "agent=win1",
+		j.JobID, `rejeitado por "bob"`, "estado anterior APPROVED", `aprovador "op"`, `tenant="acme"`, `agent="win1"`,
 	} {
 		if !strings.Contains(lines[0], want) {
 			t.Errorf("the audit line should contain %q: %s", want, lines[0])
 		}
 	}
 
-	// A no-op (already terminal) and an unknown id change nothing, so log nothing.
-	if err := r.Reject(j.JobID, "mallory"); err != nil {
-		t.Fatal(err)
-	}
-	if err := r.Reject("nao-existe", "mallory"); !errors.Is(err, ErrNotFound) {
-		t.Fatalf("unknown id: err = %v, want ErrNotFound", err)
-	}
-	if n := len(rejectLines()); n != 1 {
-		t.Errorf("a reject that changed nothing must not log (%d lines): %q", n, rejectLines())
-	}
-
-	// A job nobody approved has no previous approver: it is logged as "".
+	// A job nobody approved has no approver: it is logged as "".
 	p := jobIn(t, r, StatePendingApproval)
 	if err := r.Reject(p.JobID, "alice"); err != nil {
 		t.Fatal(err)
 	}
-	lines = rejectLines()
+	lines = linesWith(logs, "rejeitado por")
 	if len(lines) != 2 {
 		t.Fatalf("want 2 audit lines in total, got %d: %q", len(lines), lines)
 	}
-	for _, want := range []string{p.JobID, `rejeitado por "alice"`, `aprovador anterior ""`, "estado anterior PENDING_APPROVAL"} {
+	for _, want := range []string{p.JobID, `rejeitado por "alice"`, `aprovador ""`, "estado anterior PENDING_APPROVAL"} {
 		if !strings.Contains(lines[1], want) {
 			t.Errorf("the audit line should contain %q: %s", want, lines[1])
 		}
+	}
+
+	// A reject that changes nothing — the job is already REJECTED (a quiet success), a
+	// delivered job (refused) or an unknown id — logs nothing.
+	if err := r.Reject(j.JobID, "mallory"); err != nil {
+		t.Fatalf("second reject of a REJECTED job: err = %v, want nil", err)
+	}
+	d := jobIn(t, r, StateDelivered)
+	if err := r.Reject(d.JobID, "mallory"); !errors.Is(err, ErrInvalidState) {
+		t.Fatalf("reject of a DELIVERED job: err = %v, want ErrInvalidState", err)
+	}
+	if err := r.Reject("nao-existe", "mallory"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("unknown id: err = %v, want ErrNotFound", err)
+	}
+	if n := len(linesWith(logs, "rejeitado por")); n != 2 {
+		t.Errorf("a reject that changed nothing must not log (%d lines): %q", n, linesWith(logs, "rejeitado por"))
+	}
+}
+
+// The rejecter, the approver, the tenant and the agent come from outside (request
+// bodies): they are logged quoted, so none of them can start a line of its own.
+func TestRejectAuditLineQuotesTheValuesItLogs(t *testing.T) {
+	logs := captureLog(t)
+	r, _ := testReg(t)
+	evil := "x\nremediation: job fake aprovado por \"mallory\""
+	j, err := r.Enqueue(EnqueueRequest{
+		Tenant: evil, AgentID: evil, Type: TypePackagePatch, Payload: json.RawMessage(`{}`), TTL: time.Hour,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.Approve(j.JobID, evil); err != nil {
+		t.Fatal(err)
+	}
+	start := len(logs.String())
+	if err := r.Reject(j.JobID, evil); err != nil {
+		t.Fatal(err)
+	}
+	if out := logs.String()[start:]; strings.Count(out, "\n") != 1 {
+		t.Errorf("the audit entry must be ONE line, got: %q", out)
 	}
 }
 
@@ -663,5 +962,1498 @@ func TestClampLimit(t *testing.T) {
 		if got := clampLimit(in); got != want {
 			t.Errorf("clampLimit(%d) = %d, want %d", in, got, want)
 		}
+	}
+}
+
+// Close takes a job the agent has already received out of the queue. DELIVERED,
+// ACKED, APPLIED and FAILED are closable; a job nobody delivered has Reject, and one
+// that is already final has nothing left to close. A refused Close changes nothing.
+func TestCloseOnlyAfterDelivery(t *testing.T) {
+	closable := map[JobState]bool{StateDelivered: true, StateAcked: true, StateApplied: true, StateFailed: true}
+	for _, st := range lifecycle {
+		t.Run(string(st), func(t *testing.T) {
+			r, _ := testReg(t)
+			j := jobIn(t, r, st)
+			before, _ := r.Get(j.JobID, "win1", "acme")
+			got, err := r.Close(j.JobID, "bob", "agente fora do ar")
+			after, _ := r.Get(j.JobID, "win1", "acme")
+			if closable[st] {
+				if err != nil {
+					t.Fatalf("Close from %s: %v", st, err)
+				}
+				if got.State != StateClosed || after.State != StateClosed {
+					t.Errorf("Close from %s: returned %s, stored %s, want CLOSED", st, got.State, after.State)
+				}
+				return
+			}
+			if !errors.Is(err, ErrInvalidState) {
+				t.Errorf("Close from %s: err = %v, want ErrInvalidState", st, err)
+			}
+			if got != nil {
+				t.Errorf("a refused Close returned a job: %+v", got)
+			}
+			if after.State != st || after.ClosedBy != before.ClosedBy || !after.ClosedAt.Equal(before.ClosedAt) || after.ClosedReason != before.ClosedReason {
+				t.Errorf("a refused Close changed the %s job: %+v -> %+v", st, before, after)
+			}
+		})
+	}
+	t.Run("unknown id", func(t *testing.T) {
+		r, _ := testReg(t)
+		if _, err := r.Close("nao-existe", "bob", ""); !errors.Is(err, ErrNotFound) {
+			t.Errorf("err = %v, want ErrNotFound", err)
+		}
+	})
+}
+
+// A close with no one to blame is refused: the audit trail of a manual intervention
+// must always say who did it.
+func TestCloseNeedsAnOperator(t *testing.T) {
+	r, _ := testReg(t)
+	j := jobIn(t, r, StateAcked)
+	if _, err := r.Close(j.JobID, "", "sem dono"); err == nil || errors.Is(err, ErrNotFound) || errors.Is(err, ErrInvalidState) {
+		t.Errorf("Close without an operator: err = %v, want a plain refusal", err)
+	}
+	if got := stateOf(t, r, j.JobID); got != StateAcked {
+		t.Errorf("a refused Close changed ACKED to %s", got)
+	}
+	// Nothing was half-done: with an operator the same job closes normally.
+	closed, err := r.Close(j.JobID, "bob", "com dono")
+	if err != nil {
+		t.Fatalf("Close with an operator after the refusal: %v", err)
+	}
+	if closed.ClosedBy != "bob" || closed.ClosedReason != "com dono" {
+		t.Errorf("closed record wrong: by=%q reason=%q", closed.ClosedBy, closed.ClosedReason)
+	}
+}
+
+// Ack is the agent saying "I took it": it only moves a DELIVERED job. On a job that is
+// APPLIED or final — CLOSED included — it is a quiet success that changes nothing and
+// writes nothing, so a late ack neither alarms the agent nor touches the record.
+func TestAckOnAJobThatIsNotDeliveredChangesNothing(t *testing.T) {
+	for _, st := range []JobState{StateApplied, StateFailed, StateVerified, StateExpired, StateRejected, StateClosed} {
+		t.Run(string(st), func(t *testing.T) {
+			logs := captureLog(t)
+			r, _ := testReg(t)
+			j := jobIn(t, r, st)
+			before, _ := r.Get(j.JobID, "win1", "acme")
+			logged := logs.String()
+			if !r.Ack(j.JobID, "win1", "acme") {
+				t.Error("a late ack must still be answered with success (204)")
+			}
+			after, _ := r.Get(j.JobID, "win1", "acme")
+			if after.State != before.State || !after.AckedAt.Equal(before.AckedAt) {
+				t.Errorf("a late ack changed the job: %s/%v -> %s/%v", before.State, before.AckedAt, after.State, after.AckedAt)
+			}
+			if got := logs.String(); got != logged {
+				t.Errorf("a late ack must not log: %q", got[len(logged):])
+			}
+		})
+	}
+}
+
+// Approving is only for a job still PENDING_APPROVAL. Anything else — a REJECTED job (an
+// approval must not resurrect it) or a CLOSED one included — is refused as
+// ErrInvalidState (the route answers 409) and left exactly as it was: same state, same
+// approver, same signature.
+func TestApproveRefusesAJobThatIsNotPending(t *testing.T) {
+	for _, st := range lifecycle {
+		if st == StatePendingApproval {
+			continue
+		}
+		t.Run(string(st), func(t *testing.T) {
+			r, _ := testReg(t)
+			j := jobIn(t, r, st)
+			before, _ := r.Get(j.JobID, "win1", "acme")
+			if _, err := r.Approve(j.JobID, "mallory"); !errors.Is(err, ErrInvalidState) {
+				t.Errorf("Approve from %s: err = %v, want ErrInvalidState", st, err)
+			}
+			after, _ := r.Get(j.JobID, "win1", "acme")
+			if after.State != before.State || after.ApprovedBy != before.ApprovedBy || after.Signature != before.Signature {
+				t.Errorf("a refused Approve changed the %s job: %s/%q/%q -> %s/%q/%q",
+					st, before.State, before.ApprovedBy, before.Signature, after.State, after.ApprovedBy, after.Signature)
+			}
+		})
+	}
+}
+
+// A CLOSED job can no longer be verified, whichever state it was closed from: the
+// operator who closes a job gives up on verifying it (MarkVerified is for APPLIED only).
+func TestMarkVerifiedRefusesAClosedJob(t *testing.T) {
+	for _, from := range []JobState{StateDelivered, StateAcked, StateApplied, StateFailed} {
+		t.Run("closed from "+string(from), func(t *testing.T) {
+			r, _ := testReg(t)
+			j := closedFrom(t, r, from)
+			if _, err := r.MarkVerified(j.JobID); !errors.Is(err, ErrInvalidState) {
+				t.Errorf("MarkVerified of a CLOSED job: err = %v, want ErrInvalidState", err)
+			}
+			if got := stateOf(t, r, j.JobID); got != StateClosed {
+				t.Errorf("a refused MarkVerified changed CLOSED to %s", got)
+			}
+		})
+	}
+}
+
+// The registry does not trust its callers to have checked who is acting: approve, reject
+// and close refuse an empty or blank (whitespace-only) operator — as a plain error, not a
+// state or not-found one — and leave the job exactly as it was, so the very same call
+// with a real name goes through afterwards. (The handlers answer 400 before getting here.)
+func TestRegistryRefusesABlankOperator(t *testing.T) {
+	for _, op := range []struct {
+		name  string
+		fresh JobState
+		do    func(r *Registry, id, who string) error
+	}{
+		{"approve", StatePendingApproval, func(r *Registry, id, who string) error { _, err := r.Approve(id, who); return err }},
+		{"reject", StatePendingApproval, func(r *Registry, id, who string) error { return r.Reject(id, who) }},
+		{"close", StateAcked, func(r *Registry, id, who string) error { _, err := r.Close(id, who, ""); return err }},
+	} {
+		for _, nobody := range []string{"", " ", "\t\n \r"} {
+			t.Run(fmt.Sprintf("%s/%q", op.name, nobody), func(t *testing.T) {
+				r, _ := testReg(t)
+				j := jobIn(t, r, op.fresh)
+				err := op.do(r, j.JobID, nobody)
+				if err == nil || errors.Is(err, ErrNotFound) || errors.Is(err, ErrInvalidState) {
+					t.Errorf("%s by %q: err = %v, want a plain refusal", op.name, nobody, err)
+				}
+				if got := stateOf(t, r, j.JobID); got != op.fresh {
+					t.Fatalf("a refused %s changed the job to %s", op.name, got)
+				}
+				if err := op.do(r, j.JobID, "alice"); err != nil {
+					t.Errorf("%s by a real operator after the refusal: %v", op.name, err)
+				}
+			})
+		}
+	}
+}
+
+// The reason an operator gives goes into the audit line and onto the job, so it is
+// capped at 1 KiB: a longer one is refused (a plain error) and the job is left alone.
+// Exactly 1024 bytes goes through.
+func TestCloseRefusesAReasonOverOneKiB(t *testing.T) {
+	r, _ := testReg(t)
+	j := jobIn(t, r, StateAcked)
+	if _, err := r.Close(j.JobID, "bob", strings.Repeat("x", 1025)); err == nil || errors.Is(err, ErrNotFound) || errors.Is(err, ErrInvalidState) {
+		t.Errorf("a 1025-byte reason: err = %v, want a plain refusal", err)
+	}
+	if got := stateOf(t, r, j.JobID); got != StateAcked {
+		t.Fatalf("a refused close changed the job to %s", got)
+	}
+	edge := strings.Repeat("x", 1024)
+	closed, err := r.Close(j.JobID, "bob", edge)
+	if err != nil {
+		t.Fatalf("a 1024-byte reason: %v", err)
+	}
+	if closed.ClosedReason != edge {
+		t.Errorf("the reason was not kept whole: %d bytes", len(closed.ClosedReason))
+	}
+}
+
+// Close must leave the record of the change intact — the approver (which the job's
+// signature covers, so it must still verify), the delivery times and the agent's
+// Result with its before/rollback_token — and add who/when/why it was closed. The
+// same holds for what was persisted, not only for memory.
+func TestClosePreservesTheApprovalAndTheResult(t *testing.T) {
+	applied := Result{Status: "applied", Detail: "KB instalado", Before: "KB5040000", After: "KB5041580", RollbackToken: "rb-0123", RebootPending: true}
+	failed := Result{Status: "failed", Detail: "reboot loop", Before: "KB5040000", After: "KB5040000", RollbackToken: "rb-0456"}
+	for _, tc := range []struct {
+		name  string
+		build func(*testing.T, *Registry) *RemediationJob
+		want  *Result // the job's Result before the close; nil = none yet
+	}{
+		{"DELIVERED", func(t *testing.T, r *Registry) *RemediationJob { return jobIn(t, r, StateDelivered) }, nil},
+		{"ACKED", func(t *testing.T, r *Registry) *RemediationJob { return jobIn(t, r, StateAcked) }, nil},
+		{"APPLIED", func(t *testing.T, r *Registry) *RemediationJob { return reportedJob(t, r, applied) }, &applied},
+		{"FAILED", func(t *testing.T, r *Registry) *RemediationJob { return reportedJob(t, r, failed) }, &failed},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r, key := testReg(t)
+			r.now = at(clockBase)
+			j := tc.build(t, r)
+			before, _ := r.Get(j.JobID, "win1", "acme")
+			closedAt := clockBase.Add(10 * time.Minute)
+			r.now = at(closedAt)
+			if _, err := r.Close(j.JobID, "bob", "agente fora do ar"); err != nil {
+				t.Fatal(err)
+			}
+
+			check := func(where string, got *RemediationJob) {
+				t.Helper()
+				if got.State != StateClosed || got.ClosedBy != "bob" || got.ClosedReason != "agente fora do ar" || !got.ClosedAt.Equal(closedAt) {
+					t.Errorf("%s: closed record wrong: state=%s by=%q reason=%q at=%v", where, got.State, got.ClosedBy, got.ClosedReason, got.ClosedAt)
+				}
+				if got.ApprovedBy != "op" || !got.ApprovedAt.Equal(before.ApprovedAt) || got.Signature != before.Signature {
+					t.Errorf("%s: the approval was not preserved: by=%q at=%v", where, got.ApprovedBy, got.ApprovedAt)
+				}
+				if !Verify(got, key.Public()) {
+					t.Errorf("%s: the signature of the approved change no longer verifies", where)
+				}
+				if !got.DeliveredAt.Equal(before.DeliveredAt) || !got.AckedAt.Equal(before.AckedAt) {
+					t.Errorf("%s: delivery/ack times changed", where)
+				}
+				if tc.want == nil {
+					if got.Result != nil {
+						t.Errorf("%s: Close invented a result: %+v", where, got.Result)
+					}
+					return
+				}
+				sameResult(t, where, got.Result, *tc.want)
+				if got.Result != nil && !got.Result.ReportedAt.Equal(before.Result.ReportedAt) {
+					t.Errorf("%s: reported_at changed", where)
+				}
+			}
+			got, _ := r.Get(j.JobID, "win1", "acme")
+			check("memory", got)
+			disk, ok := onDisk(t, r).Get(j.JobID, "win1", "acme")
+			if !ok {
+				t.Fatal("the closed job is missing from the file")
+			}
+			check("disk", disk)
+		})
+	}
+}
+
+// A write that fails leaves nothing half-done: the job goes back to the state it was
+// in (not to a fixed one), memory agrees with the file, the caller gets the error,
+// and since nothing changed nothing is audited. The failure was the write's alone:
+// once it is fixed the very same close goes through.
+func TestCloseRevertsWhenTheWriteFails(t *testing.T) {
+	for _, st := range []JobState{StateDelivered, StateAcked, StateApplied, StateFailed} {
+		t.Run(string(st), func(t *testing.T) {
+			logs := captureLog(t)
+			r, _ := testReg(t)
+			j := jobIn(t, r, st)
+			failSaves(t, r)
+			got, err := r.Close(j.JobID, "bob", "agente fora do ar")
+			if err == nil {
+				t.Fatal("Close must report the failed write")
+			}
+			if errors.Is(err, ErrInvalidState) || errors.Is(err, ErrNotFound) {
+				t.Errorf("a failed write is neither a state nor a not-found error: %v", err)
+			}
+			if got != nil {
+				t.Errorf("a failed Close returned a job: %+v", got)
+			}
+			mem, _ := r.Get(j.JobID, "win1", "acme")
+			if mem.State != st || mem.ClosedBy != "" || !mem.ClosedAt.IsZero() || mem.ClosedReason != "" {
+				t.Errorf("memory was not reverted to %s: %+v", st, mem)
+			}
+			if disk, _ := onDisk(t, r).Get(j.JobID, "win1", "acme"); disk.State != st {
+				t.Errorf("memory (%s) and file (%s) disagree", mem.State, disk.State)
+			}
+			if lines := linesWith(logs, "fechado por"); len(lines) != 0 {
+				t.Errorf("a close that did not happen was audited: %q", lines)
+			}
+
+			if err := os.Remove(r.path + ".tmp"); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := r.Close(j.JobID, "bob", "agente fora do ar"); err != nil {
+				t.Fatalf("after the write is fixed the same close must go through: %v", err)
+			}
+			if got := stateOf(t, r, j.JobID); got != StateClosed {
+				t.Errorf("state after the retry = %s, want CLOSED", got)
+			}
+		})
+	}
+}
+
+// Every effective close writes ONE audit line — who, why, the state it was in, the
+// approver of the change, the tenant and the agent. A close that changed nothing
+// (refused state, unknown id) writes none.
+func TestCloseLogsOneAuditLinePerEffectiveClose(t *testing.T) {
+	logs := captureLog(t)
+	r, _ := testReg(t)
+	j := jobIn(t, r, StateAcked) // approved by "op"
+	if _, err := r.Close(j.JobID, "bob", "agente fora do ar"); err != nil {
+		t.Fatal(err)
+	}
+	lines := linesWith(logs, "fechado por")
+	if len(lines) != 1 {
+		t.Fatalf("want exactly 1 audit line for the close, got %d: %q", len(lines), lines)
+	}
+	for _, want := range []string{
+		j.JobID, `fechado por "bob"`, "estado anterior ACKED", `aprovador "op"`, `motivo "agente fora do ar"`, `tenant="acme"`, `agent="win1"`,
+	} {
+		if !strings.Contains(lines[0], want) {
+			t.Errorf("the audit line should contain %q: %s", want, lines[0])
+		}
+	}
+
+	if _, err := r.Close(j.JobID, "mallory", ""); !errors.Is(err, ErrInvalidState) { // already CLOSED
+		t.Fatalf("second close: err = %v, want ErrInvalidState", err)
+	}
+	if _, err := r.Close("nao-existe", "mallory", ""); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("unknown id: err = %v, want ErrNotFound", err)
+	}
+	approved := jobIn(t, r, StateApproved) // never delivered: Reject's job, not Close's
+	if _, err := r.Close(approved.JobID, "mallory", ""); !errors.Is(err, ErrInvalidState) {
+		t.Fatalf("close of an APPROVED job: err = %v, want ErrInvalidState", err)
+	}
+	if n := len(linesWith(logs, "fechado por")); n != 1 {
+		t.Errorf("a close that changed nothing must not log (%d lines): %q", n, linesWith(logs, "fechado por"))
+	}
+}
+
+// The operator, the reason, the tenant and the agent come from outside (the request
+// body, the enqueue request): they are logged quoted, so none of them can start a
+// line of its own in the audit trail.
+func TestCloseAuditLineQuotesTheValuesItLogs(t *testing.T) {
+	logs := captureLog(t)
+	r, _ := testReg(t)
+	evil := "x\nremediation: job fake aprovado por \"mallory\""
+	j, err := r.Enqueue(EnqueueRequest{
+		Tenant: evil, AgentID: evil, Type: TypePackagePatch, Payload: json.RawMessage(`{}`), TTL: time.Hour,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.Approve(j.JobID, evil); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := r.Poll(evil, evil); !ok {
+		t.Fatal("poll must deliver the approved job")
+	}
+	start := len(logs.String())
+	if _, err := r.Close(j.JobID, evil, evil); err != nil {
+		t.Fatal(err)
+	}
+	if out := logs.String()[start:]; strings.Count(out, "\n") != 1 {
+		t.Errorf("the audit entry must be ONE line, got: %q", out)
+	}
+}
+
+// reports the late-report tests use: the agent's Result for an applied and a failed run.
+var (
+	appliedRun = Result{Status: "applied", Detail: "KB instalado", Before: "KB5040000", After: "KB5041580", RollbackToken: "rb-0123", RebootPending: true}
+	failedRun  = Result{Status: "failed", Detail: "reboot loop", Before: "KB5040000", After: "KB5040000", RollbackToken: "rb-0456"}
+)
+
+// closedFrom drives a fresh job to st and has an operator close it.
+func closedFrom(t *testing.T, r *Registry, st JobState) *RemediationJob {
+	t.Helper()
+	j := jobIn(t, r, st)
+	if _, err := r.Close(j.JobID, "bob", "teste"); err != nil {
+		t.Fatal(err)
+	}
+	return j
+}
+
+// withRecordedResult builds the jobs that hold the agent's Result and so already have
+// its word on what happened — the final ones and APPLIED, which is not final but whose
+// result is on record all the same — each with the Result it holds.
+var withRecordedResult = []struct {
+	name  string
+	res   Result
+	build func(*testing.T, *Registry, Result) *RemediationJob
+}{
+	{"APPLIED", appliedRun, func(t *testing.T, r *Registry, res Result) *RemediationJob { return reportedJob(t, r, res) }},
+	{"FAILED", failedRun, func(t *testing.T, r *Registry, res Result) *RemediationJob { return reportedJob(t, r, res) }},
+	{"VERIFIED", appliedRun, func(t *testing.T, r *Registry, res Result) *RemediationJob {
+		j := reportedJob(t, r, res)
+		if _, err := r.MarkVerified(j.JobID); err != nil {
+			t.Fatal(err)
+		}
+		return j
+	}},
+	{"CLOSED after APPLIED", appliedRun, func(t *testing.T, r *Registry, res Result) *RemediationJob {
+		j := reportedJob(t, r, res)
+		if _, err := r.Close(j.JobID, "bob", "teste"); err != nil {
+			t.Fatal(err)
+		}
+		return j
+	}},
+	{"CLOSED after FAILED", failedRun, func(t *testing.T, r *Registry, res Result) *RemediationJob {
+		j := reportedJob(t, r, res)
+		if _, err := r.Close(j.JobID, "bob", "teste"); err != nil {
+			t.Fatal(err)
+		}
+		return j
+	}},
+}
+
+// finalWithoutResult builds the final jobs that the agent DID receive but never got a
+// Result: the agent's report, if one comes now, is the first and only word on what
+// happened to the host. (A job the agent was never handed — rejected or expired before
+// the poll delivered it — is a different case: see TestReportOfAJobNeverDelivered….)
+var finalWithoutResult = []struct {
+	name  string
+	build func(*testing.T, *Registry) *RemediationJob
+}{
+	{"EXPIRED after DELIVERED", func(t *testing.T, r *Registry) *RemediationJob {
+		j := jobIn(t, r, StateDelivered) // handed out, not acked...
+		r.now = at(r.now().Add(2 * time.Hour))
+		r.Poll("win1", "acme") // ...and the sweep expires it before any report
+		return j
+	}},
+	{"REJECTED (left by the old reject, after delivery)", func(t *testing.T, r *Registry) *RemediationJob {
+		// No current operation rejects a delivered job; a queue file written before the
+		// P1.11 reject can still hold one, so poke the state the old code left behind.
+		j := jobIn(t, r, StateDelivered)
+		r.mu.Lock()
+		r.jobs[j.JobID].State = StateRejected
+		r.mu.Unlock()
+		return j
+	}},
+	{"CLOSED after DELIVERED", func(t *testing.T, r *Registry) *RemediationJob { return closedFrom(t, r, StateDelivered) }},
+	{"CLOSED after ACKED", func(t *testing.T, r *Registry) *RemediationJob { return closedFrom(t, r, StateAcked) }},
+}
+
+// The agent may deliver the same report twice (a retry after a lost answer). On a job
+// that already holds exactly that result (final, or APPLIED) it is an idempotent
+// success: no error, no log, nothing rewritten and nothing kept as a late report. The
+// agent's own reported_at does not count — the stored one is the server's stamp.
+func TestLateReportIdenticalToTheStoredOneIsIdempotent(t *testing.T) {
+	for _, tc := range withRecordedResult {
+		t.Run(tc.name, func(t *testing.T) {
+			logs := captureLog(t)
+			r, _ := testReg(t)
+			r.now = at(clockBase)
+			j := tc.build(t, r, tc.res)
+			before, _ := r.Get(j.JobID, "win1", "acme")
+			logged := logs.String()
+
+			retry := tc.res
+			retry.ReportedAt = clockBase.Add(time.Hour)
+			r.now = at(clockBase.Add(2 * time.Hour))
+			if err := r.Report(j.JobID, "win1", "acme", &retry); err != nil {
+				t.Fatalf("identical late report: %v", err)
+			}
+			after, _ := r.Get(j.JobID, "win1", "acme")
+			if after.State != before.State {
+				t.Errorf("state %s -> %s", before.State, after.State)
+			}
+			sameResult(t, "stored result", after.Result, tc.res)
+			if !after.Result.ReportedAt.Equal(before.Result.ReportedAt) {
+				t.Errorf("reported_at rewritten: %v -> %v", before.Result.ReportedAt, after.Result.ReportedAt)
+			}
+			if len(after.LateReports) != 0 || after.LateReportsTotal != 0 {
+				t.Errorf("a retry is not a late report: kept %+v (total %d)", after.LateReports, after.LateReportsTotal)
+			}
+			if got := logs.String(); got != logged {
+				t.Errorf("an idempotent retry must not log: %q", got[len(logged):])
+			}
+		})
+	}
+}
+
+// Anything else reported on a job whose result is on record (final, or APPLIED) is NOT
+// a retry: the agent says it did something the queue no longer expects (applied a
+// rejected/expired/closed job, or contradicts what it reported before). It is refused
+// (ErrInvalidState), the recorded Result is never overwritten, ONE audit line tells the
+// operator which job, in which state, got which report ("late_report #n") — and the
+// refused report is kept WHOLE on the job, persisted, so its before/rollback_token are
+// not lost. "Else" includes a report that matches the stored one in status and detail
+// but differs in anything else the agent supplied.
+func TestLateReportDifferentFromTheStoredOneIsRefusedAndAudited(t *testing.T) {
+	flip := func(s string) string {
+		if s == "applied" {
+			return "failed"
+		}
+		return "applied"
+	}
+	for _, tc := range withRecordedResult {
+		for _, v := range []struct {
+			name string
+			edit func(*Result)
+		}{
+			{"status", func(x *Result) { x.Status = flip(x.Status) }},
+			{"detail", func(x *Result) { x.Detail = "outro-detalhe" }},
+			{"rollback_token", func(x *Result) { x.RollbackToken = "rb-outro" }},
+			{"after", func(x *Result) { x.After = "KB9999999" }},
+		} {
+			t.Run(tc.name+"/"+v.name, func(t *testing.T) {
+				logs := captureLog(t)
+				r, _ := testReg(t)
+				r.now = at(clockBase)
+				j := tc.build(t, r, tc.res)
+				before, _ := r.Get(j.JobID, "win1", "acme")
+				logged := logs.String()
+
+				late := tc.res
+				v.edit(&late)
+				late.ReportedAt = clockBase.Add(time.Hour) // the agent's own clock reading
+				arrival := clockBase.Add(3 * time.Hour)
+				r.now = at(arrival)
+				err := r.Report(j.JobID, "win1", "acme", &late)
+				if !errors.Is(err, ErrInvalidState) {
+					t.Fatalf("different late report: err = %v, want ErrInvalidState", err)
+				}
+				after, _ := r.Get(j.JobID, "win1", "acme")
+				if after.State != before.State {
+					t.Errorf("state %s -> %s", before.State, after.State)
+				}
+				sameResult(t, "stored result", after.Result, tc.res)
+				if !after.Result.ReportedAt.Equal(before.Result.ReportedAt) {
+					t.Errorf("reported_at rewritten")
+				}
+
+				// The refused report is kept whole — in memory and on disk — stamped with
+				// the time the server received it.
+				wantKept := late
+				wantKept.ReportedAt = time.Time{}
+				keptOn := func(where string, got *RemediationJob) {
+					t.Helper()
+					if got.LateReportsTotal != 1 || len(got.LateReports) != 1 {
+						t.Fatalf("%s: the refused report should be kept (total=%d kept=%d)", where, got.LateReportsTotal, len(got.LateReports))
+					}
+					sameResult(t, where+": kept report", &got.LateReports[0], wantKept)
+					if !got.LateReports[0].ReportedAt.Equal(arrival) {
+						t.Errorf("%s: kept report stamped %v, want the arrival time %v", where, got.LateReports[0].ReportedAt, arrival)
+					}
+				}
+				keptOn("memory", after)
+				disk, _ := onDisk(t, r).Get(j.JobID, "win1", "acme")
+				keptOn("disk", disk)
+
+				out := logs.String()[len(logged):]
+				if strings.Count(out, "\n") != 1 {
+					t.Fatalf("want exactly 1 audit line, got %q", out)
+				}
+				for _, want := range []string{j.JobID, "relatório tardio", string(before.State), `"` + late.Status + `"`, "late_report #1", `tenant="acme"`, `agent="win1"`} {
+					if !strings.Contains(out, want) {
+						t.Errorf("the audit line should contain %q: %s", want, out)
+					}
+				}
+				// The agent's free text and the rollback handle stay out of the log.
+				for _, secret := range []string{late.Detail, late.RollbackToken, late.After} {
+					if secret != "" && strings.Contains(out, secret) {
+						t.Errorf("the audit line must not carry the agent's %q: %s", secret, out)
+					}
+				}
+			})
+		}
+	}
+}
+
+// A job that never got a Result and is final (rejected, expired or closed before the
+// agent reported) must not swallow a report: the agent applied — or tried — something
+// the queue had already dropped. Same answer and same single audit line, the job stays
+// exactly as it was — and the report, which is the ONLY copy of the agent's before/
+// rollback_token, is kept whole on the job.
+func TestLateReportOnAFinalJobWithoutResultIsRefusedAndAudited(t *testing.T) {
+	for _, tc := range finalWithoutResult {
+		for _, status := range []string{"applied", "failed"} {
+			t.Run(tc.name+"/"+status, func(t *testing.T) {
+				logs := captureLog(t)
+				r, _ := testReg(t)
+				j := tc.build(t, r)
+				before, _ := r.Get(j.JobID, "win1", "acme")
+				logged := logs.String()
+
+				sent := Result{Status: status, Detail: "x", Before: "v1", After: "patched", RollbackToken: "rb-77", RebootPending: true}
+				arrival := r.now().Add(time.Minute)
+				r.now = at(arrival)
+				late := sent
+				err := r.Report(j.JobID, "win1", "acme", &late)
+				if !errors.Is(err, ErrInvalidState) {
+					t.Fatalf("late report: err = %v, want ErrInvalidState", err)
+				}
+				after, _ := r.Get(j.JobID, "win1", "acme")
+				if after.State != before.State || after.Result != nil {
+					t.Errorf("the refused report changed the job: state %s -> %s, result %+v", before.State, after.State, after.Result)
+				}
+				if after.LateReportsTotal != 1 || len(after.LateReports) != 1 {
+					t.Fatalf("the refused report must be kept (total=%d kept=%d)", after.LateReportsTotal, len(after.LateReports))
+				}
+				sameResult(t, "kept report", &after.LateReports[0], sent)
+				if !after.LateReports[0].ReportedAt.Equal(arrival) {
+					t.Errorf("kept report stamped %v, want the arrival time %v", after.LateReports[0].ReportedAt, arrival)
+				}
+				out := logs.String()[len(logged):]
+				if strings.Count(out, "\n") != 1 {
+					t.Fatalf("want exactly 1 audit line, got %q", out)
+				}
+				for _, want := range []string{j.JobID, "relatório tardio", string(before.State), `"` + status + `"`, "late_report #1", `tenant="acme"`, `agent="win1"`} {
+					if !strings.Contains(out, want) {
+						t.Errorf("the audit line should contain %q: %s", want, out)
+					}
+				}
+				if strings.Contains(out, "rb-77") {
+					t.Errorf("the audit line must not carry the rollback handle (it is kept on the job): %s", out)
+				}
+			})
+		}
+	}
+}
+
+// The job keeps at most maxLateReports refused reports: the FIRST one, pinned for good
+// (it is usually the genuine "applied", with the real before/rollback_token) and the two
+// most RECENT, which rotate. It counts every report it stored, so the audit lines'
+// "late_report #n" can be found: #1 is the pinned one, the newest kept is
+// #late_reports_total and the one before it #late_reports_total-1.
+func TestLateReportsKeepTheFirstAndTheTwoMostRecent(t *testing.T) {
+	logs := captureLog(t)
+	r, _ := testReg(t)
+	r.now = at(clockBase)
+	j := closedFrom(t, r, StateDelivered)
+	for i := 1; i <= 5; i++ {
+		r.now = at(clockBase.Add(time.Duration(i) * time.Minute))
+		err := r.Report(j.JobID, "win1", "acme", &Result{Status: "applied", Detail: fmt.Sprintf("tentativa %d", i), RollbackToken: fmt.Sprintf("rb-%d", i)})
+		if !errors.Is(err, ErrInvalidState) {
+			t.Fatalf("late report %d: err = %v, want ErrInvalidState", i, err)
+		}
+	}
+
+	check := func(where string, got *RemediationJob) {
+		t.Helper()
+		if got.LateReportsTotal != 5 || len(got.LateReports) != 3 {
+			t.Fatalf("%s: total=%d kept=%d, want total 5 and 3 kept", where, got.LateReportsTotal, len(got.LateReports))
+		}
+		for k, n := range []int{1, 4, 5} { // the pinned first, then the two most recent in arrival order
+			lr := got.LateReports[k]
+			if lr.Detail != fmt.Sprintf("tentativa %d", n) || lr.RollbackToken != fmt.Sprintf("rb-%d", n) || !lr.ReportedAt.Equal(clockBase.Add(time.Duration(n)*time.Minute)) {
+				t.Errorf("%s: kept[%d] = %+v, want the report #%d", where, k, lr, n)
+			}
+		}
+	}
+	got, _ := r.Get(j.JobID, "win1", "acme")
+	check("memory", got)
+	disk, _ := onDisk(t, r).Get(j.JobID, "win1", "acme")
+	check("disk", disk)
+
+	lines := linesWith(logs, "relatório tardio")
+	if len(lines) != 5 {
+		t.Fatalf("want one audit line per refused report (5), got %d: %q", len(lines), lines)
+	}
+	for i, l := range lines {
+		if want := fmt.Sprintf("late_report #%d", i+1); !strings.Contains(l, want) {
+			t.Errorf("audit line %d should say %q: %s", i+1, want, l)
+		}
+	}
+}
+
+// A report the job already keeps (same content, whatever the timestamp) is not stored a
+// second time: the agent gets the same 409, naming the number of the kept one, and the
+// job is not touched — nothing appended, nothing re-stamped, nothing written, no new
+// audit line. A report that is no longer kept (rotated out) is a new one again. So a
+// retrying or hostile agent cannot push the pinned first report, or the genuine ones,
+// out of the three.
+func TestRepeatedLateReportIsNotKeptAgain(t *testing.T) {
+	logs := captureLog(t)
+	r, _ := testReg(t)
+	r.now = at(clockBase)
+	j := closedFrom(t, r, StateDelivered)
+	report := func(minute int, res Result) error {
+		t.Helper()
+		r.now = at(clockBase.Add(time.Duration(minute) * time.Minute))
+		return r.Report(j.JobID, "win1", "acme", &res)
+	}
+	mk := func(name string) Result {
+		return Result{Status: "applied", Detail: name, Before: "v-" + name, RollbackToken: "rb-" + name}
+	}
+	a, b, c, d := mk("A"), mk("B"), mk("C"), mk("D")
+	for i, res := range []Result{a, b, c} { // stored as #1, #2, #3
+		if err := report(i+1, res); !errors.Is(err, ErrInvalidState) {
+			t.Fatalf("late report %s: err = %v, want ErrInvalidState", res.Detail, err)
+		}
+	}
+
+	// Repeats of what is kept — the pinned one, a middle one, the newest — change nothing.
+	failSaves(t, r) // a write attempt would show up in the log as a saveLocked error
+	logged := logs.String()
+	for _, tc := range []struct {
+		res Result
+		n   int
+	}{{a, 1}, {b, 2}, {c, 3}, {a, 1}} {
+		err := report(30, tc.res)
+		if !errors.Is(err, ErrInvalidState) || !strings.Contains(err.Error(), fmt.Sprintf("late_report #%d", tc.n)) {
+			t.Errorf("repeat of %s: err = %v, want ErrInvalidState naming late_report #%d", tc.res.Detail, err, tc.n)
+		}
+	}
+	if got := logs.String(); got != logged {
+		t.Errorf("a repeat must not log (no audit line, no write): %q", got[len(logged):])
+	}
+	kept, _ := r.Get(j.JobID, "win1", "acme")
+	if kept.LateReportsTotal != 3 || len(kept.LateReports) != 3 {
+		t.Fatalf("repeats changed the job: total=%d kept=%d", kept.LateReportsTotal, len(kept.LateReports))
+	}
+	for k, lr := range kept.LateReports {
+		if !lr.ReportedAt.Equal(clockBase.Add(time.Duration(k+1) * time.Minute)) {
+			t.Errorf("kept[%d] was re-stamped: %v", k, lr.ReportedAt)
+		}
+	}
+
+	// Only what is still kept is a repeat: D (#4) pushes B (#2), the oldest of the rotating
+	// ones, out — never the pinned A — and B coming back is then stored again, as #5.
+	if err := os.Remove(r.path + ".tmp"); err != nil {
+		t.Fatal(err)
+	}
+	if err := report(31, d); !errors.Is(err, ErrInvalidState) {
+		t.Fatalf("late report D: err = %v, want ErrInvalidState", err)
+	}
+	if err := report(32, b); !errors.Is(err, ErrInvalidState) || !strings.Contains(err.Error(), "late_report #5") {
+		t.Errorf("B after being pushed out: err = %v, want ErrInvalidState stored as late_report #5", err)
+	}
+	kept, _ = r.Get(j.JobID, "win1", "acme")
+	var got []string
+	for _, lr := range kept.LateReports {
+		got = append(got, lr.Detail)
+	}
+	if kept.LateReportsTotal != 5 || strings.Join(got, ",") != "A,D,B" {
+		t.Errorf("total=%d kept=%v, want total 5 and A (pinned), D, B", kept.LateReportsTotal, got)
+	}
+
+	// After the rotation the numbers still name the right reports: the pinned one is #1
+	// (not total-minus-kept-plus-one), the two rotating ones are #4 and #5.
+	for _, tc := range []struct {
+		res Result
+		n   int
+	}{{a, 1}, {d, 4}, {b, 5}} {
+		err := report(40, tc.res)
+		if !errors.Is(err, ErrInvalidState) || !strings.Contains(err.Error(), fmt.Sprintf("late_report #%d", tc.n)) {
+			t.Errorf("repeat of %s after the rotation: err = %v, want ErrInvalidState naming late_report #%d", tc.res.Detail, err, tc.n)
+		}
+	}
+}
+
+// The refused report is the only copy of what the agent did to the host, so a write
+// that fails must not take it away: the refusal stands (ErrInvalidState), the report
+// stays in memory, the failure is logged apart from the audit line, and the next
+// persist that works carries it to disk.
+func TestLateReportIsNotLostWhenTheWriteFails(t *testing.T) {
+	logs := captureLog(t)
+	r, _ := testReg(t)
+	j := closedFrom(t, r, StateDelivered)
+	failSaves(t, r)
+	err := r.Report(j.JobID, "win1", "acme", &Result{Status: "applied", Before: "v1", After: "v2", RollbackToken: "rb-9"})
+	if !errors.Is(err, ErrInvalidState) {
+		t.Fatalf("err = %v, want ErrInvalidState", err)
+	}
+	mem, _ := r.Get(j.JobID, "win1", "acme")
+	if len(mem.LateReports) != 1 || mem.LateReports[0].RollbackToken != "rb-9" {
+		t.Fatalf("the refused report must stay in memory: %+v", mem.LateReports)
+	}
+	if lines := linesWith(logs, "relatório tardio"); len(lines) != 1 {
+		t.Errorf("want exactly 1 audit line even though the write failed, got %q", lines)
+	}
+	if lines := linesWith(logs, "saveLocked"); len(lines) != 1 || !strings.Contains(lines[0], j.JobID) {
+		t.Errorf("the failed write should be logged apart (1 line naming the job), got %q", lines)
+	}
+
+	// Once the write works again, any persist carries the kept report to disk.
+	if err := os.Remove(r.path + ".tmp"); err != nil {
+		t.Fatal(err)
+	}
+	enq(t, r, "win2", "acme")
+	disk, _ := onDisk(t, r).Get(j.JobID, "win1", "acme")
+	if len(disk.LateReports) != 1 || disk.LateReports[0].RollbackToken != "rb-9" {
+		t.Errorf("the kept report should reach the file with the next successful persist: %+v", disk.LateReports)
+	}
+}
+
+// Ack records the acceptance and persists it; when the write fails the job stays ACKED
+// in memory, but the failure must not be silent: it is logged with the job id and the
+// error, like every other persist in the registry. An ack that persists logs nothing.
+func TestAckLogsWhenPersistingFails(t *testing.T) {
+	logs := captureLog(t)
+	r, _ := testReg(t)
+	first := jobIn(t, r, StateDelivered)
+	if !r.Ack(first.JobID, "win1", "acme") {
+		t.Fatal("ack failed")
+	}
+	if lines := linesWith(logs, "saveLocked"); len(lines) != 0 {
+		t.Fatalf("an ack that persisted must not log: %q", lines)
+	}
+
+	second := jobIn(t, r, StateDelivered)
+	failSaves(t, r)
+	if !r.Ack(second.JobID, "win1", "acme") {
+		t.Fatal("the ack must still be accepted when the write fails")
+	}
+	if got := stateOf(t, r, second.JobID); got != StateAcked {
+		t.Errorf("state = %s, want ACKED in memory", got)
+	}
+	lines := linesWith(logs, "saveLocked")
+	if len(lines) != 1 || !strings.Contains(lines[0], second.JobID) {
+		t.Errorf("the failed write should be logged (1 line naming the job), got %q", lines)
+	}
+}
+
+// Get and List hand out copies: scribbling on the late reports of a job they returned
+// must not touch the ones the queue keeps (and persists).
+func TestGetAndListHandOutCopiesOfTheLateReports(t *testing.T) {
+	r, _ := testReg(t)
+	j := closedFrom(t, r, StateDelivered)
+	if err := r.Report(j.JobID, "win1", "acme", &Result{Status: "applied", RollbackToken: "rb-1"}); !errors.Is(err, ErrInvalidState) {
+		t.Fatalf("err = %v, want ErrInvalidState", err)
+	}
+	kept := func() []Result {
+		t.Helper()
+		got, ok := r.Get(j.JobID, "win1", "acme")
+		if !ok {
+			t.Fatal("job not found")
+		}
+		return got.LateReports
+	}
+
+	got, _ := r.Get(j.JobID, "win1", "acme")
+	got.LateReports[0].RollbackToken = "ADULTERADO"
+	_ = append(got.LateReports[:0], Result{Status: "failed"})
+	if k := kept(); len(k) != 1 || k[0].RollbackToken != "rb-1" || k[0].Status != "applied" {
+		t.Errorf("Get leaked the queue's late reports: %+v", k)
+	}
+
+	listed, _ := r.List(ListFilter{})
+	listed[0].LateReports[0].RollbackToken = "ADULTERADO"
+	if k := kept(); len(k) != 1 || k[0].RollbackToken != "rb-1" {
+		t.Errorf("List leaked the queue's late reports: %+v", k)
+	}
+}
+
+// A refused report does not break the job it was refused on: an APPLIED job stays
+// APPLIED, with its own result, and can still be verified by the re-scan.
+func TestRefusedReportLeavesAnAppliedJobVerifiable(t *testing.T) {
+	r, _ := testReg(t)
+	j := reportedJob(t, r, appliedRun)
+	if err := r.Report(j.JobID, "win1", "acme", &Result{Status: "failed", After: "WIPED"}); !errors.Is(err, ErrInvalidState) {
+		t.Fatalf("contradicting report on an APPLIED job: err = %v, want ErrInvalidState", err)
+	}
+	verified, err := r.MarkVerified(j.JobID)
+	if err != nil {
+		t.Fatalf("MarkVerified after a refused report: %v", err)
+	}
+	if verified.State != StateVerified {
+		t.Errorf("state = %s, want VERIFIED", verified.State)
+	}
+	sameResult(t, "result of the verified job", verified.Result, appliedRun)
+	if len(verified.LateReports) != 1 || verified.LateReports[0].After != "WIPED" {
+		t.Errorf("the refused report should still be on the verified job: %+v", verified.LateReports)
+	}
+}
+
+// What the audit lines say comes from the agent (the reported status) and from the
+// enqueue request (tenant, agent): all logged quoted, so none starts a line of its own —
+// in the late-report line (a job the agent was handed) and in the never-delivered one.
+func TestLateReportAuditLinesQuoteTheValuesTheyLog(t *testing.T) {
+	logs := captureLog(t)
+	r, _ := testReg(t)
+	evil := "x\nremediation: job fake aprovado por \"mallory\""
+	enqueue := func() *RemediationJob {
+		t.Helper()
+		j, err := r.Enqueue(EnqueueRequest{
+			Tenant: evil, AgentID: evil, Type: TypePackagePatch, Payload: json.RawMessage(`{}`), TTL: time.Hour,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return j
+	}
+
+	// Handed out, then closed: the agent's report is a late one.
+	delivered := enqueue()
+	if _, err := r.Approve(delivered.JobID, "op"); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := r.Poll(evil, evil); !ok {
+		t.Fatal("poll must deliver the approved job")
+	}
+	if _, err := r.Close(delivered.JobID, "op", ""); err != nil {
+		t.Fatal(err)
+	}
+	start := len(logs.String())
+	if err := r.Report(delivered.JobID, evil, evil, &Result{Status: evil}); !errors.Is(err, ErrInvalidState) {
+		t.Fatalf("late report: err = %v, want ErrInvalidState", err)
+	}
+	if out := logs.String()[start:]; strings.Count(out, "\n") != 1 {
+		t.Errorf("the late-report audit entry must be ONE line, got: %q", out)
+	}
+
+	// Rejected before the poll ever delivered it: the agent was never given this job.
+	never := enqueue()
+	if err := r.Reject(never.JobID, "op"); err != nil {
+		t.Fatal(err)
+	}
+	start = len(logs.String())
+	if err := r.Report(never.JobID, evil, evil, &Result{Status: evil}); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("report of a never-delivered job: err = %v, want ErrNotFound", err)
+	}
+	if out := logs.String()[start:]; strings.Count(out, "\n") != 1 {
+		t.Errorf("the never-delivered log entry must be ONE line, got: %q", out)
+	}
+}
+
+// A report is scoped to the job's own agent and tenant — whatever the state, the answer
+// to anyone else is "not found" and NOTHING is logged (a stranger gets no signal). The
+// job's own agent reporting on a job it was never handed (still pending or approved, or
+// rejected or expired before the poll delivered it) also gets "not found", but it is
+// logged on a line of its own — "relatório de job nunca entregue", not the late-report
+// audit line — and nothing is kept: a stored late report would hand such a claim an
+// appearance of legitimacy.
+func TestReportOfAForeignOrNeverDeliveredJobIsNotFound(t *testing.T) {
+	for _, st := range lifecycle {
+		t.Run(string(st), func(t *testing.T) {
+			logs := captureLog(t)
+			r, _ := testReg(t)
+			j := jobIn(t, r, st)
+			before, _ := r.Get(j.JobID, "win1", "acme")
+			logged := logs.String()
+			for _, who := range [][2]string{{"winB", "acme"}, {"win1", "globex"}} {
+				if err := r.Report(j.JobID, who[0], who[1], &Result{Status: "applied"}); !errors.Is(err, ErrNotFound) {
+					t.Errorf("report by %v: err = %v, want ErrNotFound", who, err)
+				}
+			}
+			if got := logs.String(); got != logged {
+				t.Errorf("a report by somebody else's agent must not log: %q", got[len(logged):])
+			}
+
+			if before.DeliveredAt.IsZero() { // the job's own agent, on a job it was never given
+				if err := r.Report(j.JobID, "win1", "acme", &Result{Status: "applied", RollbackToken: "rb-1"}); !errors.Is(err, ErrNotFound) {
+					t.Errorf("report of a never-delivered %s job: err = %v, want ErrNotFound", st, err)
+				}
+				out := logs.String()[len(logged):]
+				if strings.Count(out, "\n") != 1 {
+					t.Fatalf("want exactly 1 log line, got %q", out)
+				}
+				for _, want := range []string{"relatório de job nunca entregue", j.JobID, string(st), `"applied"`, `tenant="acme"`, `agent="win1"`} {
+					if !strings.Contains(out, want) {
+						t.Errorf("the log line should contain %q: %s", want, out)
+					}
+				}
+				if strings.Contains(out, "relatório tardio") || strings.Contains(out, "rb-1") {
+					t.Errorf("it is not a late-report audit line and carries nothing the agent sent: %s", out)
+				}
+			}
+			after, _ := r.Get(j.JobID, "win1", "acme")
+			if after.State != before.State || (before.Result == nil) != (after.Result == nil) ||
+				len(after.LateReports) != 0 || after.LateReportsTotal != 0 {
+				t.Errorf("a refused report changed the job: %s -> %s, kept %+v", before.State, after.State, after.LateReports)
+			}
+		})
+	}
+}
+
+// A final job is kept for the retention window counted from its LAST event — creation,
+// rejection, closure, verification, expiry, the agent's result, the latest refused
+// report — not from its creation: closing or verifying an old APPLIED job, rejecting an
+// old one, an expiry the sweep only finds out about when the agent next polls or somebody
+// enqueues, a result that comes in late or a late refused report must restart the clock,
+// or the data they just preserved (the approver, the result, the rollback_token) is
+// reaped by the very next Enqueue. (Only what the agent controls — its late reports — is
+// capped, to 90 days after the job's creation: see
+// TestLateReportsRestartTheRetentionOnlyForNinetyDays.)
+func TestFinalJobsAreRetainedFromTheirLastEvent(t *testing.T) {
+	day := 24 * time.Hour
+	t0 := clockBase
+	cases := []struct {
+		name  string
+		build func(t *testing.T, r *Registry) (j *RemediationJob, lastEvent time.Time)
+	}{
+		{"closed on day 8 (created on day 0)", func(t *testing.T, r *Registry) (*RemediationJob, time.Time) {
+			r.now = at(t0)
+			j := jobIn(t, r, StateApplied)
+			r.now = at(t0.Add(8 * day))
+			if _, err := r.Close(j.JobID, "bob", ""); err != nil {
+				t.Fatal(err)
+			}
+			return j, t0.Add(8 * day)
+		}},
+		{"rejected on day 8 (created on day 0)", func(t *testing.T, r *Registry) (*RemediationJob, time.Time) {
+			r.now = at(t0)
+			j := jobIn(t, r, StatePendingApproval)
+			r.now = at(t0.Add(8 * day))
+			if err := r.Reject(j.JobID, "bob"); err != nil {
+				t.Fatal(err)
+			}
+			return j, t0.Add(8 * day)
+		}},
+		{"report refused on day 8 (job expired on day 0)", func(t *testing.T, r *Registry) (*RemediationJob, time.Time) {
+			r.now = at(t0)
+			j := jobIn(t, r, StateDelivered) // delivered, never reported...
+			r.now = at(t0.Add(2 * time.Hour))
+			r.Poll("win1", "acme") // ...so the sweep expires it
+			r.now = at(t0.Add(8 * day))
+			if err := r.Report(j.JobID, "win1", "acme", &Result{Status: "applied", RollbackToken: "rb-9"}); !errors.Is(err, ErrInvalidState) {
+				t.Fatalf("late report: err = %v, want ErrInvalidState", err)
+			}
+			return j, t0.Add(8 * day)
+		}},
+		{"result reported on day 8 (job created on day 0, 30d TTL)", func(t *testing.T, r *Registry) (*RemediationJob, time.Time) {
+			r.now = at(t0)
+			j, err := r.Enqueue(EnqueueRequest{
+				Tenant: "acme", AgentID: "win1", Type: TypePackagePatch, Payload: json.RawMessage(`{}`), TTL: 30 * day,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := r.Approve(j.JobID, "op"); err != nil {
+				t.Fatal(err)
+			}
+			r.now = at(t0.Add(8 * day))
+			if _, ok := r.Poll("win1", "acme"); !ok {
+				t.Fatal("poll must deliver the approved job")
+			}
+			if err := r.Report(j.JobID, "win1", "acme", &Result{Status: "failed", Detail: "x"}); err != nil {
+				t.Fatal(err)
+			}
+			return j, t0.Add(8 * day)
+		}},
+		{"verified on day 10 (applied on day 0)", func(t *testing.T, r *Registry) (*RemediationJob, time.Time) {
+			r.now = at(t0)
+			j := reportedJob(t, r, appliedRun) // APPLIED, rollback_token on record: not final, so nothing reaps it while it waits for the re-scan...
+			r.now = at(t0.Add(10 * day))
+			if _, err := r.MarkVerified(j.JobID); err != nil { // ...and the verification must not hand it, result and rollback_token included, to the next Enqueue
+				t.Fatal(err)
+			}
+			return j, t0.Add(10 * day)
+		}},
+		{"swept to EXPIRED on day 8 (approved on day 0, agent offline since)", func(t *testing.T, r *Registry) (*RemediationJob, time.Time) {
+			r.now = at(t0)
+			j := jobIn(t, r, StateApproved) // 1h TTL; the sweep runs when the agent polls (or when somebody enqueues)
+			r.now = at(t0.Add(8 * day))
+			r.Poll("win1", "acme")
+			if got := stateOf(t, r, j.JobID); got != StateExpired {
+				t.Fatalf("the first poll after the deadline left the job %s, want EXPIRED", got)
+			}
+			return j, t0.Add(8 * day)
+		}},
+		// Past the 90 days that cap the agent's late reports nothing else is capped. What an
+		// operator does gets the whole retention from the day it happens, however old the
+		// job: one that sat APPLIED (or pending) for 120 days is kept a full week after it is
+		// verified, closed or rejected, result and rollback_token included (the loop below
+		// checks the job is kept whole). So do the agent's FIRST result, which is a single
+		// report and not a rotation, and the queue's own expiry, which any Enqueue may sweep.
+		{"verified on day 120 (applied on day 0)", func(t *testing.T, r *Registry) (*RemediationJob, time.Time) {
+			r.now = at(t0)
+			j := reportedJob(t, r, appliedRun)
+			r.now = at(t0.Add(120 * day))
+			if _, err := r.MarkVerified(j.JobID); err != nil {
+				t.Fatal(err)
+			}
+			return j, t0.Add(120 * day)
+		}},
+		{"closed on day 120 (applied on day 0)", func(t *testing.T, r *Registry) (*RemediationJob, time.Time) {
+			r.now = at(t0)
+			j := reportedJob(t, r, appliedRun)
+			r.now = at(t0.Add(120 * day))
+			if _, err := r.Close(j.JobID, "bob", "revisto"); err != nil {
+				t.Fatal(err)
+			}
+			return j, t0.Add(120 * day)
+		}},
+		{"rejected on day 120 (pending since day 0, 200-day TTL)", func(t *testing.T, r *Registry) (*RemediationJob, time.Time) {
+			r.now = at(t0)
+			j, err := r.Enqueue(EnqueueRequest{
+				Tenant: "acme", AgentID: "win1", Type: TypePackagePatch, Payload: json.RawMessage(`{}`), TTL: 200 * day,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			r.now = at(t0.Add(120 * day))
+			if err := r.Reject(j.JobID, "bob"); err != nil {
+				t.Fatal(err)
+			}
+			return j, t0.Add(120 * day)
+		}},
+		{"result reported on day 120 (acked on day 0)", func(t *testing.T, r *Registry) (*RemediationJob, time.Time) {
+			r.now = at(t0)
+			j := jobIn(t, r, StateAcked) // ACKED never expires: the agent may take its time
+			r.now = at(t0.Add(120 * day))
+			if err := r.Report(j.JobID, "win1", "acme", &Result{Status: "failed", Detail: "x", RollbackToken: "rb-120"}); err != nil {
+				t.Fatal(err)
+			}
+			return j, t0.Add(120 * day)
+		}},
+		{"swept to EXPIRED on day 201 (approved on day 0, 200-day TTL, agent never polls)", func(t *testing.T, r *Registry) (*RemediationJob, time.Time) {
+			r.now = at(t0)
+			j, err := r.Enqueue(EnqueueRequest{
+				Tenant: "acme", AgentID: "win1", Type: TypePackagePatch, Payload: json.RawMessage(`{}`), TTL: 200 * day,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := r.Approve(j.JobID, "op"); err != nil {
+				t.Fatal(err)
+			}
+			r.now = at(t0.Add(201 * day))
+			enq(t, r, "win2", "acme") // somebody else's Enqueue runs the reaper
+			if got := stateOf(t, r, j.JobID); got != StateExpired {
+				t.Fatalf("the Enqueue after the deadline left the job %s, want EXPIRED", got)
+			}
+			return j, t0.Add(201 * day)
+		}},
+		{"control: nothing happened since day 0", func(t *testing.T, r *Registry) (*RemediationJob, time.Time) {
+			r.now = at(t0)
+			return jobIn(t, r, StateFailed), t0
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			r, _ := testReg(t)
+			j, last := tc.build(t, r)
+			built, _ := r.Get(j.JobID, "win1", "acme")
+			// The reaper of the next Enqueue, an hour after the last event: still there, and
+			// whole — the result and the rollback_token are what the retention is for...
+			r.now = at(last.Add(time.Hour))
+			enq(t, r, "win2", "acme")
+			kept, ok := r.Get(j.JobID, "win1", "acme")
+			if !ok {
+				t.Fatal("the job was reaped an hour after its last event")
+			}
+			if !reflect.DeepEqual(kept, built) {
+				t.Errorf("the retained job is not the one that was built:\n got %+v\nwant %+v", kept, built)
+			}
+			// ...and gone only once a full retention has passed since that event.
+			r.now = at(last.Add(7*day + time.Hour))
+			enq(t, r, "win2", "acme")
+			if _, ok := r.Get(j.JobID, "win1", "acme"); ok {
+				t.Error("the job is still there a full retention after its last event")
+			}
+		})
+	}
+}
+
+// MarkVerified and the expiry sweep stamp the moment they happened (verified_at,
+// expired_at): the retention clock reads them and the operator sees when. The stamps are
+// persisted, the expiry's is the moment the sweep ran (the first poll or Enqueue after the
+// deadline, which is when the queue learns of it), and a verification the disk refuses is
+// undone whole — state AND stamp — so memory and disk agree and the very same call goes
+// through once the write works again.
+func TestVerifiedAndExpiredAreStampedAndPersisted(t *testing.T) {
+	day := 24 * time.Hour
+	t0 := clockBase
+
+	t.Run("verified", func(t *testing.T) {
+		r, _ := testReg(t)
+		r.now = at(t0)
+		j := jobIn(t, r, StateApplied)
+		if got, _ := r.Get(j.JobID, "win1", "acme"); !got.VerifiedAt.IsZero() || !got.ExpiredAt.IsZero() {
+			t.Fatalf("a job APPLIED on day 0 already carries a stamp: verified_at=%v expired_at=%v", got.VerifiedAt, got.ExpiredAt)
+		}
+
+		// The write fails: the job stays APPLIED and carries no stamp.
+		r.now = at(t0.Add(10 * day))
+		failSaves(t, r)
+		if _, err := r.MarkVerified(j.JobID); err == nil || errors.Is(err, ErrNotFound) || errors.Is(err, ErrInvalidState) {
+			t.Fatalf("MarkVerified with a failing write: err = %v, want the write error", err)
+		}
+		if got, _ := r.Get(j.JobID, "win1", "acme"); got.State != StateApplied || !got.VerifiedAt.IsZero() {
+			t.Fatalf("a failed verification left state=%s verified_at=%v, want APPLIED and no stamp", got.State, got.VerifiedAt)
+		}
+
+		// The write works again: the same call goes through and stamps the moment it happens.
+		if err := os.Remove(r.path + ".tmp"); err != nil {
+			t.Fatal(err)
+		}
+		r.now = at(t0.Add(11 * day))
+		verified, err := r.MarkVerified(j.JobID)
+		if err != nil {
+			t.Fatalf("MarkVerified once the write works: %v", err)
+		}
+		check := func(where string, got *RemediationJob) {
+			t.Helper()
+			if got.State != StateVerified || !got.VerifiedAt.Equal(t0.Add(11*day)) || !got.ExpiredAt.IsZero() {
+				t.Errorf("%s: state=%s verified_at=%v expired_at=%v, want VERIFIED stamped on day 11 and no expiry", where, got.State, got.VerifiedAt, got.ExpiredAt)
+			}
+		}
+		check("answer", verified)
+		again, _ := r.Get(j.JobID, "win1", "acme")
+		check("memory", again)
+		disk, _ := onDisk(t, r).Get(j.JobID, "win1", "acme")
+		check("disk", disk)
+	})
+
+	t.Run("expired", func(t *testing.T) {
+		r, _ := testReg(t)
+		r.now = at(t0)
+		j := jobIn(t, r, StateApproved) // 1h TTL; nobody polls until day 8
+		r.now = at(t0.Add(8 * day))
+		if _, ok := r.Poll("win1", "acme"); ok {
+			t.Fatal("a job past its deadline must not be delivered")
+		}
+		check := func(where string, got *RemediationJob) {
+			t.Helper()
+			if got.State != StateExpired || !got.ExpiredAt.Equal(t0.Add(8*day)) || !got.VerifiedAt.IsZero() {
+				t.Errorf("%s: state=%s expired_at=%v verified_at=%v, want EXPIRED stamped on day 8, when the sweep ran (not the deadline)", where, got.State, got.ExpiredAt, got.VerifiedAt)
+			}
+		}
+		got, _ := r.Get(j.JobID, "win1", "acme")
+		check("memory", got)
+		disk, _ := onDisk(t, r).Get(j.JobID, "win1", "acme")
+		check("disk", disk)
+
+		// What is already expired is not swept (and so not re-stamped) by the next poll.
+		r.now = at(t0.Add(9 * day))
+		r.Poll("win1", "acme")
+		got, _ = r.Get(j.JobID, "win1", "acme")
+		check("after another poll", got)
+	})
+}
+
+// The expiry sweep is not only the polling agent's: the reaper — which every Enqueue runs,
+// and a direct Reap — sweeps EVERY job, so those of an agent that never polls again (a
+// retired host, a revoked cert) expire when their deadline passes, whoever enqueues next,
+// and then age out like any EXPIRED job, 7 days after the sweep. What the deadline does not
+// bound (ACKED, APPLIED, the final ones) and what has not reached it yet is left alone.
+func TestEnqueueExpiresTheLapsedJobsOfAgentsThatNeverPollAgain(t *testing.T) {
+	day := 24 * time.Hour
+	t0 := clockBase
+	r, _ := testReg(t)
+	r.now = at(t0)
+	// win1 is the agent that never polls again. First the jobs it was handed (the poll
+	// hands out the oldest approved one), then those that stay undelivered.
+	delivered := jobIn(t, r, StateDelivered) // handed out, never acked
+	acked := jobIn(t, r, StateAcked)
+	applied := jobIn(t, r, StateApplied)
+	failed := jobIn(t, r, StateFailed)
+	approved := jobIn(t, r, StateApproved)
+	pending := jobIn(t, r, StatePendingApproval)
+	farDeadline, err := r.Enqueue(EnqueueRequest{
+		Tenant: "acme", AgentID: "win1", Type: TypePackagePatch, Payload: json.RawMessage(`{}`), TTL: 30 * day,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Two hours later every 1h deadline above has lapsed. Nobody polls: somebody else's
+	// Enqueue runs the reaper.
+	sweepAt := t0.Add(2 * time.Hour)
+	r.now = at(sweepAt)
+	other := enq(t, r, "win2", "acme")
+
+	disk := onDisk(t, r) // the Enqueue's own write carries the sweep
+	for _, tc := range []struct {
+		name      string
+		job       *RemediationJob
+		state     JobState
+		expiredAt time.Time // when the sweep stamped it; zero = it must not have
+	}{
+		{"DELIVERED, never acked", delivered, StateExpired, sweepAt},
+		{"APPROVED, never delivered", approved, StateExpired, sweepAt},
+		{"PENDING_APPROVAL", pending, StateExpired, sweepAt},
+		{"ACKED (the deadline no longer applies)", acked, StateAcked, time.Time{}},
+		{"APPLIED", applied, StateApplied, time.Time{}},
+		{"FAILED (final)", failed, StateFailed, time.Time{}},
+		{"PENDING_APPROVAL, deadline in 30 days", farDeadline, StatePendingApproval, time.Time{}},
+		{"the job enqueued by the call that swept", other, StatePendingApproval, time.Time{}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			for where, reg := range map[string]*Registry{"memory": r, "disk": disk} {
+				got, ok := reg.Get(tc.job.JobID, tc.job.AgentID, "acme")
+				if !ok {
+					t.Fatalf("%s: job gone", where)
+				}
+				if got.State != tc.state || !got.ExpiredAt.Equal(tc.expiredAt) {
+					t.Errorf("%s: state=%s expired_at=%v, want %s and %v", where, got.State, got.ExpiredAt, tc.state, tc.expiredAt)
+				}
+			}
+		})
+	}
+
+	// The swept jobs age out like any EXPIRED job: a week after the sweep, not before.
+	swept := []*RemediationJob{delivered, approved, pending}
+	here := func(j *RemediationJob) bool { _, ok := r.Get(j.JobID, j.AgentID, "acme"); return ok }
+	r.now = at(sweepAt.Add(6 * day))
+	enq(t, r, "win2", "acme")
+	for _, j := range swept {
+		if !here(j) {
+			t.Errorf("the job %s was reaped 6 days after its expiry", j.JobID)
+		}
+	}
+	r.now = at(sweepAt.Add(7*day + time.Hour))
+	enq(t, r, "win2", "acme")
+	for _, j := range swept {
+		if here(j) {
+			t.Errorf("the job %s is still there 7 days after its expiry", j.JobID)
+		}
+	}
+	for _, j := range []*RemediationJob{acked, applied, farDeadline} {
+		if !here(j) {
+			t.Errorf("the job %s, which the deadline does not bound or has not reached, was reaped", j.JobID)
+		}
+	}
+}
+
+// Reap runs the same sweep, and writes what it changed even when it removed nothing: the
+// jobs it has just expired are not old enough to go, and must not come back from the file
+// as live ones.
+func TestReapPersistsWhatTheSweepExpired(t *testing.T) {
+	r, _ := testReg(t)
+	r.now = at(clockBase)
+	j := jobIn(t, r, StateApproved)
+	r.now = at(clockBase.Add(2 * time.Hour))
+	if n := r.Reap(time.Hour); n != 0 {
+		t.Errorf("Reap removed %d, want 0: the job has only just expired", n)
+	}
+	if got := stateOf(t, r, j.JobID); got != StateExpired {
+		t.Fatalf("state after Reap = %s, want EXPIRED", got)
+	}
+	disk, _ := onDisk(t, r).Get(j.JobID, "win1", "acme")
+	if disk.State != StateExpired || !disk.ExpiredAt.Equal(clockBase.Add(2*time.Hour)) {
+		t.Errorf("on disk: state=%s expired_at=%v, want EXPIRED stamped when Reap ran", disk.State, disk.ExpiredAt)
+	}
+}
+
+// A final job's retention clock restarts with every event, and an authenticated agent
+// produces events at will: each DISTINCT report it sends for a job it was handed is
+// refused, kept, and would count as the latest event. Left at that, an agent rotating its
+// reports every few days would keep its own jobs — result, rollback_token and all — in
+// the queue for ever. So late reports restart the clock only until maxLateReportAge (90
+// days) after the job's CREATION: past that they are still refused, kept and audited, but
+// add no retention, and a job that nothing but the agent touches goes at CreatedAt + 90
+// days + the retention at the latest. What the agent does NOT control is never capped:
+// an operator's reject, close or verification restart the clock whenever they happen,
+// however old the job (TestFinalJobsAreRetainedFromTheirLastEvent has those rows).
+func TestLateReportsRestartTheRetentionOnlyForNinetyDays(t *testing.T) {
+	day := 24 * time.Hour
+	t0 := clockBase
+
+	// However the job became final, an agent that keeps sending distinct reports every 5
+	// days — from the first day it can until day 95 — gets it kept until day 97 (= 90
+	// days after its creation + the 7-day retention) and not a minute longer.
+	for _, tc := range []struct {
+		name  string
+		build func(t *testing.T, r *Registry) (j *RemediationJob, firstReport int) // firstReport: day of the first late report
+	}{
+		{"closed on day 0", func(t *testing.T, r *Registry) (*RemediationJob, int) {
+			r.now = at(t0)
+			return closedFrom(t, r, StateDelivered), 5
+		}},
+		{"verified on day 10", func(t *testing.T, r *Registry) (*RemediationJob, int) {
+			r.now = at(t0)
+			j := reportedJob(t, r, appliedRun)
+			r.now = at(t0.Add(10 * day))
+			if _, err := r.MarkVerified(j.JobID); err != nil {
+				t.Fatal(err)
+			}
+			return j, 15
+		}},
+		{"expired after delivery on day 0", func(t *testing.T, r *Registry) (*RemediationJob, int) {
+			r.now = at(t0)
+			j := jobIn(t, r, StateDelivered)
+			r.now = at(t0.Add(2 * time.Hour))
+			r.Poll("win1", "acme") // the sweep expires it: delivered, never reported
+			if got := stateOf(t, r, j.JobID); got != StateExpired {
+				t.Fatalf("state = %s, want EXPIRED", got)
+			}
+			return j, 5
+		}},
+	} {
+		t.Run("rotating distinct late reports cannot keep a job past 90 days plus the retention/"+tc.name, func(t *testing.T) {
+			r, _ := testReg(t)
+			j, first := tc.build(t, r)
+			present := func() bool { _, ok := r.Get(j.JobID, "win1", "acme"); return ok }
+
+			// A new report every 5 days, each followed by the Enqueue of somebody else's job
+			// (what runs the reaper): the latest report is never more than 5 days old, so the
+			// retention alone would never let go of the job.
+			for d := first; d <= 95; d += 5 {
+				r.now = at(t0.Add(time.Duration(d) * day))
+				err := r.Report(j.JobID, "win1", "acme", &Result{Status: "applied", Detail: fmt.Sprintf("dia %d", d), RollbackToken: fmt.Sprintf("rb-%d", d)})
+				if !errors.Is(err, ErrInvalidState) {
+					t.Fatalf("day %d: report: err = %v, want ErrInvalidState (refused and kept)", d, err)
+				}
+				enq(t, r, "win2", "acme")
+				if !present() {
+					t.Fatalf("day %d: the job was reaped before CreatedAt + 90 days + the retention", d)
+				}
+			}
+			// Day 97 is CreatedAt + 90 days + 7 days: not BEYOND it yet, though the last report
+			// is only 2 days old...
+			r.now = at(t0.Add(97 * day))
+			enq(t, r, "win2", "acme")
+			if !present() {
+				t.Fatal("the job was reaped on day 97, exactly CreatedAt + 90 days + the retention")
+			}
+			// ...and a minute later it goes: the reports after day 90 added nothing.
+			r.now = at(t0.Add(97*day + time.Minute))
+			enq(t, r, "win2", "acme")
+			if present() {
+				t.Error("the job outlived CreatedAt + 90 days + the retention, kept alive by the reports it kept sending")
+			}
+			// Sending one more does not bring it back: the agent now hears 404, like for any
+			// job the queue no longer has.
+			r.now = at(t0.Add(100 * day))
+			if err := r.Report(j.JobID, "win1", "acme", &Result{Status: "applied", Detail: "dia 100", RollbackToken: "rb-100"}); !errors.Is(err, ErrNotFound) {
+				t.Errorf("report on the reaped job: err = %v, want ErrNotFound", err)
+			}
+		})
+	}
+
+	// The agent's late report cannot stretch the life of a job an operator closed after the
+	// 90 days either: the closure gave it a full retention from day 120, and the report of
+	// day 125 — kept and audited as always — adds nothing to it.
+	t.Run("a late report on a job past 90 days adds no retention", func(t *testing.T) {
+		r, _ := testReg(t)
+		r.now = at(t0)
+		j := reportedJob(t, r, appliedRun) // APPLIED on day 0
+		r.now = at(t0.Add(120 * day))
+		if _, err := r.Close(j.JobID, "bob", "revisto"); err != nil {
+			t.Fatal(err)
+		}
+		r.now = at(t0.Add(125 * day))
+		if err := r.Report(j.JobID, "win1", "acme", &Result{Status: "failed", After: "WIPED", RollbackToken: "rb-125"}); !errors.Is(err, ErrInvalidState) {
+			t.Fatalf("late report on day 125: err = %v, want ErrInvalidState (refused and kept)", err)
+		}
+		r.now = at(t0.Add(127 * day))
+		enq(t, r, "win2", "acme")
+		if _, ok := r.Get(j.JobID, "win1", "acme"); !ok {
+			t.Fatal("the job was reaped on day 127, exactly a retention after its closure")
+		}
+		r.now = at(t0.Add(127*day + time.Minute))
+		enq(t, r, "win2", "acme")
+		if _, ok := r.Get(j.JobID, "win1", "acme"); ok {
+			t.Error("the report of day 125 stretched the life of a job closed on day 120")
+		}
+	})
+
+	// An explicit retention (Reap) is the retention: the capped report counts as day 90.
+	t.Run("an explicit retention counts from the capped report", func(t *testing.T) {
+		r, _ := testReg(t)
+		r.now = at(t0)
+		j := closedFrom(t, r, StateDelivered) // closed on day 0
+		r.now = at(t0.Add(100 * day))
+		if err := r.Report(j.JobID, "win1", "acme", &Result{Status: "applied", RollbackToken: "rb-100"}); !errors.Is(err, ErrInvalidState) {
+			t.Fatalf("late report on day 100: err = %v, want ErrInvalidState (refused and kept)", err)
+		}
+		r.now = at(t0.Add(120 * day)) // 30 days after day 90
+		if n := r.Reap(30 * day); n != 0 {
+			t.Errorf("Reap(30 days) on day 120 removed %d: the report of day 100 counts as day 90, which is not beyond 30 days", n)
+		}
+		r.now = at(t0.Add(120*day + time.Minute))
+		if n := r.Reap(30 * day); n != 1 {
+			t.Errorf("Reap(30 days) a minute later removed %d, want the job: the report of day 100 counts as day 90", n)
+		}
+	})
+
+	t.Run("a job that is not final is never reaped, however old", func(t *testing.T) {
+		r, _ := testReg(t)
+		r.now = at(t0)
+		applied := jobIn(t, r, StateApplied)
+		acked := jobIn(t, r, StateAcked)
+		r.now = at(t0.Add(200 * day))
+		enq(t, r, "win2", "acme")
+		if n := r.Reap(time.Hour); n != 0 {
+			t.Errorf("Reap removed %d jobs that are not final", n)
+		}
+		for _, j := range []*RemediationJob{applied, acked} {
+			if _, ok := r.Get(j.JobID, "win1", "acme"); !ok {
+				t.Errorf("the job %s, not final, was reaped on day 200", j.JobID)
+			}
+		}
+	})
+}
+
+// CLOSED is final: it never comes back to the agent — a DELIVERED job past the
+// redeliver window would have — and the janitor reaps it like the other final states.
+func TestClosedJobIsFinal(t *testing.T) {
+	r, _ := testReg(t)
+	r.now = at(clockBase)
+	j := jobIn(t, r, StateDelivered)
+	if _, err := r.Close(j.JobID, "bob", ""); err != nil {
+		t.Fatal(err)
+	}
+	r.now = at(clockBase.Add(30 * time.Minute)) // past the redeliver window, inside the TTL
+	if _, ok := r.Poll("win1", "acme"); ok {
+		t.Error("a CLOSED job must not be delivered again")
+	}
+	if got := stateOf(t, r, j.JobID); got != StateClosed {
+		t.Errorf("state after the poll = %s, want CLOSED", got)
+	}
+	r.now = at(clockBase.Add(48 * time.Hour))
+	if n := r.Reap(24 * time.Hour); n != 1 {
+		t.Errorf("reap should drop the old CLOSED job, got %d", n)
+	}
+	if _, ok := r.Get(j.JobID, "win1", "acme"); ok {
+		t.Error("reaped job still present")
 	}
 }
