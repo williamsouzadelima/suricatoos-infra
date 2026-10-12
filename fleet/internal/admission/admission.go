@@ -22,6 +22,12 @@
 //	})                                                           // *contract.RejectError: ack it
 //
 // Lines 0–5 (contract.Verify, CheckAt, the anti-replay store) come before it; lines 8 and 9 (payload, scope) after.
+//
+// At startup the connector opens what feeds the gate and logs what they report:
+//
+//	ledger, err := budget.Open(stateDir, boot, budget.Options{FirstBoot: !identityExists})
+//	                                       // ledger.Lost() != nil: log it (the window is full until BlockedUntil)
+//	tenants, err := tenant.Open(kind, cfg) // tenants.SecretFileWarnings(): log each one
 package admission
 
 import (

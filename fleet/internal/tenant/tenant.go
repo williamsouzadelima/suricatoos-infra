@@ -27,6 +27,9 @@
 // Resolve only checks that one exists. The single way out of the package is Credentials: it reads the secret
 // at that moment and returns it inside a Secret, which prints as "[redacted]" with every fmt verb, as JSON and
 // as text. The executor (slice F2.6) calls Secret.Reveal at the one place where it authenticates to gvmd.
+//
+// The connector also logs SecretFileWarnings at startup: a secrets file that its group or others can reach (it
+// should be 0600) is a warning, never a refusal, so that read-only mounts with another owner keep working.
 package tenant
 
 import (

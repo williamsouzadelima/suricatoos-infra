@@ -1,6 +1,11 @@
-// Package fsutil holds the two file primitives the fleet connector's local state needs: a bounded read of a file
-// the operator (or another service) owns, and the atomic replacement of a state file the connector owns
-// (ADR-0011 "Anti-replay, idempotência e entrega": temp + rename with fsync, 0600).
+// Package fsutil holds the file primitives the fleet connector's local state needs:
+//
+//   - ReadBounded: a bounded, race-free read of a file the operator (or another service) owns, telling "absent"
+//     from "present but unusable";
+//   - WriteAtomic: the atomic, durable replacement of a state file the connector owns (ADR-0011 "Anti-replay,
+//     idempotência e entrega": temp + rename with fsync, 0600), and RemoveOrphanTemps, which cleans what a crash
+//     in the middle of it leaves behind;
+//   - LooseMode: whether a secrets file is open to its group or to others (a warning for the log, not a refusal).
 package fsutil
 
 import (

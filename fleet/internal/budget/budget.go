@@ -95,10 +95,12 @@ type Ledger struct {
 	total     []int64 // every accepted command still worth keeping, in insertion order
 	sensitive []int64 // the sensitive ones among them
 
+	// writeFile is fsutil.WriteAtomic; it is a field only so that a test can make the write fail.
+	writeFile func(path string, data []byte) error
+
 	// set once by Open, never changed afterwards
 	blockedUntil int64 // Unix ns; 0 = not blocked
 	lost         error
-	writeFile    func(path string, data []byte) error // fsutil.WriteAtomic; a field only so that a test can fail it
 }
 
 // Options are the facts about the node that only the caller knows.
