@@ -11,6 +11,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/williamsouzadelima/suricatoos-infra/fleet/contract"
 )
 
 var t0 = time.Date(2026, 10, 11, 12, 0, 0, 0, time.UTC)
@@ -41,11 +43,35 @@ func seedDir(t *testing.T, content string) string {
 	return dir
 }
 
-func consume(t *testing.T, l *Ledger, at time.Time, sensitive bool, lim Limits) {
-	t.Helper()
-	if err := l.Consume(at, sensitive, lim); err != nil {
-		t.Fatalf("Consume(%v, sensível=%v): %v", at, sensitive, err)
+// Dois tipos do catálogo: um comum, que só conta no orçamento global, e um sensível (opt-in), que conta nos dois.
+const (
+	plain = contract.TypeTaskStart
+	sens  = contract.TypeTaskCreate
+)
+
+// kind picks one of them.
+func kind(sensitive bool) contract.CommandType {
+	if sensitive {
+		return sens
 	}
+	return plain
+}
+
+func consume(t *testing.T, l *Ledger, at time.Time, typ contract.CommandType, lim Limits) {
+	t.Helper()
+	if err := l.Consume(at, typ, lim); err != nil {
+		t.Fatalf("Consume(%v, %s): %v", at, typ, err)
+	}
+}
+
+// fits asks and reports whether the command fits in every budget it counts in.
+func fits(t *testing.T, l *Ledger, at time.Time, typ contract.CommandType, lim Limits) bool {
+	t.Helper()
+	room, err := l.Fits(at, typ, lim)
+	if err != nil {
+		t.Fatalf("Fits(%v, %s): %v", at, typ, err)
+	}
+	return room.OK()
 }
 
 // stateJSON renders a budget.json the way the ledger writes it.
@@ -86,14 +112,14 @@ func TestJanelaDeslizanteBordasExatas(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			l, _ := openAt(t, t0)
-			consume(t, l, c.ts, true, wide)
+			consume(t, l, c.ts, sens, wide)
 			u := l.usageAt(q)
 			if u.Total != c.count || u.Sensitive != c.count {
 				t.Fatalf("usageAt(t) = %+v, esperava %d nos dois", u, c.count)
 			}
 			// a pergunta enxerga a mesma janela: com limite 1, cabe mais um só se o instante não conta
 			lim := Limits{Total: 1, Sensitive: 1}
-			if fits := l.Fits(q, true, lim); fits != (c.count == 0) {
+			if fits := fits(t, l, q, sens, lim); fits != (c.count == 0) {
 				t.Fatalf("Fits(t) com limite 1 = %v, esperava %v", fits, c.count == 0)
 			}
 		})
@@ -102,13 +128,98 @@ func TestJanelaDeslizanteBordasExatas(t *testing.T) {
 
 func TestSensivelContaNosDoisOrcamentos(t *testing.T) {
 	l, _ := openAt(t, t0)
-	consume(t, l, t0, true, wide)
+	consume(t, l, t0, sens, wide)
 	if u := l.usageAt(t0); u != (usage{Total: 1, Sensitive: 1}) {
 		t.Fatalf("depois de um sensível: %+v", u)
 	}
-	consume(t, l, t0.Add(time.Second), false, wide)
+	consume(t, l, t0.Add(time.Second), plain, wide)
 	if u := l.usageAt(t0.Add(time.Second)); u != (usage{Total: 2, Sensitive: 1}) {
 		t.Fatalf("depois de um não sensível: o sensível não cresce: %+v", u)
+	}
+}
+
+// A sensibilidade de um comando vem do catálogo, dentro do ledger: quem pergunta (o portão) e quem consome (a
+// gravação do aceite) não a informam, então não têm como discordar.
+func TestSensibilidadeVemDoCatalogo(t *testing.T) {
+	for _, e := range contract.Catalog() {
+		t.Run(string(e.Type), func(t *testing.T) {
+			l, _ := openAt(t, t0)
+			lim := Limits{Total: 100, Sensitive: 1}
+			consume(t, l, t0, e.Type, lim)
+
+			want := usage{Total: 1}
+			if e.Sensitive {
+				want.Sensitive = 1
+			}
+			if got := l.usageAt(t0); got != want {
+				t.Fatalf("depois de consumir %s (sensível=%v): %+v, esperava %+v", e.Type, e.Sensitive, got, want)
+			}
+			// com o orçamento de sensíveis em 1/1 só se o tipo consumido era sensível, outro sensível já não cabe
+			if got := fits(t, l, t0, sens, lim); got != !e.Sensitive {
+				t.Errorf("outro sensível cabe = %v, esperava %v", got, !e.Sensitive)
+			}
+			if !fits(t, l, t0, plain, lim) {
+				t.Error("um comum sempre cabe: o global tem folga")
+			}
+		})
+	}
+}
+
+// Um tipo fora do catálogo não tem sensibilidade para o ledger derivar: é erro, não "comum".
+func TestTipoForaDoCatalogoEErroENadaMuda(t *testing.T) {
+	l, dir := openAt(t, t0)
+	before := readState(t, dir)
+	for _, typ := range []contract.CommandType{"task.explode", "", "TASK.START", "tenant.scope_set"} {
+		room, err := l.Fits(t0, typ, wide)
+		if !errors.Is(err, contract.ErrUnknownType) || room != (Room{}) {
+			t.Errorf("Fits(%q) = %+v, %v; esperava Room vazio e contract.ErrUnknownType", typ, room, err)
+		}
+		err = l.Consume(t0, typ, wide)
+		if !errors.Is(err, contract.ErrUnknownType) || errors.Is(err, ErrOverBudget) {
+			t.Errorf("Consume(%q): %v; esperava contract.ErrUnknownType (e não ErrOverBudget)", typ, err)
+		}
+		if err != nil && typ != "" && strings.Contains(err.Error(), string(typ)) {
+			t.Errorf("o erro ecoa o tipo, que é entrada crua: %v", err)
+		}
+	}
+	if after := readState(t, dir); after != before {
+		t.Fatalf("um tipo desconhecido não grava: o arquivo mudou de\n%s\npara\n%s", before, after)
+	}
+	if u := l.usageAt(t0); u != (usage{}) {
+		t.Fatalf("nada foi consumido: %+v", u)
+	}
+}
+
+// Room diz qual orçamento não tem folga (o detail do portão depende disso).
+func TestFitsDizQualOrcamentoNaoTemFolga(t *testing.T) {
+	l, _ := openAt(t, t0)
+	consume(t, l, t0, sens, wide) // 1 aceito, 1 sensível
+	cases := []struct {
+		name string
+		lim  Limits
+		typ  contract.CommandType
+		want Room
+	}{
+		{"tudo com folga, comum", Limits{Total: 10, Sensitive: 10}, plain, Room{Total: true, Sensitive: true}},
+		{"tudo com folga, sensível", Limits{Total: 10, Sensitive: 10}, sens, Room{Total: true, Sensitive: true}},
+		{"global cheio, comum", Limits{Total: 1, Sensitive: 10}, plain, Room{Total: false, Sensitive: true}},
+		{"global cheio, sensível", Limits{Total: 1, Sensitive: 10}, sens, Room{Total: false, Sensitive: true}},
+		{"sensíveis cheio, comum: não conta nele", Limits{Total: 10, Sensitive: 1}, plain, Room{Total: true, Sensitive: true}},
+		{"sensíveis cheio, sensível", Limits{Total: 10, Sensitive: 1}, sens, Room{Total: true, Sensitive: false}},
+		{"os dois cheios, sensível", Limits{Total: 1, Sensitive: 1}, sens, Room{Total: false, Sensitive: false}},
+		{"limite 0 nos dois, sensível", Limits{}, sens, Room{Total: false, Sensitive: false}},
+		{"limite 0 no total, comum", Limits{Total: 0, Sensitive: 10}, plain, Room{Total: false, Sensitive: true}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got, err := l.Fits(t0.Add(time.Second), c.typ, c.lim)
+			if err != nil || got != c.want {
+				t.Fatalf("Fits = %+v, %v; esperava %+v", got, err, c.want)
+			}
+			if got.OK() != (c.want.Total && c.want.Sensitive) {
+				t.Fatalf("OK() = %v", got.OK())
+			}
+		})
 	}
 }
 
@@ -116,7 +227,7 @@ func TestFitsSoPerguntaENadaGrava(t *testing.T) {
 	l, dir := openAt(t, t0)
 	before := readState(t, dir)
 	for i := 0; i < 5; i++ {
-		if !l.Fits(t0, true, wide) {
+		if !fits(t, l, t0, sens, wide) {
 			t.Fatal("deveria caber")
 		}
 	}
@@ -133,31 +244,31 @@ func TestLimiteZeroNaoAceitaNadaDaquelaClasse(t *testing.T) {
 	before := readState(t, dir)
 
 	noTotal := Limits{Total: 0, Sensitive: 30}
-	if l.Fits(t0, false, noTotal) || l.Fits(t0, true, noTotal) {
+	if fits(t, l, t0, plain, noTotal) || fits(t, l, t0, sens, noTotal) {
 		t.Fatal("total 0: nenhum comando aceito, sensível ou não")
 	}
 	noSensitive := Limits{Total: 100, Sensitive: 0}
-	if l.Fits(t0, true, noSensitive) {
+	if fits(t, l, t0, sens, noSensitive) {
 		t.Fatal("sensível 0: nenhum sensível")
 	}
-	if !l.Fits(t0, false, noSensitive) {
+	if !fits(t, l, t0, plain, noSensitive) {
 		t.Fatal("sensível 0 não toca os não sensíveis")
 	}
-	if err := l.Consume(t0, true, noSensitive); !errors.Is(err, ErrOverBudget) {
+	if err := l.Consume(t0, sens, noSensitive); !errors.Is(err, ErrOverBudget) {
 		t.Fatalf("Consume de sensível com limite 0: %v", err)
 	}
-	if err := l.Consume(t0, false, noTotal); !errors.Is(err, ErrOverBudget) {
+	if err := l.Consume(t0, plain, noTotal); !errors.Is(err, ErrOverBudget) {
 		t.Fatalf("Consume com total 0: %v", err)
 	}
 	if after := readState(t, dir); after != before {
 		t.Fatalf("o que não coube não pode ser gravado: o arquivo mudou de\n%s\npara\n%s", before, after)
 	}
-	consume(t, l, t0, false, noSensitive) // o não sensível passa
+	consume(t, l, t0, plain, noSensitive) // o não sensível passa
 }
 
 func TestLimiteNegativoNaoAceitaNada(t *testing.T) {
 	l, _ := openAt(t, t0)
-	if l.Fits(t0, false, Limits{Total: -1, Sensitive: 30}) {
+	if fits(t, l, t0, plain, Limits{Total: -1, Sensitive: 30}) {
 		t.Fatal("limite negativo é inválido: fail-closed")
 	}
 }
@@ -165,23 +276,23 @@ func TestLimiteNegativoNaoAceitaNada(t *testing.T) {
 func TestOrcamentoEsgotaEVoltaQuandoAJanelaAnda(t *testing.T) {
 	l, _ := openAt(t, t0)
 	lim := Limits{Total: 3, Sensitive: 3}
-	consume(t, l, t0, false, lim)
-	consume(t, l, t0.Add(time.Minute), false, lim)
-	consume(t, l, t0.Add(2*time.Minute), false, lim)
-	if l.Fits(t0.Add(2*time.Minute), false, lim) {
+	consume(t, l, t0, plain, lim)
+	consume(t, l, t0.Add(time.Minute), plain, lim)
+	consume(t, l, t0.Add(2*time.Minute), plain, lim)
+	if fits(t, l, t0.Add(2*time.Minute), plain, lim) {
 		t.Fatal("três de três: não cabe o quarto")
 	}
-	if err := l.Consume(t0.Add(3*time.Minute), false, lim); !errors.Is(err, ErrOverBudget) {
+	if err := l.Consume(t0.Add(3*time.Minute), plain, lim); !errors.Is(err, ErrOverBudget) {
 		t.Fatalf("o quarto: %v", err)
 	}
-	if l.Fits(t0.Add(time.Hour-1), false, lim) {
+	if fits(t, l, t0.Add(time.Hour-1), plain, lim) {
 		t.Fatal("1 ns antes de o primeiro sair da janela ainda são três")
 	}
-	if !l.Fits(t0.Add(time.Hour), false, lim) {
+	if !fits(t, l, t0.Add(time.Hour), plain, lim) {
 		t.Fatal("em t0+1h o primeiro instante (t0) sai da janela: cabe de novo")
 	}
-	consume(t, l, t0.Add(time.Hour), false, lim)
-	if l.Fits(t0.Add(time.Hour), false, lim) {
+	consume(t, l, t0.Add(time.Hour), plain, lim)
+	if fits(t, l, t0.Add(time.Hour), plain, lim) {
 		t.Fatal("de novo três na janela")
 	}
 }
@@ -189,12 +300,12 @@ func TestOrcamentoEsgotaEVoltaQuandoAJanelaAnda(t *testing.T) {
 func TestInstantesIguaisContamCadaUm(t *testing.T) {
 	l, _ := openAt(t, t0)
 	lim := Limits{Total: 2, Sensitive: 2}
-	consume(t, l, t0, false, lim)
-	consume(t, l, t0, false, lim) // dois aceites no mesmo instante (relógio de baixa resolução)
+	consume(t, l, t0, plain, lim)
+	consume(t, l, t0, plain, lim) // dois aceites no mesmo instante (relógio de baixa resolução)
 	if u := l.usageAt(t0); u.Total != 2 {
 		t.Fatalf("Usage = %+v", u)
 	}
-	if l.Fits(t0, false, lim) {
+	if fits(t, l, t0, plain, lim) {
 		t.Fatal("dois instantes iguais são dois consumos")
 	}
 }
@@ -202,24 +313,24 @@ func TestInstantesIguaisContamCadaUm(t *testing.T) {
 func TestLimiteReduzidoValeJaSobreOQueEstaNaJanela(t *testing.T) {
 	l, _ := openAt(t, t0)
 	for i := 0; i < 5; i++ {
-		consume(t, l, t0.Add(time.Duration(i)*time.Second), i < 3, wide) // 5 aceitos, 3 sensíveis
+		consume(t, l, t0.Add(time.Duration(i)*time.Second), kind(i < 3), wide) // 5 aceitos, 3 sensíveis
 	}
 	at := t0.Add(10 * time.Second)
 	for _, c := range []struct {
-		lim       Limits
-		sensitive bool
-		fits      bool
+		lim  Limits
+		typ  contract.CommandType
+		fits bool
 	}{
-		{Limits{Total: 6, Sensitive: 100}, false, true},
-		{Limits{Total: 5, Sensitive: 100}, false, false}, // já são cinco
-		{Limits{Total: 2, Sensitive: 100}, false, false}, // reduzido abaixo do que já está na janela
-		{Limits{Total: 100, Sensitive: 4}, true, true},
-		{Limits{Total: 100, Sensitive: 3}, true, false},
-		{Limits{Total: 100, Sensitive: 1}, true, false},
-		{Limits{Total: 100, Sensitive: 1}, false, true}, // o sensível reduzido não toca os demais
+		{Limits{Total: 6, Sensitive: 100}, plain, true},
+		{Limits{Total: 5, Sensitive: 100}, plain, false}, // já são cinco
+		{Limits{Total: 2, Sensitive: 100}, plain, false}, // reduzido abaixo do que já está na janela
+		{Limits{Total: 100, Sensitive: 4}, sens, true},
+		{Limits{Total: 100, Sensitive: 3}, sens, false},
+		{Limits{Total: 100, Sensitive: 1}, sens, false},
+		{Limits{Total: 100, Sensitive: 1}, plain, true}, // o sensível reduzido não toca os demais
 	} {
-		if got := l.Fits(at, c.sensitive, c.lim); got != c.fits {
-			t.Errorf("Fits(sensível=%v, %+v) = %v, esperava %v", c.sensitive, c.lim, got, c.fits)
+		if got := fits(t, l, at, c.typ, c.lim); got != c.fits {
+			t.Errorf("Fits(%s, %+v) = %v, esperava %v", c.typ, c.lim, got, c.fits)
 		}
 	}
 }
@@ -228,27 +339,27 @@ func TestOsDoisOrcamentosSeCruzam(t *testing.T) {
 	// sensível esgotado, global com folga: o sensível é recusado e o não sensível passa
 	l, _ := openAt(t, t0)
 	lim := Limits{Total: 10, Sensitive: 2}
-	consume(t, l, t0, true, lim)
-	consume(t, l, t0.Add(time.Second), true, lim)
+	consume(t, l, t0, sens, lim)
+	consume(t, l, t0.Add(time.Second), sens, lim)
 	at := t0.Add(2 * time.Second)
-	if l.Fits(at, true, lim) || !l.Fits(at, false, lim) {
+	if fits(t, l, at, sens, lim) || !fits(t, l, at, plain, lim) {
 		t.Fatal("sensível esgotado só recusa sensível")
 	}
 	// global esgotado, sensível com folga: o global recusa também o sensível
 	g, _ := openAt(t, t0)
 	lim = Limits{Total: 2, Sensitive: 10}
-	consume(t, g, t0, false, lim)
-	consume(t, g, t0.Add(time.Second), false, lim)
-	if g.Fits(at, true, lim) || g.Fits(at, false, lim) {
+	consume(t, g, t0, plain, lim)
+	consume(t, g, t0.Add(time.Second), plain, lim)
+	if fits(t, g, at, sens, lim) || fits(t, g, at, plain, lim) {
 		t.Fatal("global esgotado recusa tudo, inclusive o sensível com folga própria")
 	}
 }
 
 func TestPersistenciaIdaEVolta(t *testing.T) {
 	l, dir := openAt(t, t0)
-	consume(t, l, t0, true, wide)
-	consume(t, l, t0.Add(time.Minute), false, wide)
-	consume(t, l, t0.Add(2*time.Minute), true, wide)
+	consume(t, l, t0, sens, wide)
+	consume(t, l, t0.Add(time.Minute), plain, wide)
+	consume(t, l, t0.Add(2*time.Minute), sens, wide)
 	at := t0.Add(3 * time.Minute)
 	want := l.usageAt(at)
 	if want != (usage{Total: 3, Sensitive: 2}) {
@@ -266,11 +377,11 @@ func TestPersistenciaIdaEVolta(t *testing.T) {
 		t.Fatalf("depois de reabrir: %+v, esperava %+v", got, want)
 	}
 	// o que foi restaurado vale: limite 3 já está cheio
-	if re.Fits(at, false, Limits{Total: 3, Sensitive: 30}) {
+	if fits(t, re, at, plain, Limits{Total: 3, Sensitive: 30}) {
 		t.Fatal("o estado restaurado deveria contar na janela")
 	}
 	// e a janela segue deslizando sobre o restaurado
-	if !re.Fits(t0.Add(time.Hour), false, Limits{Total: 3, Sensitive: 30}) {
+	if !fits(t, re, t0.Add(time.Hour), plain, Limits{Total: 3, Sensitive: 30}) {
 		t.Fatal("em t0+1h o instante t0 sai da janela, mesmo depois do reinício")
 	}
 }
@@ -278,8 +389,8 @@ func TestPersistenciaIdaEVolta(t *testing.T) {
 func TestArquivoGravadoTemFormatoEModo(t *testing.T) {
 	l, dir := openAt(t, t0)
 	path := stateFile(dir)
-	consume(t, l, t0, true, wide)
-	consume(t, l, t0.Add(time.Second), false, wide)
+	consume(t, l, t0, sens, wide)
+	consume(t, l, t0.Add(time.Second), plain, wide)
 	b, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
@@ -310,8 +421,8 @@ func TestArquivoGravadoTemFormatoEModo(t *testing.T) {
 func TestArquivoSoGuardaOQueEstaNaJanela(t *testing.T) {
 	l, dir := openAt(t, t0)
 	path := stateFile(dir)
-	consume(t, l, t0, true, wide)
-	consume(t, l, t0.Add(2*time.Hour), false, wide) // o primeiro já saiu da janela
+	consume(t, l, t0, sens, wide)
+	consume(t, l, t0.Add(2*time.Hour), plain, wide) // o primeiro já saiu da janela
 	b, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
@@ -346,7 +457,7 @@ func TestPrimeiroBootComecaVazioEGravaOEstadoInicial(t *testing.T) {
 	if l.Lost() != nil || !l.BlockedUntil().IsZero() {
 		t.Fatalf("primeiro boot não é perda: %v %v", l.Lost(), l.BlockedUntil())
 	}
-	if u := l.usageAt(t0); u != (usage{}) || !l.Fits(t0, true, Limits{Total: 1, Sensitive: 1}) {
+	if u := l.usageAt(t0); u != (usage{}) || !fits(t, l, t0, sens, Limits{Total: 1, Sensitive: 1}) {
 		t.Fatalf("deveria começar vazio: %+v", u)
 	}
 	if got, want := readState(t, dir), stateJSON(nil, nil)+"\n"; got != want {
@@ -383,7 +494,7 @@ func TestAusenteNumNoQueJaTemIdentidadeContaComoPerda(t *testing.T) {
 
 	// passada a hora, volta a aceitar, e a primeira gravação cria o arquivo: dali em diante o reinício lê o estado
 	after := boot.Add(Window)
-	consume(t, l, after, false, wide)
+	consume(t, l, after, plain, wide)
 	re, err := Open(dir, after, Options{})
 	if err != nil || re.Lost() != nil {
 		t.Fatalf("depois de uma gravação o arquivo existe e está íntegro: %v %v", err, re.Lost())
@@ -487,7 +598,7 @@ func TestOpenRecusaBootQueNaoERelogioDeVerificacao(t *testing.T) {
 			l, err := Open(dir, boot, Options{})
 			if err == nil {
 				t.Fatalf("Open aceitou boot %v; Lost=%v BlockedUntil=%v e Fits(2026-10-11)=%v (Fits=true é porta aberta)",
-					boot, l.Lost() != nil, l.BlockedUntil(), l.Fits(t0, false, wide))
+					boot, l.Lost() != nil, l.BlockedUntil(), fits(t, l, t0, plain, wide))
 			}
 			if l != nil {
 				t.Fatalf("com erro, nenhum ledger: veio %+v", l)
@@ -549,7 +660,7 @@ func TestEstadoIlegivelOuCorrompidoTrataJanelaComoCheiaPorUmaHora(t *testing.T) 
 
 			// passada a hora, volta a aceitar e a primeira gravação cura o arquivo
 			after := boot.Add(Window)
-			consume(t, l, after, false, wide)
+			consume(t, l, after, plain, wide)
 			re, err := Open(dir, after, Options{})
 			if err != nil || re.Lost() != nil {
 				t.Fatalf("depois de uma gravação o arquivo deveria estar íntegro: %v %v", err, re.Lost())
@@ -593,14 +704,14 @@ func assertBlockedUntilBootPlusHour(t *testing.T, l *Ledger, boot time.Time) {
 	}
 	lim := Limits{Total: MaxTotal, Sensitive: MaxSensitive}
 	for _, at := range []time.Time{boot, boot.Add(time.Minute), boot.Add(Window - 1)} {
-		if l.Fits(at, false, lim) || l.Fits(at, true, lim) {
+		if fits(t, l, at, plain, lim) || fits(t, l, at, sens, lim) {
 			t.Fatalf("janela cheia por 1 h a partir do boot: Fits(%v) deveria ser falso", at)
 		}
-		if err := l.Consume(at, false, lim); !errors.Is(err, ErrOverBudget) {
+		if err := l.Consume(at, plain, lim); !errors.Is(err, ErrOverBudget) {
 			t.Fatalf("Consume(%v) durante o bloqueio: %v", at, err)
 		}
 	}
-	if !l.Fits(boot.Add(Window), false, lim) || !l.Fits(boot.Add(Window), true, lim) {
+	if !fits(t, l, boot.Add(Window), plain, lim) || !fits(t, l, boot.Add(Window), sens, lim) {
 		t.Fatal("em boot+1h o bloqueio acaba")
 	}
 	if u := l.usageAt(boot); u != (usage{}) {
@@ -617,13 +728,13 @@ func TestFalhaDeGravacaoEErroENadaFicaContado(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	consume(t, l, t0, true, wide)
+	consume(t, l, t0, sens, wide)
 	before := l.usageAt(t0)
 
 	if err := os.RemoveAll(dir); err != nil { // o disco some debaixo do conector
 		t.Fatal(err)
 	}
-	err = l.Consume(t0.Add(time.Second), true, wide)
+	err = l.Consume(t0.Add(time.Second), sens, wide)
 	if err == nil {
 		t.Fatal("falha ao gravar o consumo tem de ser erro")
 	}
@@ -638,7 +749,7 @@ func TestFalhaDeGravacaoEErroENadaFicaContado(t *testing.T) {
 	if err := os.Mkdir(dir, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	consume(t, l, t0.Add(2*time.Second), false, wide)
+	consume(t, l, t0.Add(2*time.Second), plain, wide)
 	re, err := Open(dir, t0.Add(3*time.Second), Options{})
 	if err != nil || re.Lost() != nil {
 		t.Fatalf("%v %v", err, re.Lost())
@@ -663,10 +774,10 @@ func TestUsoConcorrenteNuncaPassaDoLimite(t *testing.T) {
 		go func(i int) {
 			defer wg.Done()
 			<-start
-			sensitive := i%2 == 0
-			err := l.Consume(t0.Add(time.Duration(i)*time.Millisecond), sensitive, lim)
+			typ := kind(i%2 == 0)
+			err := l.Consume(t0.Add(time.Duration(i)*time.Millisecond), typ, lim)
 			// leituras concorrentes com as gravações
-			l.Fits(t0, sensitive, lim)
+			_, _ = l.Fits(t0, typ, lim)
 			l.usageAt(t0.Add(time.Second))
 			mu.Lock()
 			defer mu.Unlock()
@@ -709,10 +820,10 @@ func TestTetoDeMemoriaNaoDependeDoLimitePedido(t *testing.T) {
 	if u := l.usageAt(at); u.Total != MaxTotal {
 		t.Fatalf("Usage = %+v", u)
 	}
-	if l.Fits(at, false, huge) {
+	if fits(t, l, at, plain, huge) {
 		t.Fatal("Fits tem de limitar o pedido ao teto do schema")
 	}
-	if err := l.Consume(at, false, huge); !errors.Is(err, ErrOverBudget) {
+	if err := l.Consume(at, plain, huge); !errors.Is(err, ErrOverBudget) {
 		t.Fatalf("Consume no teto: %v", err)
 	}
 
@@ -722,10 +833,10 @@ func TestTetoDeMemoriaNaoDependeDoLimitePedido(t *testing.T) {
 	if err != nil || l2.Lost() != nil {
 		t.Fatalf("%v %v", err, l2.Lost())
 	}
-	if err := l2.Consume(at, true, huge); !errors.Is(err, ErrOverBudget) {
+	if err := l2.Consume(at, sens, huge); !errors.Is(err, ErrOverBudget) {
 		t.Fatalf("sensível no teto: %v", err)
 	}
-	consume(t, l2, at, false, huge)
+	consume(t, l2, at, plain, huge)
 }
 
 // O relógio de verificação nunca anda para trás. Se um chamador (ou um estado gravado sob um relógio adiantado)
@@ -735,12 +846,12 @@ func TestRelogioQueVoltouNaoReabreOOrcamento(t *testing.T) {
 	lim := Limits{Total: 3, Sensitive: 3}
 	later := t0.Add(10 * time.Minute)
 	for i := 0; i < 3; i++ {
-		consume(t, l, later.Add(time.Duration(i)*time.Second), false, lim)
+		consume(t, l, later.Add(time.Duration(i)*time.Second), plain, lim)
 	}
-	if l.Fits(t0, false, lim) {
+	if fits(t, l, t0, plain, lim) {
 		t.Fatal("t anterior aos instantes gravados: eles ainda contam, o orçamento segue cheio")
 	}
-	if err := l.Consume(t0, false, lim); !errors.Is(err, ErrOverBudget) {
+	if err := l.Consume(t0, plain, lim); !errors.Is(err, ErrOverBudget) {
 		t.Fatalf("Consume com t que voltou: %v", err)
 	}
 	if u := l.usageAt(t0); u.Total != 3 {
@@ -751,8 +862,8 @@ func TestRelogioQueVoltouNaoReabreOOrcamento(t *testing.T) {
 func TestInstantesForaDeOrdemSaoGuardadosTodos(t *testing.T) {
 	l, _ := openAt(t, t0)
 	later := t0.Add(10 * time.Minute)
-	consume(t, l, later, false, wide)
-	consume(t, l, t0, false, wide)
+	consume(t, l, later, plain, wide)
+	consume(t, l, t0, plain, wide)
 	if u := l.usageAt(later); u.Total != 2 {
 		t.Fatalf("usageAt(later) = %+v", u)
 	}

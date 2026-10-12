@@ -18,25 +18,27 @@ import (
 
 var t0 = time.Date(2026, 10, 11, 12, 0, 0, 0, time.UTC)
 
-// fakeBudgets answers Fits from two switches and remembers what it was asked.
+// fakeBudgets answers Fits with the Room it was given and remembers what it was asked. Which budgets a type counts
+// in is the ledger's business (tested in package budget), not the gate's.
 type fakeBudgets struct {
 	totalRoom     bool
 	sensitiveRoom bool
+	err           error
 	calls         []fitsCall
 }
 
 type fitsCall struct {
-	at        time.Time
-	sensitive bool
-	lim       budget.Limits
+	at  time.Time
+	typ contract.CommandType
+	lim budget.Limits
 }
 
-func (f *fakeBudgets) Fits(t time.Time, sensitive bool, lim budget.Limits) bool {
-	f.calls = append(f.calls, fitsCall{t, sensitive, lim})
-	if !f.totalRoom {
-		return false
+func (f *fakeBudgets) Fits(t time.Time, typ contract.CommandType, lim budget.Limits) (budget.Room, error) {
+	f.calls = append(f.calls, fitsCall{t, typ, lim})
+	if f.err != nil {
+		return budget.Room{}, f.err
 	}
-	return !sensitive || f.sensitiveRoom
+	return budget.Room{Total: f.totalRoom, Sensitive: f.sensitiveRoom}, nil
 }
 
 func roomy() *fakeBudgets { return &fakeBudgets{totalRoom: true, sensitiveRoom: true} }
@@ -243,46 +245,45 @@ func TestOrcamentoPerguntaComOLimiteDaPoliticaEOInstanteDado(t *testing.T) {
 	if err := Check(r); err != nil {
 		t.Fatal(err)
 	}
-	// task.create é opt-in, portanto sensível: pergunta o global e depois o conjunto dos dois
-	want := []fitsCall{
-		{t0.Add(42 * time.Second), false, budget.Limits{Total: 11, Sensitive: 7}},
-		{t0.Add(42 * time.Second), true, budget.Limits{Total: 11, Sensitive: 7}},
-	}
+	// uma pergunta só, com o tipo: quem decide em quais orçamentos ele conta é o ledger
+	want := []fitsCall{{t0.Add(42 * time.Second), contract.TypeTaskCreate, budget.Limits{Total: 11, Sensitive: 7}}}
 	if !slices.Equal(fake.calls, want) {
 		t.Fatalf("perguntas %+v, esperava %+v", fake.calls, want)
 	}
+}
 
-	// não sensível: só o global
-	fake2 := roomy()
-	r2 := base()
-	r2.Budgets = fake2
-	if err := Check(r2); err != nil {
-		t.Fatal(err)
+// O detail diz qual orçamento esgotou, a partir do Room que o ledger devolve; o global vem primeiro.
+func TestDetailDizQualOrcamentoEsgotou(t *testing.T) {
+	cases := []struct {
+		name   string
+		budget *fakeBudgets
+		detail string
+	}{
+		{"só o global", &fakeBudgets{totalRoom: false, sensitiveRoom: true}, "global"},
+		{"só o de sensíveis", &fakeBudgets{totalRoom: true, sensitiveRoom: false}, "sensíveis"},
+		{"os dois: o global", &fakeBudgets{}, "global"},
 	}
-	if len(fake2.calls) != 1 || fake2.calls[0].sensitive {
-		t.Fatalf("tipo não sensível só consulta o global: %+v", fake2.calls)
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			r := base()
+			r.Budgets = c.budget
+			err := Check(r)
+			if reasonOf(t, err) != contract.ReasonRateLimited || !strings.Contains(err.Error(), c.detail) {
+				t.Fatalf("%v, esperava rate_limited citando %q", err, c.detail)
+			}
+		})
 	}
 }
 
-func TestSensivelEsgotadoSoRecusaSensivel(t *testing.T) {
+// O ledger só erra num tipo que o catálogo não conhece, e o portão já recusou esse como unsupported antes de
+// perguntar: um erro dali não é veredito, é falha de quem responde.
+func TestErroDosOrcamentosNaoEVeredito(t *testing.T) {
 	r := base()
-	r.Type, r.Policy.Allow = contract.TypeTaskCreate, append(r.Policy.Allow, contract.TypeTaskCreate)
-	r.Budgets = &fakeBudgets{totalRoom: true, sensitiveRoom: false}
+	r.Budgets = &fakeBudgets{totalRoom: true, sensitiveRoom: true, err: errors.New("ledger quebrado")}
 	err := Check(r)
-	if reasonOf(t, err) != contract.ReasonRateLimited || !strings.Contains(err.Error(), "sensíveis") {
-		t.Fatalf("sensível esgotado: %v", err)
-	}
-	// o não sensível passa com o mesmo orçamento
-	r2 := base()
-	r2.Budgets = &fakeBudgets{totalRoom: true, sensitiveRoom: false}
-	if err := Check(r2); err != nil {
-		t.Fatalf("não sensível com o orçamento de sensíveis esgotado: %v", err)
-	}
-	// global esgotado: o detail diz global
-	r3 := base()
-	r3.Budgets = &fakeBudgets{}
-	if err := Check(r3); !strings.Contains(err.Error(), "global") {
-		t.Fatalf("global esgotado: %v", err)
+	var re *contract.RejectError
+	if err == nil || errors.As(err, &re) {
+		t.Fatalf("esperava um erro que não é *contract.RejectError, veio %v", err)
 	}
 }
 
@@ -427,9 +428,8 @@ func TestPortaComOsPacotesReais(t *testing.T) {
 	}
 	accept := func(at time.Time, typ contract.CommandType) {
 		t.Helper()
-		e, _ := contract.LookupType(typ)
 		snap, _ := policy.Load(dir, contract.NodeStandalone)
-		if err := ledger.Consume(at, e.Sensitive, budget.Limits{Total: snap.Policy.TotalPerHour, Sensitive: snap.Policy.SensitivePerHour}); err != nil {
+		if err := ledger.Consume(at, typ, budget.Limits{Total: snap.Policy.TotalPerHour, Sensitive: snap.Policy.SensitivePerHour}); err != nil {
 			t.Fatal(err)
 		}
 	}

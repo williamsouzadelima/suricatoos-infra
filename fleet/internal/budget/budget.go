@@ -13,11 +13,15 @@
 //
 // Two operations, deliberately apart (ADR: "só comando aceito consome"):
 //
-//   - Fits only ASKS whether accepting one more command would exceed a budget (verification line 7,
-//     rate_limited). It consumes nothing and writes nothing.
+//   - Fits only ASKS whether accepting one more command of a given type would exceed a budget (verification line
+//     7, rate_limited). It consumes nothing and writes nothing.
 //   - Consume records an accepted command: the slice F2.4c calls it together with the durable "accepted"
 //     decision. It re-checks the limits under the same lock, so the budget cannot be exceeded even if a caller
 //     races, and it returns only after the new state is on disk.
+//
+// Both take the command TYPE, not a flag: whether the type is sensitive (and so counts in the sensitive budget
+// too) is read from the v1 catalog inside the ledger, and a type outside the catalog is an error. The gate that
+// asks and the code that consumes therefore cannot disagree about it.
 //
 // Failure rules, both fail-closed:
 //
@@ -190,40 +194,78 @@ func (l *Ledger) BlockedUntil() time.Time {
 	return time.Unix(0, l.blockedUntil).UTC()
 }
 
-// Fits reports whether accepting ONE more command at t stays inside the limits: the global budget always, and the
-// sensitive one too when the command is sensitive. It reads and consumes nothing. A limit of 0 (or negative)
-// accepts nothing of its class, and a limit above the schema ceiling is held to the ceiling — which is also what
-// bounds the memory: a window never holds more instants than the ceiling.
-func (l *Ledger) Fits(t time.Time, sensitive bool, lim Limits) bool {
+// Room says, for one more command of a given type, whether each budget that command counts in has room.
+type Room struct {
+	// Total: the global budget of accepted commands has room. It is false while the ledger is in the block that
+	// follows a lost state, which counts as a full window.
+	Total bool
+	// Sensitive: the budget of sensitive commands has room. Only a sensitive type counts in it, so for any other
+	// type it is true; while the ledger is blocked it is false for a sensitive type.
+	Sensitive bool
+}
+
+// OK reports whether the command fits in every budget it counts in.
+func (r Room) OK() bool { return r.Total && r.Sensitive }
+
+// Fits asks whether accepting ONE more command of type typ at t stays inside the limits: the global budget always,
+// and the sensitive one too when the catalog says the type is sensitive (opt-in types, report.export and
+// report.summary). The ledger derives that from the catalog itself (contract.LookupType) — the caller does not
+// pass it — so the gate that asks and the code that consumes cannot disagree about it. A type outside the v1
+// catalog is an error (wrapping contract.ErrUnknownType) and Room is empty: nothing fits.
+//
+// It reads and consumes nothing. A limit of 0 (or negative) accepts nothing of its class, and a limit above the
+// schema ceiling is held to the ceiling — which is also what bounds the memory: a window never holds more instants
+// than the ceiling.
+func (l *Ledger) Fits(t time.Time, typ contract.CommandType, lim Limits) (Room, error) {
+	sensitive, err := isSensitive(typ)
+	if err != nil {
+		return Room{}, err
+	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	return l.fits(t.UnixNano(), sensitive, lim)
+	return l.room(t.UnixNano(), sensitive, lim), nil
 }
 
-func (l *Ledger) fits(now int64, sensitive bool, lim Limits) bool {
-	if now < l.blockedUntil {
-		return false
+// isSensitive is the catalog's answer for a type (ADR "Catálogo de comandos v1": opt-in, report.export and
+// report.summary count in the sensitive budget).
+func isSensitive(typ contract.CommandType) (bool, error) {
+	e, ok := contract.LookupType(typ)
+	if !ok {
+		return false, fmt.Errorf("budget: %w", contract.ErrUnknownType)
 	}
+	return e.Sensitive, nil
+}
+
+func (l *Ledger) room(now int64, sensitive bool, lim Limits) Room {
 	lo := now - int64(Window)
-	if countAfter(l.total, lo) >= min(lim.Total, MaxTotal) {
-		return false
+	r := Room{Total: countAfter(l.total, lo) < min(lim.Total, MaxTotal), Sensitive: true}
+	if sensitive {
+		r.Sensitive = countAfter(l.sensitive, lo) < min(lim.Sensitive, MaxSensitive)
 	}
-	if sensitive && countAfter(l.sensitive, lo) >= min(lim.Sensitive, MaxSensitive) {
-		return false
+	if now < l.blockedUntil { // the block that follows a lost state: every budget is full
+		r.Total = false
+		r.Sensitive = !sensitive
 	}
-	return true
+	return r
 }
 
-// Consume records one accepted command at t, in the global budget and, when sensitive, in the sensitive one.
-// It returns nil only after the new state is durable on disk. ErrOverBudget means it did not fit (nothing
-// changed); any other error is a failed write (nothing changed either: the consumption does not count).
-// Instants that left the window are dropped from memory and from the file.
-func (l *Ledger) Consume(t time.Time, sensitive bool, lim Limits) error {
+// Consume records one accepted command of type typ at t, in the global budget and, when the catalog says the
+// type is sensitive, in the sensitive one (see Fits: the type decides, not the caller). It returns nil only after
+// the new state is durable on disk. ErrOverBudget means it did not fit (nothing changed); a type outside the
+// catalog is an error wrapping contract.ErrUnknownType (nothing changed); any other error is a failed write
+// (nothing changed either: the consumption does not count). If the error wraps fsutil.ErrNotDurable the file
+// already holds the new state but its durability is unknown; the ledger in memory stays as it was, so a retry
+// writes the state once more, from memory. Instants that left the window are dropped from memory and from the file.
+func (l *Ledger) Consume(t time.Time, typ contract.CommandType, lim Limits) error {
+	sensitive, err := isSensitive(typ)
+	if err != nil {
+		return err
+	}
 	now := t.UnixNano()
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	if !l.fits(now, sensitive, lim) {
+	if !l.room(now, sensitive, lim).OK() {
 		return ErrOverBudget
 	}
 	// the new state is built apart and swapped in only after the write, so a failed write leaves the ledger as it

@@ -27,6 +27,7 @@ package admission
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/williamsouzadelima/suricatoos-infra/fleet/contract"
@@ -37,9 +38,10 @@ import (
 
 // Budgets is the read-only question of line 7; *budget.Ledger implements it.
 type Budgets interface {
-	// Fits reports whether accepting one more command at t stays inside both budgets (the sensitive one only
-	// when sensitive is true). It must not consume anything.
-	Fits(t time.Time, sensitive bool, lim budget.Limits) bool
+	// Fits says which budgets have room for one more command of type typ at t. The implementation, not the gate,
+	// decides which budgets that command counts in (the catalog says whether the type is sensitive), so the gate
+	// and the later consumption cannot disagree. It must not consume anything.
+	Fits(t time.Time, typ contract.CommandType, lim budget.Limits) (budget.Room, error)
 }
 
 var _ Budgets = (*budget.Ledger)(nil)
@@ -90,10 +92,15 @@ func Check(r Request) error {
 		return reject(contract.ReasonTypeNotAllowed, string(missing)+" fora de allow na política local")
 	}
 	lim := budget.Limits{Total: r.Policy.TotalPerHour, Sensitive: r.Policy.SensitivePerHour}
-	if !r.Budgets.Fits(r.At, false, lim) {
-		return reject(contract.ReasonRateLimited, "orçamento global de comandos aceitos esgotado")
+	room, err := r.Budgets.Fits(r.At, r.Type, lim)
+	if err != nil {
+		// the type was just found in the catalog, so this is not a verdict: the budgets could not answer
+		return fmt.Errorf("admission: orçamentos: %w", err)
 	}
-	if entry.Sensitive && !r.Budgets.Fits(r.At, true, lim) {
+	switch {
+	case !room.Total:
+		return reject(contract.ReasonRateLimited, "orçamento global de comandos aceitos esgotado")
+	case !room.Sensitive:
 		return reject(contract.ReasonRateLimited, "orçamento de comandos sensíveis esgotado")
 	}
 	return nil
