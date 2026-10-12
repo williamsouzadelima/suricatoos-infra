@@ -5349,10 +5349,10 @@ index eaff647..d6e39ef 100644
 \ No newline at end of file
 diff --git a/public/locales/gsa-es.json b/public/locales/gsa-es.json
 new file mode 100644
-index 0000000..727b14a
+index 0000000..9098917
 --- /dev/null
 +++ b/public/locales/gsa-es.json
-@@ -0,0 +1,2492 @@
+@@ -0,0 +1,2496 @@
 +{
 +  "AI Providers": "Proveedores de IA",
 +  "Configure LLM providers (OpenRouter, UnoRouter and others) used to draft remediation plans. Keys are stored encrypted and never shown.": "Configure los proveedores de LLM (OpenRouter, UnoRouter y otros) usados para redactar planes de remediación. Las claves se guardan cifradas y nunca se muestran.",
@@ -7792,6 +7792,7 @@ index 0000000..727b14a
 +  "Your last filter change may be too restrictive.": "Su último cambio de filtro puede ser demasiado restrictivo.",
 +  "Language": "Idioma",
 +  "Select language": "Seleccionar idioma",
++  "Open manual": "Abrir manual",
 +  "Feed update": "Actualización del feed",
 +  "Update feeds now": "Actualizar feeds ahora",
 +  "Updating feeds...": "Actualizando feeds...",
@@ -7818,16 +7819,19 @@ index 0000000..727b14a
 +  "Select a tenant first": "Seleccione un tenant primero",
 +  "Generating command…": "Generando comando…",
 +  "Error generating the command: {{- error}}": "Error al generar el comando: {{- error}}",
++  "Error loading the tenants: {{- error}}": "Error al cargar los tenants: {{- error}}",
 +  "tenant": "tenant",
 +  ", run it on the host:": ", ejecútelo en el host:",
 +  "Copy": "Copiar",
 +  "Copied ✓": "Copiado ✓",
++  "The command is selected. Press Ctrl+C to copy it.": "El comando está seleccionado. Pulse Ctrl+C para copiarlo.",
 +  "Deployment token (up to {{max}} hosts)": "Token de despliegue (hasta {{max}} hosts)",
 +  "Single-use token": "Token de un solo uso",
 +  "expires on {{- date}}": "expira el {{- date}}",
 +  "Endpoint Agents": "Agentes de endpoint",
 +  "Refresh": "Actualizar",
 +  "Error loading the agents: {{- error}}": "Error al cargar los agentes: {{- error}}",
++  "Error requesting the scan of {{- host}}: {{- error}}": "Error al solicitar el escaneo de {{- host}}: {{- error}}",
 +  "No agents yet. Install one from the Activate Agent page.": "Todavía no hay agentes. Instale uno desde la página Activar agente.",
 +  "Online": "En línea",
 +  "Offline": "Fuera de línea",
@@ -7847,10 +7851,10 @@ index 0000000..727b14a
 +}
 \ No newline at end of file
 diff --git a/public/locales/gsa-pt_BR.json b/public/locales/gsa-pt_BR.json
-index 10e592f..df45fc3 100644
+index 10e592f..04730d6 100644
 --- a/public/locales/gsa-pt_BR.json
 +++ b/public/locales/gsa-pt_BR.json
-@@ -1,216 +1,2492 @@
+@@ -1,216 +1,2496 @@
  {
 -  "# of OVAL Definitions": "OVAL defini\u00e7\u00e3o",
 -  "# of Operating Systems": "Sistema Operacional",
@@ -10490,6 +10494,7 @@ index 10e592f..df45fc3 100644
 +  "Your last filter change may be too restrictive.": "Sua última alteração de filtro pode estar muito restritiva.",
 +  "Language": "Idioma",
 +  "Select language": "Selecionar idioma",
++  "Open manual": "Abrir manual",
 +  "Feed update": "Atualização do feed",
 +  "Update feeds now": "Atualizar feeds agora",
 +  "Updating feeds...": "Atualizando feeds...",
@@ -10516,16 +10521,19 @@ index 10e592f..df45fc3 100644
 +  "Select a tenant first": "Selecione um tenant primeiro",
 +  "Generating command…": "Gerando comando…",
 +  "Error generating the command: {{- error}}": "Erro ao gerar o comando: {{- error}}",
++  "Error loading the tenants: {{- error}}": "Erro ao carregar os tenants: {{- error}}",
 +  "tenant": "tenant",
 +  ", run it on the host:": ", rode no host:",
 +  "Copy": "Copiar",
 +  "Copied ✓": "Copiado ✓",
++  "The command is selected. Press Ctrl+C to copy it.": "O comando está selecionado. Pressione Ctrl+C para copiá-lo.",
 +  "Deployment token (up to {{max}} hosts)": "Token de implantação (até {{max}} hosts)",
 +  "Single-use token": "Token de uso único",
 +  "expires on {{- date}}": "expira em {{- date}}",
 +  "Endpoint Agents": "Agentes de endpoint",
 +  "Refresh": "Atualizar",
 +  "Error loading the agents: {{- error}}": "Erro ao carregar os agentes: {{- error}}",
++  "Error requesting the scan of {{- host}}: {{- error}}": "Erro ao solicitar a varredura de {{- host}}: {{- error}}",
 +  "No agents yet. Install one from the Activate Agent page.": "Nenhum agente ainda. Instale um pela página Ativar agente.",
 +  "Online": "Online",
 +  "Offline": "Offline",
@@ -10546,10 +10554,10 @@ index 10e592f..df45fc3 100644
 \ No newline at end of file
 diff --git a/public/suricatoos-theme.css b/public/suricatoos-theme.css
 new file mode 100644
-index 0000000..5b9d863
+index 0000000..a4d7766
 --- /dev/null
 +++ b/public/suricatoos-theme.css
-@@ -0,0 +1,384 @@
+@@ -0,0 +1,398 @@
 +/* ============================================================
 +   SURICATOOS — Tema Premium v2 (claro + escuro) — GSA / Mantine v7
 +   Carregado por ULTIMO. Foco: profundidade, cards, tabelas, nav,
@@ -10816,6 +10824,13 @@ index 0000000..5b9d863
 +  font:600 10.5px/1 'Space Grotesk','Inter',sans-serif;
 +  letter-spacing:.24em; text-transform:uppercase; color:var(--sur-coral-text);
 +}
++/* o texto de erro que o Mantine poe sob cada campo (e liga ao campo por
++   aria-describedby) e' so para tecnologia assistiva: a mensagem aparece uma vez,
++   no quadro acima dos campos */
++[data-suricatoos-login] .mantine-InputWrapper-error {
++  position:absolute!important; width:1px!important; height:1px!important; margin:-1px!important; padding:0!important;
++  overflow:hidden!important; clip:rect(0,0,0,0)!important; white-space:nowrap!important; border:0!important;
++}
 +/* o olho que mostra a senha e' so um icone (o ui-lib o pinta de #999, 2,85:1) */
 +[data-suricatoos-login] .mantine-PasswordInput-visibilityToggle svg { stroke:var(--sur-text-dim)!important; }
 +/* foco coral (sinal do suricato) nos campos do login */
@@ -10933,6 +10948,13 @@ index 0000000..5b9d863
 +  --mantine-color-red-light:rgba(255,158,146,.14)!important;
 +  --mantine-color-yellow-light:rgba(250,176,5,.15)!important; --mantine-color-yellow-light-color:#ffe066!important;
 +  --mantine-color-gray-light:rgba(134,142,150,.15)!important; --mantine-color-gray-light-color:#ced4da!important;
++}
++
++/* aviso que recebe o foco por codigo (tabindex=-1; p.ex. "Provedor excluido"
++   depois de excluir): o anel e' o do acento do tema, como o dos campos, e nao o
++   do navegador. So aparece para quem usa o teclado (:focus-visible). */
++[role='status'][tabindex='-1']:focus-visible, [role='alert'][tabindex='-1']:focus-visible {
++  outline:2px solid var(--sur-accent)!important; outline-offset:3px; border-radius:6px;
 +}
 diff --git a/src/gmp/locale/languages.ts b/src/gmp/locale/languages.ts
 index 4d337bd..78a4f27 100644
@@ -11604,10 +11626,21 @@ index 9775497..5622993 100644
    );
  };
 diff --git a/src/web/components/structure/Header.tsx b/src/web/components/structure/Header.tsx
-index 6958f21..bca13b5 100644
+index 6958f21..b4f378a 100644
 --- a/src/web/components/structure/Header.tsx
 +++ b/src/web/components/structure/Header.tsx
-@@ -16,7 +16,7 @@ import useTranslation from 'web/hooks/useTranslation';
+@@ -4,7 +4,9 @@
+  */
+ 
+ import {useCallback} from 'react';
+-import {AppHeader} from '@greenbone/ui-lib';
++import {ActionIcon, Divider} from '@mantine/core';
++import {AppHeader, ThemeSwitch, Tooltip} from '@greenbone/ui-lib';
++import {BookMarked} from 'lucide-react';
+ import {useLocation, useNavigate} from 'react-router';
+ import {LogoutIcon, MySettingsIcon} from 'web/components/icon';
+ import SessionTimer from 'web/components/session-timer/SessionTimer';
+@@ -16,9 +18,44 @@ import useTranslation from 'web/hooks/useTranslation';
  import useUserIsLoggedIn from 'web/hooks/useUserIsLoggedIn';
  import useUserName from 'web/hooks/useUserName';
  import useUserTimezone from 'web/hooks/useUserTimezone';
@@ -11615,8 +11648,45 @@ index 6958f21..bca13b5 100644
 +import {applianceTitle, type ApplianceLogo} from 'web/utils/appliance-data';
  import {saveLastVisitedPage} from 'web/utils/user-last-visited-page';
  
++interface ManualButtonProps {
++  label: string;
++  url: string;
++}
++
++// Suricatoos: the manual button of the AppHeader of @greenbone/ui-lib has no name
++// for assistive technology: it is an icon inside a tooltip, and the library gives
++// no way to name it (the header only takes the address, `manualLink`). So the fork
++// does not pass `manualLink` and draws the same button, with the same divider and
++// tooltip, in the slot of the color theme switch, with a name. (The header draws
++// that slot while `isThemeSwitchVisible` is true, as it is here.)
++const dividerStyle = {
++  alignSelf: 'center',
++  borderLeftColor: 'var(--mantine-color-white)',
++  height: 'calc(1.25rem * var(--mantine-scale))',
++  margin: '0 var(--mantine-spacing-sm)',
++} as const;
++
++const ManualButton = ({label, url}: ManualButtonProps) => (
++  <>
++    <Divider orientation="vertical" style={dividerStyle} />
++    <Tooltip label={label}>
++      <ActionIcon
++        aria-label={label}
++        color="neutral.0"
++        data-testid="manual-link"
++        variant="transparent"
++        onClick={() => window.open(url, '_blank', 'noreferrer')}
++      >
++        <BookMarked aria-hidden size={14} strokeWidth={1.5} />
++      </ActionIcon>
++    </Tooltip>
++  </>
++);
++
  const Header = () => {
-@@ -28,6 +28,12 @@ const Header = () => {
+   const [_] = useTranslation();
+ 
+@@ -28,6 +65,12 @@ const Header = () => {
    const navigate = useNavigate();
    const location = useLocation();
    const logoComponent = getLogo(gmp?.settings?.vendorLabel as ApplianceLogo);
@@ -11629,7 +11699,7 @@ index 6958f21..bca13b5 100644
    const [timezone] = useUserTimezone();
    const manualURL = useManualURL();
  
-@@ -63,9 +69,19 @@ const Header = () => {
+@@ -63,13 +106,28 @@ const Header = () => {
      <AppHeader
        ianaTimeZone={timezone}
        isLoggedIn={isLoggedIn}
@@ -11649,8 +11719,18 @@ index 6958f21..bca13b5 100644
 +        ) : undefined
 +      }
        logoLink="/dashboards"
-       manualLink={manualURL}
+-      manualLink={manualURL}
        menuPoints={menuPoints}
+       sessionTimer={<SessionTimer />}
++      themeSwitch={
++        <>
++          <ThemeSwitch />
++          <ManualButton label={_('Open manual')} url={manualURL} />
++        </>
++      }
+       userNavWidth={150}
+       username={username}
+     />
 diff --git a/src/web/components/structure/LanguageSwitch.tsx b/src/web/components/structure/LanguageSwitch.tsx
 index 7f74728..de42221 100644
 --- a/src/web/components/structure/LanguageSwitch.tsx
@@ -11853,10 +11933,10 @@ index a057cf9..409c93b 100644
    },
 diff --git a/src/web/pages/downloads/DownloadsPage.tsx b/src/web/pages/downloads/DownloadsPage.tsx
 new file mode 100644
-index 0000000..2446fab
+index 0000000..d9961fe
 --- /dev/null
 +++ b/src/web/pages/downloads/DownloadsPage.tsx
-@@ -0,0 +1,268 @@
+@@ -0,0 +1,352 @@
 +/* SPDX-FileCopyrightText: 2024 Greenbone AG
 + *
 + * SPDX-License-Identifier: AGPL-3.0-or-later
@@ -11869,7 +11949,7 @@ index 0000000..2446fab
 + * per-tenant token and returns a ready-to-run command with the token
 + * already embedded — the dynamic per-tenant token. Renders inside the GSA shell. */
 +
-+import React, {useState, useCallback, useEffect, useId} from 'react';
++import React, {useState, useCallback, useEffect, useId, useRef} from 'react';
 +import {VisuallyHidden} from '@mantine/core';
 +import Button from 'web/components/form/Button';
 +import Layout from 'web/components/layout/Layout';
@@ -11953,11 +12033,17 @@ index 0000000..2446fab
 +  const [target, setTarget] = useState<string>('');
 +  const [resp, setResp] = useState<EnrollResponse | null>(null);
 +  const [loading, setLoading] = useState<boolean>(false);
-+  const [error, setError] = useState<Error | null>(null);
-+  const [copied, setCopied] = useState<boolean>(false);
-+  // ids that tie the label and the error message to the select
++  // Two errors, each in its own context: the tenant list that did not load, and
++  // the command that was not generated.
++  const [tenantsError, setTenantsError] = useState<Error | null>(null);
++  const [commandError, setCommandError] = useState<Error | null>(null);
++  // 'manual': the page could not copy and says to press Ctrl+C
++  const [copy, setCopy] = useState<'idle' | 'copied' | 'manual'>('idle');
++  const command = useRef<HTMLElement>(null);
++  // ids that tie the label and the error messages to the select
 +  const tenantId = useId();
-+  const errorId = useId();
++  const tenantsErrorId = useId();
++  const commandErrorId = useId();
 +
 +  // Load the tenant list on mount (behind the nginx session gate: cookie +
 +  // token, which the shared client adds). Aborted on unmount.
@@ -11976,7 +12062,7 @@ index 0000000..2446fab
 +      })
 +      .catch(e => {
 +        if (!controller.signal.aborted) {
-+          setError(e as Error);
++          setTenantsError(e as Error);
 +        }
 +      });
 +    return () => controller.abort();
@@ -11985,13 +12071,13 @@ index 0000000..2446fab
 +  const pick = useCallback(
 +    async (tgt: string) => {
 +      if (!tenant) {
-+        setError(new Error(_('Select a tenant first')));
++        setCommandError(new Error(_('Select a tenant first')));
 +        return;
 +      }
 +      setTarget(tgt);
 +      setResp(null);
-+      setError(null);
-+      setCopied(false);
++      setCommandError(null);
++      setCopy('idle');
 +      setLoading(true);
 +      try {
 +        // retry: false — this GET mints a new enrollment token on every call:
@@ -12003,7 +12089,7 @@ index 0000000..2446fab
 +        );
 +        setResp(data);
 +      } catch (e) {
-+        setError(e as Error);
++        setCommandError(e as Error);
 +      } finally {
 +        setLoading(false);
 +      }
@@ -12011,11 +12097,66 @@ index 0000000..2446fab
 +    [tenant, token, _],
 +  );
 +
-+  const copy = useCallback(() => {
-+    if (resp?.command) {
-+      void navigator.clipboard.writeText(resp.command).then(() => setCopied(true));
++  // Selects the command, so what the operator copies by hand is what the page
++  // shows.
++  const selectCommand = useCallback(() => {
++    const node = command.current;
++    const selection = window.getSelection();
++    if (node && selection) {
++      const range = document.createRange();
++      range.selectNodeContents(node);
++      selection.removeAllRanges();
++      selection.addRange(range);
 +    }
-+  }, [resp]);
++  }, []);
++
++  const copyCommand = useCallback(async () => {
++    if (!resp?.command) {
++      return;
++    }
++    // Select first: wherever the copy does not work the operator only has to
++    // press Ctrl+C. A page opened over HTTP has no navigator.clipboard (the
++    // browser gives it only to a secure context), and a browser may also refuse.
++    selectCommand();
++    try {
++      await navigator.clipboard.writeText(resp.command);
++      setCopy('copied');
++      return;
++    } catch {
++      // no clipboard API, or it refused: the old command comes next
++    }
++    // Deprecated, but it still works in a page without a secure context, from
++    // the click that asked for the copy, with the command selected.
++    let done = false;
++    try {
++      done = document.execCommand('copy');
++    } catch {
++      done = false;
++    }
++    setCopy(done ? 'copied' : 'manual');
++  }, [resp, selectCommand]);
++
++  const tenantsErrorText = (e: Error): string =>
++    isSessionExpired(e)
++      ? _('Session expired. Sign in again to activate agents.')
++      : _('Error loading the tenants: {{- error}}', {
++          error:
++            e instanceof SuricatoosApiError ? apiErrorMessage(_, e) : e.message,
++        });
++
++  const commandErrorText = (e: Error): string =>
++    isSessionExpired(e)
++      ? _('Session expired. Sign in again to activate agents.')
++      : _('Error generating the command: {{- error}}', {
++          error:
++            e instanceof SuricatoosApiError ? apiErrorMessage(_, e) : e.message,
++        });
++
++  const describedBy = tenantsError
++    ? tenantsErrorId
++    : commandError
++      ? commandErrorId
++      : undefined;
 +
 +  return (
 +    <React.Fragment>
@@ -12036,13 +12177,13 @@ index 0000000..2446fab
 +              {_('Tenant')}:
 +            </label>
 +            <select
-+              aria-describedby={error ? errorId : undefined}
++              aria-describedby={describedBy}
 +              id={tenantId}
 +              value={tenant}
 +              onChange={e => {
 +                setTenant(e.target.value);
 +                setResp(null);
-+                setError(null);
++                setCommandError(null);
 +              }}
 +              style={selectStyle}
 +            >
@@ -12054,6 +12195,15 @@ index 0000000..2446fab
 +              ))}
 +            </select>
 +          </Layout>
++          {tenantsError ? (
++            <p
++              id={tenantsErrorId}
++              role="alert"
++              style={{color: SurColors.dangerText}}
++            >
++              {tenantsErrorText(tenantsError)}
++            </p>
++          ) : null}
 +          <Layout style={{marginTop: '12px'}}>
 +            {TARGETS.map(t => (
 +              <div key={t.id} style={{marginRight: '10px'}}>
@@ -12067,16 +12217,13 @@ index 0000000..2446fab
 +          <LiveRegion role="status">
 +            {loading && <p>{_('Generating command…')}</p>}
 +          </LiveRegion>
-+          {error ? (
-+            <p id={errorId} role="alert" style={{color: SurColors.dangerText}}>
-+              {isSessionExpired(error)
-+                ? _('Session expired. Sign in again to activate agents.')
-+                : _('Error generating the command: {{- error}}', {
-+                    error:
-+                      error instanceof SuricatoosApiError
-+                        ? apiErrorMessage(_, error)
-+                        : error.message,
-+                  })}
++          {commandError ? (
++            <p
++              id={commandErrorId}
++              role="alert"
++              style={{color: SurColors.dangerText}}
++            >
++              {commandErrorText(commandError)}
 +            </p>
 +          ) : null}
 +          {resp ? (
@@ -12086,7 +12233,9 @@ index 0000000..2446fab
 +                <b>{resp.tenant}</b>
 +                {_(', run it on the host:')}
 +              </p>
-+              <code style={codeBoxStyle}>{resp.command}</code>
++              <code ref={command} style={codeBoxStyle}>
++                {resp.command}
++              </code>
 +              {resp.target === 'windows' ? (
 +                <p style={avisoStyle}>
 +                  {_(
@@ -12095,13 +12244,28 @@ index 0000000..2446fab
 +                </p>
 +              ) : null}
 +              <Layout>
-+                <Button title={_('Copy')} onClick={copy}>
-+                  {copied ? _('Copied ✓') : _('Copy')}
++                <Button title={_('Copy')} onClick={() => void copyCommand()}>
++                  {copy === 'copied' ? _('Copied ✓') : _('Copy')}
 +                </Button>
-+                {/* the result of the copy, said aloud without moving the focus */}
-+                <VisuallyHidden role="status">
-+                  {copied ? _('Copied ✓') : ''}
-+                </VisuallyHidden>
++                {/* the result of the copy, said aloud without moving the focus:
++                    the region is on the page before the click */}
++                <LiveRegion role="status">
++                  {copy === 'copied' && (
++                    <VisuallyHidden>{_('Copied ✓')}</VisuallyHidden>
++                  )}
++                  {copy === 'manual' && (
++                    <span
++                      style={{
++                        alignSelf: 'center',
++                        color: SurColors.text,
++                        fontSize: '13px',
++                        marginLeft: '12px',
++                      }}
++                    >
++                      {_('The command is selected. Press Ctrl+C to copy it.')}
++                    </span>
++                  )}
++                </LiveRegion>
 +              </Layout>
 +              <p style={{color: SurColors.dimText, fontSize: '12px'}}>
 +                {resp.max_uses > 1
@@ -12127,10 +12291,10 @@ index 0000000..2446fab
 +export default DownloadsPage;
 diff --git a/src/web/pages/endpoint-agents/EndpointAgentsPage.tsx b/src/web/pages/endpoint-agents/EndpointAgentsPage.tsx
 new file mode 100644
-index 0000000..50e9976
+index 0000000..40f73d0
 --- /dev/null
 +++ b/src/web/pages/endpoint-agents/EndpointAgentsPage.tsx
-@@ -0,0 +1,343 @@
+@@ -0,0 +1,371 @@
 +/* SPDX-FileCopyrightText: 2024 Greenbone AG
 + *
 + * SPDX-License-Identifier: AGPL-3.0-or-later
@@ -12248,8 +12412,16 @@ index 0000000..50e9976
 +  );
 +
 +  // Every 30 s, one request at a time, nothing while the tab is hidden; a 401
-+  // stops it for good. The error of a scan request lands in the same `error`.
++  // stops it for good. `error` is the error of loading the agents (or of the
++  // session, which also ends a scan request).
 +  const {error, setError, refresh} = usePolling(load, 30000);
++
++  // The error of a scan request is the error of that request, not of loading the
++  // agents: the table is fine. It is told for its host, in a region of its own.
++  const [scanError, setScanError] = useState<{
++    host: string;
++    error: unknown;
++  } | null>(null);
 +
 +  // The agent collects ~60 s after a scan request: one extra refresh at 70 s,
 +  // besides the polling. Never armed once the page is gone (the POST may end
@@ -12270,6 +12442,7 @@ index 0000000..50e9976
 +
 +  const scanNow = useCallback(
 +    async (host: string) => {
++      setScanError(null);
 +      try {
 +        await apiRequest(`/agents/scan?id=${encodeURIComponent(host)}`, token, {
 +          method: 'POST',
@@ -12287,7 +12460,13 @@ index 0000000..50e9976
 +        }, 70000);
 +        followUps.current.add(t);
 +      } catch (e) {
-+        setError(e);
++        // An expired session is the session of the whole page; anything else
++        // belongs to this scan.
++        if (isSessionExpired(e)) {
++          setError(e);
++        } else if (mounted.current) {
++          setScanError({host, error: e});
++        }
 +      }
 +    },
 +    [refresh, setError, token, _],
@@ -12347,7 +12526,10 @@ index 0000000..50e9976
 +            <Button
 +              disabled={isSessionExpired(error)}
 +              title={_('Refresh')}
-+              onClick={() => void refresh()}
++              onClick={() => {
++                setScanError(null);
++                void refresh();
++              }}
 +            >
 +              {_('Refresh')}
 +            </Button>
@@ -12363,6 +12545,16 @@ index 0000000..50e9976
 +                    })}
 +              </p>
 +            ) : null}
++            <LiveRegion role="alert">
++              {scanError !== null && (
++                <p style={{color: SurColors.dangerText}}>
++                  {_('Error requesting the scan of {{- host}}: {{- error}}', {
++                    host: scanError.host,
++                    error: apiErrorMessage(_, scanError.error),
++                  })}
++                </p>
++              )}
++            </LiveRegion>
 +            <LiveRegion role="status">
 +              {loading && <p>{_('Loading...')}</p>}
 +            </LiveRegion>
@@ -12833,18 +13025,19 @@ index 0000000..fefd918
 +
 +export default FeedUpdateSection;
 diff --git a/src/web/pages/login/LoginForm.tsx b/src/web/pages/login/LoginForm.tsx
-index 4c667ec..65cd1cc 100644
+index 4c667ec..9fa72c3 100644
 --- a/src/web/pages/login/LoginForm.tsx
 +++ b/src/web/pages/login/LoginForm.tsx
-@@ -17,6 +17,7 @@ import ProductImage from 'web/components/img/ProductImage';
+@@ -17,6 +17,8 @@ import ProductImage from 'web/components/img/ProductImage';
  import Divider from 'web/components/layout/Divider';
  import Layout from 'web/components/layout/Layout';
  import useTranslation from 'web/hooks/useTranslation';
 +import {SurColors} from 'web/utils/suricatoosColors';
++import LiveRegion from 'web/utils/suricatoosLive';
  import Theme from 'web/utils/Theme';
  
  interface LoginFormProps {
-@@ -29,9 +30,13 @@ interface LoginFormProps {
+@@ -29,9 +31,13 @@ interface LoginFormProps {
  }
  
  const Paper = styled(Layout)`
@@ -12861,7 +13054,7 @@ index 4c667ec..65cd1cc 100644
    padding: 4rem;
    width: 30rem;
    z-index: ${Theme.Layers.higher};
-@@ -46,7 +51,7 @@ const Panel = styled.div`
+@@ -46,7 +52,7 @@ const Panel = styled.div`
  `;
  
  const StyledWarningError = styled.p`
@@ -12870,7 +13063,15 @@ index 4c667ec..65cd1cc 100644
    font-weight: bold;
    text-align: center;
    margin: 10px;
-@@ -98,7 +103,7 @@ const LoginForm = ({
+@@ -84,6 +90,7 @@ const LoginForm = ({
+     username: '',
+     password: '',
+   });
++  const hasError = isDefined(error);
+ 
+   const handleSubmit = () => {
+     if (isDefined(onSubmit)) {
+@@ -98,7 +105,7 @@ const LoginForm = ({
    };
  
    return (
@@ -12879,16 +13080,52 @@ index 4c667ec..65cd1cc 100644
        <Divider flex="column" grow="1" margin="10px">
          <Layout align="center">
            <LoginLogo />
-@@ -128,7 +133,7 @@ const LoginForm = ({
+@@ -127,18 +134,29 @@ const LoginForm = ({
+         </Layout>
  
          <>
-           {isDefined(error) && (
+-          {isDefined(error) && (
 -            <StyledErrorContainer data-testid="error">
-+            <StyledErrorContainer data-testid="error" role="alert">
-               {error}
-             </StyledErrorContainer>
-           )}
-@@ -172,9 +177,6 @@ const LoginForm = ({
+-              {error}
+-            </StyledErrorContainer>
+-          )}
++          {/* Suricatoos: the region is on the page before the message. The page
++              empties it when a new attempt starts, so the same message after the
++              same wrong credentials goes into the region again and is told again. */}
++          <LiveRegion role="alert">
++            {hasError && (
++              <StyledErrorContainer data-testid="error">
++                {error}
++              </StyledErrorContainer>
++            )}
++          </LiveRegion>
+ 
+           {showLogin && (
+             <FormGroup>
+               <H1>{_('Sign in to your account')}</H1>
++              {/* Suricatoos: the error is tied to the two fields: while it is there
++                  they are invalid and described by it (errorContent: the text
++                  that Mantine puts under a field and links to it; the page keeps
++                  it for assistive technology only, the message shows once, in the
++                  box above) */}
+               <TextField
+                 autoComplete="username"
+                 autoFocus={true}
++                errorContent={error}
+                 name="username"
+                 placeholder={_('Username')}
+                 title={_('Username')}
+@@ -146,7 +164,9 @@ const LoginForm = ({
+                 onChange={handleValueChange}
+               />
+               <PasswordField
++                aria-invalid={hasError ? true : undefined}
+                 autoComplete="current-password"
++                errorContent={error}
+                 name="password"
+                 placeholder={_('Password')}
+                 title={_('Password')}
+@@ -172,9 +192,6 @@ const LoginForm = ({
            </FormGroup>
          )}
  
@@ -12899,7 +13136,7 @@ index 4c667ec..65cd1cc 100644
      </Paper>
    );
 diff --git a/src/web/pages/login/LoginPage.tsx b/src/web/pages/login/LoginPage.tsx
-index ee487c7..4345cf6 100644
+index ee487c7..b1c4a3e 100644
 --- a/src/web/pages/login/LoginPage.tsx
 +++ b/src/web/pages/login/LoginPage.tsx
 @@ -22,11 +22,11 @@ import Theme from 'web/utils/Theme';
@@ -12916,6 +13153,17 @@ index ee487c7..4345cf6 100644
    flex-direction: column;
    justify-content: center;
    align-items: center;
+@@ -55,6 +55,10 @@ const LoginPage = () => {
+   }, []);
+ 
+   const login = async (username: string, password: string) => {
++    // Suricatoos: the message of the last attempt leaves the page when a new one
++    // starts. Wrong credentials sent again give the same message, which would
++    // change nothing in the live region of the error and so would not be told.
++    setError(undefined);
+     try {
+       await gmp.login(username, password);
+     } catch (error) {
 diff --git a/src/web/pages/reports/AuditDeltaReportDetailsPage.jsx b/src/web/pages/reports/AuditDeltaReportDetailsPage.jsx
 index 21579eb..d5dd186 100644
 --- a/src/web/pages/reports/AuditDeltaReportDetailsPage.jsx
@@ -13113,10 +13361,10 @@ index dd0b390..9316ed8 100644
    Layers: {
 diff --git a/src/web/pages/ai-providers/AiProvidersPage.tsx b/src/web/pages/ai-providers/AiProvidersPage.tsx
 new file mode 100644
-index 0000000..eb33d27
+index 0000000..b89c41d
 --- /dev/null
 +++ b/src/web/pages/ai-providers/AiProvidersPage.tsx
-@@ -0,0 +1,1201 @@
+@@ -0,0 +1,1203 @@
 +/* SPDX-FileCopyrightText: 2026 Suricatoos
 + *
 + * SPDX-License-Identifier: AGPL-3.0-or-later
@@ -13139,6 +13387,7 @@ index 0000000..eb33d27
 +  TextInput,
 +  VisuallyHidden,
 +} from '@mantine/core';
++import PageTitle from 'web/components/layout/PageTitle';
 +import useGmp from 'web/hooks/useGmp';
 +import useTranslation, {type TranslateFunc} from 'web/hooks/useTranslation';
 +import useUserTimezone from 'web/hooks/useUserTimezone';
@@ -14290,6 +14539,7 @@ index 0000000..eb33d27
 +
 +  return (
 +    <Stack gap="md" p="md">
++      <PageTitle title={_('AI Providers')} />
 +      <Text component="h2" fw={700} size="lg">
 +        {_('AI Providers')}
 +      </Text>
@@ -17300,10 +17550,10 @@ index 0000000..79d2216
 +OTHER DEALINGS IN THE FONT SOFTWARE.
 diff --git a/src/web/utils/__tests__/suricatoosA11y.test.tsx b/src/web/utils/__tests__/suricatoosA11y.test.tsx
 new file mode 100644
-index 0000000..06ab996
+index 0000000..4250d38
 --- /dev/null
 +++ b/src/web/utils/__tests__/suricatoosA11y.test.tsx
-@@ -0,0 +1,1386 @@
+@@ -0,0 +1,1698 @@
 +/* SPDX-FileCopyrightText: 2026 Suricatoos
 + *
 + * SPDX-License-Identifier: AGPL-3.0-or-later
@@ -17338,6 +17588,7 @@ index 0000000..06ab996
 +import fs from 'node:fs';
 +import path from 'node:path';
 +import {renderToStaticMarkup} from 'react-dom/server';
++import {ResponseRejection} from 'gmp/http/rejection';
 +import {createSession} from 'gmp/testing';
 +import {DEFAULT_SEVERITY_RATING} from 'gmp/utils/severity';
 +import DataDisplayIcons from 'web/components/dashboard/display/DataDisplayIcons';
@@ -17349,6 +17600,7 @@ index 0000000..06ab996
 +import EndpointAgentsPage from 'web/pages/endpoint-agents/EndpointAgentsPage';
 +import FeedUpdateSection from 'web/pages/extras/FeedUpdateSection';
 +import LoginForm from 'web/pages/login/LoginForm';
++import LoginPage from 'web/pages/login/LoginPage';
 +import {cssRules} from 'web/testing/suricatoosCss';
 +import LiveRegion from 'web/utils/suricatoosLive';
 +
@@ -17558,18 +17810,18 @@ index 0000000..06ab996
 +    serve({'/agents/data.json': () => json(500, {error: 'boom'})});
 +    const {render} = rendererWith({gmp: createGmp()});
 +    render(<EndpointAgentsPage />);
-+    expect(await screen.findByRole('alert')).toHaveTextContent(
-+      'Error loading the agents',
-+    );
++    // (the region of the error of a scan is on the page, empty: what is said
++    // is what has text)
++    await waitFor(() => expect(said('alert')).toHaveLength(1));
++    expect(said('alert')[0]).toContain('Error loading the agents');
 +  });
 +
 +  test('an expired session is announced as an alert', async () => {
 +    serve({'/agents/data.json': () => json(401, {error: 'no session'})});
 +    const {render} = rendererWith({gmp: createGmp()});
 +    render(<EndpointAgentsPage />);
-+    expect(await screen.findByRole('alert')).toHaveTextContent(
-+      'Session expired',
-+    );
++    await waitFor(() => expect(said('alert')).toHaveLength(1));
++    expect(said('alert')[0]).toContain('Session expired');
 +  });
 +});
 +
@@ -18273,10 +18525,137 @@ index 0000000..06ab996
 +    expect(submit).toHaveBeenCalledWith('ana', 'secret');
 +  });
 +
-+  test('without an error there is no alert', () => {
++  test('without an error the alert region is on the page, empty, and no field is marked', () => {
 +    const {render} = rendererWith({gmp: createGmp()});
 +    render(<LoginForm onGuestLoginClick={testing.fn()} onSubmit={submit} />);
-+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
++    expect(screen.getByRole('alert')).toBeEmptyDOMElement();
++    expect(screen.queryByTestId('error')).not.toBeInTheDocument();
++    for (const field of ['Username', 'Password']) {
++      const input = screen.getByLabelText(field);
++      expect(input).not.toHaveAttribute('aria-invalid', 'true');
++      expect(input).not.toHaveAttribute('aria-describedby');
++    }
++  });
++
++  test('the error is in an alert region that was on the page before it, and both fields are invalid and described by it', () => {
++    const {render} = rendererWith({gmp: createGmp()});
++    const view = render(
++      <LoginForm onGuestLoginClick={testing.fn()} onSubmit={submit} />,
++    );
++    const region = screen.getByRole('alert');
++    expect(region).toBeEmptyDOMElement();
++
++    view.rerender(
++      <LoginForm
++        error="Login Failed. Invalid password or username."
++        onGuestLoginClick={testing.fn()}
++        onSubmit={submit}
++      />,
++    );
++    // the same node, now with the message
++    expect(screen.getByRole('alert')).toBe(region);
++    expect(region).toHaveTextContent(
++      'Login Failed. Invalid password or username.',
++    );
++    for (const field of ['Username', 'Password']) {
++      const input = screen.getByLabelText(field);
++      expect(input).toHaveAttribute('aria-invalid', 'true');
++      expect(input).toHaveAccessibleDescription(
++        'Login Failed. Invalid password or username.',
++      );
++    }
++  });
++
++  describe('the page', () => {
++    const MESSAGE = 'Login Failed. Invalid password or username.';
++    const denied = () =>
++      new ResponseRejection({status: 401} as XMLHttpRequest, 'denied');
++
++    const openLoginPage = (login: ReturnType<typeof testing.fn>) => {
++      const gmp = {
++        ...createGmp(),
++        settings: {},
++        login,
++        user: {currentSettings: testing.fn().mockRejectedValue(new Error('x'))},
++      };
++      const {render} = rendererWith({gmp, router: true});
++      return render(<LoginPage />);
++    };
++
++    const signIn = async (user: User) => {
++      await user.type(screen.getByLabelText('Username'), 'ana');
++      await user.type(screen.getByLabelText('Password'), 'wrong');
++      await user.click(screen.getByRole('button', {name: 'Sign in'}));
++    };
++
++    test('the same wrong credentials sent twice are told twice: the message leaves the region and comes back', async () => {
++      const login = testing.fn().mockImplementation(async () => {
++        // the server takes a moment to answer
++        await new Promise(resolve => setTimeout(resolve, 20));
++        throw denied();
++      });
++      const {userEvent} = openLoginPage(login);
++      const region = screen.getByRole('alert');
++
++      // what goes in and out of the region: an assistive technology announces
++      // what is put INTO a live region, so a message that stays there is silent
++      const log: string[] = [];
++      const observer = new MutationObserver(records => {
++        for (const record of records) {
++          record.removedNodes.forEach(() => log.push('out'));
++          record.addedNodes.forEach(() => log.push('in'));
++        }
++      });
++      observer.observe(region, {childList: true, subtree: true});
++
++      try {
++        await signIn(userEvent);
++        await waitFor(() => expect(region).toHaveTextContent(MESSAGE));
++        expect(log).toEqual(['in']);
++
++        // the same credentials again: nothing about the message changes, but the
++        // region is cleared when the new attempt starts and told again when it fails
++        await userEvent.click(screen.getByRole('button', {name: 'Sign in'}));
++        await waitFor(() => expect(login).toHaveBeenCalledTimes(2));
++        await waitFor(() => expect(log).toEqual(['in', 'out', 'in']));
++        expect(region).toHaveTextContent(MESSAGE);
++        expect(screen.getAllByRole('alert')).toEqual([region]);
++      } finally {
++        observer.disconnect();
++      }
++    });
++
++    test('the fields are marked while the error is there and are not while the next attempt runs', async () => {
++      let release: () => void = () => {};
++      let attempts = 0;
++      const login = testing.fn().mockImplementation(async () => {
++        attempts++;
++        if (attempts === 1) {
++          throw denied();
++        }
++        await new Promise<void>(resolve => {
++          release = resolve;
++        });
++        throw denied();
++      });
++      const {userEvent} = openLoginPage(login);
++
++      await signIn(userEvent);
++      const user = screen.getByLabelText('Username');
++      await waitFor(() => expect(user).toHaveAttribute('aria-invalid', 'true'));
++      expect(user).toHaveAccessibleDescription(MESSAGE);
++
++      // the next attempt is on its way: the old message is gone from the region
++      // and from the fields
++      await userEvent.click(screen.getByRole('button', {name: 'Sign in'}));
++      await waitFor(() => expect(login).toHaveBeenCalledTimes(2));
++      expect(screen.getByRole('alert')).toBeEmptyDOMElement();
++      expect(user).not.toHaveAttribute('aria-invalid', 'true');
++      expect(user).not.toHaveAttribute('aria-describedby');
++
++      release();
++      await waitFor(() => expect(user).toHaveAttribute('aria-invalid', 'true'));
++    });
 +  });
 +
 +  test('the logo is named after the product it shows', () => {
@@ -18318,6 +18697,66 @@ index 0000000..06ab996
 +      'href',
 +      '/dashboards',
 +    );
++  });
++
++  describe('the manual button', () => {
++    const MANUAL = 'https://docs.example/manual';
++
++    const openHeader = () => {
++      const {render} = rendererWith({
++        gmp: createGmp({vendorTitle: 'Suricatoos', manualUrl: MANUAL}),
++        router: true,
++      });
++      return render(<Header />);
++    };
++
++    test('has a name of its own, not only a tooltip', () => {
++      openHeader();
++      // the only manual button: the one of the header of the library is not drawn
++      const buttons = screen.getAllByTestId('manual-link');
++      expect(buttons).toHaveLength(1);
++      const manual = screen.getByRole('button', {name: 'Open manual'});
++      expect(manual).toBe(buttons[0]);
++      expect(manual).toHaveAttribute('aria-label', 'Open manual');
++      // the icon is a drawing: it has no name and assistive technology skips it
++      for (const icon of manual.querySelectorAll('svg')) {
++        expect(icon).toHaveAttribute('aria-hidden', 'true');
++      }
++    });
++
++    test('is next to the color theme switch in the Tab order and opens the manual with Enter', async () => {
++      const open = testing.spyOn(window, 'open').mockImplementation(() => null);
++      try {
++        const {userEvent} = openHeader();
++        const theme = screen.getByRole('button', {name: 'Switch color theme'});
++        const manual = screen.getByRole('button', {name: 'Open manual'});
++        await tabTo(userEvent, theme);
++        await userEvent.tab();
++        expect(manual).toHaveFocus();
++
++        await userEvent.keyboard('{Enter}');
++        expect(open).toHaveBeenCalledTimes(1);
++        expect(open).toHaveBeenCalledWith(
++          `${MANUAL}/en`,
++          '_blank',
++          'noreferrer',
++        );
++      } finally {
++        open.mockRestore();
++      }
++    });
++
++    test('keeps the divider the header draws before it', () => {
++      openHeader();
++      const manual = screen.getByRole('button', {name: 'Open manual'});
++      // a vertical separator, the same one the header puts between its items
++      expect(
++        manual.previousElementSibling?.getAttribute('data-orientation') ??
++          manual.parentElement?.previousElementSibling?.getAttribute(
++            'data-orientation',
++          ),
++      ).toEqual('vertical');
++    });
 +  });
 +
 +  test('a label the appliance table does not know still names the logo', () => {
@@ -18430,6 +18869,96 @@ index 0000000..06ab996
 +    ])('%s keeps its focus ring', html => {
 +      expect(outlineTakenOff(focused(html))).toBe(false);
 +    });
++  });
++});
++
++describe('Theme CSS: the ring of the notice that takes the focus by code', () => {
++  const theme = fs.readFileSync(
++    path.join(process.cwd(), 'public/suricatoos-theme.css'),
++    'utf8',
++  );
++  // the rules for a live region that can take the focus by code (tabindex=-1)
++  const ringRules = cssRules(theme).filter(rule =>
++    /\[role=['"]?(status|alert)['"]?\]\[tabindex=['"]?-1['"]?\]:focus-visible/.test(
++      rule.selector,
++    ),
++  );
++
++  test('there is a rule, and it draws the accent of the theme, not the ring of the browser', () => {
++    expect(ringRules.length).toBeGreaterThan(0);
++    for (const rule of ringRules) {
++      const outline = rule.declarations.find(d => d.prop === 'outline');
++      expect(outline?.value, rule.selector).toMatch(
++        /^2px solid var\(--sur-accent\)/,
++      );
++      // set apart from the text, so the ring does not cover it
++      expect(
++        rule.declarations.some(d => d.prop === 'outline-offset'),
++        rule.selector,
++      ).toBe(true);
++    }
++  });
++
++  test('the ring is for the keyboard only: every selector of the rule ends with :focus-visible', () => {
++    expect(ringRules.length).toBeGreaterThan(0);
++    for (const rule of ringRules) {
++      for (const selector of rule.selector.split(',').map(s => s.trim())) {
++        expect(selector).toMatch(/:focus-visible$/);
++      }
++    }
++  });
++
++  // the cases below write straight into the body
++  afterEach(() => {
++    document.body.innerHTML = '';
++  });
++
++  // jsdom does not know :focus-visible: the selector is tried as :focus
++  const reaches = (element: Element) =>
++    ringRules.some(rule =>
++      rule.selector
++        .split(',')
++        .some(selector =>
++          element.matches(selector.replace(':focus-visible', ':focus')),
++        ),
++    );
++
++  const focused = (html: string) => {
++    document.body.innerHTML = html;
++    const element = document.body.firstElementChild as HTMLElement;
++    element.focus();
++    expect(element).toHaveFocus();
++    return element;
++  };
++
++  test.each([
++    '<div role="status" tabindex="-1"></div>',
++    '<div role="alert" tabindex="-1"></div>',
++  ])('%s gets the ring', html => {
++    expect(reaches(focused(html))).toBe(true);
++  });
++
++  test.each([
++    '<div role="status"></div>',
++    '<button tabindex="-1">ok</button>',
++    '<div tabindex="-1"></div>',
++    '<a role="status" href="/x"></a>',
++  ])('%s is not touched', html => {
++    document.body.innerHTML = html;
++    expect(reaches(document.body.firstElementChild as Element)).toBe(false);
++  });
++
++  test('the live region of the page that takes the focus after a delete is one of them', async () => {
++    const {render} = rendererWith({});
++    render(
++      <LiveRegion role="status" tabIndex={-1}>
++        Provider deleted.
++      </LiveRegion>,
++    );
++    const region = screen.getByRole('status');
++    region.focus();
++    expect(region).toHaveFocus();
++    expect(reaches(region)).toBe(true);
 +  });
 +});
 +
@@ -18636,6 +19165,39 @@ index 0000000..06ab996
 +  });
 +
 +  describe('the login', () => {
++    test('the text that Mantine puts under a field is for assistive technology only', () => {
++      const selector = '[data-suricatoos-login] .mantine-InputWrapper-error';
++      // exactly this selector: one that only starts like it would be a prefix match
++      const rule = rules.find(r =>
++        r.selector
++          .split(',')
++          .map(s => s.trim())
++          .includes(selector),
++      );
++      expect(rule).toBeDefined();
++      const props = Object.fromEntries(
++        (rule?.declarations ?? []).map(d => [d.prop, d.value]),
++      );
++      // visually hidden, still in the accessibility tree (not display:none)
++      expect(props.position).toMatch(/^absolute/);
++      expect(props.clip).toBeDefined();
++      expect(props['overflow']).toMatch(/^hidden/);
++      expect(props.display).toBeUndefined();
++      expect(props.visibility).toBeUndefined();
++
++      // and the selector reaches what the form draws: the text under each of the
++      // two fields, which sit inside the element that carries the attribute
++      const {render} = rendererWith({gmp: createGmp()});
++      const {container} = render(
++        <LoginForm
++          error="Login Failed. Invalid password or username."
++          onGuestLoginClick={testing.fn()}
++          onSubmit={testing.fn()}
++        />,
++      );
++      expect(container.querySelectorAll(selector)).toHaveLength(2);
++    });
++
 +    test('the eye that shows the password takes the dimmed color', () => {
 +      const selector =
 +        '[data-suricatoos-login] .mantine-PasswordInput-visibilityToggle svg';
@@ -19919,18 +20481,20 @@ index 0000000..7534f0d
 +});
 diff --git a/src/web/utils/__tests__/suricatoosScreens.test.tsx b/src/web/utils/__tests__/suricatoosScreens.test.tsx
 new file mode 100644
-index 0000000..f14d891
+index 0000000..80c0f78
 --- /dev/null
 +++ b/src/web/utils/__tests__/suricatoosScreens.test.tsx
-@@ -0,0 +1,381 @@
+@@ -0,0 +1,673 @@
 +/* SPDX-FileCopyrightText: 2026 Suricatoos
 + *
 + * SPDX-License-Identifier: AGPL-3.0-or-later
 + */
 +
-+// The colors of the screens of the Suricatoos patch are the ones of the theme (one
-+// for each color scheme): the status pills, the secondary text, the box of the
-+// command, the notices and the shared components that the screens use.
++// What the screens of the Suricatoos patch say and do when something goes wrong
++// or is not there: an error is shown in the context where it happened (agents,
++// activate agent), the AI page has a title and shows what the server explained,
++// the copy button works in a page without the clipboard (HTTP), and the colors
++// of the screens are the ones of the theme. Queries go by role and name.
 +
 +/* eslint-disable @typescript-eslint/naming-convention --
 +   the keys of the fixtures and of the routes mirror the JSON and the paths of the API */
@@ -19976,6 +20540,11 @@ index 0000000..f14d891
 +  });
 +};
 +
++const calls = (path: string) =>
++  fetchMock.mock.calls.filter(
++    ([input]) => new URL(String(input), 'http://localhost').pathname === path,
++  );
++
 +const createGmp = (settings: Record<string, unknown> = {}) => ({
 +  settings: {
 +    severityRating: DEFAULT_SEVERITY_RATING,
@@ -19984,6 +20553,14 @@ index 0000000..f14d891
 +  },
 +  session: createSession({token: 'tok', timezone: 'UTC', username: 'ana'}),
 +});
++
++// What the live regions of a page say now (they are on the page, empty, until
++// there is something to say).
++const said = (role: 'status' | 'alert', root: HTMLElement = document.body) =>
++  within(root)
++    .queryAllByRole(role)
++    .map(region => region.textContent ?? '')
++    .filter(text => text !== '');
 +
 +beforeEach(() => {
 +  fetchMock.mockReset();
@@ -20128,6 +20705,7 @@ index 0000000..f14d891
 +  free_models_only: true,
 +  presets: ['openrouter', 'unorouter'],
 +};
++const OPEN = {free_models_only: false, presets: []};
 +
 +const serveProviders = (policy: unknown, save: Handler) =>
 +  serve({
@@ -20137,6 +20715,282 @@ index 0000000..f14d891
 +        ? save(url, init)
 +        : json(200, {providers: PROVIDERS}),
 +  });
++
++describe('Endpoint Agents: errors in their context', () => {
++  const scanNowOf = async (host: string) =>
++    screen.findByRole('button', {name: `Scan now: ${host}`});
++
++  test('a scan that fails is told for its host, and not as an error of loading the agents', async () => {
++    serve({
++      '/agents/data.json': () => json(200, AGENTS),
++      '/agents/scan': () => json(502, {error: 'gvmd is not answering'}),
++    });
++    const {render} = rendererWith({gmp: createGmp()});
++    const {userEvent} = render(<EndpointAgentsPage />);
++
++    await userEvent.click(await scanNowOf('srv-web-01'));
++
++    await waitFor(() =>
++      expect(said('alert')).toEqual([
++        'Error requesting the scan of srv-web-01: gvmd is not answering',
++      ]),
++    );
++    expect(screen.queryByText(/Error loading the agents/)).toBeNull();
++    // the agents were loaded: the table is still there
++    expect(screen.getByText('srv-db-02')).toBeInTheDocument();
++  });
++
++  test('the error of a scan goes away when the next scan is asked, and the table keeps polling', async () => {
++    let answer = 502;
++    serve({
++      '/agents/data.json': () => json(200, AGENTS),
++      '/agents/scan': () =>
++        answer === 200 ? json(200, {}) : json(answer, {error: 'busy'}),
++    });
++    const {render} = rendererWith({gmp: createGmp()});
++    const {userEvent} = render(<EndpointAgentsPage />);
++
++    await userEvent.click(await scanNowOf('srv-web-01'));
++    await waitFor(() => expect(said('alert')).toHaveLength(1));
++
++    answer = 200;
++    await userEvent.click(await scanNowOf('srv-db-02'));
++    await waitFor(() => expect(calls('/agents/scan')).toHaveLength(2));
++    // (the toast that says the scan was requested is an alert too)
++    await waitFor(() =>
++      expect(
++        said('alert').filter(text => text.includes('Error requesting')),
++      ).toEqual([]),
++    );
++    expect(screen.getByText('srv-web-01')).toBeInTheDocument();
++  });
++
++  test('a session that expires in the middle of a scan is still the message of the session', async () => {
++    serve({
++      '/agents/data.json': () => json(200, AGENTS),
++      '/agents/scan': () => json(401, {error: 'no session'}),
++    });
++    const {render} = rendererWith({gmp: createGmp()});
++    const {userEvent} = render(<EndpointAgentsPage />);
++
++    await userEvent.click(await scanNowOf('srv-web-01'));
++
++    await waitFor(() =>
++      expect(said('alert')).toEqual([
++        'Session expired. Sign in again to see the endpoint agents.',
++      ]),
++    );
++  });
++});
++
++describe('Activate Agent: errors in their context', () => {
++  test('a tenant list that fails to load says it is about the tenants', async () => {
++    serve({
++      '/agent/provision/tenants': () => json(502, {error: 'tenants are down'}),
++    });
++    const {render} = rendererWith({gmp: createGmp()});
++    render(<DownloadsPage />);
++
++    await waitFor(() =>
++      expect(said('alert')).toEqual([
++        'Error loading the tenants: tenants are down',
++      ]),
++    );
++    expect(screen.queryByText(/generating the command/)).toBeNull();
++  });
++
++  test('a command that fails to generate says it is about the command, and the tenants stay', async () => {
++    const view = await openActivate({
++      '/agent/provision/enroll-command': () =>
++        json(502, {error: 'no token left'}),
++    });
++    await generate(view);
++
++    await waitFor(() =>
++      expect(said('alert')).toEqual([
++        'Error generating the command: no token left',
++      ]),
++    );
++    expect(screen.queryByText(/loading the tenants/)).toBeNull();
++    expect(within(view.select).getAllByRole('option')).toHaveLength(3);
++  });
++
++  test('the error of the command goes away when another tenant is picked', async () => {
++    const view = await openActivate({
++      '/agent/provision/enroll-command': () =>
++        json(502, {error: 'no token left'}),
++    });
++    await generate(view);
++    await waitFor(() => expect(said('alert')).toHaveLength(1));
++
++    await view.userEvent.selectOptions(view.select, 'beta');
++    expect(said('alert')).toEqual([]);
++  });
++
++  test('an expired session is the message of the session, for the tenants and for the command', async () => {
++    serve({
++      '/agent/provision/tenants': () => json(401, {error: 'no session'}),
++    });
++    const {render} = rendererWith({gmp: createGmp()});
++    render(<DownloadsPage />);
++    await waitFor(() =>
++      expect(said('alert')).toEqual([
++        'Session expired. Sign in again to activate agents.',
++      ]),
++    );
++  });
++
++  test('both errors describe the tenant select', async () => {
++    const view = await openActivate({
++      '/agent/provision/enroll-command': () =>
++        json(502, {error: 'no token left'}),
++    });
++    await generate(view);
++    await waitFor(() => expect(said('alert')).toHaveLength(1));
++    expect(view.select).toHaveAccessibleDescription(said('alert')[0]);
++  });
++});
++
++describe('Activate Agent: copy', () => {
++  // The page of an HTTP address has no navigator.clipboard: the browser only
++  // gives it to a secure context.
++  const withoutClipboard = () =>
++    Object.defineProperty(navigator, 'clipboard', {
++      value: undefined,
++      configurable: true,
++    });
++
++  afterEach(() => {
++    Reflect.deleteProperty(navigator, 'clipboard');
++    Reflect.deleteProperty(document, 'execCommand');
++    window.getSelection()?.removeAllRanges();
++  });
++
++  test('in a page without the clipboard the button selects the command and says how to copy it', async () => {
++    const view = await withCommand();
++    withoutClipboard();
++
++    await view.userEvent.click(screen.getByRole('button', {name: 'Copy'}));
++
++    expect(window.getSelection()?.toString()).toEqual(ENROLL.command);
++    await waitFor(() =>
++      expect(said('status')).toContain(
++        'The command is selected. Press Ctrl+C to copy it.',
++      ),
++    );
++    // nothing was copied, so it does not say it was
++    expect(said('status')).not.toContain('Copied ✓');
++    expect(screen.getByRole('button', {name: 'Copy'})).toBeInTheDocument();
++  });
++
++  test('the note is in a live region that was on the page before the click', async () => {
++    const view = await withCommand();
++    const copy = screen.getByRole('button', {name: 'Copy'});
++    const status = within(copy.parentElement as HTMLElement).getByRole(
++      'status',
++    );
++    expect(status).toBeEmptyDOMElement();
++    withoutClipboard();
++
++    await view.userEvent.click(copy);
++
++    await waitFor(() =>
++      expect(status).toHaveTextContent('Press Ctrl+C to copy it.'),
++    );
++    expect(within(copy.parentElement as HTMLElement).getByRole('status')).toBe(
++      status,
++    );
++  });
++
++  test('a clipboard that refuses ends the same way', async () => {
++    const view = await withCommand();
++    Object.defineProperty(navigator, 'clipboard', {
++      value: {writeText: testing.fn().mockRejectedValue(new Error('denied'))},
++      configurable: true,
++    });
++
++    await view.userEvent.click(screen.getByRole('button', {name: 'Copy'}));
++
++    expect(window.getSelection()?.toString()).toEqual(ENROLL.command);
++    await waitFor(() =>
++      expect(said('status')).toContain(
++        'The command is selected. Press Ctrl+C to copy it.',
++      ),
++    );
++  });
++
++  test('the old copy command is used when it works, with the command selected', async () => {
++    const view = await withCommand();
++    withoutClipboard();
++    const selectedWhenCopied: string[] = [];
++    Object.defineProperty(document, 'execCommand', {
++      value: testing.fn((name: string) => {
++        selectedWhenCopied.push(`${name}:${window.getSelection()?.toString()}`);
++        return true;
++      }),
++      configurable: true,
++    });
++
++    await view.userEvent.click(screen.getByRole('button', {name: 'Copy'}));
++
++    expect(selectedWhenCopied).toEqual([`copy:${ENROLL.command}`]);
++    await waitFor(() => expect(said('status')).toContain('Copied ✓'));
++    expect(said('status').join(' ')).not.toContain('Ctrl+C');
++  });
++
++  test('with the clipboard it copies, as before', async () => {
++    const view = await withCommand();
++
++    await view.userEvent.click(screen.getByRole('button', {name: 'Copy'}));
++
++    await waitFor(() => expect(said('status')).toContain('Copied ✓'));
++    expect(await navigator.clipboard.readText()).toEqual(ENROLL.command);
++  });
++});
++
++describe('AI Providers', () => {
++  test('sets the title of the page', async () => {
++    serveProviders(FREE_ONLY, () => json(200, {}));
++    const {render} = rendererWith({gmp: createGmp()});
++    render(<AiProvidersPage />);
++
++    expect(document.title).toEqual('Suricatoos - AI Providers');
++    await screen.findByRole('group', {name: 'OpenRouter'});
++    expect(document.title).toEqual('Suricatoos - AI Providers');
++  });
++
++  test('a preset that the server refuses with a 400 shows what the server explains', async () => {
++    serveProviders(FREE_ONLY, () =>
++      json(400, {error: 'api_key has the wrong format for this provider'}),
++    );
++    const {render} = rendererWith({gmp: createGmp()});
++    const {userEvent} = render(<AiProvidersPage />);
++    const group = await screen.findByRole('group', {name: 'UnoRouter'});
++
++    await userEvent.click(within(group).getByRole('button', {name: 'Save'}));
++
++    await waitFor(() =>
++      expect(said('alert', group)).toEqual([
++        'api_key has the wrong format for this provider',
++      ]),
++    );
++  });
++
++  test('the generic form shows what the server explains about a 400, too', async () => {
++    serveProviders(OPEN, () =>
++      json(400, {error: 'base_url must be an https URL'}),
++    );
++    const {render} = rendererWith({gmp: createGmp()});
++    const {userEvent} = render(<AiProvidersPage />);
++    await screen.findByText('Add provider');
++
++    await userEvent.click(screen.getByRole('button', {name: 'Save'}));
++
++    await waitFor(() =>
++      expect(said('alert')).toEqual(['base_url must be an https URL']),
++    );
++  });
++});
 +
 +describe('the colors of the screens', () => {
 +  describe('Endpoint Agents', () => {
