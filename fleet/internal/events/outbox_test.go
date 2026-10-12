@@ -428,23 +428,21 @@ func TestTetoDescartaOsMaisAntigosEConta(t *testing.T) {
 	if !slices.Equal(got, idsOf(4, 6)) {
 		t.Fatalf("depois do lote: %v", got)
 	}
-	// um único commit maior que o teto guarda só os mais novos
+	// um único commit maior que o teto guarda só os mais novos, e a seq segue depois dos descartados: o próximo
+	// evento não toma a seq de ninguém (o boot seguinte o recusaria)
 	d := newBox(t)
 	d.capacity = 3
 	d.add(evs(1, 5)...)
 	if _, got := d.next(); !slices.Equal(got, idsOf(3, 5)) || d.Dropped() != 2 {
 		t.Fatalf("commit acima do teto: %v, Dropped %d", got, d.Dropped())
 	}
-	d.restart()
-	if _, got := d.next(); !slices.Equal(got, idsOf(3, 5)) {
-		t.Fatalf("reinício depois do commit acima do teto: %v", got)
-	}
-	// e a seq segue depois dos descartados: o próximo não toma a seq de ninguém
-	d.capacity = 3
 	d.add(ev(6))
-	d.restart()
 	if _, got := d.next(); !slices.Equal(got, idsOf(4, 6)) {
 		t.Fatalf("depois de mais um: %v", got)
+	}
+	d.restart()
+	if _, got := d.next(); !slices.Equal(got, idsOf(4, 6)) {
+		t.Fatalf("reinício depois do commit acima do teto: %v", got)
 	}
 }
 
