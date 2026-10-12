@@ -145,6 +145,34 @@ func TestResultDeEnrollTokenCreateSaiSemDetail(t *testing.T) {
 	}
 }
 
+// O WARN do detail descartado no result de enroll_token.create só sai depois que a linha foi gravada: um acréscimo
+// que falha não loga nada (a linha não conta), e a nova tentativa que dá certo loga uma vez só.
+func TestWarnDoDetailDescartadoSoDepoisDoAcrescimo(t *testing.T) {
+	dir := t.TempDir()
+	fl := &faults{}
+	l, sink := openAt(t, dir, testConfig(fl.ops()))
+	ref := Ref{CommandID: "3b9c1d2e-4f5a-4b6c-8d7e-9f0a1b2c3d4e", Type: contract.TypeEnrollTokenCreate, Tenant: "acme"}
+	o := Outcome{Status: contract.StatusSucceeded, ObjectIDs: []string{"tok01"}, Detail: "texto livre fictício"}
+	fl.failSync = errors.New("EIO simulado")
+	if err := l.Result(testBoot, ref, o); err == nil {
+		t.Fatal("o acréscimo com fsync falhando devia dar erro")
+	}
+	if logs := sink.lines(); len(logs) != 0 {
+		t.Fatalf("um acréscimo que falhou não pode logar o descarte: %v", logs)
+	}
+	fl.failSync = nil
+	if err := l.Result(testBoot, ref, o); err != nil {
+		t.Fatal(err)
+	}
+	logs := sink.lines()
+	if len(logs) != 1 || !strings.Contains(logs[0], "level=WARN") || !strings.Contains(logs[0], "enroll_token.create") {
+		t.Fatalf("esperava um WARN só, depois do acréscimo que deu certo: %v", logs)
+	}
+	if lines := execLines(t, dir); len(lines) != 1 || strings.Contains(lines[0], `"detail"`) {
+		t.Fatalf("linhas %v", lines)
+	}
+}
+
 // Linha que não se monta (entrada fora do contrato) não grava nada e não gasta seq.
 func TestEntradaInvalidaNaoGastaSeq(t *testing.T) {
 	dir := t.TempDir()

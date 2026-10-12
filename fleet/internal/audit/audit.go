@@ -217,16 +217,15 @@ func (l *Log) Executed(t time.Time, r Ref) error {
 
 // Result records, in the exec stream, how an accepted command ended, before the result is reported. For
 // enroll_token.create — whose output is the only secret of the contract — the Detail is dropped, whatever the
-// status, and a WARN (which does not repeat it) says so: free text there could carry the token.
+// status, and a WARN (which does not repeat it) says so: free text there could carry the token. The WARN comes only
+// once the line is written, so an append that fails (and the caller's retry) does not log the drop twice.
 func (l *Log) Result(t time.Time, r Ref, o Outcome) error {
-	return l.exec.build(t, func(at string) (*entry, error) {
-		e, err := newResult(at, r, o)
-		if err == nil && r.Type == contract.TypeEnrollTokenCreate && o.Detail != "" {
-			l.exec.log.Warn("auditoria: detail descartado no result de enroll_token.create (a saída desse comando é o único segredo do contrato)",
-				"command_id", r.CommandID)
-		}
-		return e, err
-	})
+	err := l.exec.build(t, func(at string) (*entry, error) { return newResult(at, r, o) })
+	if err == nil && r.Type == contract.TypeEnrollTokenCreate && o.Detail != "" {
+		l.exec.log.Warn("auditoria: detail descartado no result de enroll_token.create (a saída desse comando é o único segredo do contrato)",
+			"command_id", r.CommandID)
+	}
+	return err
 }
 
 // Rejected records, in the reject stream, a final rejection (verification lines 3–9) before its ack.
