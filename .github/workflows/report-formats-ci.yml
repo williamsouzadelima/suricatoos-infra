@@ -33,7 +33,13 @@ name: report-formats-ci
 #              report-formats/ci/gates.sh; o controle negativo (o generate tem
 #              de falhar alto) e os artefatos (PDFs, .log, .tex, .aux, .out,
 #              PNG das 3 primeiras paginas -- com o resumo executivo numa
-#              folha so', a 3a e' a de sumario);
+#              folha so', a 3a e' a de sumario). Alem deles, as PREVIAS para
+#              revisao humana: PNG das 12 primeiras paginas do PDF de uma
+#              fixture representativa (v27, a que mais difere entre as edicoes),
+#              artefato previas-<idioma>-<edicao>. O repo nao guarda PDF nem PNG
+#              de amostra (ficavam velhos): a amostra e' o artefato;
+#   previas    NAO bloqueia: junta as previas dos nove jobs do compile num
+#              artefato so' (`previas`), para baixar de uma vez;
 #   measure    NAO bloqueia: tempo e pico de memoria do generate (edicao
 #              tecnica x edicao do cliente, um idioma) num export sintetico
 #              grande (ci/big-report.py, dezenas de milhares de resultados,
@@ -126,6 +132,10 @@ jobs:
           pdftotext -v 2>&1 | head -n 1
 
       - name: Compilar (sample + tortura) e aplicar os portoes
+        env:
+          # Previas para revisao humana (PNG das primeiras paginas da fixture
+          # representativa, v27 por padrao): ver o cabecalho de ci/compile.sh.
+          PREVIEWS_DIR: ${{ runner.temp }}/previas
         run: report-formats/ci/compile.sh "$REPORT_LANG" "$REPORT_VARIANT" "$RUNNER_TEMP/artefatos"
 
       - name: Controle negativo (o generate tem de falhar alto)
@@ -138,6 +148,58 @@ jobs:
         with:
           name: report-formats-${{ matrix.lang }}-${{ matrix.variant }}
           path: ${{ runner.temp }}/artefatos/
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Publicar as previas (PNG das primeiras paginas, para revisao humana)
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: previas-${{ matrix.lang }}-${{ matrix.variant }}
+          path: ${{ runner.temp }}/previas/
+          if-no-files-found: warn
+          retention-days: 14
+
+  previas:
+    name: previas visuais das nove edicoes (um artefato; nao bloqueia)
+    # Conveniencia, NAO portao: junta os previas-<idioma>-<edicao> dos nove jobs do
+    # compile num artefato so' (`previas`: uma pasta por idioma e edicao), para a
+    # revisao humana baixar uma vez. Os nove individuais continuam la'. Roda
+    # mesmo se algum compile reprovou (as previas de quem reprovou ajudam), e um
+    # defeito aqui nao reprova o workflow -- que e' o que o publish espera.
+    needs: compile
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    continue-on-error: true
+    steps:
+      - name: Baixar as previas dos nove jobs do compile
+        uses: actions/download-artifact@v4
+        with:
+          pattern: previas-*
+          path: previas
+          merge-multiple: true
+
+      - name: Indice das previas
+        run: |
+          set -eu
+          {
+            echo "### Previas visuais (PNG, para revisão humana)"
+            echo
+            echo "$(find previas -name '*.png' | wc -l) PNG: baixe o artefato \`previas\` (uma pasta por idioma e edição)."
+            echo
+            echo "| idioma / edição | páginas |"
+            echo "|---|---|"
+            find previas -mindepth 2 -maxdepth 2 -type d | sort | while read -r d; do
+              echo "| ${d#previas/} | $(find "$d" -name '*.png' | wc -l) |"
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publicar o artefato previas
+        uses: actions/upload-artifact@v4
+        with:
+          name: previas
+          path: previas/
           if-no-files-found: warn
           retention-days: 14
 
