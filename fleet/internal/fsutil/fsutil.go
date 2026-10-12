@@ -266,6 +266,29 @@ func dirSyncUnsupported(err error) bool {
 	return errors.Is(err, syscall.EINVAL) || errors.Is(err, syscall.ENOTSUP) || errors.Is(err, syscall.EOPNOTSUPP)
 }
 
+// SyncFile makes the content of the EXISTING regular file at path durable — what a boot does with a file it read
+// before it trusts it: after a crash of the process (not of the system) the page cache can still hold a write whose
+// fsync never returned, and the read sees it. It opens the file for writing without creating, truncating or appending
+// to it (Windows syncs only a handle with write access), on unix never through a symbolic link at the last
+// component and without blocking on a FIFO; anything but a regular file is ErrNotRegular, a missing file satisfies
+// fs.ErrNotExist. It returns the FileInfo of the descriptor it synced, for the caller to check that it is the file it
+// read (os.SameFile). The directory entry is not synced: SyncDir does that.
+func SyncFile(path string) (fs.FileInfo, error) {
+	f, err := openTruncate(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	fi, err := regularInfo(f, path)
+	if err != nil {
+		return nil, err
+	}
+	if err := f.Sync(); err != nil {
+		return nil, err
+	}
+	return fi, nil
+}
+
 // SyncDir makes the entries of the directory dir durable: what the creation, rename or removal of a file inside it
 // needs to survive a power cut. It is WriteAtomic's directory sync, with its rules: skipped on Windows (a directory
 // cannot be opened for it), EINVAL and ENOTSUP tolerated (the filesystem only says it cannot sync a directory), any

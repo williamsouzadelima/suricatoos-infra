@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -73,5 +74,35 @@ func TestWriteAtomicStreamDevolveErrNotDurable(t *testing.T) {
 	}
 	if got, _ := os.ReadFile(p); string(got) != "novo" {
 		t.Fatalf("o conteúdo novo devia estar no lugar: %q", got)
+	}
+}
+
+// SyncFile confirma no disco um arquivo que JÁ existe (o boot faz isso com o que leu antes de confiar nele): nunca
+// o cria, recusa quem não é arquivo regular, não muda o conteúdo e devolve a identidade do que sincronizou.
+func TestSyncFileConfirmaUmArquivoExistente(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "store.log")
+	if err := os.WriteFile(p, []byte("conteúdo"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	fi, err := SyncFile(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	st, err := os.Stat(p)
+	if err != nil || !os.SameFile(fi, st) {
+		t.Fatalf("a identidade devolvida não é a do arquivo: %v", err)
+	}
+	if b, _ := os.ReadFile(p); string(b) != "conteúdo" {
+		t.Fatalf("o conteúdo mudou: %q", b)
+	}
+	if _, err := SyncFile(filepath.Join(dir, "falta")); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("arquivo ausente: esperava ErrNotExist, deu %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "falta")); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatal("SyncFile criou o arquivo")
+	}
+	if _, err := SyncFile(dir); err == nil {
+		t.Fatal("um diretório não é arquivo regular")
 	}
 }
