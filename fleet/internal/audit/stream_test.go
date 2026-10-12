@@ -524,6 +524,34 @@ func TestArquivoQueMudouPorForaEnvenena(t *testing.T) {
 	}
 }
 
+// swapForCopy replaces the file at path with a copy of itself: same size, same bytes, another file.
+func swapForCopy(t *testing.T, path string) []byte {
+	t.Helper()
+	b := fileBytes(t, path)
+	if err := os.WriteFile(path+".copia", b, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(path+".copia", path); err != nil {
+		t.Fatal(err)
+	}
+	return b
+}
+
+// "Mudou por fora" não é só tamanho: o arquivo atual trocado por outro de mesmo tamanho (aqui, uma cópia byte a
+// byte dele) também envenena — o fluxo compara a identidade do arquivo (os.SameFile) com a da última gravação.
+func TestArquivoTrocadoPorOutroDoMesmoTamanhoEnvenena(t *testing.T) {
+	s, _ := newTestStream(t, execSpec, defaultOps())
+	mustAppend(t, s, 1)
+	mustAppend(t, s, 2)
+	swapped := swapForCopy(t, s.path(0))
+	if err := appendLine(t, s, 3); !errors.Is(err, ErrPoisoned) {
+		t.Fatalf("esperava ErrPoisoned, deu %v", err)
+	}
+	if got := fileBytes(t, s.path(0)); !bytes.Equal(got, swapped) {
+		t.Fatal("o fluxo acrescentou num arquivo que não é o dele")
+	}
+}
+
 // seq é inteiro exato também para um hub que lê JSON como double: no teto 2^53-1 o fluxo recusa (só uma
 // adulteração chega lá; 8 640 linhas por dia levariam bilhões de anos).
 func TestSeqNoTetoRecusa(t *testing.T) {

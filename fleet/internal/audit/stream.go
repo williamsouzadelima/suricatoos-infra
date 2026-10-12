@@ -101,13 +101,14 @@ type stream struct {
 	log  *slog.Logger
 
 	mu       sync.Mutex
-	seq      int64      // seq of the last line; 0 before the first
-	head     string     // hex sha256 of the last line; "" before the first
-	size     int64      // size of the current file as this stream left it
-	tail     []tailLine // the last TailLines lines, the oldest first
-	poisoned error      // non-nil: every append is refused until the next Open
-	recovery Recovery   // what Open found; never changes afterwards
-	flood    *flood     // the anti-flood state (reject stream only)
+	seq      int64       // seq of the last line; 0 before the first
+	head     string      // hex sha256 of the last line; "" before the first
+	size     int64       // size of the current file as this stream left it
+	ident    fs.FileInfo // the current file as this stream last wrote (or, at boot, read) it; nil = none yet
+	tail     []tailLine  // the last TailLines lines, the oldest first
+	poisoned error       // non-nil: every append is refused until the next Open
+	recovery Recovery    // what Open found; never changes afterwards
+	flood    *flood      // the anti-flood state (reject stream only)
 }
 
 // newStream is a stream with no line yet over dir; Open fills it from the files (recover) instead.
@@ -194,18 +195,20 @@ func (s *stream) appendLocked(e *entry) error {
 // write (TruncateDurable); if the cut fails too, the stream is poisoned.
 func (s *stream) writeLocked(line []byte) error {
 	path := s.path(0)
-	f, pre, err := s.openCurrentLocked()
+	f, fi, err := s.openCurrentLocked()
 	if err != nil {
 		return err
 	}
+	pre := fi.Size()
 	if pre > 0 && pre+int64(len(line))+1 > s.spec.maxBytes {
 		f.Close()
 		if err := s.rotateLocked(); err != nil {
 			return fmt.Errorf("audit: girar o fluxo %s: %w", s.spec.name, err)
 		}
-		if f, pre, err = s.openCurrentLocked(); err != nil {
+		if f, fi, err = s.openCurrentLocked(); err != nil {
 			return err
 		}
+		pre = fi.Size()
 	}
 	if pre == 0 {
 		// a file with no line yet may have just been created (first line ever, or after a rotation): its directory
@@ -230,29 +233,34 @@ func (s *stream) writeLocked(line []byte) error {
 		}
 		return fmt.Errorf("audit: gravar em %s (a linha não conta; o arquivo voltou a %d bytes): %w", path, pre, werr)
 	}
-	s.size = pre + int64(len(buf))
+	s.size, s.ident = pre+int64(len(buf)), fi
 	return nil
 }
 
-// openCurrentLocked opens the current file for appending (creating it if needed) and returns its size, which must
-// be the size this stream left it with: any other size means the file changed underneath — bytes this stream did
-// not write — and the stream is poisoned rather than append after them.
-func (s *stream) openCurrentLocked() (appendFile, int64, error) {
+// openCurrentLocked opens the current file for appending (creating it if needed) and returns its FileInfo. The file
+// must be the one this stream last wrote to (os.SameFile, when it knows one) and have the size it left it with:
+// anything else means the file changed underneath — replaced by another, or bytes this stream did not write — and
+// the stream is poisoned rather than append to it.
+func (s *stream) openCurrentLocked() (appendFile, fs.FileInfo, error) {
 	path := s.path(0)
 	f, err := s.ops.openAppend(path)
 	if err != nil {
-		return nil, 0, fmt.Errorf("audit: abrir %s: %w", path, err)
+		return nil, nil, fmt.Errorf("audit: abrir %s: %w", path, err)
 	}
 	fi, err := f.Stat()
 	if err != nil {
 		f.Close()
-		return nil, 0, fmt.Errorf("audit: medir %s: %w", path, err)
+		return nil, nil, fmt.Errorf("audit: medir %s: %w", path, err)
+	}
+	if s.ident != nil && !os.SameFile(s.ident, fi) {
+		f.Close()
+		return nil, nil, s.poisonLocked(fmt.Errorf("%s não é mais o arquivo em que este fluxo gravou: foi trocado por outro", path))
 	}
 	if fi.Size() != s.size {
 		f.Close()
-		return nil, 0, s.poisonLocked(fmt.Errorf("%s tem %d bytes e este fluxo o deixou com %d: o arquivo mudou por fora", path, fi.Size(), s.size))
+		return nil, nil, s.poisonLocked(fmt.Errorf("%s tem %d bytes e este fluxo o deixou com %d: o arquivo mudou por fora", path, fi.Size(), s.size))
 	}
-	return f, fi.Size(), nil
+	return f, fi, nil
 }
 
 // rotateLocked renames the current file to ".1" after moving the older ones up, removing the oldest so that no
@@ -291,7 +299,7 @@ func (s *stream) rotateLocked() error {
 	if err := s.ops.rename(s.path(0), s.path(1)); err != nil {
 		return err
 	}
-	s.size = 0
+	s.size, s.ident = 0, nil // the next current file is a new one
 	return s.ops.syncDir(s.dir)
 }
 

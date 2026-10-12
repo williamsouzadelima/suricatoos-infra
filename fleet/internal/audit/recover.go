@@ -303,6 +303,15 @@ func (s *stream) recoverFile(sc *chainScan, i int, boot time.Time) error {
 	if err != nil {
 		return fmt.Errorf("audit: ler %s: %w", path, err)
 	}
+	if i == 0 {
+		// the file the stream goes on writing to: a later append refuses another one in its place (os.SameFile)
+		fi, err := f.Stat()
+		if err != nil {
+			f.Close()
+			return fmt.Errorf("audit: medir %s: %w", path, err)
+		}
+		s.ident = fi
+	}
 	end, lines, partial, err := sc.scan(f, name)
 	f.Close()
 	if err != nil {

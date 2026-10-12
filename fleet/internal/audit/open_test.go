@@ -210,6 +210,21 @@ func TestBootRetomaSeqEHashAtravesDaRotacao(t *testing.T) {
 	}
 }
 
+// O boot guarda a identidade do arquivo atual que leu: trocá-lo por uma cópia depois do Open também envenena.
+func TestArquivoTrocadoDepoisDoBootEnvenena(t *testing.T) {
+	dir := t.TempDir()
+	l, _ := openAt(t, dir, defaultConfig())
+	policyChanged(t, l, 1)
+	l2, _ := openAt(t, dir, defaultConfig())
+	swapped := swapForCopy(t, filepath.Join(dir, ExecFileName))
+	if err := l2.PolicyChanged(testBoot, "depois da troca"); !errors.Is(err, ErrPoisoned) {
+		t.Fatalf("esperava ErrPoisoned, deu %v", err)
+	}
+	if got := fileBytes(t, filepath.Join(dir, ExecFileName)); !bytes.Equal(got, swapped) {
+		t.Fatal("o fluxo acrescentou num arquivo que não é o que o boot leu")
+	}
+}
+
 // Linha final parcial (queda no meio da escrita): como cada linha é gravada antes do efeito, o efeito não
 // aconteceu. O boot descarta os bytes parciais (corta o arquivo), conta isso no Status e numa linha de log — nunca
 // numa linha do fluxo, que o contrato v1 não tem — e a cadeia segue da última linha completa.
