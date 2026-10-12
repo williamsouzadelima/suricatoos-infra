@@ -31,16 +31,19 @@ jobs:
         with:
           python-version: '3.x'
 
-      - name: Regenerar os feed XMLs e o manifesto a partir do bundle (mantem em sincronia)
+      - name: Gerar os feed XMLs a partir do bundle (nao sao versionados)
         run: |
           set -eux
+          # Os nove objetos (pdf-suricatoos-<uuid>.xml) nao estao no git: o
+          # Dockerfile os copia (COPY falha alto se nenhum existir), entao esta
+          # etapa TEM de rodar antes do docker build.
           python3 report-formats/build-feed-xml.py
-          # Falha se o XML ou o manifesto versionado divergir do bundle (forca
-          # regeneracao no commit), ou se o build escrever objeto que o commit
-          # nao tem (o git diff nao ve arquivo novo).
-          git diff --exit-code report-formats/pdf-suricatoos-*.xml report-formats/manifest.json \
-            report-formats/suricatoos-premium-pdf/report_format.xml
+          # O manifest.json e' o unico versionado: o build tem de reescreve-lo igual.
+          git diff --exit-code report-formats/manifest.json
+          # Nada gerado fora do que o .gitignore declara, e nenhum objeto gerado
+          # versionado (o git diff nao ve arquivo novo).
           test -z "$(git status --porcelain --untracked-files=all -- report-formats)"
+          test -z "$(git ls-files -- 'report-formats/pdf-suricatoos-*.xml' report-formats/suricatoos-premium-pdf/report_format.xml)"
           python3 report-formats/ci/check-manifest.py
 
       - name: Login no GHCR

@@ -134,7 +134,8 @@ def check(rf_dir):
                          % (where, name, want_name))
         fpath = os.path.join(rf_dir, "pdf-suricatoos-%s.xml" % uid)
         if not os.path.exists(fpath):
-            fails.append("%s: falta %s" % (where, os.path.basename(fpath)))
+            fails.append("%s: falta %s (os objetos de feed sao gerados, nao versionados: rode "
+                         "report-formats/build-feed-xml.py)" % (where, os.path.basename(fpath)))
             continue
         root = ET.parse(fpath).getroot()
         if root.get("id") != uid or root.findtext("name") != name:
@@ -155,10 +156,14 @@ def check(rf_dir):
         if cats != ["nvt-i18n-%s.xml" % lang]:
             fails.append("%s: catalogo(s) embutido(s) %s, esperado o do idioma" % (where, cats))
     ref = os.path.join(rf_dir, "suricatoos-premium-pdf", "report_format.xml")
-    with open(ref, "rb") as fh:
-        if fh.read() != b.reference_descriptor():
-            fails.append("suricatoos-premium-pdf/report_format.xml nao e' o descritor de referencia que o "
-                         "build-feed-xml.py escreve (regere e commite)")
+    if not os.path.exists(ref):
+        fails.append("falta suricatoos-premium-pdf/report_format.xml (descritor de referencia: gerado, "
+                     "nao versionado; rode report-formats/build-feed-xml.py)")
+    else:
+        with open(ref, "rb") as fh:
+            if fh.read() != b.reference_descriptor():
+                fails.append("suricatoos-premium-pdf/report_format.xml nao e' o descritor de referencia que o "
+                             "build-feed-xml.py escreve (arquivo gerado, nao versionado: rode o build)")
     described = {"pdf-suricatoos-%s.xml" % u for u in uuids}
     extra = sorted(os.path.basename(p) for p in glob.glob(os.path.join(rf_dir, "pdf-suricatoos-*.xml"))
                    if os.path.basename(p) not in described)

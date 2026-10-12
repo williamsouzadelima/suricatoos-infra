@@ -53,9 +53,11 @@ EXCLUSÕES (o que NÃO é varrido)
 LIMITE CONHECIDO
   Conteúdo codificado não é decodificado. Os XML de feed de report format
   (`report-formats/pdf-suricatoos-*.xml`) levam cópias dos arquivos do bundle em
-  base64; elas valem o que o bundle vale porque `build-feed-xml.py` as regenera e o
-  job `feed-sync` de `.github/workflows/report-formats-ci.yml` reprova XML
-  divergente. O bundle, esse sim, é varrido.
+  base64, mas são GERADOS por `build-feed-xml.py` (no job `feed-sync` de
+  `.github/workflows/report-formats-ci.yml` e no publish) e não são versionados:
+  o checador só varre arquivos rastreados, então nem chegam aqui, e o job
+  `feed-sync` reprova um deles que volte ao git. O bundle, de onde vêm as cópias,
+  esse sim, é varrido.
   Só o IPv4 em decimal pontuado é reconhecido. Ficam de fora, de propósito ou por
   custo: formas defanged (`8.8.8[.]8`), formas tracejadas (`ip-8-8-8-8` em
   hostname), IP como inteiro ou hex (`134744072`, `0x08080808`), pontos escapados

@@ -19,8 +19,13 @@
 # dropdown and the user picks edition and language there. manifest.json maps
 # (format, lang, variant) to each UUID for the fleet connector.
 #
+# The nine feed XMLs are BUILD OUTPUTS, not versioned (.gitignore): the CI and the
+# publish workflow run build-feed-xml.py before `docker build`, and the COPY below
+# fails loudly when none exists. manifest.json is the only generated file that
+# stays in the repo (the fleet connector reads it).
+#
 # Build:
-#   python3 build-feed-xml.py   # regenerate the nine embedded XMLs and manifest.json
+#   python3 build-feed-xml.py   # GENERATE the nine embedded XMLs (and manifest.json)
 #   docker build -t ghcr.io/williamsouzadelima/suricatoos-report-formats:stable \
 #       report-formats
 FROM registry.community.greenbone.net/community/report-formats

@@ -6,11 +6,14 @@ name: report-formats-ci
 # quebrava o LaTeX so' aparecia em producao.
 #
 # Jobs:
-#   feed-sync  os 9 feed XMLs versionados (3 edicoes x 3 idiomas) e o
-#              manifest.json batem com o bundle (build-feed-xml.py), nenhum
-#              objeto gerado fica fora do repositorio, e o manifesto descreve
-#              exatamente os objetos (ci/check-manifest.py: UUID, nome, idioma
-#              e edicao do generate embutido);
+#   feed-sync  os 9 feed XMLs (3 edicoes x 3 idiomas) sao GERADOS aqui pelo
+#              build-feed-xml.py e NAO sao versionados (.gitignore): cada
+#              mudanca de relatorio regerava ~21 MB no historico do repo
+#              publico. O manifest.json continua no repo (o conector da frota o
+#              le) e o build tem de reescreve-lo igual; nada gerado fica fora do
+#              que o .gitignore declara, nenhum objeto gerado esta' versionado, e
+#              o manifesto descreve exatamente os objetos (ci/check-manifest.py:
+#              UUID, nome, idioma e edicao do generate embutido);
 #   compile    por idioma x edicao (technical, client, executive -- os nomes
 #              do contrato da frota, ADR-0011): `sh ./generate` ponta a ponta
 #              + compilacao de
@@ -52,7 +55,7 @@ env:
 
 jobs:
   feed-sync:
-    name: feed XML em sincronia com o bundle
+    name: feed gerado do bundle e manifesto
     # Imagem fixa, como a do compile abaixo: trocar de Ubuntu e' mudanca deliberada, nao efeito do ubuntu-latest.
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -65,17 +68,20 @@ jobs:
         with:
           python-version: '3.x'
 
-      - name: Regenerar os feed XMLs e o manifesto a partir do bundle e comparar
+      - name: Gerar os feed XMLs a partir do bundle (nao sao versionados)
         run: |
           set -eux
           python3 report-formats/build-feed-xml.py
-          # Falha se o XML ou o manifesto versionado divergir do bundle:
-          # regenere e commite.
-          git diff --exit-code report-formats/pdf-suricatoos-*.xml report-formats/manifest.json \
-            report-formats/suricatoos-premium-pdf/report_format.xml
-          # O git diff nao ve arquivo NOVO: um objeto que o build escreve e o
-          # commit esqueceu passaria. Nada sob report-formats/ pode ficar fora.
+          # Os nove objetos e o descritor de referencia sao saida do build e
+          # estao no .gitignore. O manifest.json e' o unico que fica no repo (o
+          # conector da frota o le): o build tem de reescreve-lo igual.
+          git diff --exit-code report-formats/manifest.json
+          # O git diff nao ve arquivo NOVO: um objeto que o build escreve e que
+          # nem o .gitignore declara passaria. Nada sob report-formats/ pode
+          # ficar fora (arquivo ignorado nao aparece aqui, de proposito).
           test -z "$(git status --porcelain --untracked-files=all -- report-formats)"
+          # E nenhum objeto gerado pode voltar a ser versionado (git add -f).
+          test -z "$(git ls-files -- 'report-formats/pdf-suricatoos-*.xml' report-formats/suricatoos-premium-pdf/report_format.xml)"
 
       - name: Manifesto = objetos de feed (UUID, nome, idioma e edicao)
         run: python3 report-formats/ci/check-manifest.py
