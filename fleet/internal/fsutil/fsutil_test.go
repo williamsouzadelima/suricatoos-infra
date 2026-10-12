@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"syscall"
 	"testing"
 )
@@ -292,6 +293,60 @@ func TestDirSyncToleraSoONaoSuportado(t *testing.T) {
 		if dirSyncUnsupported(err) {
 			t.Errorf("%s: não pode ser tolerado", name)
 		}
+	}
+}
+
+// Uma queda entre criar o temporário e o rename deixa "<arquivo>.tmp-<sufixo>" para sempre. Só os do próprio
+// arquivo saem: o diretório é dividido com os outros arquivos de estado do conector.
+func TestRemoveOrphanTempsRemoveSoOsDoProprioArquivo(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "estado.json")
+	mine := []string{"estado.json.tmp-1", "estado.json.tmp-987654321", "estado.json.tmp-abc"}
+	others := []string{
+		"estado.json",         // o próprio arquivo
+		"estado.json.bak",     // outro sufixo
+		"estado.json.tmp",     // sem o hífen do sufixo aleatório
+		"outro.json.tmp-1",    // temporário de outro arquivo de estado
+		"estado.jsonx.tmp-1",  // prefixo parecido, outro arquivo
+		"xestado.json.tmp-1",  // idem
+		"politica.json.tmp-7", // de outro módulo
+	}
+	for _, name := range append(append([]string{}, mine...), others...) {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("x"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// um diretório com o nome de um temporário não é um temporário
+	if err := os.Mkdir(filepath.Join(dir, "estado.json.tmp-dir"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	others = append(others, "estado.json.tmp-dir")
+
+	removed, err := RemoveOrphanTemps(path)
+	if err != nil || removed != len(mine) {
+		t.Fatalf("removidos %d (esperava %d), erro %v", removed, len(mine), err)
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var left []string
+	for _, e := range entries {
+		left = append(left, e.Name())
+	}
+	slices.Sort(others)
+	if !slices.Equal(left, others) {
+		t.Fatalf("sobraram %v, esperava %v", left, others)
+	}
+}
+
+func TestRemoveOrphanTempsSemNadaParaLimparNaoEErro(t *testing.T) {
+	dir := t.TempDir()
+	if n, err := RemoveOrphanTemps(filepath.Join(dir, "estado.json")); n != 0 || err != nil {
+		t.Fatalf("diretório vazio: %d %v", n, err)
+	}
+	if n, err := RemoveOrphanTemps(filepath.Join(dir, "sem", "pai", "estado.json")); n != 0 || err != nil {
+		t.Fatalf("diretório que não existe: %d %v", n, err)
 	}
 }
 

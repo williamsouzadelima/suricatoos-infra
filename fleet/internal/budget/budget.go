@@ -120,6 +120,9 @@ type Options struct {
 // missing file is a lost state (Lost explains it) and nothing is written: the first Consume after the block creates
 // the file.
 //
+// Open also removes the budget.json.tmp-* files that a crash left between a temporary file and its rename (only
+// those, since the directory is shared with the other state files; it assumes no other Ledger is writing there).
+//
 // The only errors are therefore programming ones (an empty stateDir, an invalid boot) and the failure of the first
 // boot's write; see the package comment for what an unreadable or corrupt file does.
 func Open(stateDir string, boot time.Time, opts Options) (*Ledger, error) {
@@ -130,6 +133,8 @@ func Open(stateDir string, boot time.Time, opts Options) (*Ledger, error) {
 		return nil, errors.New("budget: boot não é um instante válido (valor zero?): precisa ser o relógio de verificação")
 	}
 	path := filepath.Join(stateDir, FileName)
+	// leftovers of a Consume that a crash interrupted; best effort: a file that will not go does not stop the boot
+	_, _ = fsutil.RemoveOrphanTemps(path)
 	l := &Ledger{path: path}
 	data, err := fsutil.ReadBounded(path, maxFileBytes)
 	switch {

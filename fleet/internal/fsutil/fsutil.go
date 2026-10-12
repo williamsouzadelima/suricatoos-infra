@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"syscall"
 )
 
@@ -81,7 +82,7 @@ func readRegular(f *os.File, name string, limit int64) ([]byte, error) {
 // such as EIO, is returned.
 func WriteAtomic(path string, data []byte) (err error) {
 	dir := filepath.Dir(path)
-	f, err := os.CreateTemp(dir, filepath.Base(path)+".tmp-*") // created with mode 0600
+	f, err := os.CreateTemp(dir, filepath.Base(path)+tempInfix+"*") // created with mode 0600
 	if err != nil {
 		return err
 	}
@@ -111,6 +112,38 @@ func WriteAtomic(path string, data []byte) (err error) {
 		return fmt.Errorf("%w: sincronizar o diretório %s: %w", ErrNotDurable, dir, serr)
 	}
 	return nil
+}
+
+// tempInfix sits between the name of the file and the random suffix of the temporary file WriteAtomic creates.
+const tempInfix = ".tmp-"
+
+// RemoveOrphanTemps removes the temporary files an interrupted WriteAtomic(path, ...) left behind — a crash between
+// creating the temporary file and renaming it — and returns how many it removed. Only the files that are named
+// exactly like WriteAtomic names them for this path (the name of path, ".tmp-", a suffix) go; the directory is
+// shared with the other state files of the connector, whose leftovers belong to them. Directories are never
+// touched. It assumes no WriteAtomic of the same path is running. A directory that does not exist has nothing to
+// clean; a file that cannot be removed is reported in the error (all the others are still removed).
+func RemoveOrphanTemps(path string) (removed int, err error) {
+	dir, prefix := filepath.Dir(path), filepath.Base(path)+tempInfix
+	entries, rerr := os.ReadDir(dir)
+	if rerr != nil {
+		if errors.Is(rerr, fs.ErrNotExist) {
+			return 0, nil
+		}
+		return 0, rerr
+	}
+	var errs []error
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasPrefix(e.Name(), prefix) {
+			continue
+		}
+		if rerr := os.Remove(filepath.Join(dir, e.Name())); rerr != nil && !errors.Is(rerr, fs.ErrNotExist) {
+			errs = append(errs, rerr)
+			continue
+		}
+		removed++
+	}
+	return removed, errors.Join(errs...)
 }
 
 // ErrNotDurable: WriteAtomic renamed the new content into place, but could not confirm that the directory entry

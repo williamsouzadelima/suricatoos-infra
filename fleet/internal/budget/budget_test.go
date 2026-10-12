@@ -428,6 +428,43 @@ func TestPrimeiroBootSemComoGravarEErro(t *testing.T) {
 	assertBlockedUntilBootPlusHour(t, l, t0)
 }
 
+// Uma queda entre criar o temporário e o rename deixa budget.json.tmp-* no FLEET_STATE_DIR. O Open do ledger
+// limpa os seus, e só os seus: o diretório é dividido com os outros arquivos de estado.
+func TestOpenRemoveOsTemporariosOrfaosSoDoProprioArquivo(t *testing.T) {
+	setups := map[string]struct {
+		prepare func(t *testing.T) string
+		opts    Options
+	}{
+		"estado íntegro":    {func(t *testing.T) string { return seedDir(t, stateJSON(nil, nil)) }, Options{}},
+		"estado corrompido": {func(t *testing.T) string { return seedDir(t, "lixo") }, Options{}},
+		"primeiro boot":     {func(t *testing.T) string { return t.TempDir() }, Options{FirstBoot: true}},
+		"estado perdido":    {func(t *testing.T) string { return t.TempDir() }, Options{}},
+	}
+	for name, setup := range setups {
+		t.Run(name, func(t *testing.T) {
+			dir := setup.prepare(t)
+			for _, f := range []string{"budget.json.tmp-111", "budget.json.tmp-222", "politica.json.tmp-9", "store.db.tmp-3", "budget.json.bak"} {
+				if err := os.WriteFile(filepath.Join(dir, f), []byte("x"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if _, err := Open(dir, t0, setup.opts); err != nil {
+				t.Fatal(err)
+			}
+			for _, gone := range []string{"budget.json.tmp-111", "budget.json.tmp-222"} {
+				if _, err := os.Stat(filepath.Join(dir, gone)); !errors.Is(err, os.ErrNotExist) {
+					t.Errorf("%s deveria ter sido removido: %v", gone, err)
+				}
+			}
+			for _, kept := range []string{"politica.json.tmp-9", "store.db.tmp-3", "budget.json.bak"} {
+				if _, err := os.Stat(filepath.Join(dir, kept)); err != nil {
+					t.Errorf("%s não é do ledger e tinha de ficar: %v", kept, err)
+				}
+			}
+		})
+	}
+}
+
 func TestOpenStateDirVazioEErro(t *testing.T) {
 	// "" viraria ./budget.json: o diretório de trabalho nunca guarda o orçamento
 	if _, err := Open("", t0, Options{FirstBoot: true}); err == nil {
