@@ -3,6 +3,7 @@ package admission
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -49,24 +50,57 @@ func base() Request {
 	return Request{
 		Type:     contract.TypeAgentScanNow,
 		NodeKind: contract.NodeCentral,
-		Tenant:   tenant.Standing{OK: true, Scope: "192.0.2.0/24"},
+		Tenant:   tenant.Standing{OK: true, Scope: tenantScope, GVMUser: tenantUser},
 		Policy:   contract.DefaultPolicy(contract.NodeCentral),
 		Budgets:  roomy(),
 		At:       t0,
 	}
 }
 
-var breakers = []struct {
+// Dados que não são do portão e que nenhum detail pode repetir: um tipo que veio do envelope e que o catálogo não
+// conhece, e o escopo e o usuário gvmd do tenant.
+const (
+	rawType     = "zzz.entrada_crua"
+	tenantScope = "198.51.100.77/32"
+	tenantUser  = "usuario-gvmd-distintivo"
+)
+
+// breaker breaks exactly one check of lines 6 and 7 and nothing else.
+type breaker struct {
+	label  string
 	reason contract.RejectReason
 	apply  func(*Request)
-}{
-	{contract.ReasonTenantUnknown, func(r *Request) { r.Tenant = tenant.Standing{Why: tenant.WhyUnknown} }},
-	{contract.ReasonUnsupported, func(r *Request) { r.NodeKind = contract.NodeSensor }},
-	{contract.ReasonTypeNotAllowed, func(r *Request) {
+}
+
+var (
+	// um tenant conhecido, mas sem senha: o Standing carrega escopo e usuário, que nenhum detail repete
+	breakTenant = breaker{"tenant_unknown", contract.ReasonTenantUnknown, func(r *Request) {
+		r.Tenant = tenant.Standing{Why: tenant.WhyNoSecret, Scope: tenantScope, GVMUser: tenantUser}
+	}}
+	// o node_kind não suporta o tipo
+	breakUnsupportedNodeKind = breaker{"unsupported[node_kind]", contract.ReasonUnsupported, func(r *Request) {
+		r.NodeKind = contract.NodeSensor
+	}}
+	// o tipo nem está no catálogo (e está em allow: o catálogo vem antes de allow)
+	breakUnsupportedCatalog = breaker{"unsupported[catálogo]", contract.ReasonUnsupported, func(r *Request) {
+		r.Type = rawType
+		r.Policy.Allow = append(slices.Clone(r.Policy.Allow), r.Type)
+	}}
+	breakAllow = breaker{"type_not_allowed", contract.ReasonTypeNotAllowed, func(r *Request) {
 		typ := r.Type
 		r.Policy.Allow = slices.DeleteFunc(slices.Clone(r.Policy.Allow), func(t contract.CommandType) bool { return t == typ })
-	}},
-	{contract.ReasonRateLimited, func(r *Request) { r.Budgets = &fakeBudgets{} }},
+	}}
+	breakBudget = breaker{"rate_limited", contract.ReasonRateLimited, func(r *Request) { r.Budgets = &fakeBudgets{} }}
+)
+
+// matrices são as duas formas de falhar o "unsupported" da linha 7; cada uma passa por todas as combinações. Os
+// breakers vêm na ordem do ADR: tenant_unknown, unsupported, type_not_allowed, rate_limited.
+var matrices = []struct {
+	name     string
+	breakers []breaker
+}{
+	{"unsupported pelo node_kind", []breaker{breakTenant, breakUnsupportedNodeKind, breakAllow, breakBudget}},
+	{"unsupported por tipo fora do catálogo", []breaker{breakTenant, breakUnsupportedCatalog, breakAllow, breakBudget}},
 }
 
 func reasonOf(t *testing.T, err error) contract.RejectReason {
@@ -94,43 +128,49 @@ func TestPassaQuandoTudoPassa(t *testing.T) {
 }
 
 func TestCadaMotivoSozinho(t *testing.T) {
-	for _, b := range breakers {
-		t.Run(string(b.reason), func(t *testing.T) {
-			r := base()
-			b.apply(&r)
-			if got := reasonOf(t, Check(r)); got != b.reason {
-				t.Fatalf("motivo %q, esperava %q", got, b.reason)
-			}
-		})
+	for _, m := range matrices {
+		for _, b := range m.breakers {
+			t.Run(m.name+"/"+b.label, func(t *testing.T) {
+				r := base()
+				b.apply(&r)
+				if got := reasonOf(t, Check(r)); got != b.reason {
+					t.Fatalf("motivo %q, esperava %q", got, b.reason)
+				}
+			})
+		}
 	}
 }
 
 // TestOrdemDosMotivos: with several failures at once the first in the ADR's order wins:
 // tenant_unknown (line 6) -> unsupported -> type_not_allowed -> rate_limited (line 7). All 15 combinations of
-// the four checks are run, which includes one case for each of the six pairs.
+// the four checks are run, which includes one case for each of the six pairs — once with "unsupported" failing
+// by the node kind and once by a type the catalog does not know, so the type outside the catalog is combined
+// with every other reason too.
 func TestOrdemDosMotivos(t *testing.T) {
-	for mask := 1; mask < 1<<len(breakers); mask++ {
-		var names []string
-		var want contract.RejectReason
-		for i, b := range breakers {
-			if mask&(1<<i) != 0 {
-				names = append(names, string(b.reason))
-				if want == "" {
-					want = b.reason // breakers are in the ADR's order
-				}
-			}
-		}
-		t.Run(strings.Join(names, "+"), func(t *testing.T) {
-			r := base()
-			for i, b := range breakers {
+	for _, m := range matrices {
+		for mask := 1; mask < 1<<len(m.breakers); mask++ {
+			var names []string
+			var want contract.RejectReason
+			for i, b := range m.breakers {
 				if mask&(1<<i) != 0 {
-					b.apply(&r)
+					names = append(names, b.label)
+					if want == "" {
+						want = b.reason // breakers are in the ADR's order
+					}
 				}
 			}
-			if got := reasonOf(t, Check(r)); got != want {
-				t.Fatalf("motivo %q, esperava %q", got, want)
-			}
-		})
+			t.Run(m.name+"/"+strings.Join(names, "+"), func(t *testing.T) {
+				r := base()
+				for i, b := range m.breakers {
+					if mask&(1<<i) != 0 {
+						b.apply(&r)
+					}
+				}
+				if got := reasonOf(t, Check(r)); got != want {
+					t.Fatalf("motivo %q, esperava %q", got, want)
+				}
+			})
+		}
 	}
 }
 
@@ -288,16 +328,18 @@ func TestErroDosOrcamentosNaoEVeredito(t *testing.T) {
 }
 
 func TestOrcamentoSoEConsultadoDepoisDasOutrasLinhas(t *testing.T) {
-	for _, b := range breakers[:3] { // tenant, unsupported, type_not_allowed
-		fake := roomy()
-		r := base()
-		b.apply(&r)
-		r.Budgets = fake
-		if err := Check(r); reasonOf(t, err) != b.reason {
-			t.Fatalf("%s: %v", b.reason, err)
-		}
-		if len(fake.calls) != 0 {
-			t.Errorf("%s: os orçamentos não são consultados quando uma linha anterior já recusou: %+v", b.reason, fake.calls)
+	for _, m := range matrices {
+		for _, b := range m.breakers[:3] { // tenant, unsupported, type_not_allowed
+			fake := roomy()
+			r := base()
+			b.apply(&r)
+			r.Budgets = fake
+			if err := Check(r); reasonOf(t, err) != b.reason {
+				t.Fatalf("%s/%s: %v", m.name, b.label, err)
+			}
+			if len(fake.calls) != 0 {
+				t.Errorf("%s/%s: os orçamentos não são consultados quando uma linha anterior já recusou: %+v", m.name, b.label, fake.calls)
+			}
 		}
 	}
 }
@@ -323,16 +365,47 @@ func TestPoliticaVaziaNaoPermiteNada(t *testing.T) {
 	}
 }
 
-func TestDetailNaoEcoaTipoNemTenant(t *testing.T) {
-	for _, b := range breakers {
-		r := base()
-		b.apply(&r)
-		err := Check(r)
-		for _, forbidden := range []string{"192.0.2.0/24"} {
-			if strings.Contains(err.Error(), forbidden) {
-				t.Errorf("%s: o detail não deveria carregar dados do tenant: %v", b.reason, err)
-			}
+// O detail é texto fixo: não ecoa o que veio do envelope e o catálogo não conhece (o tipo) nem o que é do tenant
+// (o escopo e o usuário gvmd que o Standing carrega). Só um tipo DO catálogo pode aparecer (type_not_allowed).
+func TestDetailNaoEcoaTipoCruNemDadosDoTenant(t *testing.T) {
+	forbidden := []string{rawType, tenantScope, tenantUser}
+
+	// controle positivo: o detector enxerga os três textos onde eles realmente estão (a Request formatada)
+	leaky := base()
+	breakTenant.apply(&leaky)
+	breakUnsupportedCatalog.apply(&leaky)
+	dump := fmt.Sprintf("%+v", leaky)
+	for _, f := range forbidden {
+		if !strings.Contains(dump, f) {
+			t.Fatalf("controle: %q deveria aparecer na Request formatada: %s", f, dump)
 		}
+	}
+
+	checked := 0
+	for _, m := range matrices {
+		for mask := 1; mask < 1<<len(m.breakers); mask++ {
+			r := base()
+			var names []string
+			for i, b := range m.breakers {
+				if mask&(1<<i) != 0 {
+					b.apply(&r)
+					names = append(names, b.label)
+				}
+			}
+			err := Check(r)
+			if err == nil {
+				t.Fatalf("%s/%v: deveria recusar", m.name, names)
+			}
+			for _, f := range forbidden {
+				if strings.Contains(err.Error(), f) {
+					t.Errorf("%s/%v: o detail repete %q: %v", m.name, names, f, err)
+				}
+			}
+			checked++
+		}
+	}
+	if checked != 30 {
+		t.Fatalf("esperava as 30 combinações (15 por matriz), conferi %d", checked)
 	}
 }
 
@@ -367,6 +440,7 @@ func TestLinksTasks(t *testing.T) {
 		{"payload que não é objeto: na dúvida, conta", contract.TypeScheduleCreate, `["task_ids"]`, true},
 		{"payload ilegível: na dúvida, conta", contract.TypeScheduleCreate, `{"task_ids":`, true},
 		{"payload vazio: na dúvida, conta", contract.TypeScheduleCreate, ``, true},
+		{"payload null (não é objeto): na dúvida, conta", contract.TypeScheduleCreate, `null`, true},
 		{"outro tipo nunca", contract.TypeScheduleModify, marshal(withIDs), false},
 		{"task.modify nunca", contract.TypeTaskModify, `{"task_id":"x","task_ids":["y"]}`, false},
 		{"tipo fora do catálogo nunca", "tenant.scope_set", marshal(withIDs), false},

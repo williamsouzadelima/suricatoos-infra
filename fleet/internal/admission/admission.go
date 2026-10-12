@@ -67,8 +67,10 @@ type Request struct {
 
 // Check returns nil when the command passes lines 6 and 7, or the first refusal in the ADR's order as a
 // *contract.RejectError (Reason tenant_unknown, unsupported, type_not_allowed or rate_limited, and a short fixed
-// Detail that never echoes the type or any other raw input; the caller adds the Envelope it is acking). Any other
-// error is a misuse of Check (missing budgets), not a verdict.
+// Detail; the caller adds the Envelope it is acking). The Detail never repeats raw input or the tenant's data: the
+// type of the envelope is not echoed when the catalog does not know it, and the scope and the gvmd user of the
+// tenant are not echoed at all — the only type that can appear is a catalog type (type_not_allowed names the type
+// that allow lacks). Any other error is not a verdict: missing budgets, or budgets that could not answer.
 func Check(r Request) error {
 	if r.Budgets == nil {
 		return errors.New("admission: Request.Budgets ausente")
@@ -126,14 +128,15 @@ func tenantDetail(w tenant.Why) string {
 // as an empty list, since the schema reads "when task_ids is present" — from the raw payload bytes. Line 7 runs
 // before line 8 validates the payload, so this is a lenient look at the top-level members, not a decode; after
 // Verify the payload is already known to be a JSON object without duplicate members. The member name is
-// compared exactly (line 8 refuses any other case). A payload that cannot be read at all counts as "carries
-// task_ids": line 8 refuses it anyway, and a doubtful payload must never skip the rule. Any other type is false.
+// compared exactly (line 8 refuses any other case). A payload that is not a JSON object — unreadable, an array,
+// a string, or `null` — counts as "carries task_ids": line 8 refuses it anyway, and a doubtful payload must never
+// skip the rule. Any other type is false.
 func LinksTasks(typ contract.CommandType, payload []byte) bool {
 	if typ != contract.TypeScheduleCreate {
 		return false
 	}
 	var members map[string]json.RawMessage
-	if err := json.Unmarshal(payload, &members); err != nil {
+	if err := json.Unmarshal(payload, &members); err != nil || members == nil { // unreadable, or `null`
 		return true
 	}
 	_, present := members["task_ids"]
