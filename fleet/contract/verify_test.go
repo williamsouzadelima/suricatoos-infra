@@ -18,14 +18,14 @@ func TestVerifyADRExample(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(v.Canonical) != adrCanonical || v.CanonicalSHA256 != adrCanonicalSHA256 {
-		t.Fatalf("forma canônica/sha: %q %s", v.Canonical, v.CanonicalSHA256)
+	if string(v.Canonical()) != adrCanonical || v.CanonicalSHA256() != adrCanonicalSHA256 {
+		t.Fatalf("forma canônica/sha: %q %s", v.Canonical(), v.CanonicalSHA256())
 	}
-	if string(v.Command.Payload) != adrPayload || v.Command.Type != TypeTaskStart || v.Command.Signature != adrSignature {
-		t.Fatalf("envelope decodificado: %+v", v.Command)
+	if c := v.Command(); string(c.Payload) != adrPayload || c.Type != TypeTaskStart || c.Signature != adrSignature {
+		t.Fatalf("envelope decodificado: %+v", v.Command())
 	}
-	if !v.IssuedAt.Equal(utc("2026-10-11T12:00:00Z")) || !v.NotAfter.Equal(utc("2026-10-11T13:00:00Z")) {
-		t.Fatalf("tempos: %v %v", v.IssuedAt, v.NotAfter)
+	if !v.IssuedAt().Equal(utc("2026-10-11T12:00:00Z")) || !v.NotAfter().Equal(utc("2026-10-11T13:00:00Z")) {
+		t.Fatalf("tempos: %v %v", v.IssuedAt(), v.NotAfter())
 	}
 	if v2, err := VerifyAt(goldenPub, []byte(adrEnvelope), utc("2026-10-11T12:30:00Z"), "node-lab-0001", skew2m); err != nil || v2 == nil {
 		t.Fatalf("VerifyAt do exemplo do ADR: %v", err)
@@ -210,7 +210,7 @@ func TestVerifyAtWindow(t *testing.T) {
 				t.Fatal("VerifyAt nunca devolve *Verified junto com um erro")
 			}
 			env := envelopeOf(err)
-			if env == nil || env.Command.CommandID == "" || !env.sealed {
+			if env == nil || env.Command().CommandID == "" || !env.sealed {
 				t.Fatal("recusa autenticada (linhas 3–4) traz o envelope verificado no RejectError, para o ack")
 			}
 		})
@@ -226,10 +226,11 @@ func envelopeOf(err error) *Verified {
 	return nil
 }
 
-// TestVerifiedSealed: only Verify builds a *Verified that CheckAt accepts — a hand-made one (or nil) is a
-// programming error, never a way around the signature.
+// TestVerifiedSealed: only Verify builds a *Verified that CheckAt accepts — one assembled by hand inside the
+// package (or nil) is a programming error, never a way around the signature. From outside the package only the
+// zero value can be built: verified_external_test.go.
 func TestVerifiedSealed(t *testing.T) {
-	forged := &Verified{Command: adrCommand(), IssuedAt: utc("2026-10-11T12:00:00Z"), NotAfter: utc("2026-10-11T13:00:00Z")}
+	forged := &Verified{cmd: adrCommand(), issuedAt: utc("2026-10-11T12:00:00Z"), notAfter: utc("2026-10-11T13:00:00Z")}
 	if err := forged.CheckAt(utc("2026-10-11T12:30:00Z"), "node-lab-0001", skew2m); !errors.Is(err, ErrNotVerified) {
 		t.Fatalf("Verified fabricado: %v", err)
 	}
@@ -330,10 +331,10 @@ func TestVerifiedIsACopy(t *testing.T) {
 	for i := range raw {
 		raw[i] = 'x'
 	}
-	if string(v.Command.Payload) != adrPayload || !bytes.Equal(v.Canonical, []byte(adrCanonical)) {
+	if string(v.Command().Payload) != adrPayload || !bytes.Equal(v.Canonical(), []byte(adrCanonical)) {
 		t.Fatal("Verified depende do buffer de entrada")
 	}
-	if base64.StdEncoding.EncodeToString(v.Signature) != adrSignature {
+	if base64.StdEncoding.EncodeToString(v.Signature()) != adrSignature {
 		t.Fatal("assinatura decodificada")
 	}
 }

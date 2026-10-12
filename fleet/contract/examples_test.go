@@ -101,10 +101,11 @@ func commandVerdict(t *testing.T, raw []byte, prefix string) *exampleExpect {
 	if err != nil {
 		return rejectVerdict(t, err, prefix)
 	}
-	if _, ok := LookupType(v.Command.Type); !ok {
+	cmd := v.Command()
+	if _, ok := LookupType(cmd.Type); !ok {
 		return &exampleExpect{Keyword: "enum", Path: prefix + "/type"}
 	}
-	if err := ValidatePayload(v.Command.Type, v.Command.Payload); err != nil {
+	if err := ValidatePayload(cmd.Type, cmd.Payload); err != nil {
 		var viol *Violation
 		if !errors.As(err, &viol) {
 			t.Fatalf("payload: %v", err)
@@ -195,7 +196,7 @@ func TestSignReproducesExamples(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", c.File, err)
 		}
-		got, err := Sign(goldenPriv, v.Command, v.Command.Payload)
+		got, err := Sign(goldenPriv, v.Command(), v.Command().Payload)
 		if err != nil {
 			t.Fatalf("%s: %v", c.File, err)
 		}

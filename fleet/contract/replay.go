@@ -31,7 +31,7 @@ func (c ReplayClass) String() string {
 }
 
 // ClassifyReplay is the PURE rule of lines 2a and 5, which the persisted store (F2.4) reuses: canonicalSHA256 is
-// Verified.CanonicalSHA256 of the envelope being verified and recorded holds the canonical-form sha256 of every
+// Verified.CanonicalSHA256() of the envelope being verified and recorded holds the canonical-form sha256 of every
 // entry the store has under the same nonce OR the same command_id (the canonical form includes both, so an entry
 // with the very same form is always among them). The comparison is exact.
 //

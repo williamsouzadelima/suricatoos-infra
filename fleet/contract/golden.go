@@ -81,7 +81,7 @@ func (v *GoldenVector) Outcome(pub ed25519.PublicKey, skew time.Duration) (strin
 		}
 		return "", err
 	}
-	if ClassifyReplay(ver.CanonicalSHA256, v.Seen) == ReplayRedelivery {
+	if ClassifyReplay(ver.CanonicalSHA256(), v.Seen) == ReplayRedelivery {
 		return OutcomeRedelivery, nil
 	}
 	if err := ver.CheckAt(t, v.OwnNodeID, skew); err != nil {
@@ -90,13 +90,14 @@ func (v *GoldenVector) Outcome(pub ed25519.PublicKey, skew time.Duration) (strin
 		}
 		return "", err
 	}
-	if ClassifyReplay(ver.CanonicalSHA256, v.Seen) == ReplayConflict {
+	if ClassifyReplay(ver.CanonicalSHA256(), v.Seen) == ReplayConflict {
 		return string(ReasonReplay), nil
 	}
-	if _, ok := LookupType(ver.Command.Type); !ok {
+	cmd := ver.Command()
+	if _, ok := LookupType(cmd.Type); !ok {
 		return string(ReasonUnsupported), nil
 	}
-	if err := ValidatePayload(ver.Command.Type, ver.Command.Payload); err != nil {
+	if err := ValidatePayload(cmd.Type, cmd.Payload); err != nil {
 		return string(ReasonBadPayload), nil
 	}
 	return OutcomeAccept, nil
@@ -127,7 +128,7 @@ func (f *GoldenFile) Check() []error {
 			errs = append(errs, fmt.Errorf("%s: canonical_sha256 não é o sha256 de canonical", v.Name))
 		}
 		if ver, err := Verify(pub, []byte(v.CommandJSON)); err == nil {
-			if string(ver.Canonical) != v.Canonical || ver.Command.PayloadSHA256 != v.PayloadSHA256 {
+			if string(ver.Canonical()) != v.Canonical || ver.Command().PayloadSHA256 != v.PayloadSHA256 {
 				errs = append(errs, fmt.Errorf("%s: forma canônica ou payload_sha256 diferem do envelope", v.Name))
 			}
 		}

@@ -1,6 +1,7 @@
 package contract
 
 import (
+	"bytes"
 	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/hex"
@@ -21,7 +22,8 @@ var (
 
 // RejectError is a refusal of the verification lines of ADR-0011, with the exact reject_reason. Reason.Class()
 // says its destination. For lines 0–2 Envelope is nil: the envelope is not authenticated, so there is no ack
-// (count only). For lines 3–4 Envelope is the authenticated envelope: ack its command_id with Reason.Decision().
+// (count only). For lines 3–4 Envelope is the authenticated envelope: ack its Command().CommandID with
+// Reason.Decision().
 type RejectError struct {
 	Reason    RejectReason
 	Violation *Violation // line 0 (bad_envelope): the keyword and JSON pointer of the defect
@@ -54,18 +56,43 @@ func ReasonOf(err error) (RejectReason, bool) {
 
 // Verified is an envelope that passed verification lines 0–2: authentic, under the pinned key. It carries what
 // the anti-replay store needs for lines 2a and 5 (the canonical form and its sha256 — the store key — plus the
-// nonce and command_id inside Command) and the exact payload bytes for line 8. It never aliases the input. Only
-// Verify builds one that CheckAt accepts: a value made by hand is refused (ErrNotVerified).
+// nonce and command_id inside Command()) and the exact payload bytes for line 8. It never aliases the input.
+//
+// Its content is read-only and is exactly what Verify authenticated: every field is unexported and every
+// accessor returns a copy, so neither the holder nor a copy of the value (w := *v) can change what CheckAt checks
+// (node_id, issued_at, not_after) or what the store keys on. Only Verify builds one; the zero value — all that
+// another package can build — is refused by CheckAt (ErrNotVerified).
 type Verified struct {
-	Command         Command
-	Signature       []byte // the 64 decoded signature bytes
-	Canonical       []byte
-	CanonicalSHA256 string // lowercase hex
-	IssuedAt        time.Time
-	NotAfter        time.Time
-
-	sealed bool // set by Verify only
+	cmd             Command
+	signature       []byte // the 64 decoded signature bytes
+	canonical       []byte
+	canonicalSHA256 string // lowercase hex
+	issuedAt        time.Time
+	notAfter        time.Time
+	sealed          bool // set by Verify only
 }
+
+// Command returns a copy of the authenticated envelope (Payload included: the raw bytes as received).
+func (v *Verified) Command() Command {
+	c := v.cmd
+	c.Payload = bytes.Clone(v.cmd.Payload)
+	return c
+}
+
+// Signature returns a copy of the 64 decoded signature bytes.
+func (v *Verified) Signature() []byte { return bytes.Clone(v.signature) }
+
+// Canonical returns a copy of the canonical form the signature was verified over.
+func (v *Verified) Canonical() []byte { return bytes.Clone(v.canonical) }
+
+// CanonicalSHA256 returns the lowercase hex sha256 of the canonical form: the anti-replay store key.
+func (v *Verified) CanonicalSHA256() string { return v.canonicalSHA256 }
+
+// IssuedAt returns the authenticated issued_at.
+func (v *Verified) IssuedAt() time.Time { return v.issuedAt }
+
+// NotAfter returns the authenticated not_after.
+func (v *Verified) NotAfter() time.Time { return v.notAfter }
 
 // Verify runs verification lines 0–2 of ADR-0011 in order, stopping at the first failure:
 //
@@ -95,12 +122,12 @@ func Verify(pub ed25519.PublicKey, raw []byte) (*Verified, error) {
 	notAfter, _ := ParseUTCTime(c.NotAfter)
 	sum := sha256.Sum256(canonical)
 	return &Verified{
-		Command:         *c,
-		Signature:       sig,
-		Canonical:       canonical,
-		CanonicalSHA256: hex.EncodeToString(sum[:]),
-		IssuedAt:        issuedAt,
-		NotAfter:        notAfter,
+		cmd:             *c,
+		signature:       sig,
+		canonical:       canonical,
+		canonicalSHA256: hex.EncodeToString(sum[:]),
+		issuedAt:        issuedAt,
+		notAfter:        notAfter,
 		sealed:          true,
 	}, nil
 }
@@ -113,8 +140,9 @@ func Verify(pub ed25519.PublicKey, raw []byte) (*Verified, error) {
 //	4  node_id == ownNodeID (the CN of the node's own fleet certificate)            -> wrong_node (final, recorded)
 //
 // t is the node's verification clock (max(now, persisted watermark): the connector's job, F2.4) and skew the
-// FLEET_CLOCK_SKEW, in [0, 10 min]. A refusal is a *RejectError whose Envelope is v (it gets an ack). Line 2a (a
-// redelivery of a recorded canonical form) comes BEFORE this call and line 5 (replay) after it: see VerifyAt.
+// FLEET_CLOCK_SKEW, in [0, 10 min]. node_id and the window come only from what Verify authenticated (see
+// Verified). A refusal is a *RejectError whose Envelope is v (it gets an ack). Line 2a (a redelivery of a
+// recorded canonical form) comes BEFORE this call and line 5 (replay) after it: see VerifyAt.
 func (v *Verified) CheckAt(t time.Time, ownNodeID string, skew time.Duration) error {
 	if v == nil || !v.sealed {
 		return ErrNotVerified
@@ -125,16 +153,16 @@ func (v *Verified) CheckAt(t time.Time, ownNodeID string, skew time.Duration) er
 	reject := func(r RejectReason, detail string) error {
 		return &RejectError{Reason: r, Detail: detail, Envelope: v}
 	}
-	if !v.IssuedAt.Before(v.NotAfter) || v.NotAfter.After(v.IssuedAt.Add(MaxWindow)) {
+	if !v.issuedAt.Before(v.notAfter) || v.notAfter.After(v.issuedAt.Add(MaxWindow)) {
 		return reject(ReasonBadWindow, "janela exige issued_at < not_after <= issued_at + 24h")
 	}
-	if t.Before(v.IssuedAt.Add(-skew)) {
+	if t.Before(v.issuedAt.Add(-skew)) {
 		return reject(ReasonNotYetValid, "relógio de verificação antes de issued_at - skew")
 	}
-	if t.After(v.NotAfter.Add(skew)) {
+	if t.After(v.notAfter.Add(skew)) {
 		return reject(ReasonExpired, "relógio de verificação depois de not_after + skew")
 	}
-	if v.Command.NodeID != ownNodeID {
+	if v.cmd.NodeID != ownNodeID {
 		return reject(ReasonWrongNode, "node_id do envelope não é este nó")
 	}
 	return nil
@@ -148,10 +176,10 @@ func (v *Verified) CheckAt(t time.Time, ownNodeID string, skew time.Duration) er
 // A store-backed connector must NOT use VerifyAt. Its sequence is:
 //
 //	v, err := Verify(pub, raw)                                  // lines 0–2; err: only count it, no ack
-//	ClassifyReplay(v.CanonicalSHA256, recorded) == ReplayRedelivery
+//	ClassifyReplay(v.CanonicalSHA256(), recorded) == ReplayRedelivery
 //	                                                            // line 2a: resend the recorded ack/result, stop
 //	err = v.CheckAt(t, ownNodeID, skew)                         // lines 3–4; err: ack it (Reason.Decision())
-//	ClassifyReplay(v.CanonicalSHA256, recorded) == ReplayConflict
+//	ClassifyReplay(v.CanonicalSHA256(), recorded) == ReplayConflict
 //	                                                            // line 5: replay (final, recorded)
 //	                                                            // then lines 6–9: tenant, catalog/policy/budget,
 //	                                                            // DecodePayload, scope

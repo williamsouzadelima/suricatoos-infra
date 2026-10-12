@@ -50,13 +50,14 @@ func FuzzVerifyAt(f *testing.F) {
 			}
 			v = re.Envelope // authenticated refusal (lines 3-4): the same checks below
 		}
-		if !signed[v.CanonicalSHA256] {
-			t.Fatalf("autenticou uma forma canônica que a chave de teste nunca assinou:\n%q", v.Canonical)
+		cmd := v.Command()
+		if !signed[v.CanonicalSHA256()] {
+			t.Fatalf("autenticou uma forma canônica que a chave de teste nunca assinou:\n%q", v.Canonical())
 		}
-		if !bytes.Equal(Canonical(&v.Command), v.Canonical) || payloadDigest(v.Command.Payload) != v.Command.PayloadSHA256 {
+		if !bytes.Equal(Canonical(&cmd), v.Canonical()) || payloadDigest(cmd.Payload) != cmd.PayloadSHA256 {
 			t.Fatal("Verified incoerente com o envelope")
 		}
-		if err == nil && (v.Command.NodeID != own || now.Before(v.IssuedAt.Add(-DefaultClockSkew)) || now.After(v.NotAfter.Add(DefaultClockSkew))) {
+		if err == nil && (cmd.NodeID != own || now.Before(v.IssuedAt().Add(-DefaultClockSkew)) || now.After(v.NotAfter().Add(DefaultClockSkew))) {
 			t.Fatal("aceito fora da janela ou para outro nó")
 		}
 	})

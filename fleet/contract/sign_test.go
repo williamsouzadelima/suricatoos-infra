@@ -44,7 +44,7 @@ func TestSignLiteralCharacters(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if v.Command.PayloadSHA256 != sha256hex(p) {
+	if v.Command().PayloadSHA256 != sha256hex(p) {
 		t.Fatal("payload_sha256 sobre os bytes exatos")
 	}
 }
