@@ -72,6 +72,8 @@ var (
 	ruleOSArch      = newRule(0, 32, "", nil)
 	ruleTokenPolicy = newRule(0, 64, "", nil)
 	ruleAuditLine   = newRule(2, 8192, "", nil)
+	ruleCommandType = newRule(3, 64, contract.PatternCommandTypeAny, nil) // command_type_any (the events)
+	ruleDetail      = newRule(0, 512, "", nil)                            // data_command_rejected.detail (the events)
 	ruleICalendar   = func() rule {
 		r := newRule(15, 8192, contract.PatternICalendar, nil)
 		r.ical = true
@@ -103,6 +105,19 @@ func (r rule) ok(s string) bool {
 
 // opt applies the rule to an optional member: absent is fine.
 func (r rule) opt(s *string) bool { return s == nil || r.ok(*s) }
+
+// The string rules the other packages of the connector check the contract values they send with — the events
+// (package events) use the same rules as the state, each compared with the schema files by a test.
+func ValidUUID(s string) bool        { return ruleUUID.ok(s) }        // uuid
+func ValidTenant(s string) bool      { return ruleTenant.ok(s) }      // tenant
+func ValidGVMStatus(s string) bool   { return ruleStatus.ok(s) }      // gvm_status
+func ValidUTCTime(s string) bool     { return ruleUTC.ok(s) }         // utc_time, a real calendar instant
+func ValidVersion(s string) bool     { return ruleVersion.ok(s) }     // version_string
+func ValidAgentID(s string) bool     { return ruleAgentID.ok(s) }     // agent_id
+func ValidJobID(s string) bool       { return ruleJobID.ok(s) }       // job_id of the ADR-0010 and ADR-0007 jobs
+func ValidSHA256(s string) bool      { return ruleSHA256.ok(s) }      // sha256_hex
+func ValidCommandType(s string) bool { return ruleCommandType.ok(s) } // command_type_any
+func ValidDetail(s string) bool      { return ruleDetail.ok(s) }      // data_command_rejected.detail
 
 func realInstant(s string) bool {
 	_, err := contract.ParseUTCTime(s)

@@ -93,10 +93,10 @@ func sha(b []byte) string {
 	return hex.EncodeToString(s[:])
 }
 
-// schemas lê os dois arquivos de schema de que o estado depende.
+// schemas lê os arquivos de schema cujas regras de texto o estado espelha.
 var schemas = sync.OnceValues(func() (map[string]map[string]any, error) {
 	out := map[string]map[string]any{}
-	for _, name := range []string{"fleet-command.schema.json", "fleet-state.schema.json"} {
+	for _, name := range []string{"fleet-command.schema.json", "fleet-state.schema.json", "fleet-event.schema.json"} {
 		b, err := os.ReadFile(filepath.Join("..", "..", "..", "schema", name))
 		if err != nil {
 			return nil, err
