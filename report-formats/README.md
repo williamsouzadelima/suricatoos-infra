@@ -49,24 +49,43 @@ ID da imagem — nenhum dos dois lê a VERSION. Prova: `tests/test_feed.py`
 ## CI e publish
 
 - **`report-formats-ci`** (PR e push na `main`): `feed-sync` (gera, confere manifesto, bytes do
-  bundle e VERSION em cada objeto, roda `test_feed.py`, `test_stable_gate.py` e
-  `test_gvmd_drift.py`), `compile` (9 jobs, todas as fixtures, na imagem do gvmd), `previas` e
-  `measure` (os dois não bloqueiam). O CI da `main` não cancela o de outro commit; só PR cancela.
+  bundle e VERSION em cada objeto e roda todos os `tests/test_*.py`: o feed, o portão da `stable`,
+  a fiação do publish e os dois vigias), `compile` (9 jobs, todas as fixtures, na imagem do gvmd),
+  `previas` e `measure` (os dois não bloqueiam). O CI da `main` não cancela o de outro commit; só
+  PR cancela. Um PR que só mexe no `report-formats-publish.yml` também roda o CI (para
+  `test_publish_wiring.py` conferir a fiação); o push desse arquivo na `main` não, e portanto não
+  republica a imagem: dispare o publish a mão.
 - **`report-formats-gvmd-stable`** (toda segunda-feira, e a mão depois do merge): vigia a deriva
   entre o gvmd fixado e a `stable` (abaixo). Não bloqueia nada.
 - **`report-formats-publish`** roda **depois do `report-formats-ci`**: só quando o CI de um push na
   `main` termina com `success` (`workflow_run`), e constrói a imagem do commit que o CI aprovou. O
-  disparo manual (`workflow_dispatch`) continua e não espera o CI (o log avisa).
-- **A tag `stable` só anda para o commit mais novo do relatório na `main`**
-  (`ci/stable-gate.sh`, decidido na hora do push): o commit tem de ser ancestral da `main` e nenhum
-  commit da `main` depois dele pode tocar `report-formats/` nem os workflows do relatório
-  (`report-formats-ci.yml`, `report-formats-publish.yml`). Um re-run de CI antigo, um CI lento que
-  termina depois de um mais novo e um disparo manual de outro branch empurram **só `:<sha12>`** (o
-  resumo do job diz por quê): senão a frota voltaria a um relatório velho no sync seguinte, e o GSA
-  não mostra nada (a VERSION é um hash). Se o commit mais novo que toca o relatório reprovar no CI,
-  a `stable` espera: a próxima correção que passar a move (ou um disparo manual da ponta da `main`).
-  O disparo manual roda o workflow do branch escolhido, então a guarda só protege os branches que já
-  a contêm.
+  disparo manual (`workflow_dispatch`) continua e não espera o CI (o log avisa). O checkout traz o
+  histórico todo **sem os blobs** (`filter: blob:none`): o portão só lê commits e árvores, e o repo
+  guarda ~188 MiB de XMLs de feed antigos, que o publish não precisa baixar.
+- **A tag `stable` só anda para o commit mais novo do relatório na `main`.** O publish empurra
+  `:<sha12>`, busca a `main` de agora e **só então** roda o portão, logo antes de mover a `stable`:
+  o commit tem de ser ancestral da `main` e o relatório da `main` (`report-formats/` e os workflows
+  `report-formats-ci.yml` e `report-formats-publish.yml`) tem de ter **o mesmo conteúdo** que o do
+  commit. A decisão é exata (`git diff` entre os dois), não depende da forma da história: um merge ou
+  um revert que devolve o relatório ao mesmo estado libera, e a lista de commits só explica um
+  bloqueio. Um re-run de CI antigo, um CI lento que termina depois de um mais novo e um disparo manual
+  de outro branch empurram **só `:<sha12>`** (o resumo do job e um `::warning::` dizem por quê):
+  senão a frota voltaria a um relatório velho no sync seguinte, e o GSA não mostra nada (a VERSION é
+  um hash). Se o commit mais novo que toca o relatório reprovar no CI, a `stable` espera: a próxima
+  correção que passar a move (ou um disparo manual da ponta da `main`). O disparo manual roda o
+  workflow do branch escolhido, então a guarda só protege os branches que já a contêm.
+  - O portão que roda é **o da `main`** (`git show refs/remotes/origin/main:report-formats/ci/stable-gate.sh`),
+    não o da árvore do commit: uma correção dele chega aos re-runs de commits antigos, que são o
+    caso para o qual ele existe, e um commit anterior ao portão cai em "só `:<sha12>`" em vez de
+    derrubar o job.
+  - A `main` é buscada para um ref **explícito** (`+refs/heads/main:refs/remotes/origin/main`) e o
+    portão só aceita o nome completo: uma tag chamada `origin/main` sombreia o nome curto (o git
+    resolve `refs/tags/` antes de `refs/remotes/`) e liberaria um commit velho.
+  - Decidir logo antes do push deixa a janela entre a decisão e a `stable` em segundos (retag e
+    push de uma imagem cujas camadas já subiram). Isso **limita** a corrida com um publish mais novo;
+    não a elimina. `tests/test_publish_wiring.py` trava a fiação (busca e portão antes do push da
+    `stable`, a `stable` só sob `MOVE_STABLE=true`, nunca `--all-tags`, checkout completo e sem
+    blobs, fila por commit); `tests/test_stable_gate.py`, as regras do portão.
 - A imagem vira `ghcr.io/williamsouzadelima/suricatoos-report-formats:stable` (e `:<sha12>`); o
   feed-updater a puxa e o gvmd reimporta. Os CIs da `main` não se cancelam entre si (um grupo por
   commit) e o publish também é uma fila por commit: a ordem entre commits é do portão, não da fila.

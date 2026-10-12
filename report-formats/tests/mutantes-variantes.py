@@ -29,10 +29,14 @@ Cinco modos:
         marcador sem preencher...) numa COPIA do builder e roda o
         tests/test_feed.py contra ela: algum teste tem de reprovar. O mutante
         tem de rodar (um que nao roda e' invalido, nao reprovado).
-  scripts cada mutante quebra uma regra do portao da tag `stable' (ci/stable-gate.sh) ou do
-        vigia da deriva do gvmd (ci/gvmd-drift.sh) numa COPIA de ci/ e roda o
-        tests/test_stable_gate.py ou o tests/test_gvmd_drift.py contra ela: algum teste tem
-        de reprovar; o mutante tem de ser bash valido.
+  scripts cada mutante quebra uma regra do portao da tag `stable' (ci/stable-gate.sh), do
+        vigia da deriva do gvmd (ci/gvmd-drift.sh), do vigia da base do feed
+        (ci/base-drift.sh) ou da fiacao dos workflows (o report-formats-publish.yml que
+        usa o portao, o grupo de concorrencia do report-formats-ci.yml) numa COPIA de
+        report-formats/ci/ e de .github/workflows/ e roda o teste daquele arquivo
+        (test_stable_gate, test_gvmd_drift, test_base_drift, test_publish_wiring)
+        contra ela: algum teste tem de reprovar; o mutante tem de ser bash (ou YAML)
+        valido.
 
 E um modo a parte, fora de `todos':
 
@@ -509,14 +513,26 @@ VERSAO_MUTANTES = [
 ]
 
 # ---------------------------------------------------------------------------
-# Mutantes dos scripts de CI: o test_stable_gate.py (portao da tag `stable') e o
-# test_gvmd_drift.py (vigia da deriva do gvmd) rodam contra uma COPIA de ci/ com UM
-# script mutado (REPORT_FORMATS_DIR). Cada mutante quebra uma regra; algum teste tem de
-# reprovar. O mutante tem de ser bash valido (bash -n): um que nao e' e' invalido.
+# Mutantes dos scripts de CI e da fiacao dos workflows: o test_stable_gate.py (portao da
+# tag `stable'), o test_gvmd_drift.py (vigia da deriva do gvmd) e o test_publish_wiring.py
+# (como o publish USA o portao) rodam contra uma COPIA de report-formats/ci/ e de
+# .github/workflows/ com UM arquivo mutado (REPORT_FORMATS_DIR aponta para
+# <copia>/report-formats). Cada mutante quebra uma regra; algum teste tem de reprovar. O
+# mutante tem de ser valido (bash -n; YAML, quando ha' PyYAML): um que nao e' e' invalido.
 # ---------------------------------------------------------------------------
 GATE_RELEVANT = ("RELEVANT=(report-formats .github/workflows/report-formats-ci.yml "
                  ".github/workflows/report-formats-publish.yml)")
-# (modulo de teste, nome, o que quebra, script em ci/, [(trecho, troca)])
+PUBLISH_YML = ".github/workflows/report-formats-publish.yml"
+CI_YML = ".github/workflows/report-formats-ci.yml"
+CI_GROUP = "group: report-formats-ci-${{ github.event_name == 'pull_request' && github.ref || github.sha }}"
+CI_CANCEL = "cancel-in-progress: ${{ github.event_name == 'pull_request' }}"
+PUB_PUSH_SHA = '          docker push "$IMG:${SRC_SHA::12}"\n          echo "PUSHED_SHA=true" >> "$GITHUB_ENV"\n'
+PUB_GATE_CALL = 'decisao=$(bash "$RUNNER_TEMP/stable-gate.sh" "$SRC_SHA" "$MAIN")'
+PUB_FETCH = "git fetch --no-tags origin '+refs/heads/main:refs/remotes/origin/main'"
+PUB_IF = ("      (github.event.workflow_run.conclusion == 'success' &&\n"
+          "       github.event.workflow_run.event == 'push' &&\n")
+# (modulo de teste, nome, o que quebra, alvo, [(trecho, troca)]) -- o alvo e' um script de
+# report-formats/ci/ (so' o nome) ou um caminho a partir da raiz do repositorio.
 SCRIPT_MUTANTES = [
     ("test_stable_gate", "controle", "nenhuma troca", "stable-gate.sh", []),
     ("test_stable_gate", "sem-ancestralidade", "o commit nao precisa ser ancestral da main (um branch de feature move)",
@@ -574,6 +590,57 @@ SCRIPT_MUTANTES = [
      "gvmd-drift.sh", [('if ! [[ "$pin" =~ @sha256:[0-9a-f]{64}$ ]]; then', "if false; then")]),
     ("test_gvmd_drift", "combinacao-fixa", "DRIFT_LANG e DRIFT_VARIANT sao ignorados",
      "gvmd-drift.sh", [("lang=${DRIFT_LANG:-en}", "lang=en")]),
+    # --- a fiacao do publish: como o workflow USA o portao (test_publish_wiring) ---
+    ("test_publish_wiring", "controle", "nenhuma troca", PUBLISH_YML, []),
+    ("test_publish_wiring", "stable-sem-o-if", "a stable e' movida sempre: o resultado do portao nao decide",
+     PUBLISH_YML, [('if [ "$MOVE_STABLE" = true ]; then', "if true; then")]),
+    ("test_publish_wiring", "push-all-tags", "o push da tag do commit vira --all-tags (empurraria tambem a stable local)",
+     PUBLISH_YML, [(PUB_PUSH_SHA, '          docker push --all-tags "$IMG"\n          echo "PUSHED_SHA=true" >> "$GITHUB_ENV"\n')]),
+    ("test_publish_wiring", "build-com-a-stable", "o docker build ja' gera a tag stable (antes de qualquer portao)",
+     PUBLISH_YML, [('docker build -t "$IMG:${SRC_SHA::12}" report-formats',
+                    'docker build -t "$IMG:${SRC_SHA::12}" -t "$IMG:stable" report-formats')]),
+    ("test_publish_wiring", "stable-no-passo-da-sha", "a stable e' empurrada no passo da tag do commit, antes do portao",
+     PUBLISH_YML, [(PUB_PUSH_SHA, PUB_PUSH_SHA + '          docker tag "$IMG:${SRC_SHA::12}" "$IMG:stable"\n          docker push "$IMG:stable"\n')]),
+    ("test_publish_wiring", "sem-portao", "o passo da stable nao chama o portao: decide sempre mover",
+     PUBLISH_YML, [(PUB_GATE_CALL, r"decisao=$(printf 'MOVE_STABLE=true\nSTABLE_REASON=%s\n' liberado)")]),
+    ("test_publish_wiring", "portao-do-commit", "roda o portao da arvore do commit, nao o da main",
+     PUBLISH_YML, [(PUB_GATE_CALL, 'decisao=$(bash report-formats/ci/stable-gate.sh "$SRC_SHA" "$MAIN")')]),
+    ("test_publish_wiring", "main-com-nome-curto", "o ref da main volta a ser o nome curto origin/main (uma tag o sombreia)",
+     PUBLISH_YML, [("MAIN=refs/remotes/origin/main", "MAIN=origin/main")]),
+    ("test_publish_wiring", "fetch-sem-refspec", "a main e' buscada sem um refspec explicito",
+     PUBLISH_YML, [(PUB_FETCH, "git fetch origin main")]),
+    ("test_publish_wiring", "sem-fetch", "a main nao e' buscada antes do portao (valeria a da hora do clone)",
+     PUBLISH_YML, [(PUB_FETCH, "true")]),
+    ("test_publish_wiring", "main-sem-portao-derruba", "a main sem o portao nao e' tratada: o git show falha e derruba o job",
+     PUBLISH_YML, [('if [ -n "$(git ls-tree --name-only "$MAIN" -- report-formats/ci/stable-gate.sh)" ]; then', "if true; then")]),
+    ("test_publish_wiring", "checkout-raso", "o checkout volta a ser raso: o portao nao ve a historia",
+     PUBLISH_YML, [("          fetch-depth: 0\n", "")]),
+    ("test_publish_wiring", "checkout-com-blobs", "o checkout traz todos os blobs do historico (~188 MiB de XML de feed)",
+     PUBLISH_YML, [("          filter: blob:none\n", "")]),
+    ("test_publish_wiring", "fila-por-ref", "a fila do publish volta a ser por ref: o re-run de um commit velho tira o mais novo da fila",
+     PUBLISH_YML, [("group: report-formats-publish-${{ github.event.workflow_run.head_sha || github.sha }}",
+                    "group: report-formats-publish-${{ github.ref }}")]),
+    ("test_publish_wiring", "fila-cancela", "um publish cancela o de outro commit",
+     PUBLISH_YML, [("cancel-in-progress: false", "cancel-in-progress: true")]),
+    ("test_publish_wiring", "publica-ci-reprovado", "o publish nao exige o CI aprovado",
+     PUBLISH_YML, [(PUB_IF, "      (github.event.workflow_run.event == 'push' &&\n")]),
+    ("test_publish_wiring", "dispara-no-push", "o publish volta a disparar no proprio push, em paralelo ao CI",
+     PUBLISH_YML, [("  workflow_dispatch:\n\nenv:", "  push:\n    branches: [main]\n  workflow_dispatch:\n\nenv:")]),
+    ("test_publish_wiring", "aviso-com-porcento-cru", "o ::warning:: leva a razao sem escapar o % (um %0A no assunto quebra a anotacao)",
+     PUBLISH_YML, [("${STABLE_REASON//%/%25}", "$STABLE_REASON")]),
+    ("test_publish_wiring", "razao-crua-no-env", "o assunto de um commit vai direto ao GITHUB_ENV (sem passar pelo portao que tira os controles)",
+     PUBLISH_YML, [('echo "$decisao" >> "$GITHUB_ENV"\n',
+                    'echo "$decisao" >> "$GITHUB_ENV"\n          echo "STABLE_REASON=$(git log -n 1 --format=%s "$MAIN")" >> "$GITHUB_ENV"\n')]),
+    ("test_publish_wiring", "ci-fila-por-ref", "o CI da main volta a agrupar por ref: o re-run de um CI antigo cancela o do commit mais novo",
+     CI_YML, [(CI_GROUP, "group: report-formats-ci-${{ github.ref }}")]),
+    ("test_publish_wiring", "ci-cancela-na-main", "o CI cancela o run em andamento tambem na main",
+     CI_YML, [(CI_CANCEL, "cancel-in-progress: true")]),
+    ("test_publish_wiring", "ci-pr-sem-o-publish", "um PR que so' mexe no workflow do publish nao roda o CI (a trava da fiacao nao roda)",
+     CI_YML, [("      - '.github/workflows/report-formats-publish.yml'\n  push:", "  push:")]),
+    ("test_publish_wiring", "ci-push-com-o-publish", "mudar so' o workflow do publish passa a disparar o CI (e o publish) no push na main",
+     CI_YML, [("    branches: [main]\n    paths:\n      - 'report-formats/**'\n      - '.github/workflows/report-formats-ci.yml'\n",
+                "    branches: [main]\n    paths:\n      - 'report-formats/**'\n      - '.github/workflows/report-formats-ci.yml'\n"
+                "      - '.github/workflows/report-formats-publish.yml'\n")]),
 ]
 
 
@@ -806,19 +873,44 @@ def modo_versao(work, only):
     return bad
 
 
+def invalido(path):
+    """Por que o arquivo mutado nao vale como mutante (None se vale): bash -n para .sh; para
+    .yml, o PyYAML, quando existe (sem ele a checagem de sintaxe do YAML fica de fora)."""
+    if path.endswith(".sh"):
+        r = subprocess.run(["bash", "-n", path.replace("\\", "/")], capture_output=True)
+        return None if r.returncode == 0 else "nao e' bash valido: " + r.stderr.decode("utf-8", "replace").strip()[:140]
+    if path.endswith((".yml", ".yaml")):
+        try:
+            import yaml
+        except ImportError:
+            return None
+        try:
+            with open(path, encoding="utf-8") as fh:
+                yaml.safe_load(fh)
+        except yaml.YAMLError as e:
+            return "nao e' YAML valido: " + str(e).replace("\n", " ")[:140]
+    return None
+
+
 def modo_scripts(work, only):
-    """Roda o test_stable_gate.py e o test_gvmd_drift.py contra uma COPIA de ci/ com um
-    script mutado: cada mutante quebra uma regra do portao da tag `stable' ou do vigia da
-    deriva e algum teste tem de reprovar. O mutante tem de ser bash valido: um que nao e'
-    e' invalido, nao reprovado."""
+    """Roda o teste de cada arquivo (test_stable_gate, test_gvmd_drift, test_publish_wiring...)
+    contra uma COPIA de report-formats/ci/ e de .github/workflows/ com UM arquivo mutado: cada
+    mutante quebra uma regra do portao da tag `stable', dos vigias ou da fiacao do publish e
+    algum teste tem de reprovar. O mutante tem de ser valido (bash, YAML): um que nao e' e'
+    invalido, nao reprovado."""
     bad = 0
-    for modulo, name, what, script, subs in SCRIPT_MUTANTES:
+    workflows = os.path.join(os.path.dirname(RF), ".github", "workflows")
+    if not os.path.isdir(workflows):
+        raise SystemExit("sem .github/workflows ao lado de report-formats/: o modo scripts roda dentro do repo")
+    for modulo, name, what, alvo, subs in SCRIPT_MUTANTES:
         if only and name not in only and name != "controle":
             continue
         d = os.path.join(work, "script-%s-%s" % (modulo, name))
         shutil.rmtree(d, ignore_errors=True)
-        shutil.copytree(CI, os.path.join(d, "ci"), ignore=shutil.ignore_patterns("__pycache__"))
-        p = os.path.join(d, "ci", script)
+        # O desenho do repo (os testes de fiacao leem os dois): <d>/report-formats/ci e <d>/.github/workflows.
+        shutil.copytree(CI, os.path.join(d, "report-formats", "ci"), ignore=shutil.ignore_patterns("__pycache__"))
+        shutil.copytree(workflows, os.path.join(d, ".github", "workflows"))
+        p = os.path.join(d, alvo if "/" in alvo else "report-formats/ci/" + alvo)
         s = open(p, "rb").read().decode("utf-8")
         for a, b in subs:
             n = s.count(a)
@@ -827,14 +919,14 @@ def modo_scripts(work, only):
             s = s.replace(a, b)
         open(p, "wb").write(s.encode("utf-8"))
         label = "%s/%s" % (modulo[5:], name)
-        sintaxe = subprocess.run(["bash", "-n", p.replace("\\", "/")], capture_output=True)
-        if sintaxe.returncode != 0:
-            print("%-44s %s\n    MUTANTE INVALIDO (nao e' bash valido): %s"
-                  % (label, what, sintaxe.stderr.decode("utf-8", "replace").strip()[:140]), flush=True)
+        motivo = invalido(p)
+        if motivo:
+            print("%-44s %s\n    MUTANTE INVALIDO (%s)" % (label, what, motivo), flush=True)
             bad += 1
             continue
         r = subprocess.run([sys.executable, "-X", "utf8", "-m", "unittest", modulo], cwd=HERE,
-                           env=dict(os.environ, REPORT_FORMATS_DIR=d), capture_output=True)
+                           env=dict(os.environ, REPORT_FORMATS_DIR=os.path.join(d, "report-formats")),
+                           capture_output=True)
         err = r.stderr.decode("utf-8", "replace").splitlines()
         reprovados = [l.split()[1] for l in err if l.startswith(("FAIL:", "ERROR:"))]
         failed = r.returncode != 0
@@ -919,7 +1011,7 @@ def main():
             print("== mutantes da VERSION por conteudo (tests/test_feed.py)", flush=True)
             bad += modo_versao(work, set(a.so))
         if a.modo in ("scripts", "todos"):
-            print("== mutantes do portao da tag stable e do vigia da deriva (ci/stable-gate.sh, ci/gvmd-drift.sh)", flush=True)
+            print("== mutantes dos scripts de CI e da fiacao dos workflows (stable-gate, gvmd-drift, base-drift, publish)", flush=True)
             bad += modo_scripts(work, set(a.so))
     finally:
         if not a.manter and not a.trabalho:

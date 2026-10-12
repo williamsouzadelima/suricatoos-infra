@@ -22,11 +22,25 @@ name: report-formats-publish
 # workflow_run dispara a cada conclusao do CI -- inclusive o re-run de um CI antigo
 # (oscilacao do registro, previas que vencem em 14 dias) e um CI lento que termina
 # depois de um mais novo --, e o disparo manual pode vir de qualquer branch, quem
-# decide e' ci/stable-gate.sh, na hora do push: o commit tem de ser ancestral da main
-# e nenhum commit da main depois dele pode tocar report-formats/ nem os workflows do
-# relatorio. Senao, so' a tag <sha12> e' empurrada, e o resumo do job diz por que. Vale
-# igual para o disparo manual: um disparo de outro branch nunca move `stable' (mas ele
-# roda o workflow DO BRANCH escolhido, entao so' protege quem ja' contem este arquivo).
+# decide e' ci/stable-gate.sh: o commit tem de ser ancestral da main e o relatorio da
+# main (report-formats/ e os workflows dele) tem de ter o MESMO CONTEUDO que o dele.
+# Senao, so' a tag <sha12> e' empurrada, e o resumo do job diz por que. Vale igual para
+# o disparo manual: um disparo de outro branch nunca move `stable' (mas ele roda o
+# workflow DO BRANCH escolhido, entao so' protege quem ja' contem este arquivo).
+#   - O portao roda LOGO ANTES de mexer na `stable' (depois do push da tag do commit): o
+#     que ele ve ("existe um commit mais novo do relatorio") so' cresce, e a janela entre
+#     a decisao e o push da `stable' fica em segundos (retag e push de uma imagem cujas
+#     camadas ja' subiram). Isso LIMITA a corrida com um publish mais novo; nao a fecha.
+#   - E' o portao da MAIN (git show refs/remotes/origin/main:...), nao o do commit: uma
+#     correcao do portao chega aos re-runs de commits antigos, que sao o caso para o qual
+#     ele existe, e um commit anterior ao portao cai em "so' a tag <sha12>" em vez de
+#     derrubar o job.
+#   - A main e' buscada para um ref EXPLICITO (refs/remotes/origin/main) e esse nome
+#     completo e' o unico aceito: uma tag chamada `origin/main' sombrearia o nome curto.
+#   - O checkout traz o historico todo (o portao precisa dele) SEM os blobs antigos
+#     (filter: blob:none: ~188 MiB de XMLs de feed que o repo guarda desde antes de eles
+#     deixarem de ser versionados); o portao so' le commits e arvores, e o checkout busca
+#     na hora so' os blobs da arvore do commit.
 #
 # Os nove feed XMLs nao estao no git: o build os gera aqui, antes do docker build.
 on:
@@ -46,8 +60,8 @@ env:
 # commit mais novo: o re-run de um commit velho, ou um CI lento, tiraria da fila o
 # publish de um commit mais novo. Por isso a fila e' por commit (so' re-runs do mesmo
 # commit esperam uns pelos outros) e a ordem entre commits nao e' da fila: e' do
-# portao acima, que "existe um commit mais novo" so' cresce -- decidir na hora do push
-# fecha a corrida, e nenhum publish cancela o de outro commit.
+# portao acima -- "existe um commit mais novo" so' cresce, e decidir logo antes de mexer
+# na `stable' limita a corrida a segundos. Nenhum publish cancela o de outro commit.
 concurrency:
   group: report-formats-publish-${{ github.event.workflow_run.head_sha || github.sha }}
   cancel-in-progress: false
@@ -66,13 +80,15 @@ jobs:
       contents: read
       packages: write
     steps:
-      - name: Checkout (o commit que o CI aprovou, com o historico todo)
+      - name: Checkout (o commit que o CI aprovou, historico todo e sem os blobs antigos)
         uses: actions/checkout@v4
         with:
           # workflow_run: o head_sha do run do CI; disparo manual: o commit do ref escolhido.
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
-          # O portao da tag stable olha o historico da main (ancestralidade e commits mais novos).
+          # O portao da tag stable olha o historico da main (ancestralidade, arvores, commits).
           fetch-depth: 0
+          # Sem os blobs do historico: o portao nao os le e o checkout busca so' os da arvore do commit.
+          filter: blob:none
 
       - name: Origem do que vai ser publicado
         env:
@@ -120,36 +136,43 @@ jobs:
         run: |
           set -eux
           IMG="$REGISTRY/$OWNER/$IMAGE"
-          # So' a tag do commit: a `stable' e' decidida depois, na hora do push.
+          # So' a tag do commit: a `stable' e' decidida depois, logo antes de ser movida.
           docker build -t "$IMG:${SRC_SHA::12}" report-formats
 
-      - name: Decidir se a tag stable anda (ci/stable-gate.sh)
-        run: |
-          set -eu
-          if [ ! -f report-formats/ci/stable-gate.sh ]; then
-            echo "::error::Este commit e' anterior ao report-formats/ci/stable-gate.sh: nao ha' como decidir se a tag stable anda (re-run de um CI muito antigo nao e' suportado)."
-            exit 1
-          fi
-          # Logo antes do push e com a main de agora: "existe um commit mais novo do
-          # relatorio" so' cresce, entao decidir aqui fecha a corrida com um publish
-          # mais novo.
-          git fetch --no-tags origin '+refs/heads/main:refs/remotes/origin/main'
-          decisao=$(bash report-formats/ci/stable-gate.sh "$SRC_SHA" refs/remotes/origin/main)
-          echo "$decisao"
-          echo "$decisao" >> "$GITHUB_ENV"
-
-      - name: Push (a tag do commit sempre; a stable so' se o portao deixou)
+      - name: Push da tag do commit
         run: |
           set -eux
           IMG="$REGISTRY/$OWNER/$IMAGE"
           docker push "$IMG:${SRC_SHA::12}"
           echo "PUSHED_SHA=true" >> "$GITHUB_ENV"
+
+      - name: A tag stable (o portao da main logo antes; so' se ele deixar)
+        run: |
+          set -eu
+          IMG="$REGISTRY/$OWNER/$IMAGE"
+          MAIN=refs/remotes/origin/main
+          # A main de AGORA, para um ref explicito (o nome curto origin/main pode ser uma tag).
+          git fetch --no-tags origin '+refs/heads/main:refs/remotes/origin/main'
+          # O portao e' o da MAIN, nao o do commit: git ls-tree so' le arvores (clone sem blobs)
+          # e git show busca na hora o blob do portao. A main ainda sem portao: sem decisao,
+          # so' a tag do commit.
+          if [ -n "$(git ls-tree --name-only "$MAIN" -- report-formats/ci/stable-gate.sh)" ]; then
+            git show "$MAIN:report-formats/ci/stable-gate.sh" > "$RUNNER_TEMP/stable-gate.sh"
+            decisao=$(bash "$RUNNER_TEMP/stable-gate.sh" "$SRC_SHA" "$MAIN")
+          else
+            decisao=$(printf 'MOVE_STABLE=false\nSTABLE_REASON=%s\n' "a main ainda nao tem report-formats/ci/stable-gate.sh: sem como decidir")
+          fi
+          echo "$decisao"
+          echo "$decisao" >> "$GITHUB_ENV"
+          MOVE_STABLE=$(printf '%s\n' "$decisao" | sed -n 's/^MOVE_STABLE=//p')
+          STABLE_REASON=$(printf '%s\n' "$decisao" | sed -n 's/^STABLE_REASON=//p')
           if [ "$MOVE_STABLE" = true ]; then
             docker tag "$IMG:${SRC_SHA::12}" "$IMG:stable"
             docker push "$IMG:stable"
             echo "PUSHED_STABLE=true" >> "$GITHUB_ENV"
           else
-            echo "::warning::A tag stable NAO foi movida (so' a <sha12> foi empurrada): $STABLE_REASON"
+            # `%' vira %25 no comando de workflow (senao %0A/%0D no texto virariam quebra de linha).
+            echo "::warning::A tag stable NAO foi movida (so' a <sha12> foi empurrada): ${STABLE_REASON//%/%25}"
           fi
 
       - name: Resumo
@@ -161,6 +184,8 @@ jobs:
           SHA="${SRC_SHA:-?}"
           if [ "$JOB_STATUS" = success ]; then
             titulo="publicado"
+          elif [ "${PUSHED_SHA:-}" = true ]; then
+            titulo="PARCIAL (a tag do commit subiu; o job terminou: $JOB_STATUS)"
           else
             titulo="NÃO publicado (o job terminou: $JOB_STATUS)"
           fi
@@ -181,7 +206,7 @@ jobs:
             elif [ "${MOVE_STABLE:-}" = true ]; then
               echo "O portão liberou a tag \`stable\`, mas o push dela não aconteceu (o job terminou: $JOB_STATUS)."
             else
-              echo "A decisão sobre a tag \`stable\` não foi tomada (o job parou antes do portão)."
+              echo "A decisão sobre a tag \`stable\` não foi tomada (o job parou antes do portão): a \`stable\` ficou como estava."
             fi
             echo ""
             echo "Commit: \`$SHA\`. VERSION dos nove objetos (derivada do conteúdo): \`$(python3 report-formats/build-feed-xml.py --print-version 2>/dev/null || echo '?')\`."

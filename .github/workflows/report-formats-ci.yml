@@ -50,6 +50,10 @@ on:
     paths:
       - 'report-formats/**'
       - '.github/workflows/report-formats-ci.yml'
+      # So' no PR: o tests/test_publish_wiring.py (job feed-sync) trava a fiacao do publish, e
+      # tem de rodar quando o workflow dele muda. No push na main esse arquivo NAO dispara o CI
+      # (mudar so' ele nao republica a imagem: dispare o publish a mao).
+      - '.github/workflows/report-formats-publish.yml'
   push:
     branches: [main]
     paths:
