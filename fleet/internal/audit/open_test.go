@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/williamsouzadelima/suricatoos-infra/fleet/contract"
+	"github.com/williamsouzadelima/suricatoos-infra/fleet/internal/fsutil"
 )
 
 var testBoot = time.Date(2026, 10, 11, 12, 0, 0, 0, time.UTC)
@@ -370,6 +371,16 @@ func TestBootLinhaParcialEmArquivoGiradoEQuebra(t *testing.T) {
 	}
 	if !bytes.Equal(fileBytes(t, rotated), before) {
 		t.Fatal("o boot cortou um arquivo girado")
+	}
+}
+
+// O boot lê os arquivos da auditoria sem seguir link: um link plantado no lugar de um deles não leva o conector a
+// ler (e mandar ao hub, na cauda) outro arquivo do nó. O comportamento é testado em unix
+// (TestBootNaoSegueLink); aqui, que a leitura do boot é a do fsutil que não segue link.
+func TestBootLeSemSeguirLink(t *testing.T) {
+	got := reflect.ValueOf(defaultOps().openRead).Pointer()
+	if want := reflect.ValueOf(fsutil.OpenRegularNoFollow).Pointer(); got != want {
+		t.Fatal("o boot tem de abrir os arquivos da auditoria com fsutil.OpenRegularNoFollow")
 	}
 }
 

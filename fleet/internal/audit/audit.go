@@ -46,13 +46,15 @@
 // contract has no audit event for that, so it is reported outside the stream: Status (Recovery.DiscardedBytes and
 // DiscardedAt) and one log line. A chain broken in the middle (tampering, corruption) is not repaired: the stream
 // goes on from its last line and the break is exposed in Status (Recovery.Breaks, FirstBreak) and in one log line;
-// the hub, which has seen the earlier tails, is the witness. A file that cannot be read makes Open fail.
+// the hub, which has seen the earlier tails, is the witness. The files are read without following a symbolic link
+// (fsutil.OpenRegularNoFollow): a link in place of one of them, like a file that cannot be read, makes Open fail.
 //
 // # Tail
 //
 // Tail returns, for the audit_tail state, the last TailLines lines of each stream verbatim with first_seq,
 // last_seq and head_sha256. It comes from memory — the lines this Log confirmed plus those Open read — never from
-// re-reading a file after a write that was not confirmed.
+// re-reading a file after a write that was not confirmed. Only audit lines of the stream get there: a line Open
+// found that is not one (another file's content, say) makes the tail restart after it.
 //
 // # No secret
 //

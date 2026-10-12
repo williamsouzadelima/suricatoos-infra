@@ -392,6 +392,70 @@ func TestCaudaSoTemLinhasConfirmadas(t *testing.T) {
 	}
 }
 
+// Conteúdo que não é auditoria no lugar de um arquivo da auditoria — a sonda da revisão: um arquivo no formato PEM
+// (fictício) — nunca chega à cauda, que vai ao hub: o boot expõe as quebras e a cauda recomeça depois da última
+// linha que não é linha de auditoria deste fluxo. Vale também para JSON que tem os campos da cadeia mas não é um
+// audit_entry (membro desconhecido) e para a linha do outro fluxo.
+func TestCaudaNuncaLevaLinhaQueNaoEAuditoriaDoFluxo(t *testing.T) {
+	pem := []string{
+		"-----BEGIN CERTIFICATE-----",
+		"TUlJQmZpY3RpY2lvLXNvLXBhcmEtby10ZXN0ZS1kYS1hdWRpdG9yaWE=",
+		"-----END CERTIFICATE-----",
+	}
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, ExecFileName), []byte(strings.Join(pem, "\n")+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	l, _ := openAt(t, dir, defaultConfig())
+	st := l.Status().Exec
+	if st.Recovery.Breaks != len(pem) || st.Seq != int64(len(pem)) {
+		t.Fatalf("recovery %+v, seq %d", st.Recovery, st.Seq)
+	}
+	if tail := l.Tail().Exec; len(tail.Lines) != 0 || tail.FirstSeq != nil {
+		t.Fatalf("a cauda levou %d linhas que não são auditoria: %q", len(tail.Lines), tail.Lines)
+	}
+	policyChanged(t, l, 1) // segue da última linha (seq 3): o hub vê first_seq 4 e a lacuna
+	if tail := l.Tail().Exec; len(tail.Lines) != 1 || *tail.FirstSeq != 4 {
+		t.Fatalf("depois de uma linha nova: %d linhas, first_seq %v", len(tail.Lines), tail.FirstSeq)
+	}
+
+	// JSON com os campos da cadeia, mas com um membro que o audit_entry não tem, e uma linha do outro fluxo
+	dir = t.TempDir()
+	l, _ = openAt(t, dir, defaultConfig())
+	for i := 1; i <= 3; i++ {
+		policyChanged(t, l, i)
+	}
+	path := filepath.Join(dir, ExecFileName)
+	lines := fileLines(t, path)
+	forged := strings.Replace(lines[2], `"event":"policy_changed"`, `"event":"policy_changed","segredo":"de outro arquivo"`, 1)
+	rewriteLine(t, path, 2, forged)
+	l2, _ := openAt(t, dir, defaultConfig())
+	for _, line := range l2.Tail().Exec.Lines {
+		if strings.Contains(line, "segredo") {
+			t.Fatal("uma linha que não decodifica como audit_entry chegou à cauda")
+		}
+	}
+	// e o contrário: a forma do audit_entry, mas um campo da cadeia que não é (prev_sha256 que não é hexadecimal)
+	rewriteLine(t, path, 2, strings.Replace(lines[2], `"prev_sha256":"`, `"prev_sha256":"nao-e-hex-`, 1))
+	l2, _ = openAt(t, dir, defaultConfig())
+	for _, line := range l2.Tail().Exec.Lines {
+		if strings.Contains(line, "nao-e-hex") {
+			t.Fatal("uma linha cujos campos da cadeia não valem chegou à cauda")
+		}
+	}
+	other := filepath.Join(dir, RejectFileName)
+	if err := os.WriteFile(other, []byte(lines[0]+"\n"), 0o600); err != nil { // uma linha do exec no reject
+		t.Fatal(err)
+	}
+	l3, _ := openAt(t, dir, defaultConfig())
+	if tail := l3.Tail().Reject; len(tail.Lines) != 0 {
+		t.Fatalf("uma linha do outro fluxo chegou à cauda do reject: %q", tail.Lines)
+	}
+	if l3.Status().Reject.Recovery.Breaks != 1 {
+		t.Fatalf("a linha do outro fluxo é quebra: %+v", l3.Status().Reject.Recovery)
+	}
+}
+
 // Uma linha que a cauda não pode carregar como é (aqui, com um caractere que o no_control recusa) faz a cauda
 // recomeçar depois dela: o hub vê a lacuna de seq e alerta, em vez de receber um estado inválido inteiro.
 func TestCaudaRecomecaDepoisDeLinhaQueNaoCabe(t *testing.T) {

@@ -83,7 +83,7 @@ func defaultOps() fileOps {
 		rename:   os.Rename,
 		remove:   os.Remove,
 		readDir:  os.ReadDir,
-		openRead: fsutil.OpenRegular,
+		openRead: fsutil.OpenRegularNoFollow,
 	}
 }
 

@@ -10,6 +10,7 @@ import (
 	"hash"
 	"io"
 	"io/fs"
+	"slices"
 	"time"
 	"unicode/utf8"
 
@@ -124,6 +125,23 @@ func parseChain(text []byte) (chainFields, bool) {
 	return p, ok
 }
 
+// strictTail keeps, of the lines the boot kept for the tail (already audit lines of this stream by their chain
+// fields, see add), only those after the last one that does not decode strictly (contract.DecodeStrict) as an
+// audit_entry: JSON that carries the chain fields but also a member the contract does not have, a duplicate key, a
+// wrong type. The boot follows the chain with a lenient decode (~1 µs a line); the strict one costs ~9 µs, so it runs
+// only on the at most TailLines lines that can reach the hub. So every line of Tail() decodes as a
+// contract.AuditEntry: the lines this Log writes passed DecodeStrict before they were written, and those read at
+// boot pass it here.
+func strictTail(tail []tailLine) []tailLine {
+	for i := len(tail) - 1; i >= 0; i-- {
+		var e contract.AuditEntry
+		if contract.DecodeStrict([]byte(tail[i].text), &e) != nil {
+			return slices.Clone(tail[i+1:])
+		}
+	}
+	return tail
+}
+
 // tailable reports whether a line can go into the audit_tail state as it is: the tail item's schema (2 to 8192
 // characters, no_control) and valid UTF-8 (a JSON string carries nothing else verbatim).
 func tailable(text []byte) bool {
@@ -192,8 +210,10 @@ func (sc *chainScan) add(seg segment, file string, line int) {
 	if ok && p.Stream == sc.stream {
 		sc.last[p.Event] = p
 	}
-	if seg.text == nil || !tailable(seg.text) {
-		sc.tail = sc.tail[:0] // the tail restarts after a line it cannot carry: the hub sees a gap, not a fix
+	if !ok || p.Stream != sc.stream || !tailable(seg.text) {
+		// the tail restarts after a line that is no audit line of this stream, or that it cannot carry as it is: such
+		// a line never goes to the hub, which sees a gap in seq instead (and the break is in Recovery)
+		sc.tail = sc.tail[:0]
 		return
 	}
 	if len(sc.tail) == TailLines {
@@ -244,7 +264,7 @@ func (s *stream) recover(boot time.Time) (*chainScan, error) {
 	if err := s.recoverFile(sc, 0, boot); err != nil {
 		return nil, err
 	}
-	s.seq, s.head, s.tail = sc.seq, sc.head, sc.tail
+	s.seq, s.head, s.tail = sc.seq, sc.head, strictTail(sc.tail)
 	s.recovery.Breaks, s.recovery.FirstBreak = sc.breaks, sc.first
 	if sc.first != nil {
 		s.log.Warn("auditoria: cadeia quebrada no boot; nada é consertado e o fluxo segue da última linha",
