@@ -1107,13 +1107,13 @@ func TestRegistryRefusesABlankOperator(t *testing.T) {
 		{"reject", StatePendingApproval, func(r *Registry, id, who string) error { return r.Reject(id, who) }},
 		{"close", StateAcked, func(r *Registry, id, who string) error { _, err := r.Close(id, who, ""); return err }},
 	} {
-		for _, blank := range []string{"", " ", "\t\n \r"} {
-			t.Run(fmt.Sprintf("%s/%q", op.name, blank), func(t *testing.T) {
+		for _, nobody := range []string{"", " ", "\t\n \r"} {
+			t.Run(fmt.Sprintf("%s/%q", op.name, nobody), func(t *testing.T) {
 				r, _ := testReg(t)
 				j := jobIn(t, r, op.fresh)
-				err := op.do(r, j.JobID, blank)
+				err := op.do(r, j.JobID, nobody)
 				if err == nil || errors.Is(err, ErrNotFound) || errors.Is(err, ErrInvalidState) {
-					t.Errorf("%s by %q: err = %v, want a plain refusal", op.name, blank, err)
+					t.Errorf("%s by %q: err = %v, want a plain refusal", op.name, nobody, err)
 				}
 				if got := stateOf(t, r, j.JobID); got != op.fresh {
 					t.Fatalf("a refused %s changed the job to %s", op.name, got)

@@ -841,8 +841,8 @@ func TestOperatorRoutesRefuseBlankOperatorAndRecordItTrimmed(t *testing.T) {
 			j := jobIn(t, reg, rt.fresh)
 
 			// Blank (spaces; tab+newline+space) → 400, and the job is left alone.
-			for _, blank := range []string{"   ", `\t\n `} {
-				body := `{"` + rt.field + `":"` + blank + `"}`
+			for _, nobody := range []string{"   ", `\t\n `} {
+				body := `{"` + rt.field + `":"` + nobody + `"}`
 				if code := post(j.JobID, body); code != http.StatusBadRequest {
 					t.Errorf("%s with a blank operator (%s) = %d, want 400", rt.action, body, code)
 				}

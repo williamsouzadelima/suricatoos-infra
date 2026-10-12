@@ -115,11 +115,15 @@ func (s *Service) AckHandler() http.HandlerFunc {
 
 // ReportHandler serves POST /v1/remediation-jobs/{id}/report: the agent reports
 // its apply result (applied/failed + before/after/rollback_token). Scoped to
-// CN+O; foreign/unknown id (or a job never handed out) → 404. APPLIED is not
-// terminal — the server verifies later by re-scan. A report that arrives when the job
-// already holds the agent's result (final, or APPLIED) or was dropped (rejected,
-// expired, closed) is a 409 unless it repeats the result already on record (204); the
-// refused one is kept on the job (late_reports): see Registry.Report.
+// CN+O; foreign/unknown id → 404, and so is a job the agent was never handed — pending,
+// approved, or rejected or expired BEFORE the poll delivered it (that one is also logged,
+// and nothing is kept). APPLIED is not terminal — the server verifies later by re-scan.
+// A report on a job the agent WAS handed that already holds its result (final, or
+// APPLIED), or that was taken out of the queue after the delivery — CLOSED, EXPIRED after
+// the poll handed it out, or a legacy REJECTED one (rejecting a delivered job was refused
+// from P1.11 on, but a queue file written before can still hold one) — is a 409, unless
+// it repeats the result already on record (204); the refused one is kept on the job
+// (late_reports): see Registry.Report.
 func (s *Service) ReportHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id, ok := s.auth(w, r)
