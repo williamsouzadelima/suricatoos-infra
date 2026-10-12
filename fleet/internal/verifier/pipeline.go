@@ -177,7 +177,7 @@ func (c *check) refuse(reason contract.RejectReason, detail string) Outcome {
 				d := *out.Ack.Detail // its own copy: the event and the ack travel apart
 				ev.Detail = &d
 			}
-			out.PolicyEvent = ev
+			out.PolicyEvent, out.PolicyEventTenant = ev, c.cmd.Tenant
 		}
 		return out
 	}

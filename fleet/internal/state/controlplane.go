@@ -5,6 +5,7 @@ import (
 	"slices"
 
 	"github.com/williamsouzadelima/suricatoos-infra/fleet/contract"
+	"github.com/williamsouzadelima/suricatoos-infra/fleet/internal/tenant"
 )
 
 // ControlPlane is the central node's admin API (slice F2.2) as the state reads it: one listing per kind. The items
@@ -29,13 +30,20 @@ func (c *Collector) knownTenants(cyc *cycle) (func(string) bool, error) {
 	if err != nil {
 		return nil, err
 	}
+	names := enabledTenants(list)
+	return func(t string) bool { return names[t] }, nil
+}
+
+// enabledTenants is the set of the enabled tenants of a listing whose name matches the tenant pattern: the domain of
+// the control-plane kinds' known check.
+func enabledTenants(list []tenant.Listing) map[string]bool {
 	names := make(map[string]bool, len(list))
 	for _, l := range list {
 		if l.Enabled && ruleTenant.ok(l.Name) {
 			names[l.Name] = true
 		}
 	}
-	return func(t string) bool { return names[t] }, nil
+	return names
 }
 
 // cpList reads one control-plane listing and finishes it.

@@ -33,6 +33,9 @@ func TestRegrasDeTextoConferemComOSchema(t *testing.T) {
 		{"fleet-state.schema.json#/$defs/data_agents/properties/items/items/properties/arch", ruleOSArch},
 		{"fleet-state.schema.json#/$defs/data_tokens/properties/items/items/properties/policy", ruleTokenPolicy},
 		{"fleet-state.schema.json#/$defs/audit_stream_tail/properties/lines/items", ruleAuditLine},
+		{"fleet-command.schema.json#/$defs/command_type_any", ruleCommandType},
+		{"fleet-event.schema.json#/$defs/data_remediation_pending/properties/job_id", ruleJobID},
+		{"fleet-event.schema.json#/$defs/data_command_rejected/properties/detail", ruleDetail},
 	}
 	for _, c := range cases {
 		s := schemaAt(t, c.ref)
@@ -67,6 +70,57 @@ func TestRegrasDeTextoConferemComOSchema(t *testing.T) {
 		}
 		if !ical && !noControl && c.rule.pattern == "" {
 			t.Errorf("%s: texto livre sem no_control no schema", c.ref)
+		}
+	}
+}
+
+// As regras expostas aos outros pacotes do conector são as mesmas que o estado usa, com os mesmos veredictos.
+func TestRegrasExpostasSaoAsDoEstado(t *testing.T) {
+	samples := []string{"", "a", uuidTask1, strings.ToUpper(uuidTask1), "acme", "acme corp", "-acme", "Running",
+		"Stop Requested", "Done2", "2026-10-11T12:00:00Z", "2026-02-30T12:00:00Z", "26.0.1", "v 1", "DESKTOP-ACME-01",
+		"a,b", "job-01_A", "job.1", strings.Repeat("a", 64), strings.Repeat("a", 65), strings.Repeat("é", 512),
+		strings.Repeat("é", 513), "task.start", "Task.start", "task", "x\n", "a\x01", "a\xff",
+		"202e584626515573d531f5508c9094f8d6b705e0fc0fe6fbf29c76969fef313f"}
+	cases := []struct {
+		name     string
+		exported func(string) bool
+		rule     rule
+	}{
+		{"ValidUUID", ValidUUID, ruleUUID},
+		{"ValidTenant", ValidTenant, ruleTenant},
+		{"ValidGVMStatus", ValidGVMStatus, ruleStatus},
+		{"ValidUTCTime", ValidUTCTime, ruleUTC},
+		{"ValidVersion", ValidVersion, ruleVersion},
+		{"ValidAgentID", ValidAgentID, ruleAgentID},
+		{"ValidJobID", ValidJobID, ruleJobID},
+		{"ValidSHA256", ValidSHA256, ruleSHA256},
+		{"ValidCommandType", ValidCommandType, ruleCommandType},
+		{"ValidDetail", ValidDetail, ruleDetail},
+	}
+	for _, c := range cases {
+		for _, s := range samples {
+			if got, want := c.exported(s), c.rule.ok(s); got != want {
+				t.Errorf("%s(%.40q) = %v, a regra do estado diz %v", c.name, s, got, want)
+			}
+		}
+	}
+	for _, c := range []struct {
+		name string
+		f    func(string) bool
+		in   string
+		ok   bool
+	}{
+		{"tipo de comando", ValidCommandType, "task.start", true},
+		{"tipo fora do catálogo, bem formado", ValidCommandType, "foo.bar_baz", true},
+		{"tipo sem ponto", ValidCommandType, "task", false},
+		{"tipo com maiúscula", ValidCommandType, "Task.start", false},
+		{"detalhe vazio", ValidDetail, "", true},
+		{"detalhe de 512 runas", ValidDetail, strings.Repeat("é", 512), true},
+		{"detalhe de 513 runas", ValidDetail, strings.Repeat("é", 513), false},
+		{"detalhe com quebra de linha", ValidDetail, "a\nb", false},
+	} {
+		if got := c.f(c.in); got != c.ok {
+			t.Errorf("%s: %v, esperava %v", c.name, got, c.ok)
 		}
 	}
 }
