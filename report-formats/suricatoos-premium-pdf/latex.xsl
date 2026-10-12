@@ -814,6 +814,11 @@ SPDX-License-Identifier: GPL-2.0-or-later
          singular e plural). -->
     <s k="client_log_1" en=" informational record (Log), not detailed in this edition." pt=" registro informativo (Log), não detalhado nesta edição." es=" registro informativo (Log), no detallado en esta edición."/>
     <s k="client_log_n" en=" informational records (Log), not detailed in this edition." pt=" registros informativos (Log), não detalhados nesta edição." es=" registros informativos (Log), no detallados en esta edición."/>
+    <!-- Edicao do cliente: o aviso CURTO do bloco de indicadores que so' tem
+         Log (nenhum item a mostrar; a contagem vem logo abaixo). O meio e' o
+         do aviso longo: ind_intro_em1, ind_intro_b e o piso de QoD. -->
+    <s k="ind_none_client_a" en="No indicators to validate above informational severity: with " pt="Nenhum indicador a validar acima da severidade informativa: com " es="Ningún indicador a validar por encima de la severidad informativa: con "/>
+    <s k="ind_none_client_b" en="), the scanner only reported informational records (Log)." pt="), o scanner só reportou registros informativos (Log)." es="), el escáner solo reportó registros informativos (Log)."/>
     <!-- A frase da ordem da secao 2 na edicao do cliente: a mesma de
          prio_order, sem falar de falso positivo (que nao existe nela). -->
     <s k="prio_order_client" en="Order: severity class (Critical, High, Medium, Low); more affected hosts first; higher EPSS first, no EPSS last; higher CVSS first; name and OID ascending. Affected hosts and EPSS only take into account instances of Low severity or higher (Log does not count): the affected hosts are those with one of them, and the EPSS is the highest among them. For an outstanding update, those instances are the ones of all its advisories (each host counts once), and its severity and CVSS are the highest among them; the name is the NVT name as in the feed, and for an outstanding update it is the product, with the OID of its first advisory in the order of the export results." pt="Ordem: classe de severidade (Crítico, Alto, Médio, Baixo); mais hosts afetados primeiro; EPSS maior primeiro, sem EPSS por último; CVSS maior primeiro; nome e OID em ordem crescente. Hosts afetados e EPSS só levam em conta as instâncias de severidade Baixa ou maior (Log não conta): os hosts afetados são os que têm uma delas, e o EPSS é o maior entre elas. Numa atualização pendente, essas instâncias são as de todos os advisories dela (cada host conta uma vez), e a severidade e o CVSS dela são os maiores deles; o nome é o do NVT como no feed, e o de uma atualização pendente é o produto, com o OID do primeiro advisory dela na ordem dos resultados do export." es="Orden: clase de severidad (Crítico, Alto, Medio, Bajo); más hosts afectados primero; EPSS mayor primero, sin EPSS al final; CVSS mayor primero; nombre y OID en orden ascendente. Los hosts afectados y el EPSS solo tienen en cuenta las instancias de severidad Baja o mayor (Log no cuenta): los hosts afectados son los que tienen una de ellas, y el EPSS es el mayor entre ellas. En una actualización pendiente, esas instancias son las de todos sus advisories (cada host cuenta una vez), y su severidad y su CVSS son los mayores de ellos; el nombre es el del NVT como en el feed, y el de una actualización pendiente es el producto, con el OID de su primer advisory en el orden de los resultados de la exportación."/>
@@ -960,6 +965,20 @@ SPDX-License-Identifier: GPL-2.0-or-later
        aparece numa nota. Um advisory com todas as instancias falso positivo
        deixa de existir, e um grupo consolidado ou a confirmacao de um NVT que
        dependia dele mudam com ele.
+
+       Duas leituras deliberadas (fixadas pelo controlador; a v27 pina as duas):
+         - o host cujos resultados eram TODOS falso positivo continua, como host
+           varrido e limpo: conta em "hosts avaliados", tem o card da secao 4
+           (sem porta) e, no apendice, a nota de host sem servico com achado.
+           O host foi avaliado; com result_hosts_only=1 o gvmd talvez nem o
+           listasse num export sem falso positivo, mas tira-lo apagaria um
+           fato do escopo;
+         - fora das secoes 5 e 6 o Log ja' e' so' contagem e classe, e fica
+           como no tecnico: a porta cuja maior severidade e' Log mantem a linha
+           da secao 4 (numero de resultados e a chave Log, sem nome nem detalhe
+           de NVT), a nota da linha geral conta o Log, e o mapa e o apendice
+           mostram a porta. E' porta aberta, fato de exposicao, nao detalhe de
+           Log.
 
        ATENCAO, libxslt (1.1.35 do gvmd:stable e 1.1.45): o corpo de uma
        func:function roda com o no' CORRENTE do XSLT (exsltFuncFunctionFunction
@@ -3565,6 +3584,36 @@ SPDX-License-Identifier: GPL-2.0-or-later
     </xsl:if>
   </xsl:template>
 
+  <!-- O aviso que abre o bloco de indicadores (secoes 5 e 6): o que o scanner
+       reportou com baixa qualidade de deteccao, com o piso dito por extenso
+       ($qod-min e' parametro). Na edicao do cliente o bloco que so' tem Log
+       nao tem item nenhum a mostrar (o Log so' e' contado, na linha logo
+       abaixo, client-log-line): a variante CURTA diz isso, em vez de falar de
+       itens abaixo que nao existem. A tarja e o marcador do bloco ficam como
+       estao (o contrato de navegacao nao muda). -->
+  <xsl:template name="indicators-warning">
+    <xsl:text>\warnbox{</xsl:text>
+    <xsl:choose>
+      <xsl:when test="$variant = 'client' and count($low-show) = 0">
+        <xsl:value-of select="gvm:t('ind_none_client_a')"/>
+        <xsl:text>\textbf{</xsl:text><xsl:value-of select="gvm:t('ind_intro_em1')"/><xsl:text>}</xsl:text>
+        <xsl:value-of select="gvm:t('ind_intro_b')"/>
+        <xsl:value-of select="$qod-min"/><xsl:text>\%</xsl:text>
+        <xsl:value-of select="gvm:t('ind_none_client_b')"/>
+      </xsl:when>
+      <xsl:otherwise>
+        <xsl:value-of select="gvm:t('ind_intro_a')"/>
+        <xsl:text>\textbf{</xsl:text><xsl:value-of select="gvm:t('ind_intro_em1')"/><xsl:text>}</xsl:text>
+        <xsl:value-of select="gvm:t('ind_intro_b')"/>
+        <xsl:value-of select="$qod-min"/><xsl:text>\%</xsl:text><xsl:value-of select="gvm:t('ind_intro_c')"/>
+        <xsl:text>\textbf{</xsl:text><xsl:value-of select="gvm:t('ind_intro_em2')"/><xsl:text>}</xsl:text>
+        <xsl:value-of select="gvm:t('ind_intro_d')"/>
+      </xsl:otherwise>
+    </xsl:choose>
+    <xsl:text>}
+</xsl:text>
+  </xsl:template>
+
   <xsl:template name="findings-summary">
     <!-- As contagens que decidem se cada tabela existe sao count() dos MESMOS
          node-sets que a tabela itera (veja "O CONJUNTO DE ACHADOS"). -->
@@ -3600,18 +3649,13 @@ SPDX-License-Identifier: GPL-2.0-or-later
          the threshold out loud, because $qod-min is a parameter and the caption
          macros of the design system carry only the default.
          Na edicao do cliente o bloco pode ter so' Log: entao nao ha tabela
-         (vazia ela pareceria defeito), so' a contagem. -->
+         (vazia ela pareceria defeito), so' o aviso curto e a contagem (veja
+         indicators-warning). -->
     <xsl:if test="$n-low &gt; 0">
       <xsl:text>\clearpage
 \suriSummaryHead{indicadores}
-\warnbox{</xsl:text><xsl:value-of select="gvm:t('ind_intro_a')"/>
-      <xsl:text>\textbf{</xsl:text><xsl:value-of select="gvm:t('ind_intro_em1')"/><xsl:text>}</xsl:text>
-      <xsl:value-of select="gvm:t('ind_intro_b')"/>
-      <xsl:value-of select="$qod-min"/><xsl:text>\%</xsl:text><xsl:value-of select="gvm:t('ind_intro_c')"/>
-      <xsl:text>\textbf{</xsl:text><xsl:value-of select="gvm:t('ind_intro_em2')"/><xsl:text>}</xsl:text>
-      <xsl:value-of select="gvm:t('ind_intro_d')"/>
-      <xsl:text>}
 </xsl:text>
+      <xsl:call-template name="indicators-warning"/>
       <xsl:if test="count($low-show) &gt; 0">
         <xsl:call-template name="findings-summary-table">
           <xsl:with-param name="low" select="1"/>
@@ -4076,14 +4120,8 @@ SPDX-License-Identifier: GPL-2.0-or-later
         <xsl:with-param name="text" select="gvm:t('sub_indicators')"/>
       </xsl:call-template>
       <xsl:text>\suriSummaryHead{indicadores}
-\warnbox{</xsl:text><xsl:value-of select="gvm:t('ind_intro_a')"/>
-      <xsl:text>\textbf{</xsl:text><xsl:value-of select="gvm:t('ind_intro_em1')"/><xsl:text>}</xsl:text>
-      <xsl:value-of select="gvm:t('ind_intro_b')"/>
-      <xsl:value-of select="$qod-min"/><xsl:text>\%</xsl:text><xsl:value-of select="gvm:t('ind_intro_c')"/>
-      <xsl:text>\textbf{</xsl:text><xsl:value-of select="gvm:t('ind_intro_em2')"/><xsl:text>}</xsl:text>
-      <xsl:value-of select="gvm:t('ind_intro_d')"/>
-      <xsl:text>}
 </xsl:text>
+      <xsl:call-template name="indicators-warning"/>
       <xsl:call-template name="finding-cards">
         <xsl:with-param name="low" select="1"/>
       </xsl:call-template>

@@ -29,7 +29,8 @@ porque sao invariantes do documento, nao casos especiais.
                  TOTAL DE ACHADOS e o N de Alto/Critico da narrativa batem com
                  elas; a clausula de remediacao que fecha a frase e' exatamente
                  a esperada, e so' fala de confianca quando Alto/Critico e baixa
-                 confianca vem da mesma populacao;
+                 confianca vem da mesma populacao; HOSTS AVALIADOS e a frase
+                 "N host(s) ... M resultado(s)" dizem todo <host> e o total;
   ancoras        toda ancora casa ^[A-Za-z0-9-]+$; todo link tem alvo; um link e
                  um alvo por grupo consolidado;
   nome           o nome do projeto, quando cortado (capa, contracapa, narrativa,
@@ -83,7 +84,12 @@ porque sao invariantes do documento, nao casos especiais.
                  que decompoe a linha `geral' por classe;
   edicao         a capa diz a edicao (o kicker) e o .tex so' usa os blocos da
                  edicao pedida (\\findinglog so' na do cliente, a tabela de
-                 prioridades sem coluna de card so' na executiva).
+                 prioridades sem coluna de card so' na executiva);
+  aviso          cada bloco de indicadores (secoes 5 e 6) abre com UM aviso,
+                 com o piso de QoD: o longo ("os itens abaixo...") quando o
+                 bloco tem item a mostrar; o curto ("nenhum indicador a
+                 validar...") so' na edicao do cliente e so' no bloco sem item
+                 nenhum (ali o Log so' e' contado).
 
 EDICOES (--variant, o `variant' do contrato da frota, ADR-0011):
   technical  o relatorio completo; todas as checagens acima;
@@ -95,7 +101,8 @@ EDICOES (--variant, o `variant' do contrato da frota, ADR-0011):
              (confirmados, indicadores) diz quantos ha. O oraculo aplica essa
              regra ao XML (client_view) e roda as mesmas checagens, mais a
              `cliente': nenhuma palavra, chave, linha, card, ancora ou porta de
-             falso positivo, e as contagens de Log batendo com o XML;
+             falso positivo, e as contagens de Log batendo com o XML; o bloco
+             de indicadores sem item nenhum abre com o aviso curto (`aviso');
   executive  so' o resumo executivo, as prioridades (sem coluna de card) e o
              escopo, numeradas 1..3: as checagens dessas secoes, mais a
              `executiva' (nenhuma outra secao, card, host, ancora de card ou
@@ -988,10 +995,20 @@ def check_vulns_unicas(m, tex, sheet, lang):
     return []
 
 
+# A frase do resumo executivo com os hosts avaliados e o total de resultados
+# (texto fixo do latex.xsl, por idioma).
+LEDE_COUNTS = {
+    "en": r"\} assessed (\d+) host\(s\) and produced (\d+) result\(s\)",
+    "pt_BR": r"\} avaliou (\d+) host\(s\) e produziu (\d+) resultado\(s\)",
+    "es": r"\} evaluó (\d+) host\(s\) y produjo (\d+) resultado\(s\)",
+}
+
+
 def check_faixas(m, tex, sheet, lang):
     """As quatro barras do resumo executivo, o TOTAL DE ACHADOS, o numero de
     Alto/Critico da narrativa e a clausula de remediacao que fecha a frase --
-    todos da fonte que o latex.xsl tem de usar."""
+    todos da fonte que o latex.xsl tem de usar --, e HOSTS AVALIADOS e o
+    "N host(s) ... M resultado(s)" da narrativa (todo <host>; M = o TOTAL)."""
     fails = []
     rc = m.report.find("result_count")
     names = ("critical", "high", "medium", "low")
@@ -1024,6 +1041,11 @@ def check_faixas(m, tex, sheet, lang):
                      % (kpi[0][1][5].strip(), total_full,
                         "texto do result_count" if truncated or total_full != total
                         else "results do export"))
+    # HOSTS AVALIADOS: todo <host> do relatorio -- na edicao do cliente, o host
+    # que so' falso positivo alcancava inclusive (host varrido e limpo).
+    if kpi and kpi[0][1][3].strip() != str(m.hosts):
+        fails.append("HOSTS AVALIADOS = %s, esperado %d (<host> do relatorio)"
+                     % (kpi[0][1][3].strip(), m.hosts))
     # Narrativa: o N de Alto/Critico e' a soma das MESMAS faixas das barras, e a
     # clausula que fecha a frase depende de N, da baixa confianca (contada no
     # export) e de as duas serem da mesma populacao.
@@ -1036,6 +1058,13 @@ def check_faixas(m, tex, sheet, lang):
     if not lede:
         return fails + ["sem \\suriLede no resumo executivo"]
     text = lede[0][1][0]
+    # "avaliou N host(s) e produziu M resultado(s)": os mesmos N e M do KPI.
+    said = re.search(LEDE_COUNTS.get(lang, LEDE_COUNTS["en"]), text)
+    if not said:
+        fails.append("narrativa sem 'N host(s) ... M resultado(s)'")
+    elif (said.group(1), said.group(2)) != (str(m.hosts), str(total_full)):
+        fails.append("narrativa diz %s host(s) e %s resultado(s), esperado %d e %d"
+                     % (said.group(1), said.group(2), m.hosts, total_full))
     head = "\\textbf{%d " % hicrit
     k = text.rfind(head)
     if k < 0:
@@ -1979,7 +2008,11 @@ def check_afetados(m, tex, sheet, lang):
     declarado num chip "+N"; o card consolidado, o chip HOST <ip> (um host) ou
     N HOSTS e os hosts, em ordem, das instancias dos membros. Na edicao do
     cliente as instancias sao as do relatorio sem falso positivo: o host que so'
-    um falso positivo alcancava nao aparece."""
+    um falso positivo alcancava nao aparece.
+    ATENCAO: o chip N HOSTS do card consolidado conta os hosts de TODAS as
+    instancias dos membros, as de Log (e, no tecnico, as de falso positivo)
+    inclusive. E' a pendencia CONHECIDA do chip, fora da fatia R5, pinada aqui
+    como esta' hoje: quem corrigir o chip muda esta checagem junto."""
     fails = []
     inst_lbl = sheet.upper(sheet.t("lbl_instances", lang))
     more = sheet.upper(sheet.t("more_word", lang))
@@ -2206,6 +2239,38 @@ def port_observations(rep):
     return glob, per
 
 
+def check_aviso(m, tex, sheet, lang):
+    """O aviso que abre cada bloco de indicadores (secoes 5 e 6): um so'
+    \\warnbox, com o piso de QoD. O longo ("o scanner reportou os itens
+    abaixo...") quando o bloco tem item a mostrar; o CURTO ("nenhum indicador
+    a validar acima da severidade informativa...") so' na edicao do cliente e
+    so' quando o bloco nao tem item nenhum -- ali o Log so' e' contado (a
+    `cliente' confere a contagem), e o aviso longo falaria de itens que nao
+    existem. A tarja e o marcador do bloco sao os de sempre (`secoes' e a
+    navegacao)."""
+    def t(k):
+        return sheet.t(k, lang)
+    floor = "%d\\%%" % m.floor
+    long_ = (t("ind_intro_a") + "\\textbf{" + t("ind_intro_em1") + "}" + t("ind_intro_b") + floor
+             + t("ind_intro_c") + "\\textbf{" + t("ind_intro_em2") + "}" + t("ind_intro_d"))
+    short = (t("ind_none_client_a") + "\\textbf{" + t("ind_intro_em1") + "}" + t("ind_intro_b")
+             + floor + t("ind_none_client_b"))
+    items = [n for n in m.nvts if n.low and m.shown(n)]
+    empty = m.variant == "client" and not items
+    want = short if empty else long_
+    fails = []
+    for sec in (SEC_SUMMARY, SEC_DETAIL):
+        for mode, block in tex.blocks(sec):
+            if mode != "indicadores":
+                continue
+            got = [a[0].strip() for _, a in macros(block, "warnbox", 1)]
+            if got != [want]:
+                fails.append("secao %d / indicadores: aviso %s, esperado o %s ('%s...')"
+                             % (sec, ["%s..." % g[:45] for g in got],
+                                "curto (bloco sem item)" if empty else "longo (bloco com item)", want[:45]))
+    return fails
+
+
 def check_cliente(m, tex, sheet, lang):
     """A edicao do cliente nao tem falso positivo em lugar nenhum e so' tem o
     Log como contagem:
@@ -2340,7 +2405,8 @@ CHECKS = [
     ("acao", None), ("vulns-unicas", check_vulns_unicas), ("faixas", check_faixas),
     ("ancoras", check_ancoras), ("nome", check_nome), ("prioridades", None),
     ("hosts", check_hosts), ("escopo", check_escopo), ("alerta", check_alerta),
-    ("edicao", check_edicao), ("cliente", check_cliente), ("executiva", check_executiva),
+    ("edicao", check_edicao), ("aviso", check_aviso), ("cliente", check_cliente),
+    ("executiva", check_executiva),
 ]
 # As checagens de cada edicao. A executiva so' tem as secoes 1 (resumo), 2
 # (prioridades) e 3 (escopo): as checagens das outras secoes nao rodam nela, e

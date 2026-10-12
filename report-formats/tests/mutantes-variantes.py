@@ -103,6 +103,15 @@ EXE_SECS = ('<xsl:when test="$variant = \'executive\'">\n        <sec n="1" key=
 EXE_SKIP = ('<xsl:if test="$variant != \'executive\'">\n      <xsl:call-template name="hexmap-section"/>')
 EXE_APX = ('<xsl:if test="$variant != \'executive\'">\n      <xsl:text>\\clearpage\n</xsl:text>\n'
            '      <xsl:call-template name="hexmap-hosts-section"/>')
+# O aviso curto do bloco de indicadores sem item (edicao do cliente).
+AVISO_CURTO = "<xsl:when test=\"$variant = 'client' and count($low-show) = 0\">"
+COM_INDICADOR = [V27, "v7b-lowconf", "v7c-todos-lowconf"]
+# Um template a mais no modo client-view: o host com resultado, todos falso
+# positivo, sai da copia (a leitura que o controlador NAO quis).
+RC_TEMPLATE = '  <xsl:template match="report/result_count" mode="client-view">'
+HOST_FP_DROP = ('  <xsl:template match="report/host[normalize-space(ip) = ../results/result/host/text()]'
+                '[not(normalize-space(ip) = ../results/result[not(number(severity) &lt; 0 and '
+                'number(severity) &gt; -1.5)]/host/text())]" mode="client-view"/>\n')
 
 # (nome, o que o mutante quebra, [(trecho, troca) ou (regex, troca)], [(edicao, fixture)])
 MUTANTES = [
@@ -172,6 +181,15 @@ MUTANTES = [
      jobs("client", COM_LOG)),
     ("tabela-vazia-de-indicadores", "o bloco de indicadores so' de Log abre uma tabela vazia",
      [('<xsl:if test="count($low-show) &gt; 0">', '<xsl:if test="true()">')], jobs("client", [V28])),
+    ("aviso-longo-sem-itens", "o bloco de indicadores so' de Log fala dos itens abaixo (o aviso longo)",
+     [(AVISO_CURTO, '<xsl:when test="false()">')], jobs("client", [V28])),
+    ("aviso-curto-com-itens", "o bloco de indicadores com item leva o aviso curto na edicao do cliente",
+     [(AVISO_CURTO, "<xsl:when test=\"$variant = 'client'\">")], jobs("client", COM_INDICADOR)),
+    ("aviso-curto-no-tecnico", "o tecnico leva o aviso curto",
+     [(AVISO_CURTO, "<xsl:when test=\"$variant = 'technical' or ($variant = 'client' and count($low-show) = 0)\">")],
+     jobs("technical", COM_INDICADOR + [V28])),
+    ("host-so-fp-some", "a copia da edicao do cliente tira o host que so' falso positivo alcancava",
+     [(RC_TEMPLATE, HOST_FP_DROP + RC_TEMPLATE)], jobs("client", COM_FP)),
     ("kicker-do-cliente", "a capa da edicao do cliente nao diz a edicao",
      [("<xsl:when test=\"$variant = 'client'\"><xsl:value-of select=\"gvm:t('kicker_client')\"/></xsl:when>",
        "<xsl:when test=\"false()\"><xsl:value-of select=\"gvm:t('kicker_client')\"/></xsl:when>")],
@@ -254,6 +272,20 @@ FP_ROW = ("\\findingrow{10}{\\hyperlink{fnd-1-3-6-1-4-1-25623-1-0-992702}{Exampl
           "{1}{neutro}{}\n")
 LOG_CARD = ("\\findingcard{logsev}{\\hypertarget{fnd-1-3-6-1-4-1-25623-1-0-992731}{}\\#10}"
             "{Example OS Fingerprint}{%\n  \\chipsev{logsev}{}%\n}\n")
+AVISO_CURTO_PT = ("\\warnbox{Nenhum indicador a validar acima da severidade informativa: com "
+                  "\\textbf{baixa qualidade de detecção} (abaixo de 70\\%), o scanner só reportou "
+                  "registros informativos (Log).}")
+AVISO_LONGO_PT = ("\\warnbox{O scanner reportou os itens abaixo com \\textbf{baixa qualidade de detecção} "
+                  "(abaixo de 70\\%). São inconclusivos por natureza e precisam ser validados manualmente "
+                  "antes de qualquer esforço de remediação — trate a severidade exibida como um "
+                  "\\textbf{teto}, não como fato confirmado.}")
+AVISO_CURTO_EN = ("\\warnbox{No indicators to validate above informational severity: with "
+                  "\\textbf{low detection quality} (under 70\\%), the scanner only reported informational "
+                  "records (Log).}")
+AVISO_LONGO_EN = ("\\warnbox{The scanner reported the items below with \\textbf{low detection quality} "
+                  "(under 70\\%). They are inconclusive by nature and must be validated manually before any "
+                  "remediation effort — treat the severity shown as an \\textbf{upper bound}, not as a "
+                  "confirmed fact.}")
 CASOS_TEX = [
     # (nome, fixture, idioma, edicao, edicao ou None = controle)
     ("controle cliente v27", V27, "en", "client", None),
@@ -261,6 +293,7 @@ CASOS_TEX = [
     ("controle cliente v6", V6, "es", "client", None),
     ("controle executiva v26", V26, "es", "executive", None),
     ("controle executiva v22", V22, "en", "executive", None),
+    ("controle tecnico v28", V28, "pt_BR", "technical", None),
     # cliente: falso positivo
     ("linha falso positivo no sumario", V27, "en", "client",
      before("\\end{findingsummary}", FP_ROW)),
@@ -307,6 +340,17 @@ CASOS_TEX = [
      repl("+ 1 registro informativo (Log), não detalhado", "+ 1 registros informativos (Log), não detalhados")),
     ("tabela vazia de indicadores", V28, "pt_BR", "client",
      before("\\findinglog{\\suriEllip\\ + 1 ", "\\begin{findingsummary}{indicadores}\n\\end{findingsummary}\n")),
+    # cliente: o aviso do bloco de indicadores (curto so' no bloco sem item)
+    ("aviso longo no bloco sem item", V28, "pt_BR", "client", repl(AVISO_CURTO_PT, AVISO_LONGO_PT)),
+    ("aviso curto no bloco com item", V27, "en", "client", repl(AVISO_LONGO_EN, AVISO_CURTO_EN)),
+    ("aviso ausente no bloco sem item", V28, "pt_BR", "client", rx(r"\\warnbox\{Nenhum indicador[^\n]*\n", "")),
+    # cliente: o host so' com falso positivo continua (host varrido e limpo)
+    ("host so' de falso positivo fora da secao 4", V27, "en", "client",
+     rx(r"\\suriBookmark\{1\}\{bm-host-5\}.*?recorded on this host\.\}\}\n", "")),
+    ("host so' de falso positivo fora da contagem", V27, "en", "client",
+     repl("{HOSTS ASSESSED}{5}", "{HOSTS ASSESSED}{4}")),
+    ("host so' de falso positivo fora da narrativa", V27, "en", "client",
+     repl("} assessed 5 host(s)", "} assessed 4 host(s)")),
     ("capa sem a edicao do cliente", V27, "en", "client", repl("kicker={CLIENT EDITION}", "kicker={VULNERABILITY ASSESSMENT}")),
     # executiva
     ("link de card na executiva", V26, "es", "executive",

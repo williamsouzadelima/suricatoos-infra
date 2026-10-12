@@ -10,13 +10,19 @@ a severidade MAXIMA dos resultados daquele host e porta e a ameaca).
 
 Edicao do cliente (fatia R5): o relatorio SEM os resultados falso positivo
 (severidade -1, a faixa do sev-class), como o gvmd o exportaria sem eles; o
-Log so' como contagem. 27 resultados, 9 falso positivo: o TOTAL DE ACHADOS
+Log so' como contagem. 29 resultados, 11 falso positivo: o TOTAL DE ACHADOS
 da edicao do cliente e' 18, sem a nota de export parcial.
-- Example Mail Relay Open Relay: uma instancia Alta (H1) e uma falso positivo
-  (H2, 443/tcp): o card do cliente tem 1 instancia e so' H1 nos sistemas
-  afetados, e a porta 443/tcp de H2 (so' esse falso positivo) some;
-- Example Debug Endpoint Exposed: so' falso positivo, na 8443/tcp de H2, que
-  so' ele alcanca: nenhuma linha, card, porta ou celula do mapa no cliente;
+- Example Mail Relay Open Relay: uma instancia Alta (H1) e duas falso positivo
+  (H2 443/tcp, .85 25/tcp): o card do cliente tem 1 instancia e so' H1 nos
+  sistemas afetados, e a 443/tcp de H2 e a 25/tcp de .85 (so' esses falso
+  positivo) somem;
+- Example Debug Endpoint Exposed: so' falso positivo, na 8443/tcp de H2 e de
+  .85, que so' ele alcanca: nenhuma linha, card, porta ou celula do mapa no
+  cliente;
+- 198.51.100.85 (mail85): host SO' com falso positivo. No cliente ele
+  continua como host varrido e limpo: conta nos 5 hosts avaliados, tem o card
+  da secao 4 sem porta nenhuma e, no apendice, a nota de host sem servico com
+  achado;
 - Example Weak SSH Key Exchange: confirmado no tecnico SO' pela instancia
   falso positivo (QoD 80; a outra e' QoD 30): no cliente vira indicador, sai
   do plano e entra na nota de indicadores; a 22/tcp de H3 some;
@@ -47,8 +53,8 @@ da edicao do cliente e' 18, sem a nota de export parcial.
   <timezone_abbrev>UTC</timezone_abbrev>
   <scan_start>2026-09-01T09:00:00Z</scan_start>
   <scan_end>2026-09-01T10:05:00Z</scan_end>
-  <hosts><count>4</count></hosts>
-  <result_count>27<full>27</full><filtered>27</filtered><critical><full>2</full><filtered>2</filtered></critical><high><full>4</full><filtered>4</filtered></high><medium><full>7</full><filtered>7</filtered></medium><low><full>1</full><filtered>1</filtered></low><log><full>4</full><filtered>4</filtered></log><false_positive><full>9</full><filtered>9</filtered></false_positive></result_count>
+  <hosts><count>5</count></hosts>
+  <result_count>29<full>29</full><filtered>29</filtered><critical><full>2</full><filtered>2</filtered></critical><high><full>4</full><filtered>4</filtered></high><medium><full>7</full><filtered>7</filtered></medium><low><full>1</full><filtered>1</filtered></low><log><full>4</full><filtered>4</filtered></log><false_positive><full>11</full><filtered>11</filtered></false_positive></result_count>
   <filters id="00000000-0000-4000-8000-000000000002">
     <term>apply_overrides=1 levels=chmlgf rows=-1 min_qod=1 first=1 sort-reverse=severity</term>
   </filters>
@@ -67,6 +73,8 @@ da edicao do cliente e' 18, sem a nota de export parcial.
     <port><host>192.0.2.83</host>general/tcp<severity>0.0</severity><threat>Log</threat></port>
     <port><host>198.51.100.84</host>443/tcp<severity>-1.0</severity><threat>False Positive</threat></port>
     <port><host>198.51.100.84</host>3306/tcp<severity>9.8</severity><threat>Critical</threat></port>
+    <port><host>198.51.100.85</host>25/tcp<severity>-1.0</severity><threat>False Positive</threat></port>
+    <port><host>198.51.100.85</host>8443/tcp<severity>-1.0</severity><threat>False Positive</threat></port>
   </ports>
   <host>
     <ip>192.0.2.81</ip>
@@ -91,6 +99,12 @@ da edicao do cliente e' 18, sem a nota de export parcial.
     <start>2026-09-01T09:00:00Z</start>
     <end>2026-09-01T10:05:00Z</end>
     <detail><name>hostname</name><value>edge84.example.com</value></detail>
+  </host>
+  <host>
+    <ip>198.51.100.85</ip>
+    <start>2026-09-01T09:00:00Z</start>
+    <end>2026-09-01T10:05:00Z</end>
+    <detail><name>hostname</name><value>mail85.example.com</value></detail>
   </host>
   <results start="1" max="-1">
     <result id="c27-0001">
@@ -335,6 +349,24 @@ da edicao do cliente e' 18, sem a nota de export parcial.
       <severity>6.8</severity>
       <qod><value>80</value><type>remote_banner</type></qod>
       <description>Synthetic detection output for Example Database Weak Password Policy.</description>
+    </result>
+    <result id="c27-0028">
+      <host>198.51.100.85<hostname>mail85.example.com</hostname></host>
+      <port>25/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992701"><type>nvt</type><name>Example Mail Relay Open Relay</name><family>Synthetic</family><cvss_base></cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">Restrict relaying to authenticated users.</solution><refs></refs></nvt>
+      <threat>False Positive</threat>
+      <severity>-1.0</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Mail Relay Open Relay.</description>
+    </result>
+    <result id="c27-0029">
+      <host>198.51.100.85<hostname>mail85.example.com</hostname></host>
+      <port>8443/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992702"><type>nvt</type><name>Example Debug Endpoint Exposed</name><family>Synthetic</family><cvss_base></cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Workaround</tags><solution type="Workaround">Disable the debug endpoint.</solution><refs></refs></nvt>
+      <threat>False Positive</threat>
+      <severity>-1.0</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Debug Endpoint Exposed.</description>
     </result>
   </results>
 </report>
