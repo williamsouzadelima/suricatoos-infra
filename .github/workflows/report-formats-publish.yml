@@ -16,6 +16,18 @@ name: report-formats-publish
 #     de emergencia, e a decisao e' de quem aperta o botao (o log avisa).
 #   - Mudar so' ESTE arquivo nao republica (o CI nao roda por ele): dispare a mao.
 #
+# A TAG `stable' SO' ANDA PARA O COMMIT MAIS NOVO DO RELATORIO NA MAIN. A producao
+# puxa `stable' direto; mover para um commit velho faz a frota voltar atras no sync
+# seguinte, e o GSA nao mostra nada (a VERSION e' um hash, nao tem ordem). Como o
+# workflow_run dispara a cada conclusao do CI -- inclusive o re-run de um CI antigo
+# (oscilacao do registro, previas que vencem em 14 dias) e um CI lento que termina
+# depois de um mais novo --, e o disparo manual pode vir de qualquer branch, quem
+# decide e' ci/stable-gate.sh, na hora do push: o commit tem de ser ancestral da main
+# e nenhum commit da main depois dele pode tocar report-formats/ nem os workflows do
+# relatorio. Senao, so' a tag <sha12> e' empurrada, e o resumo do job diz por que. Vale
+# igual para o disparo manual: um disparo de outro branch nunca move `stable' (mas ele
+# roda o workflow DO BRANCH escolhido, entao so' protege quem ja' contem este arquivo).
+#
 # Os nove feed XMLs nao estao no git: o build os gera aqui, antes do docker build.
 on:
   workflow_run:
@@ -29,11 +41,15 @@ env:
   OWNER: williamsouzadelima
   IMAGE: suricatoos-report-formats
 
-# Um publish por vez: dois commits seguidos na main nao correm entre si pela tag
-# `stable`. Se ja' houver um esperando, o mais novo toma o lugar (a imagem dele tem
-# tudo do anterior).
+# Um publish por COMMIT. A fila de uma concurrency tem UMA vaga de espera e, quando
+# chega um run novo, o que esperava e' CANCELADO -- o "novo" e' o de chegada, nao o do
+# commit mais novo: o re-run de um commit velho, ou um CI lento, tiraria da fila o
+# publish de um commit mais novo. Por isso a fila e' por commit (so' re-runs do mesmo
+# commit esperam uns pelos outros) e a ordem entre commits nao e' da fila: e' do
+# portao acima, que "existe um commit mais novo" so' cresce -- decidir na hora do push
+# fecha a corrida, e nenhum publish cancela o de outro commit.
 concurrency:
-  group: report-formats-publish
+  group: report-formats-publish-${{ github.event.workflow_run.head_sha || github.sha }}
   cancel-in-progress: false
 
 jobs:
@@ -50,11 +66,13 @@ jobs:
       contents: read
       packages: write
     steps:
-      - name: Checkout (o commit que o CI aprovou)
+      - name: Checkout (o commit que o CI aprovou, com o historico todo)
         uses: actions/checkout@v4
         with:
           # workflow_run: o head_sha do run do CI; disparo manual: o commit do ref escolhido.
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          # O portao da tag stable olha o historico da main (ancestralidade e commits mais novos).
+          fetch-depth: 0
 
       - name: Origem do que vai ser publicado
         env:
@@ -79,8 +97,9 @@ jobs:
         run: |
           set -eux
           # Os nove objetos (pdf-suricatoos-<uuid>.xml) nao estao no git: o
-          # Dockerfile os copia (COPY falha alto se nenhum existir), entao esta
-          # etapa TEM de rodar antes do docker build.
+          # Dockerfile os copia, entao esta etapa TEM de rodar antes do docker build.
+          # (A guarda de "faltou objeto" e' o RUN do Dockerfile, que exige exatamente
+          # nove; o COPY de um curinga vazio nao falha sob o BuildKit.)
           python3 report-formats/build-feed-xml.py
           # O manifest.json e' o unico versionado: o build tem de reescreve-lo igual.
           git diff --exit-code report-formats/manifest.json
@@ -97,27 +116,73 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GHCR_PAT }}
 
-      - name: Build & push suricatoos-report-formats
+      - name: Build suricatoos-report-formats
         run: |
           set -eux
           IMG="$REGISTRY/$OWNER/$IMAGE"
-          docker build \
-            -t "$IMG:stable" -t "$IMG:${SRC_SHA::12}" \
-            report-formats
-          docker push --all-tags "$IMG"
+          # So' a tag do commit: a `stable' e' decidida depois, na hora do push.
+          docker build -t "$IMG:${SRC_SHA::12}" report-formats
+
+      - name: Decidir se a tag stable anda (ci/stable-gate.sh)
+        run: |
+          set -eu
+          if [ ! -f report-formats/ci/stable-gate.sh ]; then
+            echo "::error::Este commit e' anterior ao report-formats/ci/stable-gate.sh: nao ha' como decidir se a tag stable anda (re-run de um CI muito antigo nao e' suportado)."
+            exit 1
+          fi
+          # Logo antes do push e com a main de agora: "existe um commit mais novo do
+          # relatorio" so' cresce, entao decidir aqui fecha a corrida com um publish
+          # mais novo.
+          git fetch --no-tags origin main
+          decisao=$(bash report-formats/ci/stable-gate.sh "$SRC_SHA" origin/main)
+          echo "$decisao"
+          echo "$decisao" >> "$GITHUB_ENV"
+
+      - name: Push (a tag do commit sempre; a stable so' se o portao deixou)
+        run: |
+          set -eux
+          IMG="$REGISTRY/$OWNER/$IMAGE"
+          docker push "$IMG:${SRC_SHA::12}"
+          echo "PUSHED_SHA=true" >> "$GITHUB_ENV"
+          if [ "$MOVE_STABLE" = true ]; then
+            docker tag "$IMG:${SRC_SHA::12}" "$IMG:stable"
+            docker push "$IMG:stable"
+            echo "PUSHED_STABLE=true" >> "$GITHUB_ENV"
+          else
+            echo "::notice::A tag stable NAO foi movida: $STABLE_REASON"
+          fi
 
       - name: Resumo
         if: always()
         env:
           CI_RUN_URL: ${{ github.event.workflow_run.html_url }}
+          JOB_STATUS: ${{ job.status }}
         run: |
           SHA="${SRC_SHA:-?}"
+          if [ "$JOB_STATUS" = success ]; then
+            titulo="publicado"
+          else
+            titulo="NÃO publicado (o job terminou: $JOB_STATUS)"
+          fi
+          tags=""
+          if [ "${PUSHED_SHA:-}" = true ]; then tags="${SHA::12}"; fi
+          if [ "${PUSHED_STABLE:-}" = true ]; then tags="${tags:+$tags, }stable"; fi
           {
-            echo "### Suricatoos — report-formats publicado 🐾"
+            echo "### Suricatoos — report-formats $titulo 🐾"
             echo ""
-            echo "| Imagem | Tags |"
+            echo "| Imagem | Tags empurradas |"
             echo "|---|---|"
-            echo "| \`$REGISTRY/$OWNER/$IMAGE\` | stable, ${SHA::12} |"
+            echo "| \`$REGISTRY/$OWNER/$IMAGE\` | ${tags:-nenhuma} |"
+            echo ""
+            if [ "${PUSHED_STABLE:-}" = true ]; then
+              echo "**A tag \`stable\` foi movida para \`${SHA::12}\`:** ${STABLE_REASON:-}."
+            elif [ "${MOVE_STABLE:-}" = false ]; then
+              echo "**A tag \`stable\` NÃO foi movida:** ${STABLE_REASON:-}. Só a tag \`${SHA::12}\` foi empurrada."
+            elif [ "${MOVE_STABLE:-}" = true ]; then
+              echo "O portão liberou a tag \`stable\`, mas o push dela não aconteceu (o job terminou: $JOB_STATUS)."
+            else
+              echo "A decisão sobre a tag \`stable\` não foi tomada (o job parou antes do portão)."
+            fi
             echo ""
             echo "Commit: \`$SHA\`. VERSION dos nove objetos (derivada do conteúdo): \`$(python3 report-formats/build-feed-xml.py --print-version 2>/dev/null || echo '?')\`."
             if [ -n "$CI_RUN_URL" ]; then

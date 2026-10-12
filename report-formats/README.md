@@ -48,8 +48,19 @@ ID da imagem — nenhum dos dois lê a VERSION. Prova: `tests/test_feed.py`
 - **`report-formats-publish`** roda **depois** dele: só quando o CI de um push na `main`
   termina com `success` (`workflow_run`), e constrói a imagem do commit que o CI aprovou. O
   disparo manual (`workflow_dispatch`) continua e não espera o CI (o log avisa).
+- **A tag `stable` só anda para o commit mais novo do relatório na `main`**
+  (`ci/stable-gate.sh`, decidido na hora do push): o commit tem de ser ancestral da `main` e nenhum
+  commit da `main` depois dele pode tocar `report-formats/` nem os workflows do relatório
+  (`report-formats-ci.yml`, `report-formats-publish.yml`). Um re-run de CI antigo, um CI lento que
+  termina depois de um mais novo e um disparo manual de outro branch empurram **só `:<sha12>`** (o
+  resumo do job diz por quê): senão a frota voltaria a um relatório velho no sync seguinte, e o GSA
+  não mostra nada (a VERSION é um hash). Se o commit mais novo que toca o relatório reprovar no CI,
+  a `stable` espera: a próxima correção que passar a move (ou um disparo manual da ponta da `main`).
+  O disparo manual roda o workflow do branch escolhido, então a guarda só protege os branches que já
+  a contêm.
 - A imagem vira `ghcr.io/williamsouzadelima/suricatoos-report-formats:stable` (e `:<sha12>`); o
-  feed-updater a puxa e o gvmd reimporta.
+  feed-updater a puxa e o gvmd reimporta. Os CIs da `main` não se cancelam entre si (um grupo por
+  commit) e o publish também é uma fila por commit: a ordem entre commits é do portão, não da fila.
 
 ## Imagem do gvmd do CI: fixada por digest
 

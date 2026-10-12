@@ -59,9 +59,15 @@ on:
 permissions:
   contents: read
 
+# PR: um run por PR e o novo cancela o velho (cada run custa ~45 job-min). Push na
+# main: um grupo por COMMIT e sem cancelar -- o CI de um commit nao cancela o de outro,
+# e o re-run de um CI antigo (que reentra com o ref e o sha do run original) nao
+# derruba o CI em andamento do commit mais novo. Agrupar a main por ref, como antes,
+# fazia exatamente isso. Quem decide qual imagem vira `stable' e' o publish
+# (ci/stable-gate.sh), nao a ordem em que os CIs terminam.
 concurrency:
-  group: report-formats-ci-${{ github.ref }}
-  cancel-in-progress: true
+  group: report-formats-ci-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # A imagem do gvmd (compile, controle negativo e measure) e' FIXADA por digest em
 # report-formats/ci/lib.sh (GVMD_IMAGE), e so' la': a tag `stable' muda sozinha
