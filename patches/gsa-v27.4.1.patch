@@ -10554,10 +10554,10 @@ index 10e592f..04730d6 100644
 \ No newline at end of file
 diff --git a/public/suricatoos-theme.css b/public/suricatoos-theme.css
 new file mode 100644
-index 0000000..a4d7766
+index 0000000..62a5abd
 --- /dev/null
 +++ b/public/suricatoos-theme.css
-@@ -0,0 +1,398 @@
+@@ -0,0 +1,405 @@
 +/* ============================================================
 +   SURICATOOS — Tema Premium v2 (claro + escuro) — GSA / Mantine v7
 +   Carregado por ULTIMO. Foco: profundidade, cards, tabelas, nav,
@@ -10579,6 +10579,8 @@ index 0000000..a4d7766
 +  --sur-accent:#5b7cfa; --sur-accent-soft:rgba(91,124,250,.10); --sur-accent-line:rgba(91,124,250,.30);
 +  /* WCAG AA: --sur-accent fica para borda, anel e fundo; o acento como TEXTO e' --sur-accent-text */
 +  --sur-accent-text:#3c52c0;
++  /* o cabecalho e' escuro nos dois esquemas: o acento sobre ele e' o claro */
++  --sur-header-accent:#8aa2ff;
 +  --sur-danger-text:#a62c16; --sur-danger-bg:#fdf3f3; --sur-danger-border:#f0c2c2;
 +  --sur-coral-text:#c8383c;
 +  --sur-control-border:#718096;
@@ -10592,6 +10594,7 @@ index 0000000..a4d7766
 +  --sur-login-bg:radial-gradient(125% 125% at 16% 6%, #32428a 0%, #1a2547 45%, #070d18 100%);
 +  --sur-accent:#7d97ff; --sur-accent-soft:rgba(125,151,255,.14); --sur-accent-line:rgba(125,151,255,.34);
 +  --sur-accent-text:#8aa2ff;
++  --sur-header-accent:#8aa2ff;
 +  --sur-danger-text:#ff9e92; --sur-danger-bg:#2b1416; --sur-danger-border:#6b2a2e;
 +  --sur-coral-text:#f2595b;
 +  --sur-control-border:#62799a;
@@ -10732,6 +10735,10 @@ index 0000000..a4d7766
 +  border-bottom:1px solid var(--sur-border)!important;
 +  box-shadow:0 1px 0 rgba(255,255,255,.03), 0 6px 18px rgba(0,0,0,.18)!important;
 +}
++/* o icone sob o mouse: a regra global dos ActionIcons (secao 7) usa o acento como
++   texto do esquema, que no claro e' um indigo escuro (2,4:1 sobre o cabecalho, que
++   e' escuro nos dois esquemas); aqui vale o acento claro do cabecalho */
++[class*="_header_"] .mantine-ActionIcon-root:hover { color:var(--sur-header-accent)!important; }
 +
 +/* ============================================================
 +   9. INPUTS — foco com anel do acento
@@ -20143,10 +20150,10 @@ index 0000000..4404d14
 +});
 diff --git a/src/web/utils/__tests__/suricatoosContrast.test.ts b/src/web/utils/__tests__/suricatoosContrast.test.ts
 new file mode 100644
-index 0000000..7534f0d
+index 0000000..d60abf1
 --- /dev/null
 +++ b/src/web/utils/__tests__/suricatoosContrast.test.ts
-@@ -0,0 +1,494 @@
+@@ -0,0 +1,603 @@
 +/* SPDX-FileCopyrightText: 2026 Suricatoos
 + *
 + * SPDX-License-Identifier: AGPL-3.0-or-later
@@ -20553,6 +20560,115 @@ index 0000000..7534f0d
 +
 +    expect(contrast(text, background)).toBeGreaterThanOrEqual(4.5);
 +  });
++});
++
++describe('the icon buttons of the header', () => {
++  // The header is dark in both color schemes (the theme forces its gradient), so what
++  // an icon button turns into under the mouse is read against that dark, not against
++  // the page of the scheme: the accent as text of the light scheme is an indigo made
++  // for a light page and is 2.4:1 on the header. The global hover rule of the icon
++  // buttons paints them with it; the rule of the header has to win over that one.
++  const HEADER = '[class*="_header_"]';
++  const items = (selector: string) =>
++    selector.split(',').map(item => item.trim());
++  // enough for the selectors of the hover rules: ids, then classes + attributes +
++  // pseudo-classes, then types
++  const specificity = (selector: string): [number, number, number] => {
++    const attributes = selector.match(/\[[^\]]*\]/g)?.length ?? 0;
++    const bare = selector.replace(/\[[^\]]*\]/g, '');
++    return [
++      bare.match(/#[\w-]+/g)?.length ?? 0,
++      attributes +
++        (bare.match(/\.[\w-]+/g)?.length ?? 0) +
++        (bare.match(/(?<!:):[\w-]+/g)?.length ?? 0),
++      bare.match(/(?:^|[\s>+~])[a-z][\w-]*/gi)?.length ?? 0,
++    ];
++  };
++  const stronger = (
++    a: {important: boolean; spec: number[]; order: number},
++    b: {important: boolean; spec: number[]; order: number},
++  ) => {
++    if (a.important !== b.important) {
++      return a.important;
++    }
++    for (let i = 0; i < 3; i++) {
++      if (a.spec[i] !== b.spec[i]) {
++        return a.spec[i] > b.spec[i];
++      }
++    }
++    return a.order > b.order;
++  };
++
++  // The `color` that wins for an icon button under the mouse, in a header or outside
++  // of it (jsdom does not know :hover: the items with it are tried without it).
++  const hoverColor = (inHeader: boolean): string | undefined => {
++    document.body.innerHTML = inHeader
++      ? '<div class="x_header_y"><button class="mantine-ActionIcon-root"></button></div>'
++      : '<main><button class="mantine-ActionIcon-root"></button></main>';
++    const button = document.querySelector('button') as Element;
++    let best:
++      | {important: boolean; spec: number[]; order: number; value: string}
++      | undefined;
++    rules.forEach((rule, order) => {
++      const declaration = rule.declarations.find(d => d.prop === 'color');
++      if (declaration === undefined) {
++        return;
++      }
++      for (const item of items(rule.selector)) {
++        if (
++          !item.includes(':hover') ||
++          !button.matches(item.replace(':hover', ''))
++        ) {
++          continue;
++        }
++        const candidate = {
++          important: /!important\s*$/i.test(declaration.value),
++          spec: specificity(item),
++          order,
++          value: declaration.value.replace(/\s*!important\s*$/i, '').trim(),
++        };
++        if (best === undefined || stronger(candidate, best)) {
++          best = candidate;
++        }
++      }
++    });
++    document.body.innerHTML = '';
++    return best?.value;
++  };
++
++  test('under the mouse an icon button of the header takes the light accent of the header', () => {
++    expect(hoverColor(true)).toBe('var(--sur-header-accent)');
++  });
++
++  test('the icon buttons of the rest of the page keep the accent as text', () => {
++    expect(hoverColor(false)).toBe('var(--sur-accent-text)');
++  });
++
++  test.each(SCHEMES)(
++    'and the icon reads on the header with the hover fill on it (%s scheme, 4.5:1)',
++    name => {
++      const {color} = scheme(name);
++      const background = rules
++        .filter(r => r.selector === HEADER)
++        .flatMap(r => r.declarations)
++        .find(d => d.prop === 'background')?.value;
++      expect(background).toBeDefined();
++      const stops = [...(background ?? '').matchAll(/#[0-9a-fA-F]{6}\b/g)].map(
++        m => parseColor(m[0]),
++      );
++      expect(stops.length).toBeGreaterThan(0);
++      // the lightest the header can be, with the fill of the hover on it
++      const lightest = stops.reduce((a, b) =>
++        luminance(b) > luminance(a) ? b : a,
++      );
++      const fill = over(color('--sur-accent-soft'), lightest);
++      const token = /^var\((--[\w-]+)\)$/.exec(hoverColor(true) ?? '')?.[1];
++      expect(token).toBeDefined();
++      expect(contrast(color(token as string), fill)).toBeGreaterThanOrEqual(
++        4.5,
++      );
++    },
++  );
 +});
 +
 +describe('the theme never paints text with a color that is only for borders and fills', () => {
