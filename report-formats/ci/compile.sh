@@ -16,14 +16,19 @@
 #   v*       report-formats/tests/fixtures/*.xml: uma fixture por defeito de
 #            veracidade ja' corrigido (numeracao, indicadores vazios, ...),
 #            mais a v10-navegacao (caminhos de navegacao que as outras nao
-#            percorrem) e as v11..v20 da secao 6 (escopo, metodologia e
+#            percorrem), as v11..v20 da secao 7 (escopo, metodologia e
 #            limitacoes: autenticacao, erros de scan, tarefa que nao iniciou,
 #            tabelas acima do teto, scan interrompido, inventario do agente,
-#            import do sensor, o veto do comentario do bridge); o cabecalho de
-#            cada uma diz qual. A v20a..v20i e' a TABELA DE ESTADOS: um
-#            relatorio sem host por scan_run_status, para que cada estado das
-#            listas de $scan-never-started e $scan-unfinished do latex.xsl tenha
-#            a sua fixture (o alerta da secao 1 e a nota da secao 6 mudam):
+#            import do sensor, o veto do comentario do bridge) e as v21..v26 da
+#            secao 2 (prioridades e proximos passos: a ordem do plano com
+#            empate em cada nivel e EPSS, grupos consolidados e os textos da
+#            coluna de acao, sem critico nem alto e sem EPSS, exatamente 20
+#            acoes, uma acao so', mais de 20 acoes por card com cards
+#            consolidados dentro e fora das 20); o cabecalho de cada uma diz
+#            qual. A v20a..v20i e' a TABELA DE ESTADOS: um relatorio sem host por
+#            scan_run_status, para que cada estado das listas de
+#            $scan-never-started e $scan-unfinished do latex.xsl tenha a sua
+#            fixture (o alerta da secao 1 e a nota da secao 7 mudam):
 #              iniciou e nao terminou (alerta "nao terminou"): v20a Running,
 #                v20b Stop Requested, v20c Stopped; Interrupted e' a v14 (com
 #                hosts: so' a nota);

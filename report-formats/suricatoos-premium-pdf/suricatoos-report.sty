@@ -128,8 +128,9 @@
 \suri@air{18}{\blocknote}         % small note under a card or a table (pg-03/05)
 \suri@air{17}{\porttable}         % the longtable of pg-04, under its heading
 \suri@air{13}{\findingsummary}    % the longtable of pg-06/07, under its tag
-\suri@air{17}{\authtable}         % secao 6: tabela de autenticacao, sob os fatos
-\suri@air{17}{\errortable}        % secao 6: tabela de erros de scan, sob os fatos
+\suri@air{17}{\prioritytable}     % secao 2: tabela de prioridades, sob a frase calculada
+\suri@air{17}{\authtable}         % secao 7: tabela de autenticacao, sob os fatos
+\suri@air{17}{\errortable}        % secao 7: tabela de erros de scan, sob os fatos
 \suri@air{16}{\sevbars}           % severity bars, under their heading (pg-02)
 \suri@air{14}{\timelinestrip}     % timeline strip, under its heading (pg-02)
 
@@ -315,7 +316,7 @@
 % The mode is compared with \ifstrequal, not \ifx on two \def'd macros: a
 % \newcommand carries a \long prefix that an \ifx also compares, so the naive
 % test silently answers "no" and every table came out labelled `confirmados'.
-% \suri@navflush (suricatoos-page): in section 5 the two slabs are entries of
+% \suri@navflush (suricatoos-page): in section 6 the two slabs are entries of
 % the PDF bookmark tree, between the runs of cards they title -- the indicator
 % cards number from #1 again, and the slab is what tells the two runs apart.
 \newcommand{\suriSummaryHead}[1]{%

@@ -1,0 +1,334 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+Fixture SINTETICA do CI de veracidade do Suricatoos Premium PDF
+(report-formats/ci/check-veracity.py roda sobre o .tex desta fixture nos 3
+idiomas). Enderecos RFC 5737, nomes genericos sob .example, OIDs da faixa
+sintetica 1.3.6.1.4.1.25623.1.0.99xxxx (nao existem no feed), CVEs do ano 2099
+e EPSS inventado no formato do gvmd 26 (gmp.c, results_xml_append_epss: score
+e percentile com 5 casas); nenhum dado de scan real.
+
+Secao 2 (prioridades e proximos passos): os CORTES e os textos da coluna de
+acao:
+- 17 acoes, uma por card: os dois cards consolidados (5 advisories VendorFix
+  confirmados do Contoso Mailer e os 6 "Example Filler", VendorFix com as
+  mesmas duas primeiras palavras) sao UMA acao cada, com o titulo do card na
+  coluna de nome, o link para o card consolidado (#1 e #2 do sumario de
+  achados) e a acao unica do card (a do Example Filler e' a primeira frase
+  com o "p." de uma letra); o primeiro card normal e' o #3; as 17 cabem na
+  tabela, sem corte declarado (o "+ N" por card e' da v26), e a frase diz
+  que tratam 24 de 24 achados criticos e altos (o grupo conta as instancias
+  de todos os membros);
+- nome e acao traduzidos de um NVT avulso: o ...141635 e' de proposito um OID
+  PUBLICO do feed (a excecao a faixa sintetica), presente nos catalogos pt_BR
+  e es como os advisories da v5, com nome e solucao do fornecedor sinteticos
+  (VENDOR-RAW); em pt_BR e es a linha traz o nome e a primeira frase da
+  solucao do catalogo, e a ordem usa o nome do feed;
+- NVT sem solucao nenhuma ("sem solucao informada", tipo travessao); solucao vazia
+  com tipo NoneAvailable; solucao so' na tag (o mesmo fallback do card);
+- primeira frase: cortada em fronteira de palavra no teto (e o corte
+  declarado); numero de item "1." e "10." que nao fecham frase; "e.g." e "p."
+  (uma letra) que nao fecham; versao "2.4.58." que fecha; "etc." que fecha;
+  lista com " - " sem ponto nenhum (a solucao inteira);
+- tipos de solucao: os cinco do feed, um desconhecido (sai como esta') e um
+  ausente (travessao); caracteres especiais do LaTeX na acao; nome de NVT longo;
+- EPSS so' em parte das acoes (nota do travessao), e export parcial (27 de 40
+  resultados: nota de export parcial).
+-->
+<report extension="pdf" content_type="application/pdf" id="00000000-0000-4000-8000-000000000221">
+  <task id="00000000-0000-4000-8000-000000000001">
+    <name>Example Priorities Cuts Review</name>
+  </task>
+  <scan_run_status>Done</scan_run_status>
+  <timezone>Coordinated Universal Time</timezone>
+  <timezone_abbrev>UTC</timezone_abbrev>
+  <scan_start>2026-09-01T09:00:00Z</scan_start>
+  <scan_end>2026-09-01T10:12:00Z</scan_end>
+  <hosts><count>6</count></hosts>
+  <result_count>40<full>40</full><filtered>27</filtered><critical><full>3</full><filtered>3</filtered></critical><high><full>29</full><filtered>21</filtered></high><medium><full>6</full><filtered>3</filtered></medium><low><full>2</full><filtered>0</filtered></low><log><full>0</full><filtered>0</filtered></log><false_positive><full>0</full><filtered>0</filtered></false_positive></result_count>
+  <filters id="00000000-0000-4000-8000-000000000002">
+    <term>apply_overrides=1 levels=chmlgf rows=-1 min_qod=1 first=1 sort-reverse=severity</term>
+  </filters>
+  <host>
+    <ip>192.0.2.31</ip>
+    <start>2026-09-01T09:01:00Z</start>
+    <end>2026-09-01T10:10:00Z</end>
+    <detail><name>hostname</name><value>mail31.example.com</value></detail>
+  </host>
+  <host>
+    <ip>192.0.2.32</ip>
+    <start>2026-09-01T09:01:00Z</start>
+    <end>2026-09-01T10:10:00Z</end>
+    <detail><name>hostname</name><value>mail32.example.com</value></detail>
+  </host>
+  <host>
+    <ip>192.0.2.33</ip>
+    <start>2026-09-01T09:01:00Z</start>
+    <end>2026-09-01T10:10:00Z</end>
+    <detail><name>hostname</name><value>app33.example.com</value></detail>
+  </host>
+  <host>
+    <ip>198.51.100.31</ip>
+    <start>2026-09-01T09:01:00Z</start>
+    <end>2026-09-01T10:10:00Z</end>
+    <detail><name>hostname</name><value>app34.example.com</value></detail>
+  </host>
+  <host>
+    <ip>198.51.100.32</ip>
+    <start>2026-09-01T09:01:00Z</start>
+    <end>2026-09-01T10:10:00Z</end>
+    <detail><name>hostname</name><value>db35.example.com</value></detail>
+  </host>
+  <host>
+    <ip>203.0.113.31</ip>
+    <start>2026-09-01T09:01:00Z</start>
+    <end>2026-09-01T10:10:00Z</end>
+    <detail><name>hostname</name><value>edge36.example.com</value></detail>
+  </host>
+  <results start="1" max="-1">
+    <result id="p-0001">
+      <host>192.0.2.31<hostname>mail31.example.com</hostname></host>
+      <port>25/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992201"><type>nvt</type><name>Contoso Mailer Advisory (CM-01)</name><family>Synthetic</family><cvss_base>9.6</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=VendorFix</tags><solution type="VendorFix">Upgrade Contoso Mailer to version 5.1 or later.</solution><epss><max_severity><score>0.61000</score><percentile>0.90000</percentile><cve id="CVE-2099-2201"><severity>9.6</severity></cve></max_severity><max_epss><score>0.61000</score><percentile>0.90000</percentile><cve id="CVE-2099-2201"><severity>9.6</severity></cve></max_epss></epss><refs><ref type="cve" id="CVE-2099-2201"/></refs></nvt>
+      <threat>Critical</threat>
+      <severity>9.6</severity>
+      <qod><value>98</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Contoso Mailer Advisory (CM-01).</description>
+    </result>
+    <result id="p-0002">
+      <host>192.0.2.31<hostname>mail31.example.com</hostname></host>
+      <port>25/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992202"><type>nvt</type><name>Contoso Mailer Advisory (CM-02)</name><family>Synthetic</family><cvss_base>8.1</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=VendorFix</tags><solution type="VendorFix">Upgrade Contoso Mailer to version 5.2 or later.</solution><refs><ref type="cve" id="CVE-2099-2202"/></refs></nvt>
+      <threat>High</threat>
+      <severity>8.1</severity>
+      <qod><value>98</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Contoso Mailer Advisory (CM-02).</description>
+    </result>
+    <result id="p-0003">
+      <host>192.0.2.32<hostname>mail32.example.com</hostname></host>
+      <port>25/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992203"><type>nvt</type><name>Contoso Mailer Advisory (CM-03)</name><family>Synthetic</family><cvss_base>7.4</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=VendorFix</tags><solution type="VendorFix">Upgrade Contoso Mailer to version 5.3 or later.</solution><refs><ref type="cve" id="CVE-2099-2203"/></refs></nvt>
+      <threat>High</threat>
+      <severity>7.4</severity>
+      <qod><value>98</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Contoso Mailer Advisory (CM-03).</description>
+    </result>
+    <result id="p-0004">
+      <host>192.0.2.32<hostname>mail32.example.com</hostname></host>
+      <port>25/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992204"><type>nvt</type><name>Contoso Mailer Advisory (CM-04)</name><family>Synthetic</family><cvss_base>7.2</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=VendorFix</tags><solution type="VendorFix">Upgrade Contoso Mailer to version 5.4 or later.</solution><refs><ref type="cve" id="CVE-2099-2204"/></refs></nvt>
+      <threat>High</threat>
+      <severity>7.2</severity>
+      <qod><value>98</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Contoso Mailer Advisory (CM-04).</description>
+    </result>
+    <result id="p-0005">
+      <host>192.0.2.33<hostname>app33.example.com</hostname></host>
+      <port>25/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992205"><type>nvt</type><name>Contoso Mailer Advisory (CM-05)</name><family>Synthetic</family><cvss_base>7.1</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=VendorFix</tags><solution type="VendorFix">Upgrade Contoso Mailer to version 5.5 or later.</solution><refs><ref type="cve" id="CVE-2099-2205"/></refs></nvt>
+      <threat>High</threat>
+      <severity>7.1</severity>
+      <qod><value>98</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Contoso Mailer Advisory (CM-05).</description>
+    </result>
+    <result id="p-0006">
+      <host>192.0.2.33<hostname>app33.example.com</hostname></host>
+      <port>8443/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992211"><type>nvt</type><name>Example Appliance Missing Solution Text</name><family>Synthetic</family><cvss_base>8.6</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.</tags><refs></refs></nvt>
+      <threat>High</threat>
+      <severity>8.6</severity>
+      <qod><value>98</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Appliance Missing Solution Text.</description>
+    </result>
+    <result id="p-0007">
+      <host>198.51.100.31<hostname>app34.example.com</hostname></host>
+      <port>8080/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992212"><type>nvt</type><name>Example Controller Without Fix</name><family>Synthetic</family><cvss_base>8.4</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=NoneAvailable</tags><solution type="NoneAvailable"/><refs></refs></nvt>
+      <threat>High</threat>
+      <severity>8.4</severity>
+      <qod><value>98</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Controller Without Fix.</description>
+    </result>
+    <result id="p-0008">
+      <host>198.51.100.31<hostname>app34.example.com</hostname></host>
+      <port>8443/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992213"><type>nvt</type><name>Example Management Interface Hardening Gap</name><family>Synthetic</family><cvss_base>9.3</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=VendorFix</tags><solution type="VendorFix">Apply the vendor configuration baseline to every exposed management interface, restricting administrative access to the dedicated jump hosts, enforcing multi factor authentication for every operator account and rotating the shared service credentials that the previous baseline left in place. Then verify the result.</solution><epss><max_severity><score>0.88000</score><percentile>0.90000</percentile><cve id="CVE-2099-2213"><severity>9.3</severity></cve></max_severity><max_epss><score>0.88000</score><percentile>0.90000</percentile><cve id="CVE-2099-2213"><severity>9.3</severity></cve></max_epss></epss><refs><ref type="cve" id="CVE-2099-2213"/></refs></nvt>
+      <threat>Critical</threat>
+      <severity>9.3</severity>
+      <qod><value>98</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Management Interface Hardening Gap.</description>
+    </result>
+    <result id="p-0009">
+      <host>198.51.100.32<hostname>db35.example.com</hostname></host>
+      <port>8443/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992213"><type>nvt</type><name>Example Management Interface Hardening Gap</name><family>Synthetic</family><cvss_base>9.3</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=VendorFix</tags><solution type="VendorFix">Apply the vendor configuration baseline to every exposed management interface, restricting administrative access to the dedicated jump hosts, enforcing multi factor authentication for every operator account and rotating the shared service credentials that the previous baseline left in place. Then verify the result.</solution><epss><max_severity><score>0.88000</score><percentile>0.90000</percentile><cve id="CVE-2099-2213"><severity>9.3</severity></cve></max_severity><max_epss><score>0.88000</score><percentile>0.90000</percentile><cve id="CVE-2099-2213"><severity>9.3</severity></cve></max_epss></epss><refs><ref type="cve" id="CVE-2099-2213"/></refs></nvt>
+      <threat>Critical</threat>
+      <severity>9.3</severity>
+      <qod><value>98</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Management Interface Hardening Gap.</description>
+    </result>
+    <result id="p-0010">
+      <host>198.51.100.32<hostname>db35.example.com</hostname></host>
+      <port>80/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992214"><type>nvt</type><name>Example Shop Directory Exposure</name><family>Synthetic</family><cvss_base>8.3</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">1. Rename the following directories to something hard to guess: data, carts, orders and auth, as in item 10. of the vendor checklist. 2. Change the settings in shop.setup.</solution><refs></refs></nvt>
+      <threat>High</threat>
+      <severity>8.3</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Shop Directory Exposure.</description>
+    </result>
+    <result id="p-0011">
+      <host>203.0.113.31<hostname>edge36.example.com</hostname></host>
+      <port>9000/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992215"><type>nvt</type><name>Example Exposed Service Without Filtering</name><family>Synthetic</family><cvss_base>8.2</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Workaround</tags><solution type="Workaround">Restrict the exposed service, e.g. by a host firewall rule. Review the configuration afterwards.</solution><refs></refs></nvt>
+      <threat>High</threat>
+      <severity>8.2</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Exposed Service Without Filtering.</description>
+    </result>
+    <result id="p-0012">
+      <host>203.0.113.31<hostname>edge36.example.com</hostname></host>
+      <port>443/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992216"><type>nvt</type><name>Example Web Server Outdated Release</name><family>Synthetic</family><cvss_base>8.0</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=VendorFix</tags><solution type="VendorFix">Update to version 2.4.58. See the references for more information.</solution><epss><max_severity><score>0.43000</score><percentile>0.90000</percentile><cve id="CVE-2099-2216"><severity>8.0</severity></cve></max_severity><max_epss><score>0.43000</score><percentile>0.90000</percentile><cve id="CVE-2099-2216"><severity>8.0</severity></cve></max_epss></epss><refs><ref type="cve" id="CVE-2099-2216"/></refs></nvt>
+      <threat>High</threat>
+      <severity>8.0</severity>
+      <qod><value>98</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Web Server Outdated Release.</description>
+    </result>
+    <result id="p-0013">
+      <host>192.0.2.31<hostname>mail31.example.com</hostname></host>
+      <port>8081/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992217"><type>nvt</type><name>Example Debug Endpoint Enabled</name><family>Synthetic</family><cvss_base>7.9</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution=Disable the debug endpoint on production hosts. Restart the service.|solution_type=Workaround</tags><solution type="Workaround"/><refs></refs></nvt>
+      <threat>High</threat>
+      <severity>7.9</severity>
+      <qod><value>98</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Debug Endpoint Enabled.</description>
+    </result>
+    <result id="p-0014">
+      <host>192.0.2.32<hostname>mail32.example.com</hostname></host>
+      <port>7000/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992218"><type>nvt</type><name>Example Agent Unsafe Settings</name><family>Synthetic</family><cvss_base>7.8</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=ExampleFix</tags><solution type="ExampleFix">Set max_conn=50% in C:\Example\{app}.conf &amp; remove the #debug and $HOME~^ entries. Restart the agent.</solution><refs></refs></nvt>
+      <threat>High</threat>
+      <severity>7.8</severity>
+      <qod><value>98</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Agent Unsafe Settings.</description>
+    </result>
+    <result id="p-0015">
+      <host>192.0.2.33<hostname>app33.example.com</hostname></host>
+      <port>general/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992219"><type>nvt</type><name>Example Leaked Service Credentials</name><family>Synthetic</family><cvss_base>7.7</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.</tags><solution>Rotate the exposed credentials.</solution><refs></refs></nvt>
+      <threat>High</threat>
+      <severity>7.7</severity>
+      <qod><value>98</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Leaked Service Credentials.</description>
+    </result>
+    <result id="p-0016">
+      <host>198.51.100.31<hostname>app34.example.com</hostname></host>
+      <port>443/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992220"><type>nvt</type><name>Example Enterprise Content Management Suite Multiple Vulnerabilities Including Path Traversal And Server Side Request Forgery (EX-2099)</name><family>Synthetic</family><cvss_base>7.6</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">Apply the hardening guide published by the vendor.</solution><refs></refs></nvt>
+      <threat>High</threat>
+      <severity>7.6</severity>
+      <qod><value>98</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Enterprise Content Management Suite Multiple Vulnerabilities Including Path Traversal And Server Side Request Forgery (EX-2099).</description>
+    </result>
+    <result id="p-0017">
+      <host>198.51.100.32<hostname>db35.example.com</hostname></host>
+      <port>443/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992221"><type>nvt</type><name>Example Feature Toggles Exposed</name><family>Synthetic</family><cvss_base>7.5</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">The following mitigation steps are suggested:
+  - Disable feature A
+  - Disable feature B</solution><refs></refs></nvt>
+      <threat>High</threat>
+      <severity>7.5</severity>
+      <qod><value>98</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Feature Toggles Exposed.</description>
+    </result>
+    <result id="p-0018">
+      <host>203.0.113.31<hostname>edge36.example.com</hostname></host>
+      <port>80/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992222"><type>nvt</type><name>Example Plugin Compromise Indicators</name><family>Synthetic</family><cvss_base>7.3</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">Remove the plugin, review the files, change the passwords, etc. Then scan again.</solution><refs></refs></nvt>
+      <threat>High</threat>
+      <severity>7.3</severity>
+      <qod><value>98</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Plugin Compromise Indicators.</description>
+    </result>
+    <result id="p-0019">
+      <host>192.0.2.31<hostname>mail31.example.com</hostname></host>
+      <port>10000/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992231"><type>nvt</type><name>Example Filler High Finding 1</name><family>Synthetic</family><cvss_base>7.2</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=VendorFix</tags><solution type="VendorFix">Apply the fix in the vendor note, p. 4 of the advisory. Reboot afterwards.</solution><epss><max_severity><score>0.05000</score><percentile>0.90000</percentile><cve id="CVE-2099-2230"><severity>7.2</severity></cve></max_severity><max_epss><score>0.05000</score><percentile>0.90000</percentile><cve id="CVE-2099-2230"><severity>7.2</severity></cve></max_epss></epss><refs></refs></nvt>
+      <threat>High</threat>
+      <severity>7.2</severity>
+      <qod><value>98</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Filler High Finding 1.</description>
+    </result>
+    <result id="p-0020">
+      <host>192.0.2.32<hostname>mail32.example.com</hostname></host>
+      <port>10001/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992232"><type>nvt</type><name>Example Filler High Finding 2</name><family>Synthetic</family><cvss_base>7.2</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=VendorFix</tags><solution type="VendorFix">Apply the fix for filler finding 2.</solution><refs></refs></nvt>
+      <threat>High</threat>
+      <severity>7.2</severity>
+      <qod><value>98</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Filler High Finding 2.</description>
+    </result>
+    <result id="p-0021">
+      <host>192.0.2.33<hostname>app33.example.com</hostname></host>
+      <port>10002/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992233"><type>nvt</type><name>Example Filler High Finding 3</name><family>Synthetic</family><cvss_base>7.2</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=VendorFix</tags><solution type="VendorFix">Apply the fix for filler finding 3.</solution><refs></refs></nvt>
+      <threat>High</threat>
+      <severity>7.2</severity>
+      <qod><value>98</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Filler High Finding 3.</description>
+    </result>
+    <result id="p-0022">
+      <host>198.51.100.31<hostname>app34.example.com</hostname></host>
+      <port>10003/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992234"><type>nvt</type><name>Example Filler High Finding 4</name><family>Synthetic</family><cvss_base>7.1</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=VendorFix</tags><solution type="VendorFix">Apply the fix for filler finding 4.</solution><refs></refs></nvt>
+      <threat>High</threat>
+      <severity>7.1</severity>
+      <qod><value>98</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Filler High Finding 4.</description>
+    </result>
+    <result id="p-0023">
+      <host>198.51.100.32<hostname>db35.example.com</hostname></host>
+      <port>10004/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992235"><type>nvt</type><name>Example Filler High Finding 5</name><family>Synthetic</family><cvss_base>7.1</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=VendorFix</tags><solution type="VendorFix">Apply the fix for filler finding 5.</solution><refs></refs></nvt>
+      <threat>High</threat>
+      <severity>7.1</severity>
+      <qod><value>98</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Filler High Finding 5.</description>
+    </result>
+    <result id="p-0024">
+      <host>203.0.113.31<hostname>edge36.example.com</hostname></host>
+      <port>10005/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992236"><type>nvt</type><name>Example Filler High Finding 6</name><family>Synthetic</family><cvss_base>7.1</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=VendorFix</tags><solution type="VendorFix">Apply the fix for filler finding 6.</solution><refs></refs></nvt>
+      <threat>High</threat>
+      <severity>7.1</severity>
+      <qod><value>98</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Filler High Finding 6.</description>
+    </result>
+    <result id="p-0025">
+      <host>192.0.2.31<hostname>mail31.example.com</hostname></host>
+      <port>10100/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992241"><type>nvt</type><name>Example Filler Medium Finding 1</name><family>Synthetic</family><cvss_base>5.5</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">Apply the configuration change for medium finding 1.</solution><refs></refs></nvt>
+      <threat>Medium</threat>
+      <severity>5.5</severity>
+      <qod><value>98</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Filler Medium Finding 1.</description>
+    </result>
+    <result id="p-0026">
+      <host>192.0.2.32<hostname>mail32.example.com</hostname></host>
+      <port>10101/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992242"><type>nvt</type><name>Example Filler Medium Finding 2</name><family>Synthetic</family><cvss_base>4.5</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">Apply the configuration change for medium finding 2.</solution><refs></refs></nvt>
+      <threat>Medium</threat>
+      <severity>4.5</severity>
+      <qod><value>98</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Filler Medium Finding 2.</description>
+    </result>
+    <result id="p-0027">
+      <host>192.0.2.33<hostname>app33.example.com</hostname></host>
+      <port>8080/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.141635"><type>nvt</type><name>VENDOR-RAW Example Script Library Cross Site Scripting</name><family>Synthetic</family><cvss_base>6.1</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">VENDOR-RAW: upgrade the script library to the fixed release. Clear the caches.</solution><refs></refs></nvt>
+      <threat>Medium</threat>
+      <severity>6.1</severity>
+      <qod><value>98</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for VENDOR-RAW Example Script Library Cross Site Scripting.</description>
+    </result>
+  </results>
+</report>

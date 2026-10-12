@@ -14,6 +14,15 @@ Litware tem o membro menos severo primeiro: a linha do grupo no sumario dizia
 4.3 enquanto o card dizia 8.8. O resultado da deteccao do card e' o da
 instancia que carrega a severidade maxima (a primeira, no empate): cada
 instancia tem uma evidencia propria, marcada EVIDENCE-<oid>-...
+
+Secao 2 (prioridades): esta fixture e' o PINO da acao de um card
+consolidado. No grupo Litware o representante (o 1o membro confirmado, dono
+da ancora grp-) e' o ...411 (4.3, "...advisory 1."), e o membro mais severo
+e' o ...412 (8.8, "...advisory 2."): a linha do grupo na tabela de
+prioridades traz a acao unica do card, a do ...412, com o CVSS 8.8 e o link
+para grp-...411. O oraculo tira essa acao de Model.group_top, nunca do
+representante; a v26 repete o caso com EPSS e com membro mais severo sem
+solucao.
 -->
 <report extension="pdf" content_type="application/pdf" id="00000000-0000-4000-8000-000000000034">
   <task id="00000000-0000-4000-8000-000000000001">

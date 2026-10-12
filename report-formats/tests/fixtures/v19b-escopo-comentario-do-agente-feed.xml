@@ -6,7 +6,7 @@ idiomas). Enderecos RFC 5737, nomes genericos sob .example, OIDs da faixa
 sintetica 1.3.6.1.4.1.25623.1.0.99xxxx (nao existem no feed); nenhum dado de
 scan real.
 
-Secao 6, a outra metade do VETO da leitura de inventario do agente (a v19a tem
+Secao 7, a outra metade do VETO da leitura de inventario do agente (a v19a tem
 o Auth-*): o mesmo prefixo do gmp-bridge no comentario de um scan de rede REAL,
 e o unico rastro de rede sao os detalhes scanned_with_* que o feed grava em
 todo host varrido (scan sem credencial: nenhum Auth-*). Continua scan comum:

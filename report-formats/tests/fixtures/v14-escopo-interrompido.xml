@@ -6,7 +6,7 @@ idiomas). Enderecos RFC 5737, nomes genericos sob .example, OIDs da faixa
 sintetica 1.3.6.1.4.1.25623.1.0.99xxxx (nao existem no feed); nenhum dado de
 scan real.
 
-Secao 6 (escopo, metodologia e limitacoes), o scan que COMECOU E NAO TERMINOU:
+Secao 7 (escopo, metodologia e limitacoes), o scan que COMECOU E NAO TERMINOU:
 - scan_run_status Interrupted: a secao diz que a cobertura e' parcial, numa
   nota e numa limitacao;
 - export SEM scan_start e sem scan_end, mas com hosts e resultados: um so'

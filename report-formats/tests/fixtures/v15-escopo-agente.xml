@@ -5,7 +5,7 @@ Fixture SINTETICA do CI de veracidade do Suricatoos Premium PDF
 idiomas). Nomes genericos, identificador de agente inventado, OIDs da faixa
 sintetica 99xxxx (nao existem no feed); nenhum dado de scan real.
 
-Secao 6 (escopo, metodologia e limitacoes), um relatorio IMPORTADO do
+Secao 7 (escopo, metodologia e limitacoes), um relatorio IMPORTADO do
 inventario do agente pelo gmp-bridge (bridge.py, modo agent), como o gvmd o
 exporta depois: tarefa conteiner com o nome que o ingest da'
 (<GMP_TASK_NAME>-<agente>) e o comentario que o bridge grava ao cria-la

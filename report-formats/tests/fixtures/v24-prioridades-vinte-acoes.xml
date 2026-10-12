@@ -1,0 +1,232 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+Fixture SINTETICA do CI de veracidade do Suricatoos Premium PDF
+(report-formats/ci/check-veracity.py roda sobre o .tex desta fixture nos 3
+idiomas). Enderecos RFC 5737, nomes genericos sob .example, OIDs da faixa
+sintetica 1.3.6.1.4.1.25623.1.0.99xxxx (nao existem no feed), CVEs do ano 2099
+e EPSS inventado no formato do gvmd 26 (gmp.c, results_xml_append_epss: score
+e percentile com 5 casas); nenhum dado de scan real.
+
+Secao 2 (prioridades e proximos passos), no limite do teto e com UM so' achado
+critico ou alto:
+- exatamente 20 acoes: a tabela mostra todas e NAO declara corte ("+ 0" seria
+  um corte que nao existe);
+- um unico achado alto (uma instancia): a frase diz que a primeira acao trata
+  o unico achado critico ou alto confirmado, em vez de "1 de 1";
+- EPSS em parte das acoes (nota do travessao).
+-->
+<report extension="pdf" content_type="application/pdf" id="00000000-0000-4000-8000-000000000241">
+  <task id="00000000-0000-4000-8000-000000000001">
+    <name>Example Priorities Twenty Actions</name>
+  </task>
+  <scan_run_status>Done</scan_run_status>
+  <timezone>Coordinated Universal Time</timezone>
+  <timezone_abbrev>UTC</timezone_abbrev>
+  <scan_start>2026-09-01T09:00:00Z</scan_start>
+  <scan_end>2026-09-01T10:12:00Z</scan_end>
+  <hosts><count>3</count></hosts>
+  <result_count>20<full>20</full><filtered>20</filtered><critical><full>0</full><filtered>0</filtered></critical><high><full>1</full><filtered>1</filtered></high><medium><full>19</full><filtered>19</filtered></medium><low><full>0</full><filtered>0</filtered></low><log><full>0</full><filtered>0</filtered></log><false_positive><full>0</full><filtered>0</filtered></false_positive></result_count>
+  <filters id="00000000-0000-4000-8000-000000000002">
+    <term>apply_overrides=1 levels=chmlgf rows=-1 min_qod=1 first=1 sort-reverse=severity</term>
+  </filters>
+  <host>
+    <ip>192.0.2.51</ip>
+    <start>2026-09-01T09:01:00Z</start>
+    <end>2026-09-01T10:10:00Z</end>
+    <detail><name>hostname</name><value>host51.example.com</value></detail>
+  </host>
+  <host>
+    <ip>198.51.100.51</ip>
+    <start>2026-09-01T09:01:00Z</start>
+    <end>2026-09-01T10:10:00Z</end>
+    <detail><name>hostname</name><value>host52.example.com</value></detail>
+  </host>
+  <host>
+    <ip>203.0.113.51</ip>
+    <start>2026-09-01T09:01:00Z</start>
+    <end>2026-09-01T10:10:00Z</end>
+    <detail><name>hostname</name><value>host53.example.com</value></detail>
+  </host>
+  <results start="1" max="-1">
+    <result id="p-0001">
+      <host>192.0.2.51<hostname>host51.example.com</hostname></host>
+      <port>443/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992401"><type>nvt</type><name>Example Single High Severity Finding</name><family>Synthetic</family><cvss_base>7.5</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=VendorFix</tags><solution type="VendorFix">Apply the vendor update for the single high finding.</solution><refs></refs></nvt>
+      <threat>High</threat>
+      <severity>7.5</severity>
+      <qod><value>98</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Single High Severity Finding.</description>
+    </result>
+    <result id="p-0002">
+      <host>192.0.2.51<hostname>host51.example.com</hostname></host>
+      <port>20000/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992411"><type>nvt</type><name>Example Medium Finding 01</name><family>Synthetic</family><cvss_base>4.0</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">Apply the configuration change for medium finding 01.</solution><refs></refs></nvt>
+      <threat>Medium</threat>
+      <severity>4.0</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Medium Finding 01.</description>
+    </result>
+    <result id="p-0003">
+      <host>198.51.100.51<hostname>host52.example.com</hostname></host>
+      <port>20001/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992412"><type>nvt</type><name>Example Medium Finding 02</name><family>Synthetic</family><cvss_base>4.5</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">Apply the configuration change for medium finding 02.</solution><refs></refs></nvt>
+      <threat>Medium</threat>
+      <severity>4.5</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Medium Finding 02.</description>
+    </result>
+    <result id="p-0004">
+      <host>203.0.113.51<hostname>host53.example.com</hostname></host>
+      <port>20002/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992413"><type>nvt</type><name>Example Medium Finding 03</name><family>Synthetic</family><cvss_base>5.0</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">Apply the configuration change for medium finding 03.</solution><refs></refs></nvt>
+      <threat>Medium</threat>
+      <severity>5.0</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Medium Finding 03.</description>
+    </result>
+    <result id="p-0005">
+      <host>192.0.2.51<hostname>host51.example.com</hostname></host>
+      <port>20003/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992414"><type>nvt</type><name>Example Medium Finding 04</name><family>Synthetic</family><cvss_base>5.5</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">Apply the configuration change for medium finding 04.</solution><epss><max_severity><score>0.04000</score><percentile>0.90000</percentile><cve id="CVE-2099-2404"><severity>5.0</severity></cve></max_severity><max_epss><score>0.04000</score><percentile>0.90000</percentile><cve id="CVE-2099-2404"><severity>5.0</severity></cve></max_epss></epss><refs></refs></nvt>
+      <threat>Medium</threat>
+      <severity>5.5</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Medium Finding 04.</description>
+    </result>
+    <result id="p-0006">
+      <host>198.51.100.51<hostname>host52.example.com</hostname></host>
+      <port>20004/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992415"><type>nvt</type><name>Example Medium Finding 05</name><family>Synthetic</family><cvss_base>6.0</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">Apply the configuration change for medium finding 05.</solution><refs></refs></nvt>
+      <threat>Medium</threat>
+      <severity>6.0</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Medium Finding 05.</description>
+    </result>
+    <result id="p-0007">
+      <host>203.0.113.51<hostname>host53.example.com</hostname></host>
+      <port>20005/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992416"><type>nvt</type><name>Example Medium Finding 06</name><family>Synthetic</family><cvss_base>6.5</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">Apply the configuration change for medium finding 06.</solution><refs></refs></nvt>
+      <threat>Medium</threat>
+      <severity>6.5</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Medium Finding 06.</description>
+    </result>
+    <result id="p-0008">
+      <host>192.0.2.51<hostname>host51.example.com</hostname></host>
+      <port>20006/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992417"><type>nvt</type><name>Example Medium Finding 07</name><family>Synthetic</family><cvss_base>4.0</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">Apply the configuration change for medium finding 07.</solution><refs></refs></nvt>
+      <threat>Medium</threat>
+      <severity>4.0</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Medium Finding 07.</description>
+    </result>
+    <result id="p-0009">
+      <host>198.51.100.51<hostname>host52.example.com</hostname></host>
+      <port>20007/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992418"><type>nvt</type><name>Example Medium Finding 08</name><family>Synthetic</family><cvss_base>4.5</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">Apply the configuration change for medium finding 08.</solution><epss><max_severity><score>0.08000</score><percentile>0.90000</percentile><cve id="CVE-2099-2408"><severity>5.0</severity></cve></max_severity><max_epss><score>0.08000</score><percentile>0.90000</percentile><cve id="CVE-2099-2408"><severity>5.0</severity></cve></max_epss></epss><refs></refs></nvt>
+      <threat>Medium</threat>
+      <severity>4.5</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Medium Finding 08.</description>
+    </result>
+    <result id="p-0010">
+      <host>203.0.113.51<hostname>host53.example.com</hostname></host>
+      <port>20008/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992419"><type>nvt</type><name>Example Medium Finding 09</name><family>Synthetic</family><cvss_base>5.0</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">Apply the configuration change for medium finding 09.</solution><refs></refs></nvt>
+      <threat>Medium</threat>
+      <severity>5.0</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Medium Finding 09.</description>
+    </result>
+    <result id="p-0011">
+      <host>192.0.2.51<hostname>host51.example.com</hostname></host>
+      <port>20009/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992420"><type>nvt</type><name>Example Medium Finding 10</name><family>Synthetic</family><cvss_base>5.5</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">Apply the configuration change for medium finding 10.</solution><refs></refs></nvt>
+      <threat>Medium</threat>
+      <severity>5.5</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Medium Finding 10.</description>
+    </result>
+    <result id="p-0012">
+      <host>198.51.100.51<hostname>host52.example.com</hostname></host>
+      <port>20010/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992421"><type>nvt</type><name>Example Medium Finding 11</name><family>Synthetic</family><cvss_base>6.0</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">Apply the configuration change for medium finding 11.</solution><refs></refs></nvt>
+      <threat>Medium</threat>
+      <severity>6.0</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Medium Finding 11.</description>
+    </result>
+    <result id="p-0013">
+      <host>203.0.113.51<hostname>host53.example.com</hostname></host>
+      <port>20011/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992422"><type>nvt</type><name>Example Medium Finding 12</name><family>Synthetic</family><cvss_base>6.5</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">Apply the configuration change for medium finding 12.</solution><epss><max_severity><score>0.12000</score><percentile>0.90000</percentile><cve id="CVE-2099-2412"><severity>5.0</severity></cve></max_severity><max_epss><score>0.12000</score><percentile>0.90000</percentile><cve id="CVE-2099-2412"><severity>5.0</severity></cve></max_epss></epss><refs></refs></nvt>
+      <threat>Medium</threat>
+      <severity>6.5</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Medium Finding 12.</description>
+    </result>
+    <result id="p-0014">
+      <host>192.0.2.51<hostname>host51.example.com</hostname></host>
+      <port>20012/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992423"><type>nvt</type><name>Example Medium Finding 13</name><family>Synthetic</family><cvss_base>4.0</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">Apply the configuration change for medium finding 13.</solution><refs></refs></nvt>
+      <threat>Medium</threat>
+      <severity>4.0</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Medium Finding 13.</description>
+    </result>
+    <result id="p-0015">
+      <host>198.51.100.51<hostname>host52.example.com</hostname></host>
+      <port>20013/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992424"><type>nvt</type><name>Example Medium Finding 14</name><family>Synthetic</family><cvss_base>4.5</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">Apply the configuration change for medium finding 14.</solution><refs></refs></nvt>
+      <threat>Medium</threat>
+      <severity>4.5</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Medium Finding 14.</description>
+    </result>
+    <result id="p-0016">
+      <host>203.0.113.51<hostname>host53.example.com</hostname></host>
+      <port>20014/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992425"><type>nvt</type><name>Example Medium Finding 15</name><family>Synthetic</family><cvss_base>5.0</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">Apply the configuration change for medium finding 15.</solution><refs></refs></nvt>
+      <threat>Medium</threat>
+      <severity>5.0</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Medium Finding 15.</description>
+    </result>
+    <result id="p-0017">
+      <host>192.0.2.51<hostname>host51.example.com</hostname></host>
+      <port>20015/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992426"><type>nvt</type><name>Example Medium Finding 16</name><family>Synthetic</family><cvss_base>5.5</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">Apply the configuration change for medium finding 16.</solution><epss><max_severity><score>0.16000</score><percentile>0.90000</percentile><cve id="CVE-2099-2416"><severity>5.0</severity></cve></max_severity><max_epss><score>0.16000</score><percentile>0.90000</percentile><cve id="CVE-2099-2416"><severity>5.0</severity></cve></max_epss></epss><refs></refs></nvt>
+      <threat>Medium</threat>
+      <severity>5.5</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Medium Finding 16.</description>
+    </result>
+    <result id="p-0018">
+      <host>198.51.100.51<hostname>host52.example.com</hostname></host>
+      <port>20016/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992427"><type>nvt</type><name>Example Medium Finding 17</name><family>Synthetic</family><cvss_base>6.0</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">Apply the configuration change for medium finding 17.</solution><refs></refs></nvt>
+      <threat>Medium</threat>
+      <severity>6.0</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Medium Finding 17.</description>
+    </result>
+    <result id="p-0019">
+      <host>203.0.113.51<hostname>host53.example.com</hostname></host>
+      <port>20017/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992428"><type>nvt</type><name>Example Medium Finding 18</name><family>Synthetic</family><cvss_base>6.5</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">Apply the configuration change for medium finding 18.</solution><refs></refs></nvt>
+      <threat>Medium</threat>
+      <severity>6.5</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Medium Finding 18.</description>
+    </result>
+    <result id="p-0020">
+      <host>192.0.2.51<hostname>host51.example.com</hostname></host>
+      <port>20018/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992429"><type>nvt</type><name>Example Medium Finding 19</name><family>Synthetic</family><cvss_base>4.0</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">Apply the configuration change for medium finding 19.</solution><refs></refs></nvt>
+      <threat>Medium</threat>
+      <severity>4.0</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Medium Finding 19.</description>
+    </result>
+  </results>
+</report>

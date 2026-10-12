@@ -1,0 +1,397 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+Fixture SINTETICA do CI de veracidade do Suricatoos Premium PDF
+(report-formats/ci/check-veracity.py roda sobre o .tex desta fixture nos 3
+idiomas). Enderecos RFC 5737, nomes genericos sob .example, OIDs da faixa
+sintetica 1.3.6.1.4.1.25623.1.0.99xxxx (nao existem no feed), CVEs do ano 2099
+e EPSS inventado no formato do gvmd 26 (gmp.c, results_xml_append_epss: score
+e percentile com 5 casas); nenhum dado de scan real.
+
+Secao 2 (prioridades e proximos passos): a ORDEM do plano, com empate em cada
+nivel do criterio (classe de severidade > hosts afetados > EPSS > maior CVSS >
+nome do NVT > OID), e as regras de contagem:
+- classe antes de hosts: o Baixo em 5 hosts (SNMP) fica depois de todo Medio;
+- hosts antes de EPSS e de CVSS: o Medio em 3 hosts (assinatura do file share)
+  fica antes do Medio de EPSS 90%, e o Critico em 3 hosts (gateway) antes de
+  todos os Criticos em 2;
+- EPSS antes de CVSS: entre os Criticos em 2 hosts, o de EPSS 50% (9.1) vem
+  antes do de 20% (9.8), e os dois antes dos sem EPSS; o EPSS e' o de
+  max_epss (0.50000), nao o de max_severity (0.02000) do mesmo NVT;
+- sem EPSS: o maior CVSS desempata (spooler 9.8 antes do desktop 9.0);
+- nome do NVT: "Example Alpha ..." antes de "Example Beta ..." (Beta vem antes
+  no XML); OID: dois NVTs com o MESMO nome, ...992109 antes de ...992110
+  (o 992110 vem antes no XML);
+- nome comparado ponto de codigo a ponto de codigo, como o xsl:sort do libxslt
+  sem @lang: "Example Zeta ..." antes de "Example beta ..." (maiuscula antes
+  de minuscula) e "Example Bravo ..." antes de "Example Ágata ..." (letra
+  acentuada depois de todo ASCII), os dois pares Baixos empatados em tudo o
+  mais; uma colacao de idioma inverteria os dois, e em cada par o que deve
+  vir depois vem antes no XML e tem o OID menor;
+- hosts afetados = hosts DISTINTOS entre as instancias que sao achado: o desktop
+  tem 3 instancias em 2 hosts (duas portas no mesmo host); o mail relay tem
+  uma instancia falso positivo (-1.0, override) em outro host, que nao conta;
+  a instancia de QoD 30 de um NVT confirmado (broker) conta, como no card;
+- fora do plano: o Log (banner) e o indicador de QoD 30 (database), que vira a
+  nota "fora deste plano: 1 indicador";
+- frase calculada: 17 acoes (todas na tabela) tratam 14 de 14 achados criticos
+  e altos confirmados (as duas instancias criticas do indicador nao contam).
+-->
+<report extension="pdf" content_type="application/pdf" id="00000000-0000-4000-8000-000000000211">
+  <task id="00000000-0000-4000-8000-000000000001">
+    <name>Example Priorities Ordering Review</name>
+  </task>
+  <scan_run_status>Done</scan_run_status>
+  <timezone>Coordinated Universal Time</timezone>
+  <timezone_abbrev>UTC</timezone_abbrev>
+  <scan_start>2026-09-01T09:00:00Z</scan_start>
+  <scan_end>2026-09-01T10:12:00Z</scan_end>
+  <hosts><count>6</count></hosts>
+  <result_count>34<full>34</full><filtered>34</filtered><critical><full>10</full><filtered>10</filtered></critical><high><full>6</full><filtered>6</filtered></high><medium><full>7</full><filtered>7</filtered></medium><low><full>9</full><filtered>9</filtered></low><log><full>1</full><filtered>1</filtered></log><false_positive><full>1</full><filtered>1</filtered></false_positive></result_count>
+  <filters id="00000000-0000-4000-8000-000000000002">
+    <term>apply_overrides=1 levels=chmlgf rows=-1 min_qod=1 first=1 sort-reverse=severity</term>
+  </filters>
+  <host>
+    <ip>192.0.2.21</ip>
+    <start>2026-09-01T09:01:00Z</start>
+    <end>2026-09-01T10:10:00Z</end>
+    <detail><name>hostname</name><value>host21.example.com</value></detail>
+  </host>
+  <host>
+    <ip>192.0.2.22</ip>
+    <start>2026-09-01T09:01:00Z</start>
+    <end>2026-09-01T10:10:00Z</end>
+    <detail><name>hostname</name><value>host22.example.com</value></detail>
+  </host>
+  <host>
+    <ip>192.0.2.23</ip>
+    <start>2026-09-01T09:01:00Z</start>
+    <end>2026-09-01T10:10:00Z</end>
+    <detail><name>hostname</name><value>host23.example.com</value></detail>
+  </host>
+  <host>
+    <ip>198.51.100.21</ip>
+    <start>2026-09-01T09:01:00Z</start>
+    <end>2026-09-01T10:10:00Z</end>
+    <detail><name>hostname</name><value>host24.example.com</value></detail>
+  </host>
+  <host>
+    <ip>198.51.100.22</ip>
+    <start>2026-09-01T09:01:00Z</start>
+    <end>2026-09-01T10:10:00Z</end>
+    <detail><name>hostname</name><value>host25.example.com</value></detail>
+  </host>
+  <host>
+    <ip>203.0.113.21</ip>
+    <start>2026-09-01T09:01:00Z</start>
+    <end>2026-09-01T10:10:00Z</end>
+    <detail><name>hostname</name><value>host26.example.com</value></detail>
+  </host>
+  <results start="1" max="-1">
+    <result id="p-0001">
+      <host>192.0.2.21<hostname>host21.example.com</hostname></host>
+      <port>443/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992101"><type>nvt</type><name>Example Gateway Remote Code Execution</name><family>Synthetic</family><cvss_base>9.8</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=VendorFix</tags><solution type="VendorFix">Upgrade the gateway firmware to release 4.2.1 or later. Restart the appliance afterwards.</solution><epss><max_severity><score>0.10000</score><percentile>0.90000</percentile><cve id="CVE-2099-2101"><severity>9.8</severity></cve></max_severity><max_epss><score>0.10000</score><percentile>0.90000</percentile><cve id="CVE-2099-2101"><severity>9.8</severity></cve></max_epss></epss><refs><ref type="cve" id="CVE-2099-2101"/></refs></nvt>
+      <threat>Critical</threat>
+      <severity>9.8</severity>
+      <qod><value>98</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Gateway Remote Code Execution.</description>
+    </result>
+    <result id="p-0002">
+      <host>192.0.2.22<hostname>host22.example.com</hostname></host>
+      <port>443/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992101"><type>nvt</type><name>Example Gateway Remote Code Execution</name><family>Synthetic</family><cvss_base>7.5</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=VendorFix</tags><solution type="VendorFix">Upgrade the gateway firmware to release 4.2.1 or later. Restart the appliance afterwards.</solution><epss><max_severity><score>0.10000</score><percentile>0.90000</percentile><cve id="CVE-2099-2101"><severity>9.8</severity></cve></max_severity><max_epss><score>0.10000</score><percentile>0.90000</percentile><cve id="CVE-2099-2101"><severity>9.8</severity></cve></max_epss></epss><refs><ref type="cve" id="CVE-2099-2101"/></refs></nvt>
+      <threat>High</threat>
+      <severity>7.5</severity>
+      <qod><value>98</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Gateway Remote Code Execution.</description>
+    </result>
+    <result id="p-0003">
+      <host>192.0.2.23<hostname>host23.example.com</hostname></host>
+      <port>443/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992101"><type>nvt</type><name>Example Gateway Remote Code Execution</name><family>Synthetic</family><cvss_base>5.0</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=VendorFix</tags><solution type="VendorFix">Upgrade the gateway firmware to release 4.2.1 or later. Restart the appliance afterwards.</solution><epss><max_severity><score>0.10000</score><percentile>0.90000</percentile><cve id="CVE-2099-2101"><severity>9.8</severity></cve></max_severity><max_epss><score>0.10000</score><percentile>0.90000</percentile><cve id="CVE-2099-2101"><severity>9.8</severity></cve></max_epss></epss><refs><ref type="cve" id="CVE-2099-2101"/></refs></nvt>
+      <threat>Medium</threat>
+      <severity>5.0</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Gateway Remote Code Execution.</description>
+    </result>
+    <result id="p-0004">
+      <host>192.0.2.21<hostname>host21.example.com</hostname></host>
+      <port>389/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992102"><type>nvt</type><name>Example Directory Service Authentication Bypass</name><family>Synthetic</family><cvss_base>9.1</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">Restrict access to the directory service to the management network.</solution><epss><max_severity><score>0.02000</score><percentile>0.40000</percentile><cve id="CVE-2099-2102"><severity>9.1</severity></cve></max_severity><max_epss><score>0.50000</score><percentile>0.97000</percentile><cve id="CVE-2099-2103"><severity>7.5</severity></cve></max_epss></epss><refs><ref type="cve" id="CVE-2099-2102"/><ref type="cve" id="CVE-2099-2103"/></refs></nvt>
+      <threat>Critical</threat>
+      <severity>9.1</severity>
+      <qod><value>98</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Directory Service Authentication Bypass.</description>
+    </result>
+    <result id="p-0005">
+      <host>198.51.100.21<hostname>host24.example.com</hostname></host>
+      <port>389/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992102"><type>nvt</type><name>Example Directory Service Authentication Bypass</name><family>Synthetic</family><cvss_base>9.1</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">Restrict access to the directory service to the management network.</solution><epss><max_severity><score>0.02000</score><percentile>0.40000</percentile><cve id="CVE-2099-2102"><severity>9.1</severity></cve></max_severity><max_epss><score>0.50000</score><percentile>0.97000</percentile><cve id="CVE-2099-2103"><severity>7.5</severity></cve></max_epss></epss><refs><ref type="cve" id="CVE-2099-2102"/><ref type="cve" id="CVE-2099-2103"/></refs></nvt>
+      <threat>Critical</threat>
+      <severity>9.1</severity>
+      <qod><value>98</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Directory Service Authentication Bypass.</description>
+    </result>
+    <result id="p-0006">
+      <host>192.0.2.22<hostname>host22.example.com</hostname></host>
+      <port>5672/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992103"><type>nvt</type><name>Example Messaging Broker Deserialization</name><family>Synthetic</family><cvss_base>9.8</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=VendorFix</tags><solution type="VendorFix">Update the broker to version 3.0.5 or later.</solution><epss><max_severity><score>0.20000</score><percentile>0.90000</percentile><cve id="CVE-2099-2104"><severity>9.8</severity></cve></max_severity><max_epss><score>0.20000</score><percentile>0.90000</percentile><cve id="CVE-2099-2104"><severity>9.8</severity></cve></max_epss></epss><refs><ref type="cve" id="CVE-2099-2104"/></refs></nvt>
+      <threat>Critical</threat>
+      <severity>9.8</severity>
+      <qod><value>98</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Messaging Broker Deserialization.</description>
+    </result>
+    <result id="p-0007">
+      <host>198.51.100.22<hostname>host25.example.com</hostname></host>
+      <port>5672/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992103"><type>nvt</type><name>Example Messaging Broker Deserialization</name><family>Synthetic</family><cvss_base>9.8</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=VendorFix</tags><solution type="VendorFix">Update the broker to version 3.0.5 or later.</solution><epss><max_severity><score>0.20000</score><percentile>0.90000</percentile><cve id="CVE-2099-2104"><severity>9.8</severity></cve></max_severity><max_epss><score>0.20000</score><percentile>0.90000</percentile><cve id="CVE-2099-2104"><severity>9.8</severity></cve></max_epss></epss><refs><ref type="cve" id="CVE-2099-2104"/></refs></nvt>
+      <threat>Critical</threat>
+      <severity>9.8</severity>
+      <qod><value>30</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Messaging Broker Deserialization.</description>
+    </result>
+    <result id="p-0008">
+      <host>192.0.2.23<hostname>host23.example.com</hostname></host>
+      <port>631/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992104"><type>nvt</type><name>Example Print Spooler Buffer Overflow</name><family>Synthetic</family><cvss_base>9.8</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Workaround</tags><solution type="Workaround">Disable the print spooler service on hosts that do not need it.</solution><refs></refs></nvt>
+      <threat>Critical</threat>
+      <severity>9.8</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Print Spooler Buffer Overflow.</description>
+    </result>
+    <result id="p-0009">
+      <host>203.0.113.21<hostname>host26.example.com</hostname></host>
+      <port>631/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992104"><type>nvt</type><name>Example Print Spooler Buffer Overflow</name><family>Synthetic</family><cvss_base>9.8</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Workaround</tags><solution type="Workaround">Disable the print spooler service on hosts that do not need it.</solution><refs></refs></nvt>
+      <threat>Critical</threat>
+      <severity>9.8</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Print Spooler Buffer Overflow.</description>
+    </result>
+    <result id="p-0010">
+      <host>192.0.2.21<hostname>host21.example.com</hostname></host>
+      <port>3389/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992105"><type>nvt</type><name>Example Remote Desktop Pre-Auth Flaw</name><family>Synthetic</family><cvss_base>9.0</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=VendorFix</tags><solution type="VendorFix">Install the vendor patch for the remote desktop service.</solution><refs></refs></nvt>
+      <threat>Critical</threat>
+      <severity>9.0</severity>
+      <qod><value>98</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Remote Desktop Pre-Auth Flaw.</description>
+    </result>
+    <result id="p-0011">
+      <host>192.0.2.21<hostname>host21.example.com</hostname></host>
+      <port>3390/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992105"><type>nvt</type><name>Example Remote Desktop Pre-Auth Flaw</name><family>Synthetic</family><cvss_base>9.0</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=VendorFix</tags><solution type="VendorFix">Install the vendor patch for the remote desktop service.</solution><refs></refs></nvt>
+      <threat>Critical</threat>
+      <severity>9.0</severity>
+      <qod><value>98</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Remote Desktop Pre-Auth Flaw.</description>
+    </result>
+    <result id="p-0012">
+      <host>198.51.100.21<hostname>host24.example.com</hostname></host>
+      <port>3389/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992105"><type>nvt</type><name>Example Remote Desktop Pre-Auth Flaw</name><family>Synthetic</family><cvss_base>9.0</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=VendorFix</tags><solution type="VendorFix">Install the vendor patch for the remote desktop service.</solution><refs></refs></nvt>
+      <threat>Critical</threat>
+      <severity>9.0</severity>
+      <qod><value>98</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Remote Desktop Pre-Auth Flaw.</description>
+    </result>
+    <result id="p-0013">
+      <host>192.0.2.21<hostname>host21.example.com</hostname></host>
+      <port>25/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992106"><type>nvt</type><name>Example Mail Relay Accepts Unauthenticated Relaying</name><family>Synthetic</family><cvss_base>8.0</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">Configure the mail relay to require authentication before relaying.</solution><refs></refs></nvt>
+      <threat>High</threat>
+      <severity>8.0</severity>
+      <qod><value>98</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Mail Relay Accepts Unauthenticated Relaying.</description>
+    </result>
+    <result id="p-0014">
+      <host>192.0.2.22<hostname>host22.example.com</hostname></host>
+      <port>25/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992106"><type>nvt</type><name>Example Mail Relay Accepts Unauthenticated Relaying</name><family>Synthetic</family><cvss_base>-1.0</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">Configure the mail relay to require authentication before relaying.</solution><refs></refs></nvt>
+      <threat>False Positive</threat>
+      <severity>-1.0</severity>
+      <qod><value>98</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Mail Relay Accepts Unauthenticated Relaying.</description>
+    </result>
+    <result id="p-0015">
+      <host>203.0.113.21<hostname>host26.example.com</hostname></host>
+      <port>8080/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992108"><type>nvt</type><name>Example Beta Web Console Exposure</name><family>Synthetic</family><cvss_base>7.5</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">Remove the web console from public interfaces.</solution><epss><max_severity><score>0.30000</score><percentile>0.90000</percentile><cve id="CVE-2099-2108"><severity>7.5</severity></cve></max_severity><max_epss><score>0.30000</score><percentile>0.90000</percentile><cve id="CVE-2099-2108"><severity>7.5</severity></cve></max_epss></epss><refs><ref type="cve" id="CVE-2099-2108"/></refs></nvt>
+      <threat>High</threat>
+      <severity>7.5</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Beta Web Console Exposure.</description>
+    </result>
+    <result id="p-0016">
+      <host>198.51.100.22<hostname>host25.example.com</hostname></host>
+      <port>8080/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992107"><type>nvt</type><name>Example Alpha Web Console Exposure</name><family>Synthetic</family><cvss_base>7.5</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">Remove the web console from public interfaces.</solution><epss><max_severity><score>0.30000</score><percentile>0.90000</percentile><cve id="CVE-2099-2107"><severity>7.5</severity></cve></max_severity><max_epss><score>0.30000</score><percentile>0.90000</percentile><cve id="CVE-2099-2107"><severity>7.5</severity></cve></max_epss></epss><refs><ref type="cve" id="CVE-2099-2107"/></refs></nvt>
+      <threat>High</threat>
+      <severity>7.5</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Alpha Web Console Exposure.</description>
+    </result>
+    <result id="p-0017">
+      <host>192.0.2.23<hostname>host23.example.com</hostname></host>
+      <port>23/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992110"><type>nvt</type><name>Example Legacy Protocol Enabled</name><family>Synthetic</family><cvss_base>5.0</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=NoneAvailable</tags><solution type="NoneAvailable">No known solution is available. Isolate the service from untrusted networks.</solution><refs></refs></nvt>
+      <threat>Medium</threat>
+      <severity>5.0</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Legacy Protocol Enabled.</description>
+    </result>
+    <result id="p-0018">
+      <host>192.0.2.22<hostname>host22.example.com</hostname></host>
+      <port>23/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992109"><type>nvt</type><name>Example Legacy Protocol Enabled</name><family>Synthetic</family><cvss_base>5.0</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=WillNotFix</tags><solution type="WillNotFix">The vendor will not fix this protocol weakness; disable the protocol where possible.</solution><refs></refs></nvt>
+      <threat>Medium</threat>
+      <severity>5.0</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Legacy Protocol Enabled.</description>
+    </result>
+    <result id="p-0019">
+      <host>198.51.100.21<hostname>host24.example.com</hostname></host>
+      <port>123/udp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992111"><type>nvt</type><name>Example Time Service Information Leak</name><family>Synthetic</family><cvss_base>6.5</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">Restrict the time service to trusted peers.</solution><epss><max_severity><score>0.90000</score><percentile>0.90000</percentile><cve id="CVE-2099-2111"><severity>6.5</severity></cve></max_severity><max_epss><score>0.90000</score><percentile>0.90000</percentile><cve id="CVE-2099-2111"><severity>6.5</severity></cve></max_epss></epss><refs><ref type="cve" id="CVE-2099-2111"/></refs></nvt>
+      <threat>Medium</threat>
+      <severity>6.5</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Time Service Information Leak.</description>
+    </result>
+    <result id="p-0020">
+      <host>192.0.2.21<hostname>host21.example.com</hostname></host>
+      <port>445/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992112"><type>nvt</type><name>Example File Share Weak Signing</name><family>Synthetic</family><cvss_base>5.3</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">Require message signing on the file share service.</solution><refs></refs></nvt>
+      <threat>Medium</threat>
+      <severity>5.3</severity>
+      <qod><value>98</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example File Share Weak Signing.</description>
+    </result>
+    <result id="p-0021">
+      <host>192.0.2.22<hostname>host22.example.com</hostname></host>
+      <port>445/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992112"><type>nvt</type><name>Example File Share Weak Signing</name><family>Synthetic</family><cvss_base>5.3</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">Require message signing on the file share service.</solution><refs></refs></nvt>
+      <threat>Medium</threat>
+      <severity>5.3</severity>
+      <qod><value>98</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example File Share Weak Signing.</description>
+    </result>
+    <result id="p-0022">
+      <host>192.0.2.23<hostname>host23.example.com</hostname></host>
+      <port>445/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992112"><type>nvt</type><name>Example File Share Weak Signing</name><family>Synthetic</family><cvss_base>5.3</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">Require message signing on the file share service.</solution><refs></refs></nvt>
+      <threat>Medium</threat>
+      <severity>5.3</severity>
+      <qod><value>98</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example File Share Weak Signing.</description>
+    </result>
+    <result id="p-0023">
+      <host>192.0.2.21<hostname>host21.example.com</hostname></host>
+      <port>161/udp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992113"><type>nvt</type><name>Example SNMP Default Community</name><family>Synthetic</family><cvss_base>2.6</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">Change the default SNMP community string.</solution><refs></refs></nvt>
+      <threat>Low</threat>
+      <severity>2.6</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example SNMP Default Community.</description>
+    </result>
+    <result id="p-0024">
+      <host>192.0.2.22<hostname>host22.example.com</hostname></host>
+      <port>161/udp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992113"><type>nvt</type><name>Example SNMP Default Community</name><family>Synthetic</family><cvss_base>2.6</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">Change the default SNMP community string.</solution><refs></refs></nvt>
+      <threat>Low</threat>
+      <severity>2.6</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example SNMP Default Community.</description>
+    </result>
+    <result id="p-0025">
+      <host>192.0.2.23<hostname>host23.example.com</hostname></host>
+      <port>161/udp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992113"><type>nvt</type><name>Example SNMP Default Community</name><family>Synthetic</family><cvss_base>2.6</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">Change the default SNMP community string.</solution><refs></refs></nvt>
+      <threat>Low</threat>
+      <severity>2.6</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example SNMP Default Community.</description>
+    </result>
+    <result id="p-0026">
+      <host>198.51.100.21<hostname>host24.example.com</hostname></host>
+      <port>161/udp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992113"><type>nvt</type><name>Example SNMP Default Community</name><family>Synthetic</family><cvss_base>2.6</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">Change the default SNMP community string.</solution><refs></refs></nvt>
+      <threat>Low</threat>
+      <severity>2.6</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example SNMP Default Community.</description>
+    </result>
+    <result id="p-0027">
+      <host>198.51.100.22<hostname>host25.example.com</hostname></host>
+      <port>161/udp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992113"><type>nvt</type><name>Example SNMP Default Community</name><family>Synthetic</family><cvss_base>2.6</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">Change the default SNMP community string.</solution><refs></refs></nvt>
+      <threat>Low</threat>
+      <severity>2.6</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example SNMP Default Community.</description>
+    </result>
+    <result id="p-0028">
+      <host>203.0.113.21<hostname>host26.example.com</hostname></host>
+      <port>80/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992114"><type>nvt</type><name>Example Service Banner Disclosure</name><family>Synthetic</family><cvss_base>0.0</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.</tags><solution></solution><refs></refs></nvt>
+      <threat>Log</threat>
+      <severity>0.0</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Service Banner Disclosure.</description>
+    </result>
+    <result id="p-0029">
+      <host>198.51.100.21<hostname>host24.example.com</hostname></host>
+      <port>1521/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992115"><type>nvt</type><name>Example Unconfirmed Database Flaw</name><family>Synthetic</family><cvss_base>8.8</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=VendorFix</tags><solution type="VendorFix">Update the database server to the release that fixes the flaw.</solution><epss><max_severity><score>0.70000</score><percentile>0.90000</percentile><cve id="CVE-2099-2115"><severity>8.8</severity></cve></max_severity><max_epss><score>0.70000</score><percentile>0.90000</percentile><cve id="CVE-2099-2115"><severity>8.8</severity></cve></max_epss></epss><refs><ref type="cve" id="CVE-2099-2115"/></refs></nvt>
+      <threat>High</threat>
+      <severity>8.8</severity>
+      <qod><value>30</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Unconfirmed Database Flaw.</description>
+    </result>
+    <result id="p-0030">
+      <host>198.51.100.22<hostname>host25.example.com</hostname></host>
+      <port>1521/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992115"><type>nvt</type><name>Example Unconfirmed Database Flaw</name><family>Synthetic</family><cvss_base>8.8</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=VendorFix</tags><solution type="VendorFix">Update the database server to the release that fixes the flaw.</solution><epss><max_severity><score>0.70000</score><percentile>0.90000</percentile><cve id="CVE-2099-2115"><severity>8.8</severity></cve></max_severity><max_epss><score>0.70000</score><percentile>0.90000</percentile><cve id="CVE-2099-2115"><severity>8.8</severity></cve></max_epss></epss><refs><ref type="cve" id="CVE-2099-2115"/></refs></nvt>
+      <threat>High</threat>
+      <severity>8.8</severity>
+      <qod><value>30</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Unconfirmed Database Flaw.</description>
+    </result>
+    <result id="p-0031">
+      <host>192.0.2.22<hostname>host22.example.com</hostname></host>
+      <port>8443/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992116"><type>nvt</type><name>Example beta Status Page Disclosure</name><family>Synthetic</family><cvss_base>3.7</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">Disable the public status page.</solution><refs></refs></nvt>
+      <threat>Low</threat>
+      <severity>3.7</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example beta Status Page Disclosure.</description>
+    </result>
+    <result id="p-0032">
+      <host>192.0.2.23<hostname>host23.example.com</hostname></host>
+      <port>8443/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992117"><type>nvt</type><name>Example Zeta Status Page Disclosure</name><family>Synthetic</family><cvss_base>3.7</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">Disable the public status page.</solution><refs></refs></nvt>
+      <threat>Low</threat>
+      <severity>3.7</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Zeta Status Page Disclosure.</description>
+    </result>
+    <result id="p-0033">
+      <host>198.51.100.21<hostname>host24.example.com</hostname></host>
+      <port>8444/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992118"><type>nvt</type><name>Example Ágata Report Viewer Disclosure</name><family>Synthetic</family><cvss_base>3.5</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">Restrict the report viewer to authenticated users.</solution><refs></refs></nvt>
+      <threat>Low</threat>
+      <severity>3.5</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Ágata Report Viewer Disclosure.</description>
+    </result>
+    <result id="p-0034">
+      <host>198.51.100.22<hostname>host25.example.com</hostname></host>
+      <port>8444/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992119"><type>nvt</type><name>Example Bravo Report Viewer Disclosure</name><family>Synthetic</family><cvss_base>3.5</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">Restrict the report viewer to authenticated users.</solution><refs></refs></nvt>
+      <threat>Low</threat>
+      <severity>3.5</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Bravo Report Viewer Disclosure.</description>
+    </result>
+  </results>
+</report>

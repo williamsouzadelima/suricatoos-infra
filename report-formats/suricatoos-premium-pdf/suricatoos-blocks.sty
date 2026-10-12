@@ -24,7 +24,9 @@
 %   pg-08      \consolidatedcard, \advisoryrow, \advisorytrunc
 %   pg-09      \findingcard, \fieldcols, \cvssvector, \affectedchips,
 %              termbox env, \solbox, \reflist, \refurl
-%   secao 6    scopefacts env, \scopefact, \scopena, authtable env, \authrow,
+%   secao 2    \priosummary, prioritytable env, \priorow, \priolink,
+%              \prionosol, \priotrunc
+%   secao 7    scopefacts env, \scopefact, \scopena, authtable env, \authrow,
 %              errortable env, \errorrow, \scopetrunc
 %   strings    \suriLbl... (every fixed word the blocks print, overridable)
 %
@@ -1017,7 +1019,7 @@
   \suriFS{9}{14}\raggedright#1\par}}
 
 % ===========================================================================
-% Escopo, metodologia e limitacoes (secao 6).
+% Escopo, metodologia e limitacoes (secao 7).
 %
 %   \begin{scopefacts}
 %     \scopefact{Tarefa}{Revis\~ao trimestral}
@@ -1162,8 +1164,104 @@
   {\suriFS{10}{13}\color{body}#4}\suri@rowfill{26}\\
   \suri@rowhair}
 
-% \scopetrunc{texto} — a linha que fecha uma tabela cortada da secao 6.
+% \scopetrunc{texto} — a linha que fecha uma tabela cortada da secao 7.
 \newcommand{\scopetrunc}[1]{\findingtrunc{#1}}
+
+% ===========================================================================
+% Prioridades e proximos passos (secao 2).
+%
+%   \priosummary{As 20 primeiras a\c{c}\~oes tratam 140 de 152 achados ...}
+%   \begin{prioritytable}
+%     \priorow{1}{Atualize o servidor web para 2.4.58.}{Servidor web < 2.4.58}%
+%       {Corre\c{c}\~ao do Fornecedor}{3}{critico}{9.8}{97.3\%}{\priolink{fnd-1-3-6}{\#3}}
+%   \end{prioritytable}
+%   \priotrunc{\suriEllip\ + 12 a\c{c}\~ao(\~oes) a mais, ...}
+%
+% \priosummary e' a frase calculada que abre o plano ("as N primeiras acoes
+% tratam X de Y achados criticos e altos"): a UNICA linha da secao que o leitor
+% leva embora, entao sai um degrau acima do \suriPara -- o corpo do \suriLede,
+% em Sans semibold `ink' (sb/n, face do subset; nada em italico dentro dela).
+%
+% prioritytable e' uma longtable no molde da errortable (secao 7): cabecalho
+% Mono repetido a cada pagina sobre a regra de 2px `ink', fio entre as linhas,
+% 2px fechando, e um vao de 1% da medida entre as colunas, porque aqui tambem
+% as celulas quebram em varias linhas (a acao, o nome do NVT, o tipo de
+% solucao); larguras + vaos somam exatamente a medida.
+% \priorow{n}{acao}{nome}{tipo}{hosts}{sev}{cvss}{epss}{link}: uma acao por
+% card de achado (o card consolidado e' uma). A acao em Sans `ink' e, embaixo
+% dela, o nome menor e `muted' -- o do NVT (o do \findingorig) ou o titulo do
+% card consolidado: e' a referencia de QUE a acao trata, porque "Atualize para
+% a versao 2.4.58" sozinha nao diz de que; a severidade e' CHAVE, como nas
+% outras tabelas, e sai no \sevbadges (a coluna ja' diz severidade, o numero
+% e' o CVSS); o link e' um \priolink. O \suri@rowfill fecha TODA celula (cada
+% uma e' um \vtop; veja o \authrow); na da acao ele fica DENTRO do paragrafo
+% do nome, antes do \par -- depois dele seria uma linha a mais.
+%
+% \priolink{ancora}{texto} e' um \hyperlink com outro nome no .tex: o portao de
+% links do CI (gates.sh) faz a conta exata alvos == \hyperlink + cortes do
+% sumario de achados, e o card que este link abre ja' tem o link da sua linha
+% no sumario. Com nome proprio ele fica fora da conta (que continua exata) e
+% passa pela mesma regra de "nenhum link sem alvo" (gates.sh e o check
+% `ancoras' do check-veracity.py).
+%
+% \prionosol e' a acao de um card cuja solucao o relatorio nao traz (num card
+% consolidado, a do membro mais severo, que e' a acao unica dele): a frase de
+% \suriLblNoSolution em Sans regular italico `muted' (face do subset), como o
+% \scopena, para nao se confundir com uma acao.
+%
+% \priotrunc{texto}: a linha que fecha a tabela cortada, com o desenho do
+% \findingtrunc e outro nome pela mesma razao do \scopetrunc: o portao de
+% links soma os "\findingtrunc{\suriEllip\ + N" contra os alvos de card.
+% ===========================================================================
+\newcommand{\suriLblAction}{A\c{c}\~ao}
+\newcommand{\suriLblSolType}{Tipo}
+\newcommand{\suriLblEpss}{EPSS}
+\newcommand{\suriLblCard}{Achado}
+\newcommand{\suriLblNoSolution}{sem solu\c{c}\~ao informada}
+
+\newcommand{\priosummary}[1]{\par\addvspace{\suripx{4}}%
+  {\parindent=0pt\raggedright\suriFS{12.2}{19}\suriSB\color{ink}#1\par}}
+
+\newcommand{\prionosol}{{\suriSans\mdseries\itshape\color{muted}\suriLblNoSolution}}
+\newcommand{\priolink}[2]{\hyperlink{#1}{#2}}
+\newcommand{\priotrunc}[1]{\findingtrunc{#1}}
+
+\newlength{\suri@prw}   % medida da prioritytable em composicao
+\newcommand{\suri@prhead}{%
+  \suri@hlbl{\#}&\suri@hlbl{\suriLblAction}&\suri@hlbl{\suriLblSolType}&
+  \suri@hlblr{\suriLblHostsCol}&\suri@hlbl{\suriLblSev}&
+  \suri@hlblr{\suriLblEpss}&\suri@hlbl{\suriLblCard}\suri@rowfill{27}\\
+  \suri@rowthick}
+\newenvironment{prioritytable}{%
+  \setlength{\suri@prw}{\linewidth}%
+  \suri@rowbase{16}%
+  \setlength{\tabcolsep}{0pt}%
+  \setlength{\LTpre}{0pt}\setlength{\LTpost}{0pt}%
+  \setlength{\LTleft}{0pt}\setlength{\LTright}{0pt}%
+  \longtable{@{}%
+    >{\raggedright\arraybackslash}p{0.04\suri@prw}@{\hspace{0.01\suri@prw}}%
+    >{\raggedright\arraybackslash}p{0.41\suri@prw}@{\hspace{0.01\suri@prw}}%
+    >{\raggedright\arraybackslash}p{0.13\suri@prw}@{\hspace{0.01\suri@prw}}%
+    >{\raggedleft\arraybackslash}p{0.06\suri@prw}@{\hspace{0.01\suri@prw}}%
+    >{\raggedright\arraybackslash}p{0.14\suri@prw}@{\hspace{0.01\suri@prw}}%
+    >{\raggedleft\arraybackslash}p{0.08\suri@prw}@{\hspace{0.01\suri@prw}}%
+    >{\raggedright\arraybackslash}p{0.08\suri@prw}@{}}
+  \suri@prhead\endfirsthead
+  \suri@prhead\endhead
+  \suri@rowclose\endlastfoot
+}{\endlongtable}
+% \priorow{n}{acao}{nome}{tipo}{hosts}{sev}{cvss}{epss}{link} — uma acao.
+\newcommand{\priorow}[9]{%
+  {\dat{\suriFS{10}{13}\color{muted}#1}}\suri@rowfill{26}&
+  {\suriFS{10}{13}\color{ink}#2\par
+   \nointerlineskip\vskip\suripx{3}%
+   {\suriFS{9}{12}\color{muted}#3\suri@rowfill{26}\par}}&
+  {\suriFS{9.5}{12}\color{body}#4}\suri@rowfill{26}&
+  {\dat{\suriFS{10}{13}\color{ink}#5}}\suri@rowfill{26}&
+  {\sevbadges{#6}{#7}}\suri@rowfill{26}&
+  {\dat{\suriFS{9.5}{13}\color{ink}#8}}\suri@rowfill{26}&
+  {\dat{\suriFS{10}{13}\bfseries\color{ink}#9}}\suri@rowfill{26}\\
+  \suri@rowhair}
 
 \makeatother
 \endinput

@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+Fixture SINTETICA do CI de veracidade do Suricatoos Premium PDF
+(report-formats/ci/check-veracity.py roda sobre o .tex desta fixture nos 3
+idiomas). Enderecos RFC 5737, nomes genericos sob .example, OIDs da faixa
+sintetica 1.3.6.1.4.1.25623.1.0.99xxxx (nao existem no feed), CVEs do ano 2099
+e EPSS inventado no formato do gvmd 26 (gmp.c, results_xml_append_epss: score
+e percentile com 5 casas); nenhum dado de scan real.
+
+Secao 2 (prioridades e proximos passos), UMA acao so' (um NVT critico em 3
+hosts, com EPSS): a frase calculada fala da "primeira acao" no singular e
+conta as 3 instancias criticas (3 de 3); nenhuma nota de EPSS, de indicador ou
+de export parcial.
+-->
+<report extension="pdf" content_type="application/pdf" id="00000000-0000-4000-8000-000000000251">
+  <task id="00000000-0000-4000-8000-000000000001">
+    <name>Example Priorities Single Action</name>
+  </task>
+  <scan_run_status>Done</scan_run_status>
+  <timezone>Coordinated Universal Time</timezone>
+  <timezone_abbrev>UTC</timezone_abbrev>
+  <scan_start>2026-09-01T09:00:00Z</scan_start>
+  <scan_end>2026-09-01T10:12:00Z</scan_end>
+  <hosts><count>3</count></hosts>
+  <result_count>3<full>3</full><filtered>3</filtered><critical><full>3</full><filtered>3</filtered></critical><high><full>0</full><filtered>0</filtered></high><medium><full>0</full><filtered>0</filtered></medium><low><full>0</full><filtered>0</filtered></low><log><full>0</full><filtered>0</filtered></log><false_positive><full>0</full><filtered>0</filtered></false_positive></result_count>
+  <filters id="00000000-0000-4000-8000-000000000002">
+    <term>apply_overrides=1 levels=chmlgf rows=-1 min_qod=1 first=1 sort-reverse=severity</term>
+  </filters>
+  <host>
+    <ip>192.0.2.61</ip>
+    <start>2026-09-01T09:01:00Z</start>
+    <end>2026-09-01T10:10:00Z</end>
+    <detail><name>hostname</name><value>host61.example.com</value></detail>
+  </host>
+  <host>
+    <ip>198.51.100.61</ip>
+    <start>2026-09-01T09:01:00Z</start>
+    <end>2026-09-01T10:10:00Z</end>
+    <detail><name>hostname</name><value>host62.example.com</value></detail>
+  </host>
+  <host>
+    <ip>203.0.113.61</ip>
+    <start>2026-09-01T09:01:00Z</start>
+    <end>2026-09-01T10:10:00Z</end>
+    <detail><name>hostname</name><value>host63.example.com</value></detail>
+  </host>
+  <results start="1" max="-1">
+    <result id="p-0001">
+      <host>192.0.2.61<hostname>host61.example.com</hostname></host>
+      <port>902/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992501"><type>nvt</type><name>Example Hypervisor Escape</name><family>Synthetic</family><cvss_base>9.8</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=VendorFix</tags><solution type="VendorFix">Install the hypervisor security update released by the vendor. Reboot the hosts.</solution><epss><max_severity><score>0.97000</score><percentile>0.90000</percentile><cve id="CVE-2099-2501"><severity>9.8</severity></cve></max_severity><max_epss><score>0.97000</score><percentile>0.90000</percentile><cve id="CVE-2099-2501"><severity>9.8</severity></cve></max_epss></epss><refs><ref type="cve" id="CVE-2099-2501"/></refs></nvt>
+      <threat>Critical</threat>
+      <severity>9.8</severity>
+      <qod><value>98</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Hypervisor Escape.</description>
+    </result>
+    <result id="p-0002">
+      <host>198.51.100.61<hostname>host62.example.com</hostname></host>
+      <port>902/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992501"><type>nvt</type><name>Example Hypervisor Escape</name><family>Synthetic</family><cvss_base>9.8</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=VendorFix</tags><solution type="VendorFix">Install the hypervisor security update released by the vendor. Reboot the hosts.</solution><epss><max_severity><score>0.97000</score><percentile>0.90000</percentile><cve id="CVE-2099-2501"><severity>9.8</severity></cve></max_severity><max_epss><score>0.97000</score><percentile>0.90000</percentile><cve id="CVE-2099-2501"><severity>9.8</severity></cve></max_epss></epss><refs><ref type="cve" id="CVE-2099-2501"/></refs></nvt>
+      <threat>Critical</threat>
+      <severity>9.8</severity>
+      <qod><value>98</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Hypervisor Escape.</description>
+    </result>
+    <result id="p-0003">
+      <host>203.0.113.61<hostname>host63.example.com</hostname></host>
+      <port>902/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992501"><type>nvt</type><name>Example Hypervisor Escape</name><family>Synthetic</family><cvss_base>9.8</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=VendorFix</tags><solution type="VendorFix">Install the hypervisor security update released by the vendor. Reboot the hosts.</solution><epss><max_severity><score>0.97000</score><percentile>0.90000</percentile><cve id="CVE-2099-2501"><severity>9.8</severity></cve></max_severity><max_epss><score>0.97000</score><percentile>0.90000</percentile><cve id="CVE-2099-2501"><severity>9.8</severity></cve></max_epss></epss><refs><ref type="cve" id="CVE-2099-2501"/></refs></nvt>
+      <threat>Critical</threat>
+      <severity>9.8</severity>
+      <qod><value>98</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Hypervisor Escape.</description>
+    </result>
+  </results>
+</report>

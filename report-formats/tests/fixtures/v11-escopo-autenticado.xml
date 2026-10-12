@@ -6,7 +6,7 @@ idiomas). Enderecos RFC 5737, nomes genericos sob .example, OIDs da faixa
 sintetica 1.3.6.1.4.1.25623.1.0.99xxxx (nao existem no feed); nenhum dado de
 scan real.
 
-Secao 6 (escopo, metodologia e limitacoes), o relatorio que traz tudo:
+Secao 7 (escopo, metodologia e limitacoes), o relatorio que traz tudo:
 - tarefa E alvo nomeados; <hosts><count> igual ao numero de <host> (sem a
   ressalva da contagem do scanner); janela de 42 min 13 s, que sai "42 min";
 - filtro com piso de QoD ALTO (min_qod=80, acima do piso de 70 do proprio

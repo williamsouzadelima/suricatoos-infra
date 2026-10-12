@@ -6,7 +6,7 @@ idiomas). Enderecos RFC 5737, identificador de sensor e tenant inventados,
 OIDs da faixa sintetica 1.3.6.1.4.1.25623.1.0.99xxxx (nao existem no feed);
 nenhum dado de scan real.
 
-Secao 6 (escopo, metodologia e limitacoes), um relatorio IMPORTADO dos achados
+Secao 7 (escopo, metodologia e limitacoes), um relatorio IMPORTADO dos achados
 do SENSOR pelo gmp-bridge (bridge.py, modo network, network_report_to_xml),
 como o gvmd o exporta depois: tarefa conteiner com o nome que o ingest da'
 (<GMP_TASK_NAME>-<sensor>) e o comentario que o bridge grava ao cria-la
