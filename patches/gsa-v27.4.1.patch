@@ -5349,10 +5349,10 @@ index eaff647..d6e39ef 100644
 \ No newline at end of file
 diff --git a/public/locales/gsa-es.json b/public/locales/gsa-es.json
 new file mode 100644
-index 0000000..727b14a
+index 0000000..9098917
 --- /dev/null
 +++ b/public/locales/gsa-es.json
-@@ -0,0 +1,2492 @@
+@@ -0,0 +1,2496 @@
 +{
 +  "AI Providers": "Proveedores de IA",
 +  "Configure LLM providers (OpenRouter, UnoRouter and others) used to draft remediation plans. Keys are stored encrypted and never shown.": "Configure los proveedores de LLM (OpenRouter, UnoRouter y otros) usados para redactar planes de remediación. Las claves se guardan cifradas y nunca se muestran.",
@@ -7792,6 +7792,7 @@ index 0000000..727b14a
 +  "Your last filter change may be too restrictive.": "Su último cambio de filtro puede ser demasiado restrictivo.",
 +  "Language": "Idioma",
 +  "Select language": "Seleccionar idioma",
++  "Open manual": "Abrir manual",
 +  "Feed update": "Actualización del feed",
 +  "Update feeds now": "Actualizar feeds ahora",
 +  "Updating feeds...": "Actualizando feeds...",
@@ -7818,16 +7819,19 @@ index 0000000..727b14a
 +  "Select a tenant first": "Seleccione un tenant primero",
 +  "Generating command…": "Generando comando…",
 +  "Error generating the command: {{- error}}": "Error al generar el comando: {{- error}}",
++  "Error loading the tenants: {{- error}}": "Error al cargar los tenants: {{- error}}",
 +  "tenant": "tenant",
 +  ", run it on the host:": ", ejecútelo en el host:",
 +  "Copy": "Copiar",
 +  "Copied ✓": "Copiado ✓",
++  "The command is selected. Press Ctrl+C to copy it.": "El comando está seleccionado. Pulse Ctrl+C para copiarlo.",
 +  "Deployment token (up to {{max}} hosts)": "Token de despliegue (hasta {{max}} hosts)",
 +  "Single-use token": "Token de un solo uso",
 +  "expires on {{- date}}": "expira el {{- date}}",
 +  "Endpoint Agents": "Agentes de endpoint",
 +  "Refresh": "Actualizar",
 +  "Error loading the agents: {{- error}}": "Error al cargar los agentes: {{- error}}",
++  "Error requesting the scan of {{- host}}: {{- error}}": "Error al solicitar el escaneo de {{- host}}: {{- error}}",
 +  "No agents yet. Install one from the Activate Agent page.": "Todavía no hay agentes. Instale uno desde la página Activar agente.",
 +  "Online": "En línea",
 +  "Offline": "Fuera de línea",
@@ -7847,10 +7851,10 @@ index 0000000..727b14a
 +}
 \ No newline at end of file
 diff --git a/public/locales/gsa-pt_BR.json b/public/locales/gsa-pt_BR.json
-index 10e592f..df45fc3 100644
+index 10e592f..04730d6 100644
 --- a/public/locales/gsa-pt_BR.json
 +++ b/public/locales/gsa-pt_BR.json
-@@ -1,216 +1,2492 @@
+@@ -1,216 +1,2496 @@
  {
 -  "# of OVAL Definitions": "OVAL defini\u00e7\u00e3o",
 -  "# of Operating Systems": "Sistema Operacional",
@@ -10490,6 +10494,7 @@ index 10e592f..df45fc3 100644
 +  "Your last filter change may be too restrictive.": "Sua última alteração de filtro pode estar muito restritiva.",
 +  "Language": "Idioma",
 +  "Select language": "Selecionar idioma",
++  "Open manual": "Abrir manual",
 +  "Feed update": "Atualização do feed",
 +  "Update feeds now": "Atualizar feeds agora",
 +  "Updating feeds...": "Atualizando feeds...",
@@ -10516,16 +10521,19 @@ index 10e592f..df45fc3 100644
 +  "Select a tenant first": "Selecione um tenant primeiro",
 +  "Generating command…": "Gerando comando…",
 +  "Error generating the command: {{- error}}": "Erro ao gerar o comando: {{- error}}",
++  "Error loading the tenants: {{- error}}": "Erro ao carregar os tenants: {{- error}}",
 +  "tenant": "tenant",
 +  ", run it on the host:": ", rode no host:",
 +  "Copy": "Copiar",
 +  "Copied ✓": "Copiado ✓",
++  "The command is selected. Press Ctrl+C to copy it.": "O comando está selecionado. Pressione Ctrl+C para copiá-lo.",
 +  "Deployment token (up to {{max}} hosts)": "Token de implantação (até {{max}} hosts)",
 +  "Single-use token": "Token de uso único",
 +  "expires on {{- date}}": "expira em {{- date}}",
 +  "Endpoint Agents": "Agentes de endpoint",
 +  "Refresh": "Atualizar",
 +  "Error loading the agents: {{- error}}": "Erro ao carregar os agentes: {{- error}}",
++  "Error requesting the scan of {{- host}}: {{- error}}": "Erro ao solicitar a varredura de {{- host}}: {{- error}}",
 +  "No agents yet. Install one from the Activate Agent page.": "Nenhum agente ainda. Instale um pela página Ativar agente.",
 +  "Online": "Online",
 +  "Offline": "Offline",
@@ -10546,10 +10554,10 @@ index 10e592f..df45fc3 100644
 \ No newline at end of file
 diff --git a/public/suricatoos-theme.css b/public/suricatoos-theme.css
 new file mode 100644
-index 0000000..74b3d5d
+index 0000000..62a5abd
 --- /dev/null
 +++ b/public/suricatoos-theme.css
-@@ -0,0 +1,312 @@
+@@ -0,0 +1,405 @@
 +/* ============================================================
 +   SURICATOOS — Tema Premium v2 (claro + escuro) — GSA / Mantine v7
 +   Carregado por ULTIMO. Foco: profundidade, cards, tabelas, nav,
@@ -10564,20 +10572,32 @@ index 0000000..74b3d5d
 +[data-mantine-color-scheme='light'] {
 +  --sur-surface:#ffffff; --sur-surface-2:#f8fafc; --sur-canvas:#eceff5;
 +  --sur-border:#e5e9f0; --sur-border-strong:#d3dae6; --sur-header:#f5f7fb;
-+  --sur-text:#0f1825; --sur-text-dim:#64748b; --sur-chart-text:#64748b;
++  --sur-text:#0f1825; --sur-text-dim:#566579; --sur-chart-text:#566579;
 +  --sur-shadow:0 1px 2px rgba(15,28,50,.05), 0 6px 18px rgba(15,28,50,.05), 0 16px 44px rgba(15,28,50,.04);
 +  --sur-shadow-sm:0 1px 2px rgba(15,28,50,.05), 0 3px 10px rgba(15,28,50,.05);
 +  --sur-login-bg:radial-gradient(125% 125% at 12% 8%, #7d97ff 0%, #5b7cfa 38%, #3b4fc0 100%);
 +  --sur-accent:#5b7cfa; --sur-accent-soft:rgba(91,124,250,.10); --sur-accent-line:rgba(91,124,250,.30);
++  /* WCAG AA: --sur-accent fica para borda, anel e fundo; o acento como TEXTO e' --sur-accent-text */
++  --sur-accent-text:#3c52c0;
++  /* o cabecalho e' escuro nos dois esquemas: o acento sobre ele e' o claro */
++  --sur-header-accent:#8aa2ff;
++  --sur-danger-text:#a62c16; --sur-danger-bg:#fdf3f3; --sur-danger-border:#f0c2c2;
++  --sur-coral-text:#c8383c;
++  --sur-control-border:#718096;
 +}
 +[data-mantine-color-scheme='dark'] {
 +  --sur-surface:#13202e; --sur-surface-2:#16273b; --sur-canvas:#080e17;
 +  --sur-border:#22344a; --sur-border-strong:#2d435c; --sur-header:#172839;
-+  --sur-text:#e6eef8; --sur-text-dim:#8499b3; --sur-chart-text:#9fb2cb;
++  --sur-text:#e6eef8; --sur-text-dim:#8fa4be; --sur-chart-text:#9fb2cb;
 +  --sur-shadow:0 2px 8px rgba(0,0,0,.5), 0 18px 44px rgba(0,0,0,.45);
 +  --sur-shadow-sm:0 2px 10px rgba(0,0,0,.42);
 +  --sur-login-bg:radial-gradient(125% 125% at 16% 6%, #32428a 0%, #1a2547 45%, #070d18 100%);
 +  --sur-accent:#7d97ff; --sur-accent-soft:rgba(125,151,255,.14); --sur-accent-line:rgba(125,151,255,.34);
++  --sur-accent-text:#8aa2ff;
++  --sur-header-accent:#8aa2ff;
++  --sur-danger-text:#ff9e92; --sur-danger-bg:#2b1416; --sur-danger-border:#6b2a2e;
++  --sur-coral-text:#f2595b;
++  --sur-control-border:#62799a;
 +}
 +
 +/* sinal coral do suricato (usado com parcimonia: login + severidade critica) */
@@ -10676,7 +10696,12 @@ index 0000000..74b3d5d
 +table tbody td { padding:11px 14px!important; border-bottom:1px solid var(--sur-border)!important; font-size:13.5px!important; }
 +table tbody tr { transition:background-color .14s ease!important; }
 +table tbody tr:hover { background:var(--sur-accent-soft)!important; }
-+table a { color:var(--sur-accent)!important; font-weight:500!important; }
++table a { color:var(--sur-accent-text)!important; font-weight:500!important; }
++
++/* icones de ordenacao: o SVG vem com stroke="black" (some no escuro, 1,4:1) e o da
++   coluna ordenada usa o verde 5 do Mantine (2,9:1 no claro): as cores do tema */
++table thead th svg[stroke='black'] { stroke:var(--sur-text-dim); }
++table thead th svg[stroke*='mantine-color-green-5'] { stroke:var(--sur-accent-text); }
 +
 +/* ============================================================
 +   6. NAVEGACAO lateral — item ativo premium
@@ -10687,7 +10712,7 @@ index 0000000..74b3d5d
 +}
 +.mantine-NavLink-root:hover { background:var(--sur-accent-soft)!important; }
 +.mantine-NavLink-root[data-active='true'], .mantine-NavLink-root[aria-current='page'], .mantine-NavLink-root[data-active] {
-+  background:var(--sur-accent-soft)!important; color:var(--sur-accent)!important; font-weight:600!important;
++  background:var(--sur-accent-soft)!important; color:var(--sur-accent-text)!important; font-weight:600!important;
 +}
 +.mantine-NavLink-root[data-active='true']::before, .mantine-NavLink-root[data-active]::before {
 +  content:''!important; position:absolute!important; left:0; top:18%; bottom:18%; width:3px;
@@ -10700,7 +10725,7 @@ index 0000000..74b3d5d
 +.mantine-Button-root[data-variant='filled'] { box-shadow:0 1px 2px rgba(91,124,250,.25), 0 4px 12px rgba(91,124,250,.20)!important; font-weight:600!important; }
 +.mantine-Button-root[data-variant='filled']:hover { box-shadow:0 2px 4px rgba(91,124,250,.30), 0 8px 20px rgba(91,124,250,.26)!important; transform:translateY(-1px); }
 +.mantine-ActionIcon-root { border-radius:8px!important; }
-+.mantine-ActionIcon-root:hover { background:var(--sur-accent-soft)!important; color:var(--sur-accent)!important; }
++.mantine-ActionIcon-root:hover { background:var(--sur-accent-soft)!important; color:var(--sur-accent-text)!important; }
 +
 +/* ============================================================
 +   8. HEADER (topbar)
@@ -10710,6 +10735,10 @@ index 0000000..74b3d5d
 +  border-bottom:1px solid var(--sur-border)!important;
 +  box-shadow:0 1px 0 rgba(255,255,255,.03), 0 6px 18px rgba(0,0,0,.18)!important;
 +}
++/* o icone sob o mouse: a regra global dos ActionIcons (secao 7) usa o acento como
++   texto do esquema, que no claro e' um indigo escuro (2,4:1 sobre o cabecalho, que
++   e' escuro nos dois esquemas); aqui vale o acento claro do cabecalho */
++[class*="_header_"] .mantine-ActionIcon-root:hover { color:var(--sur-header-accent)!important; }
 +
 +/* ============================================================
 +   9. INPUTS — foco com anel do acento
@@ -10723,6 +10752,26 @@ index 0000000..74b3d5d
 +  border-color:var(--sur-accent)!important; box-shadow:0 0 0 3px var(--sur-accent-soft)!important; outline:none!important;
 +}
 +.mantine-Input-input, input, textarea { border-radius:9px!important; }
++
++/* ============================================================
++   9b. CONTROLES — contorno com contraste de componente
++   WCAG 1.4.11: a borda que mostra onde o campo, o select, a caixa de marcar e
++   a chave (desligada) estao precisa de 3:1 contra o que esta em volta (os
++   padroes do Mantine dao 1,5:1 no claro e 2:1 no escuro). :where() zera a
++   especificidade: o anel de foco (secao 9) e o estado de erro do Mantine
++   continuam vencendo.
++   ============================================================ */
++:where(
++  input:not([type='checkbox']):not([type='radio']):not([type='hidden']):not([type='button']):not([type='submit']):not([type='reset']):not(:disabled):not(:focus):not([data-error]),
++  select:not(:disabled):not(:focus),
++  textarea:not(:disabled):not(:focus):not([data-error]),
++  .mantine-Input-input:not(:disabled):not(:focus):not(:focus-within):not([data-error]),
++  .mantine-Checkbox-input:not(:checked):not(:disabled),
++  .mantine-Radio-radio:not(:checked):not(:disabled)
++) { border-color:var(--sur-control-border)!important; }
++.mantine-Switch-input:not(:checked):not(:disabled) + .mantine-Switch-track {
++  background-color:var(--sur-control-border)!important; border-color:var(--sur-control-border)!important;
++}
 +
 +/* ============================================================
 +   10. LOGIN — assinatura "DE VIGÍLIA" (suricato-sentinela)
@@ -10780,8 +10829,17 @@ index 0000000..74b3d5d
 +  content:'· DE VIGÍLIA ·';
 +  position:absolute; left:0; bottom:calc(100% + 4px); white-space:nowrap;
 +  font:600 10.5px/1 'Space Grotesk','Inter',sans-serif;
-+  letter-spacing:.24em; text-transform:uppercase; color:var(--sur-coral);
++  letter-spacing:.24em; text-transform:uppercase; color:var(--sur-coral-text);
 +}
++/* o texto de erro que o Mantine poe sob cada campo (e liga ao campo por
++   aria-describedby) e' so para tecnologia assistiva: a mensagem aparece uma vez,
++   no quadro acima dos campos */
++[data-suricatoos-login] .mantine-InputWrapper-error {
++  position:absolute!important; width:1px!important; height:1px!important; margin:-1px!important; padding:0!important;
++  overflow:hidden!important; clip:rect(0,0,0,0)!important; white-space:nowrap!important; border:0!important;
++}
++/* o olho que mostra a senha e' so um icone (o ui-lib o pinta de #999, 2,85:1) */
++[data-suricatoos-login] .mantine-PasswordInput-visibilityToggle svg { stroke:var(--sur-text-dim)!important; }
 +/* foco coral (sinal do suricato) nos campos do login */
 +#app:not(:has([class*="_header_"])) input:focus {
 +  border-color:var(--sur-coral) !important; box-shadow:0 0 0 3px var(--sur-coral-soft) !important;
@@ -10789,7 +10847,7 @@ index 0000000..74b3d5d
 +/* rodape (copyright) legivel sobre a noite */
 +#app:not(:has([class*="_header_"])) > div > footer,
 +#app:not(:has([class*="_header_"])) > div > footer * {
-+  position:relative; z-index:2; color:rgba(210,220,235,.5) !important;
++  position:relative; z-index:2; color:rgba(210,220,235,.72) !important;
 +}
 +
 +/* badges / pills de status */
@@ -10818,11 +10876,11 @@ index 0000000..74b3d5d
 +  --mantine-primary-color-light:rgba(125,151,255,.16)!important;
 +}
 +[class*="_root-active_"], [class*="navigation-item"][data-active='true'] {
-+  background:var(--sur-accent-soft)!important; color:var(--sur-accent)!important;
++  background:var(--sur-accent-soft)!important; color:var(--sur-accent-text)!important;
 +}
-+[class*="_root-active_"] *, [class*="_root-active_"] svg { color:var(--sur-accent)!important; }
++[class*="_root-active_"] *, [class*="_root-active_"] svg { color:var(--sur-accent-text)!important; }
 +[role="tab"][aria-selected='true'], [class*="Tabs-tab"][data-active], [class*="Tab"][data-active='true'] {
-+  background:transparent!important; color:var(--sur-accent)!important; border-color:var(--sur-accent)!important;
++  background:transparent!important; color:var(--sur-accent-text)!important; border-color:var(--sur-accent)!important;
 +}
 +[role="tab"][aria-selected='true'] { border-bottom:2px solid var(--sur-accent)!important; }
 +
@@ -10862,6 +10920,49 @@ index 0000000..74b3d5d
 +/* rótulo de eixo (ex.: "Pontuacao de Vulnerabilidade") discreto */
 +svg .axis-label, svg text.axis-label { fill:var(--sur-text-dim)!important; font-size:11px!important; font-weight:500!important; }
 +
++/* ============================================================
++   16. CONTRASTE — WCAG 2.1 AA (texto 4,5:1; contorno de controle 3:1)
++   Medido nos dois esquemas. Estes valores vencem os das secoes acima (mesma
++   especificidade, !important nos dois, vale a ordem do arquivo). Quem confere
++   e' o teste suricatoosContrast, que le este arquivo.
++   ============================================================ */
++:root {
++  /* botoes preenchidos (o primario do Mantine e o vermelho do ui-lib): texto branco >= 4,5:1 */
++  --mantine-color-green-filled:#4864e6!important; --mantine-color-green-filled-hover:#3f58d4!important;
++  --mantine-color-blue-filled:#4864e6!important; --mantine-color-blue-filled-hover:#3f58d4!important;
++  --mantine-color-teal-filled:#4864e6!important; --mantine-color-teal-filled-hover:#3f58d4!important;
++  --mantine-primary-color-filled:#4864e6!important; --mantine-primary-color-filled-hover:#3f58d4!important;
++  --mantine-primary-color-contrast:#ffffff!important;
++  --mantine-color-red-filled:#d63538!important; --mantine-color-red-filled-hover:#c42e31!important;
++  /* texto colorido do Mantine (botao claro, badge, alerta, contorno, link): o acento e o erro como TEXTO */
++  --mantine-color-green-text:var(--sur-accent-text)!important; --mantine-color-green-light-color:var(--sur-accent-text)!important; --mantine-color-green-outline:var(--sur-accent-text)!important;
++  --mantine-color-blue-text:var(--sur-accent-text)!important; --mantine-color-blue-light-color:var(--sur-accent-text)!important; --mantine-color-blue-outline:var(--sur-accent-text)!important;
++  --mantine-color-teal-text:var(--sur-accent-text)!important; --mantine-color-teal-light-color:var(--sur-accent-text)!important; --mantine-color-teal-outline:var(--sur-accent-text)!important;
++  --mantine-color-red-text:var(--sur-danger-text)!important; --mantine-color-red-light-color:var(--sur-danger-text)!important; --mantine-color-red-outline:var(--sur-danger-text)!important;
++  --mantine-color-anchor:var(--sur-accent-text)!important;
++  /* texto e borda de erro do Mantine (campo com erro, mensagem do campo) */
++  --mantine-color-error:var(--sur-danger-text)!important;
++}
++[data-mantine-color-scheme='light'] {
++  --mantine-color-red-light:rgba(214,53,56,.10)!important;
++  --mantine-color-yellow-light:rgba(250,176,5,.10)!important; --mantine-color-yellow-light-color:#7a5200!important;
++  --mantine-color-gray-light:rgba(134,142,150,.12)!important; --mantine-color-gray-light-color:#4a5565!important;
++  /* icones do menu lateral (24 px, ao lado do rotulo): o ui-lib os pinta de gray-6
++     (#868e96, 2,9:1 sobre o fundo do claro); no escuro o dele ja passa (9,3:1) */
++  --app-navigation-link-icon-left-color:var(--sur-text-dim)!important;
++}
++[data-mantine-color-scheme='dark'] {
++  --mantine-color-red-light:rgba(255,158,146,.14)!important;
++  --mantine-color-yellow-light:rgba(250,176,5,.15)!important; --mantine-color-yellow-light-color:#ffe066!important;
++  --mantine-color-gray-light:rgba(134,142,150,.15)!important; --mantine-color-gray-light-color:#ced4da!important;
++}
++
++/* aviso que recebe o foco por codigo (tabindex=-1; p.ex. "Provedor excluido"
++   depois de excluir): o anel e' o do acento do tema, como o dos campos, e nao o
++   do navegador. So aparece para quem usa o teclado (:focus-visible). */
++[role='status'][tabindex='-1']:focus-visible, [role='alert'][tabindex='-1']:focus-visible {
++  outline:2px solid var(--sur-accent)!important; outline-offset:3px; border-radius:6px;
++}
 diff --git a/src/gmp/locale/languages.ts b/src/gmp/locale/languages.ts
 index 4d337bd..78a4f27 100644
 --- a/src/gmp/locale/languages.ts
@@ -11483,9 +11584,35 @@ index 13fca0c..8166998 100644
    ];
    return (
 diff --git a/src/web/components/structure/Footer.tsx b/src/web/components/structure/Footer.tsx
-index 9775497..5c7d152 100644
+index 9775497..5622993 100644
 --- a/src/web/components/structure/Footer.tsx
 +++ b/src/web/components/structure/Footer.tsx
+@@ -5,13 +5,13 @@
+ 
+ import styled from 'styled-components';
+ import useLanguage from 'web/hooks/useLanguage';
+-import Theme from 'web/utils/Theme';
++import {SurColors} from 'web/utils/suricatoosColors';
+ 
+ const Link = styled.a`
+-  color: ${Theme.mediumGray};
++  color: ${SurColors.dimText};
+   font-size: 10px;
+   &:link {
+-    color: ${Theme.mediumGray};
++    color: ${SurColors.dimText};
+   }
+ `;
+ 
+@@ -19,7 +19,7 @@ const Footer = styled.footer`
+   padding: 2px;
+   font-size: 10px;
+   text-align: center;
+-  color: ${Theme.mediumGray};
++  color: ${SurColors.dimText};
+   margin-top: 10px;
+ `;
+ 
 @@ -37,6 +37,18 @@ const GreenboneFooter = () => {
        <Link href={linkHref} rel="noopener noreferrer" target="_blank">
          www.greenbone.net
@@ -11506,10 +11633,21 @@ index 9775497..5c7d152 100644
    );
  };
 diff --git a/src/web/components/structure/Header.tsx b/src/web/components/structure/Header.tsx
-index 6958f21..bca13b5 100644
+index 6958f21..b4f378a 100644
 --- a/src/web/components/structure/Header.tsx
 +++ b/src/web/components/structure/Header.tsx
-@@ -16,7 +16,7 @@ import useTranslation from 'web/hooks/useTranslation';
+@@ -4,7 +4,9 @@
+  */
+ 
+ import {useCallback} from 'react';
+-import {AppHeader} from '@greenbone/ui-lib';
++import {ActionIcon, Divider} from '@mantine/core';
++import {AppHeader, ThemeSwitch, Tooltip} from '@greenbone/ui-lib';
++import {BookMarked} from 'lucide-react';
+ import {useLocation, useNavigate} from 'react-router';
+ import {LogoutIcon, MySettingsIcon} from 'web/components/icon';
+ import SessionTimer from 'web/components/session-timer/SessionTimer';
+@@ -16,9 +18,44 @@ import useTranslation from 'web/hooks/useTranslation';
  import useUserIsLoggedIn from 'web/hooks/useUserIsLoggedIn';
  import useUserName from 'web/hooks/useUserName';
  import useUserTimezone from 'web/hooks/useUserTimezone';
@@ -11517,8 +11655,45 @@ index 6958f21..bca13b5 100644
 +import {applianceTitle, type ApplianceLogo} from 'web/utils/appliance-data';
  import {saveLastVisitedPage} from 'web/utils/user-last-visited-page';
  
++interface ManualButtonProps {
++  label: string;
++  url: string;
++}
++
++// Suricatoos: the manual button of the AppHeader of @greenbone/ui-lib has no name
++// for assistive technology: it is an icon inside a tooltip, and the library gives
++// no way to name it (the header only takes the address, `manualLink`). So the fork
++// does not pass `manualLink` and draws the same button, with the same divider and
++// tooltip, in the slot of the color theme switch, with a name. (The header draws
++// that slot while `isThemeSwitchVisible` is true, as it is here.)
++const dividerStyle = {
++  alignSelf: 'center',
++  borderLeftColor: 'var(--mantine-color-white)',
++  height: 'calc(1.25rem * var(--mantine-scale))',
++  margin: '0 var(--mantine-spacing-sm)',
++} as const;
++
++const ManualButton = ({label, url}: ManualButtonProps) => (
++  <>
++    <Divider orientation="vertical" style={dividerStyle} />
++    <Tooltip label={label}>
++      <ActionIcon
++        aria-label={label}
++        color="neutral.0"
++        data-testid="manual-link"
++        variant="transparent"
++        onClick={() => window.open(url, '_blank', 'noreferrer')}
++      >
++        <BookMarked aria-hidden size={14} strokeWidth={1.5} />
++      </ActionIcon>
++    </Tooltip>
++  </>
++);
++
  const Header = () => {
-@@ -28,6 +28,12 @@ const Header = () => {
+   const [_] = useTranslation();
+ 
+@@ -28,6 +65,12 @@ const Header = () => {
    const navigate = useNavigate();
    const location = useLocation();
    const logoComponent = getLogo(gmp?.settings?.vendorLabel as ApplianceLogo);
@@ -11531,7 +11706,7 @@ index 6958f21..bca13b5 100644
    const [timezone] = useUserTimezone();
    const manualURL = useManualURL();
  
-@@ -63,9 +69,19 @@ const Header = () => {
+@@ -63,13 +106,28 @@ const Header = () => {
      <AppHeader
        ianaTimeZone={timezone}
        isLoggedIn={isLoggedIn}
@@ -11551,13 +11726,23 @@ index 6958f21..bca13b5 100644
 +        ) : undefined
 +      }
        logoLink="/dashboards"
-       manualLink={manualURL}
+-      manualLink={manualURL}
        menuPoints={menuPoints}
+       sessionTimer={<SessionTimer />}
++      themeSwitch={
++        <>
++          <ThemeSwitch />
++          <ManualButton label={_('Open manual')} url={manualURL} />
++        </>
++      }
+       userNavWidth={150}
+       username={username}
+     />
 diff --git a/src/web/components/structure/LanguageSwitch.tsx b/src/web/components/structure/LanguageSwitch.tsx
-index 7f74728..de42221 100644
+index 7f74728..35b96c0 100644
 --- a/src/web/components/structure/LanguageSwitch.tsx
 +++ b/src/web/components/structure/LanguageSwitch.tsx
-@@ -3,64 +3,135 @@
+@@ -3,64 +3,136 @@
   * SPDX-License-Identifier: AGPL-3.0-or-later
   */
  
@@ -11602,7 +11787,9 @@ index 7f74728..de42221 100644
 +    <circle cx="14" cy="10" fill="#002776" r="4.2" />
 +  </svg>
 +);
-+
+ 
+-const getNextLanguage = (language: LanguageCode): LanguageCode =>
+-  language === LANGUAGES.EN ? LANGUAGES.DE : LANGUAGES.EN;
 +const FlagES: React.FC = () => (
 +  <svg {...flagProps}>
 +    <rect fill="#aa151b" height="20" width="28" />
@@ -11642,9 +11829,7 @@ index 7f74728..de42221 100644
 +    </g>
 +  </svg>
 +);
- 
--const getNextLanguage = (language: LanguageCode): LanguageCode =>
--  language === LANGUAGES.EN ? LANGUAGES.DE : LANGUAGES.EN;
++
 +interface LangDef {
 +  code: string;
 +  // BCP 47 tag of the label: each name is written in its own language
@@ -11663,13 +11848,13 @@ index 7f74728..de42221 100644
    const [language, setLanguage] = useLanguage();
    const [_] = useTranslation();
 -  const [isChangingLanguage, setIsChangingLanguage] = useState<boolean>(false);
- 
+-
 -  const nextLanguage: LanguageCode = getNextLanguage(language as LanguageCode);
 -  const titles: Record<LanguageCode, string> = {
 -    en: _('Switch language to English'),
 -    de: _('Switch language to German'),
 -  };
--
+ 
 -  const handleLanguageChange = async (): Promise<void> => {
 -    if (isChangingLanguage) {
 -      return;
@@ -11684,10 +11869,12 @@ index 7f74728..de42221 100644
 -      throw new Error(error instanceof Error ? error.message : String(error));
 -    } finally {
 -      setIsChangingLanguage(false);
+-    }
++  // Choosing the language that is shown is a choice too when it was only detected;
++  // setLanguage (the provider) tells that and does nothing when it already is the
++  // choice of the user.
 +  const handleSelect = async (code: string): Promise<void> => {
-+    if (code !== language) {
-+      await setLanguage(code);
-     }
++    await setLanguage(code);
    };
  
    return (
@@ -11755,10 +11942,10 @@ index a057cf9..409c93b 100644
    },
 diff --git a/src/web/pages/downloads/DownloadsPage.tsx b/src/web/pages/downloads/DownloadsPage.tsx
 new file mode 100644
-index 0000000..772575f
+index 0000000..94e559a
 --- /dev/null
 +++ b/src/web/pages/downloads/DownloadsPage.tsx
-@@ -0,0 +1,261 @@
+@@ -0,0 +1,358 @@
 +/* SPDX-FileCopyrightText: 2024 Greenbone AG
 + *
 + * SPDX-License-Identifier: AGPL-3.0-or-later
@@ -11771,7 +11958,8 @@ index 0000000..772575f
 + * per-tenant token and returns a ready-to-run command with the token
 + * already embedded — the dynamic per-tenant token. Renders inside the GSA shell. */
 +
-+import React, {useState, useCallback, useEffect, useId} from 'react';
++import React, {useState, useCallback, useEffect, useId, useRef} from 'react';
++import {flushSync} from 'react-dom';
 +import {VisuallyHidden} from '@mantine/core';
 +import Button from 'web/components/form/Button';
 +import Layout from 'web/components/layout/Layout';
@@ -11786,6 +11974,7 @@ index 0000000..772575f
 +  isSessionExpired,
 +  SuricatoosApiError,
 +} from 'web/utils/suricatoosApi';
++import {SurColors} from 'web/utils/suricatoosColors';
 +import {formatApiDate} from 'web/utils/suricatoosDate';
 +import LiveRegion from 'web/utils/suricatoosLive';
 +import Theme from 'web/utils/Theme';
@@ -11809,14 +11998,18 @@ index 0000000..772575f
 +  {id: 'windows', label: 'Windows'},
 +];
 +
++// The colors are the ones of the theme, which has one for each color scheme: the
++// text takes the color of the page (light in the dark scheme), so a background
++// fixed in a light color made the command unreadable there.
 +const codeBoxStyle: React.CSSProperties = {
 +  display: 'block',
 +  whiteSpace: 'pre-wrap',
 +  wordBreak: 'break-all',
 +  fontFamily: 'monospace',
 +  fontSize: '13px',
-+  background: '#f6f8fa',
-+  border: `1px solid ${Theme.lightGray}`,
++  background: SurColors.codeBg,
++  color: SurColors.text,
++  border: `1px solid ${SurColors.codeBorder}`,
 +  borderRadius: '6px',
 +  padding: '12px 14px',
 +  margin: '10px 0',
@@ -11825,13 +12018,15 @@ index 0000000..772575f
 +const selectStyle: React.CSSProperties = {
 +  padding: '6px 10px',
 +  fontSize: '14px',
-+  border: `1px solid ${Theme.lightGray}`,
++  background: SurColors.surface,
++  color: SurColors.text,
++  border: `1px solid ${SurColors.controlBorder}`,
 +  borderRadius: '4px',
 +  minWidth: '220px',
 +};
 +
 +const avisoStyle: React.CSSProperties = {
-+  color: Theme.darkGray,
++  color: SurColors.text,
 +  fontSize: '12px',
 +  borderLeft: `3px solid ${Theme.severityWarnYellow}`,
 +  padding: '2px 0 2px 8px',
@@ -11848,11 +12043,17 @@ index 0000000..772575f
 +  const [target, setTarget] = useState<string>('');
 +  const [resp, setResp] = useState<EnrollResponse | null>(null);
 +  const [loading, setLoading] = useState<boolean>(false);
-+  const [error, setError] = useState<Error | null>(null);
-+  const [copied, setCopied] = useState<boolean>(false);
-+  // ids that tie the label and the error message to the select
++  // Two errors, each in its own context: the tenant list that did not load, and
++  // the command that was not generated.
++  const [tenantsError, setTenantsError] = useState<Error | null>(null);
++  const [commandError, setCommandError] = useState<Error | null>(null);
++  // 'manual': the page could not copy and says to press Ctrl+C
++  const [copy, setCopy] = useState<'idle' | 'copied' | 'manual'>('idle');
++  const command = useRef<HTMLElement>(null);
++  // ids that tie the label and the error messages to the select
 +  const tenantId = useId();
-+  const errorId = useId();
++  const tenantsErrorId = useId();
++  const commandErrorId = useId();
 +
 +  // Load the tenant list on mount (behind the nginx session gate: cookie +
 +  // token, which the shared client adds). Aborted on unmount.
@@ -11871,7 +12072,7 @@ index 0000000..772575f
 +      })
 +      .catch(e => {
 +        if (!controller.signal.aborted) {
-+          setError(e as Error);
++          setTenantsError(e as Error);
 +        }
 +      });
 +    return () => controller.abort();
@@ -11880,13 +12081,13 @@ index 0000000..772575f
 +  const pick = useCallback(
 +    async (tgt: string) => {
 +      if (!tenant) {
-+        setError(new Error(_('Select a tenant first')));
++        setCommandError(new Error(_('Select a tenant first')));
 +        return;
 +      }
 +      setTarget(tgt);
 +      setResp(null);
-+      setError(null);
-+      setCopied(false);
++      setCommandError(null);
++      setCopy('idle');
 +      setLoading(true);
 +      try {
 +        // retry: false — this GET mints a new enrollment token on every call:
@@ -11898,7 +12099,7 @@ index 0000000..772575f
 +        );
 +        setResp(data);
 +      } catch (e) {
-+        setError(e as Error);
++        setCommandError(e as Error);
 +      } finally {
 +        setLoading(false);
 +      }
@@ -11906,11 +12107,71 @@ index 0000000..772575f
 +    [tenant, token, _],
 +  );
 +
-+  const copy = useCallback(() => {
-+    if (resp?.command) {
-+      void navigator.clipboard.writeText(resp.command).then(() => setCopied(true));
++  // Selects the command, so what the operator copies by hand is what the page
++  // shows.
++  const selectCommand = useCallback(() => {
++    const node = command.current;
++    const selection = window.getSelection();
++    if (node && selection) {
++      const range = document.createRange();
++      range.selectNodeContents(node);
++      selection.removeAllRanges();
++      selection.addRange(range);
 +    }
-+  }, [resp]);
++  }, []);
++
++  const copyCommand = useCallback(async () => {
++    if (!resp?.command) {
++      return;
++    }
++    // The note of a second click is the same text in the same live region, and a
++    // text that stays there is not announced: empty the region now (flushSync puts
++    // it in the DOM before the copy below, which can end in the same task), so the
++    // result goes in again, as a new insertion.
++    flushSync(() => setCopy('idle'));
++    // Select first: wherever the copy does not work the operator only has to
++    // press Ctrl+C. A page opened over HTTP has no navigator.clipboard (the
++    // browser gives it only to a secure context), and a browser may also refuse.
++    selectCommand();
++    try {
++      await navigator.clipboard.writeText(resp.command);
++      setCopy('copied');
++      return;
++    } catch {
++      // no clipboard API, or it refused: the old command comes next
++    }
++    // Deprecated, but it still works in a page without a secure context, from
++    // the click that asked for the copy, with the command selected.
++    let done = false;
++    try {
++      done = document.execCommand('copy');
++    } catch {
++      done = false;
++    }
++    setCopy(done ? 'copied' : 'manual');
++  }, [resp, selectCommand]);
++
++  const tenantsErrorText = (e: Error): string =>
++    isSessionExpired(e)
++      ? _('Session expired. Sign in again to activate agents.')
++      : _('Error loading the tenants: {{- error}}', {
++          error:
++            e instanceof SuricatoosApiError ? apiErrorMessage(_, e) : e.message,
++        });
++
++  const commandErrorText = (e: Error): string =>
++    isSessionExpired(e)
++      ? _('Session expired. Sign in again to activate agents.')
++      : _('Error generating the command: {{- error}}', {
++          error:
++            e instanceof SuricatoosApiError ? apiErrorMessage(_, e) : e.message,
++        });
++
++  const describedBy = tenantsError
++    ? tenantsErrorId
++    : commandError
++      ? commandErrorId
++      : undefined;
 +
 +  return (
 +    <React.Fragment>
@@ -11931,13 +12192,13 @@ index 0000000..772575f
 +              {_('Tenant')}:
 +            </label>
 +            <select
-+              aria-describedby={error ? errorId : undefined}
++              aria-describedby={describedBy}
 +              id={tenantId}
 +              value={tenant}
 +              onChange={e => {
 +                setTenant(e.target.value);
 +                setResp(null);
-+                setError(null);
++                setCommandError(null);
 +              }}
 +              style={selectStyle}
 +            >
@@ -11949,6 +12210,15 @@ index 0000000..772575f
 +              ))}
 +            </select>
 +          </Layout>
++          {tenantsError ? (
++            <p
++              id={tenantsErrorId}
++              role="alert"
++              style={{color: SurColors.dangerText}}
++            >
++              {tenantsErrorText(tenantsError)}
++            </p>
++          ) : null}
 +          <Layout style={{marginTop: '12px'}}>
 +            {TARGETS.map(t => (
 +              <div key={t.id} style={{marginRight: '10px'}}>
@@ -11962,16 +12232,13 @@ index 0000000..772575f
 +          <LiveRegion role="status">
 +            {loading && <p>{_('Generating command…')}</p>}
 +          </LiveRegion>
-+          {error ? (
-+            <p id={errorId} role="alert" style={{color: Theme.errorRed}}>
-+              {isSessionExpired(error)
-+                ? _('Session expired. Sign in again to activate agents.')
-+                : _('Error generating the command: {{- error}}', {
-+                    error:
-+                      error instanceof SuricatoosApiError
-+                        ? apiErrorMessage(_, error)
-+                        : error.message,
-+                  })}
++          {commandError ? (
++            <p
++              id={commandErrorId}
++              role="alert"
++              style={{color: SurColors.dangerText}}
++            >
++              {commandErrorText(commandError)}
 +            </p>
 +          ) : null}
 +          {resp ? (
@@ -11981,7 +12248,9 @@ index 0000000..772575f
 +                <b>{resp.tenant}</b>
 +                {_(', run it on the host:')}
 +              </p>
-+              <code style={codeBoxStyle}>{resp.command}</code>
++              <code ref={command} style={codeBoxStyle}>
++                {resp.command}
++              </code>
 +              {resp.target === 'windows' ? (
 +                <p style={avisoStyle}>
 +                  {_(
@@ -11990,15 +12259,30 @@ index 0000000..772575f
 +                </p>
 +              ) : null}
 +              <Layout>
-+                <Button title={_('Copy')} onClick={copy}>
-+                  {copied ? _('Copied ✓') : _('Copy')}
++                <Button title={_('Copy')} onClick={() => void copyCommand()}>
++                  {copy === 'copied' ? _('Copied ✓') : _('Copy')}
 +                </Button>
-+                {/* the result of the copy, said aloud without moving the focus */}
-+                <VisuallyHidden role="status">
-+                  {copied ? _('Copied ✓') : ''}
-+                </VisuallyHidden>
++                {/* the result of the copy, said aloud without moving the focus:
++                    the region is on the page before the click */}
++                <LiveRegion role="status">
++                  {copy === 'copied' && (
++                    <VisuallyHidden>{_('Copied ✓')}</VisuallyHidden>
++                  )}
++                  {copy === 'manual' && (
++                    <span
++                      style={{
++                        alignSelf: 'center',
++                        color: SurColors.text,
++                        fontSize: '13px',
++                        marginLeft: '12px',
++                      }}
++                    >
++                      {_('The command is selected. Press Ctrl+C to copy it.')}
++                    </span>
++                  )}
++                </LiveRegion>
 +              </Layout>
-+              <p style={{color: Theme.mediumGray, fontSize: '12px'}}>
++              <p style={{color: SurColors.dimText, fontSize: '12px'}}>
 +                {resp.max_uses > 1
 +                  ? _('Deployment token (up to {{max}} hosts)', {
 +                      max: String(resp.max_uses),
@@ -12022,10 +12306,10 @@ index 0000000..772575f
 +export default DownloadsPage;
 diff --git a/src/web/pages/endpoint-agents/EndpointAgentsPage.tsx b/src/web/pages/endpoint-agents/EndpointAgentsPage.tsx
 new file mode 100644
-index 0000000..06e9d9a
+index 0000000..40f73d0
 --- /dev/null
 +++ b/src/web/pages/endpoint-agents/EndpointAgentsPage.tsx
-@@ -0,0 +1,343 @@
+@@ -0,0 +1,371 @@
 +/* SPDX-FileCopyrightText: 2024 Greenbone AG
 + *
 + * SPDX-License-Identifier: AGPL-3.0-or-later
@@ -12061,9 +12345,9 @@ index 0000000..06e9d9a
 +  isSessionExpired,
 +  usePolling,
 +} from 'web/utils/suricatoosApi';
++import {PILL_COLORS, SurColors} from 'web/utils/suricatoosColors';
 +import {formatApiRelativeTime as relTime} from 'web/utils/suricatoosDate';
 +import LiveRegion from 'web/utils/suricatoosLive';
-+import Theme from 'web/utils/Theme';
 +
 +interface Agent {
 +  host: string;
@@ -12090,27 +12374,27 @@ index 0000000..06e9d9a
 +  borderRadius: '10px',
 +  fontWeight: 600,
 +  fontSize: '12px',
-+  color: Theme.white,
++  color: '#ffffff',
 +  backgroundColor: bg,
 +  whiteSpace: 'nowrap',
 +});
 +
 +const StatusPill = ({agent}: {agent: Agent}) => {
 +  const [_] = useTranslation();
-+  let bg = Theme.mediumGray;
++  let bg: string = PILL_COLORS.unknown;
 +  let label = _('Unknown');
 +  if (agent.status === 'online') {
-+    bg = Theme.statusNewGreen;
++    bg = PILL_COLORS.online;
 +    label = _('Online');
 +  } else if (agent.status === 'offline') {
-+    bg = Theme.errorRed;
++    bg = PILL_COLORS.offline;
 +    label = _('Offline');
 +  }
 +  return (
 +    <span>
 +      <span style={badgeStyle(bg)}>{label}</span>
 +      {agent.last_seen ? (
-+        <div style={{color: Theme.mediumGray, fontSize: '11px', marginTop: '3px'}}>
++        <div style={{color: SurColors.dimText, fontSize: '11px', marginTop: '3px'}}>
 +          {_('check-in {{- time}}', {time: relTime(agent.last_seen)})}
 +        </div>
 +      ) : null}
@@ -12143,8 +12427,16 @@ index 0000000..06e9d9a
 +  );
 +
 +  // Every 30 s, one request at a time, nothing while the tab is hidden; a 401
-+  // stops it for good. The error of a scan request lands in the same `error`.
++  // stops it for good. `error` is the error of loading the agents (or of the
++  // session, which also ends a scan request).
 +  const {error, setError, refresh} = usePolling(load, 30000);
++
++  // The error of a scan request is the error of that request, not of loading the
++  // agents: the table is fine. It is told for its host, in a region of its own.
++  const [scanError, setScanError] = useState<{
++    host: string;
++    error: unknown;
++  } | null>(null);
 +
 +  // The agent collects ~60 s after a scan request: one extra refresh at 70 s,
 +  // besides the polling. Never armed once the page is gone (the POST may end
@@ -12165,6 +12457,7 @@ index 0000000..06e9d9a
 +
 +  const scanNow = useCallback(
 +    async (host: string) => {
++      setScanError(null);
 +      try {
 +        await apiRequest(`/agents/scan?id=${encodeURIComponent(host)}`, token, {
 +          method: 'POST',
@@ -12182,7 +12475,13 @@ index 0000000..06e9d9a
 +        }, 70000);
 +        followUps.current.add(t);
 +      } catch (e) {
-+        setError(e);
++        // An expired session is the session of the whole page; anything else
++        // belongs to this scan.
++        if (isSessionExpired(e)) {
++          setError(e);
++        } else if (mounted.current) {
++          setScanError({host, error: e});
++        }
 +      }
 +    },
 +    [refresh, setError, token, _],
@@ -12242,13 +12541,16 @@ index 0000000..06e9d9a
 +            <Button
 +              disabled={isSessionExpired(error)}
 +              title={_('Refresh')}
-+              onClick={() => void refresh()}
++              onClick={() => {
++                setScanError(null);
++                void refresh();
++              }}
 +            >
 +              {_('Refresh')}
 +            </Button>
 +          </div>
 +            {error ? (
-+              <p role="alert" style={{color: Theme.errorRed}}>
++              <p role="alert" style={{color: SurColors.dangerText}}>
 +                {isSessionExpired(error)
 +                  ? _(
 +                      'Session expired. Sign in again to see the endpoint agents.',
@@ -12258,6 +12560,16 @@ index 0000000..06e9d9a
 +                    })}
 +              </p>
 +            ) : null}
++            <LiveRegion role="alert">
++              {scanError !== null && (
++                <p style={{color: SurColors.dangerText}}>
++                  {_('Error requesting the scan of {{- host}}: {{- error}}', {
++                    host: scanError.host,
++                    error: apiErrorMessage(_, scanError.error),
++                  })}
++                </p>
++              )}
++            </LiveRegion>
 +            <LiveRegion role="status">
 +              {loading && <p>{_('Loading...')}</p>}
 +            </LiveRegion>
@@ -12294,7 +12606,7 @@ index 0000000..06e9d9a
 +                    <TableRow key={agent.host}>
 +                      <TableData>
 +                        <b>{agent.host}</b>
-+                        <div style={{color: Theme.mediumGray, fontSize: '11px'}}>
++                        <div style={{color: SurColors.dimText, fontSize: '11px'}}>
 +                          {agent.task}
 +                        </div>
 +                      </TableData>
@@ -12309,7 +12621,7 @@ index 0000000..06e9d9a
 +                          <b>{agent.findings}</b> {_('findings')}
 +                        </span>
 +                        {agent.findings > 0 ? (
-+                          <div style={{color: Theme.mediumGray, fontSize: '11px'}}>
++                          <div style={{color: SurColors.dimText, fontSize: '11px'}}>
 +                            {_(
 +                              '{{critical}} critical · {{high}} high · {{medium}} medium',
 +                              {
@@ -12323,7 +12635,7 @@ index 0000000..06e9d9a
 +                      </TableData>
 +                      <TableData>
 +                        {relTime(agent.last_report)}
-+                        <div style={{color: Theme.mediumGray, fontSize: '11px'}}>
++                        <div style={{color: SurColors.dimText, fontSize: '11px'}}>
 +                          {_('{{count}} report(s)', {count: String(agent.reports)})}
 +                        </div>
 +                      </TableData>
@@ -12391,7 +12703,7 @@ index b995df4..be67f0d 100644
              <TableRow>
 diff --git a/src/web/pages/extras/FeedUpdateSection.tsx b/src/web/pages/extras/FeedUpdateSection.tsx
 new file mode 100644
-index 0000000..2bb8d5a
+index 0000000..fefd918
 --- /dev/null
 +++ b/src/web/pages/extras/FeedUpdateSection.tsx
 @@ -0,0 +1,332 @@
@@ -12715,7 +13027,7 @@ index 0000000..2bb8d5a
 +          </Button>
 +          <LiveRegion role="status">
 +            {saved && (
-+              <Text c="green" size="sm">
++              <Text c="var(--sur-accent-text)" size="sm">
 +                {_('Saved')}
 +              </Text>
 +            )}
@@ -12728,10 +13040,19 @@ index 0000000..2bb8d5a
 +
 +export default FeedUpdateSection;
 diff --git a/src/web/pages/login/LoginForm.tsx b/src/web/pages/login/LoginForm.tsx
-index 4c667ec..4885889 100644
+index 4c667ec..9fa72c3 100644
 --- a/src/web/pages/login/LoginForm.tsx
 +++ b/src/web/pages/login/LoginForm.tsx
-@@ -29,9 +29,13 @@ interface LoginFormProps {
+@@ -17,6 +17,8 @@ import ProductImage from 'web/components/img/ProductImage';
+ import Divider from 'web/components/layout/Divider';
+ import Layout from 'web/components/layout/Layout';
+ import useTranslation from 'web/hooks/useTranslation';
++import {SurColors} from 'web/utils/suricatoosColors';
++import LiveRegion from 'web/utils/suricatoosLive';
+ import Theme from 'web/utils/Theme';
+ 
+ interface LoginFormProps {
+@@ -29,9 +31,13 @@ interface LoginFormProps {
  }
  
  const Paper = styled(Layout)`
@@ -12748,16 +13069,78 @@ index 4c667ec..4885889 100644
    padding: 4rem;
    width: 30rem;
    z-index: ${Theme.Layers.higher};
-@@ -128,7 +132,7 @@ const LoginForm = ({
+@@ -46,7 +52,7 @@ const Panel = styled.div`
+ `;
+ 
+ const StyledWarningError = styled.p`
+-  color: ${Theme.warningRed};
++  color: ${SurColors.dangerText};
+   font-weight: bold;
+   text-align: center;
+   margin: 10px;
+@@ -84,6 +90,7 @@ const LoginForm = ({
+     username: '',
+     password: '',
+   });
++  const hasError = isDefined(error);
+ 
+   const handleSubmit = () => {
+     if (isDefined(onSubmit)) {
+@@ -98,7 +105,7 @@ const LoginForm = ({
+   };
+ 
+   return (
+-    <Paper>
++    <Paper data-suricatoos-login>
+       <Divider flex="column" grow="1" margin="10px">
+         <Layout align="center">
+           <LoginLogo />
+@@ -127,18 +134,29 @@ const LoginForm = ({
+         </Layout>
  
          <>
-           {isDefined(error) && (
+-          {isDefined(error) && (
 -            <StyledErrorContainer data-testid="error">
-+            <StyledErrorContainer data-testid="error" role="alert">
-               {error}
-             </StyledErrorContainer>
-           )}
-@@ -172,9 +176,6 @@ const LoginForm = ({
+-              {error}
+-            </StyledErrorContainer>
+-          )}
++          {/* Suricatoos: the region is on the page before the message. The page
++              empties it when a new attempt starts, so the same message after the
++              same wrong credentials goes into the region again and is told again. */}
++          <LiveRegion role="alert">
++            {hasError && (
++              <StyledErrorContainer data-testid="error">
++                {error}
++              </StyledErrorContainer>
++            )}
++          </LiveRegion>
+ 
+           {showLogin && (
+             <FormGroup>
+               <H1>{_('Sign in to your account')}</H1>
++              {/* Suricatoos: the error is tied to the two fields: while it is there
++                  they are invalid and described by it (errorContent: the text
++                  that Mantine puts under a field and links to it; the page keeps
++                  it for assistive technology only, the message shows once, in the
++                  box above) */}
+               <TextField
+                 autoComplete="username"
+                 autoFocus={true}
++                errorContent={error}
+                 name="username"
+                 placeholder={_('Username')}
+                 title={_('Username')}
+@@ -146,7 +164,9 @@ const LoginForm = ({
+                 onChange={handleValueChange}
+               />
+               <PasswordField
++                aria-invalid={hasError ? true : undefined}
+                 autoComplete="current-password"
++                errorContent={error}
+                 name="password"
+                 placeholder={_('Password')}
+                 title={_('Password')}
+@@ -172,9 +192,6 @@ const LoginForm = ({
            </FormGroup>
          )}
  
@@ -12768,7 +13151,7 @@ index 4c667ec..4885889 100644
      </Paper>
    );
 diff --git a/src/web/pages/login/LoginPage.tsx b/src/web/pages/login/LoginPage.tsx
-index ee487c7..4345cf6 100644
+index ee487c7..b1c4a3e 100644
 --- a/src/web/pages/login/LoginPage.tsx
 +++ b/src/web/pages/login/LoginPage.tsx
 @@ -22,11 +22,11 @@ import Theme from 'web/utils/Theme';
@@ -12785,6 +13168,17 @@ index ee487c7..4345cf6 100644
    flex-direction: column;
    justify-content: center;
    align-items: center;
+@@ -55,6 +55,10 @@ const LoginPage = () => {
+   }, []);
+ 
+   const login = async (username: string, password: string) => {
++    // Suricatoos: the message of the last attempt leaves the page when a new one
++    // starts. Wrong credentials sent again give the same message, which would
++    // change nothing in the live region of the error and so would not be told.
++    setError(undefined);
+     try {
+       await gmp.login(username, password);
+     } catch (error) {
 diff --git a/src/web/pages/reports/AuditDeltaReportDetailsPage.jsx b/src/web/pages/reports/AuditDeltaReportDetailsPage.jsx
 index 21579eb..d5dd186 100644
 --- a/src/web/pages/reports/AuditDeltaReportDetailsPage.jsx
@@ -12982,10 +13376,10 @@ index dd0b390..9316ed8 100644
    Layers: {
 diff --git a/src/web/pages/ai-providers/AiProvidersPage.tsx b/src/web/pages/ai-providers/AiProvidersPage.tsx
 new file mode 100644
-index 0000000..679e946
+index 0000000..b89c41d
 --- /dev/null
 +++ b/src/web/pages/ai-providers/AiProvidersPage.tsx
-@@ -0,0 +1,1201 @@
+@@ -0,0 +1,1203 @@
 +/* SPDX-FileCopyrightText: 2026 Suricatoos
 + *
 + * SPDX-License-Identifier: AGPL-3.0-or-later
@@ -13008,6 +13402,7 @@ index 0000000..679e946
 +  TextInput,
 +  VisuallyHidden,
 +} from '@mantine/core';
++import PageTitle from 'web/components/layout/PageTitle';
 +import useGmp from 'web/hooks/useGmp';
 +import useTranslation, {type TranslateFunc} from 'web/hooks/useTranslation';
 +import useUserTimezone from 'web/hooks/useUserTimezone';
@@ -13295,14 +13690,14 @@ index 0000000..679e946
 +      tabIndex={statusRef ? -1 : undefined}
 +    >
 +      {notice !== null && !notice.error && (
-+        <Text c="green" size="sm">
++        <Text c="var(--sur-accent-text)" size="sm">
 +          {notice.text}
 +        </Text>
 +      )}
 +    </LiveRegion>
 +    <LiveRegion role="alert">
 +      {notice !== null && notice.error && (
-+        <Text c="red" size="sm">
++        <Text c="var(--sur-danger-text)" size="sm">
 +          {notice.text}
 +        </Text>
 +      )}
@@ -14159,6 +14554,7 @@ index 0000000..679e946
 +
 +  return (
 +    <Stack gap="md" p="md">
++      <PageTitle title={_('AI Providers')} />
 +      <Text component="h2" fw={700} size="lg">
 +        {_('AI Providers')}
 +      </Text>
@@ -15980,7 +16376,7 @@ index 44176d5..5fb6807 100644
  import 'dayjs/locale/pt-br';
  import 'dayjs/locale/ru';
 diff --git a/src/web/components/provider/LanguageProvider.tsx b/src/web/components/provider/LanguageProvider.tsx
-index a417b0b..ff2d1a4 100644
+index a417b0b..b1e0cbc 100644
 --- a/src/web/components/provider/LanguageProvider.tsx
 +++ b/src/web/components/provider/LanguageProvider.tsx
 @@ -9,7 +9,7 @@ import {
@@ -15992,7 +16388,7 @@ index a417b0b..ff2d1a4 100644
  } from 'gmp/locale/lang';
  import useGmp from 'web/hooks/useGmp';
  
-@@ -39,12 +39,15 @@ export const LanguageContext = createContext<LanguageContextProps>({
+@@ -39,27 +39,38 @@ export const LanguageContext = createContext<LanguageContextProps>({
  const LanguageProvider = ({children}: LanguageProviderProps) => {
    const gmp = useGmp();
    const {session} = gmp;
@@ -16010,10 +16406,11 @@ index a417b0b..ff2d1a4 100644
        setLanguageState(currentLang => {
          if (currentLang !== newLang) {
            // Explicitly set date locale
-@@ -53,13 +56,17 @@ const LanguageProvider = ({children}: LanguageProviderProps) => {
-           // store language in the session
-           session.setLocale(newLang);
+           setDateLocale(newLang);
  
+-          // store language in the session
+-          session.setLocale(newLang);
+-
 -          void (async () => {
 -            try {
 -              await gmp.user.saveSetting(SETTING_ID_LOCALE, newLang);
@@ -16022,8 +16419,15 @@ index a417b0b..ff2d1a4 100644
 -            }
 -          })();
 +          // Suricatoos: the language detected at start (the browser's, or the
-+          // default pt-BR) is shown, not saved as the setting of the user.
++          // default pt-BR) is shown, not kept as the choice of the user: neither
++          // saved as the setting nor stored in the session. The session writes
++          // it to localStorage.locale, which the detector reads first on the
++          // next visit, so the language of the browser of today would stay
++          // after the browser changes.
 +          if (!initial) {
++            // store language in the session
++            session.setLocale(newLang);
++
 +            void (async () => {
 +              try {
 +                await gmp.user.saveSetting(SETTING_ID_LOCALE, newLang);
@@ -16035,12 +16439,38 @@ index a417b0b..ff2d1a4 100644
  
            return newLang;
          }
+@@ -81,12 +92,20 @@ const LanguageProvider = ({children}: LanguageProviderProps) => {
+ 
+   const setLanguage = useCallback(
+     async (newLang: string) => {
+-      if (newLang !== languageState) {
+-        // Set locale in gmp
+-        changeGmpLocale(newLang);
++      // Suricatoos: the language that is shown may only have been detected (the
++      // browser's, or the default), which is not kept in the session. Choosing it
++      // is then a choice of the user and is saved, so the language stops following
++      // the browser. When the session already has it (the choice of the user),
++      // choosing it again does nothing.
++      const changes = newLang !== languageState;
++      if (changes || session.locale !== newLang) {
++        if (changes) {
++          // Set locale in gmp
++          changeGmpLocale(newLang);
+ 
+-        // Explicitly set date locale
+-        setDateLocale(newLang);
++          // Explicitly set date locale
++          setDateLocale(newLang);
++        }
+ 
+         // store language in the session
+         session.setLocale(newLang);
 diff --git a/src/web/utils/__tests__/suricatoosLocale.test.ts b/src/web/utils/__tests__/suricatoosLocale.test.ts
 new file mode 100644
-index 0000000..0eacd90
+index 0000000..2e4fe98
 --- /dev/null
 +++ b/src/web/utils/__tests__/suricatoosLocale.test.ts
-@@ -0,0 +1,278 @@
+@@ -0,0 +1,464 @@
 +/* SPDX-FileCopyrightText: 2026 Suricatoos
 + *
 + * SPDX-License-Identifier: AGPL-3.0-or-later
@@ -16251,34 +16681,56 @@ index 0000000..0eacd90
 +});
 +
 +describe('the language detected at start is not a choice of the user', () => {
-+  test('LanguageProvider saves the setting only on a later change', async () => {
-+    // Fresh modules: no language seen yet, as when the page loads.
++  // Fresh modules: no language seen yet, as when the page loads. The provider is
++  // mounted BEFORE the detection finishes, which is what happens when the catalog
++  // is slow (the first paint does not wait for it for more than 2 s).
++  const mountProvider = async (gmp: Record<string, unknown>) => {
 +    testing.resetModules();
 +    const {default: i18n} = await import('i18next');
 +    const {onLanguageChange} = await import('gmp/locale/lang');
-+    const {default: LanguageProvider} = await import(
-+      'web/components/provider/LanguageProvider'
-+    );
-+    const {default: GmpContext} = await import(
-+      'web/components/provider/GmpProvider'
-+    );
-+    const {createElement} = await import('react');
++    const {default: LanguageProvider, LanguageContext} =
++      await import('web/components/provider/LanguageProvider');
++    const {default: GmpContext} =
++      await import('web/components/provider/GmpProvider');
++    const {createElement, useContext} = await import('react');
 +    const {act, render} = await import('@testing-library/react');
 +
 +    const seen: Array<[string, boolean | undefined]> = [];
 +    const unsubscribe = onLanguageChange((lang, initial) => {
 +      seen.push([lang, initial]);
 +    });
-+    const saveSetting = testing.fn().mockResolvedValue(undefined);
-+    const setLocale = testing.fn();
-+    const gmp = {user: {saveSetting}, session: {setLocale}};
-+    render(
++    // what the page does when the user picks a language
++    const chosen: {setLanguage?: (lang: string) => Promise<void>} = {};
++    const Consumer = () => {
++      chosen.setLanguage = useContext(LanguageContext).setLanguage;
++      return null;
++    };
++    const view = render(
 +      createElement(
 +        GmpContext.Provider,
 +        {value: gmp as never},
-+        createElement(LanguageProvider, null, 'page'),
++        createElement(LanguageProvider, null, createElement(Consumer)),
 +      ),
 +    );
++    return {
++      act,
++      chosen,
++      i18n,
++      seen,
++      unmount: () => {
++        view.unmount();
++        unsubscribe();
++      },
++    };
++  };
++
++  test('LanguageProvider saves the setting only on a later change', async () => {
++    const saveSetting = testing.fn().mockResolvedValue(undefined);
++    const setLocale = testing.fn();
++    const {act, i18n, seen, unmount} = await mountProvider({
++      user: {saveSetting},
++      session: {setLocale},
++    });
 +
 +    try {
 +      // the detection (the browser language, or the default)
@@ -16286,8 +16738,11 @@ index 0000000..0eacd90
 +        await i18n.changeLanguage('es');
 +      });
 +      expect(seen).toEqual([['es', true]]);
-+      expect(setLocale).toHaveBeenCalledWith('es');
 +      expect(saveSetting).not.toHaveBeenCalled();
++      // not kept in the session either: the session is what the detector reads
++      // first on the next visit, so it would turn the language of the browser of
++      // today into the choice of the user
++      expect(setLocale).not.toHaveBeenCalled();
 +
 +      // a later change: the choice of the user, saved as before
 +      await act(async () => {
@@ -16301,9 +16756,170 @@ index 0000000..0eacd90
 +        '6765549a-934e-11e3-b358-406186ea4fc5',
 +        'en',
 +      );
++      expect(setLocale).toHaveBeenCalledTimes(1);
++      expect(setLocale).toHaveBeenCalledWith('en');
 +    } finally {
-+      unsubscribe();
++      unmount();
 +    }
++  });
++
++  describe('in the storage of the browser (localStorage.locale)', () => {
++    // A logged in session on the real storage: the writes of the session land in
++    // localStorage, where the language detector reads the language of the last
++    // visit before it looks at the browser.
++    const loggedInSession = async () => {
++      localStorage.clear();
++      const {default: DefaultSession} =
++        await import('gmp/session/default-session');
++      const {default: date} = await import('gmp/models/date');
++      localStorage.setItem('token', 'tok');
++      localStorage.setItem('username', 'ana');
++      localStorage.setItem(
++        'sessionTimeout',
++        date().add(1, 'hour').toISOString(),
++      );
++      const session = new DefaultSession(localStorage);
++      expect(session.isLoggedIn()).toBe(true);
++      return session;
++    };
++
++    afterEach(() => {
++      localStorage.clear();
++    });
++
++    test('the detected language is not written', async () => {
++      const session = await loggedInSession();
++      const saveSetting = testing.fn().mockResolvedValue(undefined);
++      const {act, i18n, unmount} = await mountProvider({
++        user: {saveSetting},
++        session,
++      });
++
++      try {
++        await act(async () => {
++          await i18n.changeLanguage('pt_BR');
++        });
++        expect(localStorage.getItem('locale')).toBeNull();
++        expect(session.locale).toBeUndefined();
++      } finally {
++        unmount();
++      }
++    });
++
++    test('the language the user picks is written, also when it is the first change', async () => {
++      const session = await loggedInSession();
++      const saveSetting = testing.fn().mockResolvedValue(undefined);
++      const {act, chosen, i18n, seen, unmount} = await mountProvider({
++        user: {saveSetting},
++        session,
++      });
++
++      try {
++        // before the detection ended: this change reaches the listeners as the
++        // first one, so as "initial", but it is a choice
++        await act(async () => {
++          await chosen.setLanguage?.('es');
++        });
++        expect(seen[0]).toEqual(['es', true]);
++        expect(localStorage.getItem('locale')).toEqual('es');
++        expect(saveSetting).toHaveBeenCalledWith(
++          '6765549a-934e-11e3-b358-406186ea4fc5',
++          'es',
++        );
++
++        // and a later one
++        await act(async () => {
++          await i18n.changeLanguage('en');
++        });
++        expect(localStorage.getItem('locale')).toEqual('en');
++      } finally {
++        unmount();
++      }
++    });
++
++    // Choosing the language that is shown: a choice when what is shown was only
++    // detected (nothing in the session), nothing to do when it already is the choice
++    // of the user.
++    const SETTING = '6765549a-934e-11e3-b358-406186ea4fc5';
++
++    test('choosing the language that is shown but was only detected saves it as the choice of the user', async () => {
++      const session = await loggedInSession();
++      const saveSetting = testing.fn().mockResolvedValue(undefined);
++      const {act, chosen, i18n, unmount} = await mountProvider({
++        user: {saveSetting},
++        session,
++      });
++
++      try {
++        // the detection: shown, not kept
++        await act(async () => {
++          await i18n.changeLanguage('pt_BR');
++        });
++        expect(session.locale).toBeUndefined();
++        expect(saveSetting).not.toHaveBeenCalled();
++
++        // the user picks the language that is already shown
++        await act(async () => {
++          await chosen.setLanguage?.('pt_BR');
++        });
++        expect(localStorage.getItem('locale')).toEqual('pt_BR');
++        expect(saveSetting).toHaveBeenCalledTimes(1);
++        expect(saveSetting).toHaveBeenCalledWith(SETTING, 'pt_BR');
++      } finally {
++        unmount();
++      }
++    });
++
++    test('choosing the language that already is the choice of the user does nothing', async () => {
++      const session = await loggedInSession();
++      // the choice of a previous visit: what the detector reads first and shows
++      localStorage.setItem('locale', 'pt_BR');
++      const saveSetting = testing.fn().mockResolvedValue(undefined);
++      const setLocale = testing.spyOn(session, 'setLocale');
++      const {act, chosen, i18n, unmount} = await mountProvider({
++        user: {saveSetting},
++        session,
++      });
++
++      try {
++        await act(async () => {
++          await i18n.changeLanguage('pt_BR');
++        });
++        await act(async () => {
++          await chosen.setLanguage?.('pt_BR');
++        });
++        expect(saveSetting).not.toHaveBeenCalled();
++        expect(setLocale).not.toHaveBeenCalled();
++        expect(localStorage.getItem('locale')).toEqual('pt_BR');
++      } finally {
++        unmount();
++      }
++    });
++
++    test('and so does choosing again the language that the user picked in this page', async () => {
++      const session = await loggedInSession();
++      const saveSetting = testing.fn().mockResolvedValue(undefined);
++      const {act, chosen, unmount} = await mountProvider({
++        user: {saveSetting},
++        session,
++      });
++
++      try {
++        await act(async () => {
++          await chosen.setLanguage?.('es');
++        });
++        expect(session.locale).toEqual('es');
++        saveSetting.mockClear();
++
++        await act(async () => {
++          await chosen.setLanguage?.('es');
++        });
++        expect(saveSetting).not.toHaveBeenCalled();
++        expect(localStorage.getItem('locale')).toEqual('es');
++      } finally {
++        unmount();
++      }
++    });
 +  });
 +});
 +
@@ -17059,10 +17675,10 @@ index 0000000..79d2216
 +OTHER DEALINGS IN THE FONT SOFTWARE.
 diff --git a/src/web/utils/__tests__/suricatoosA11y.test.tsx b/src/web/utils/__tests__/suricatoosA11y.test.tsx
 new file mode 100644
-index 0000000..c4e9f6f
+index 0000000..4250d38
 --- /dev/null
 +++ b/src/web/utils/__tests__/suricatoosA11y.test.tsx
-@@ -0,0 +1,1159 @@
+@@ -0,0 +1,1698 @@
 +/* SPDX-FileCopyrightText: 2026 Suricatoos
 + *
 + * SPDX-License-Identifier: AGPL-3.0-or-later
@@ -17097,6 +17713,7 @@ index 0000000..c4e9f6f
 +import fs from 'node:fs';
 +import path from 'node:path';
 +import {renderToStaticMarkup} from 'react-dom/server';
++import {ResponseRejection} from 'gmp/http/rejection';
 +import {createSession} from 'gmp/testing';
 +import {DEFAULT_SEVERITY_RATING} from 'gmp/utils/severity';
 +import DataDisplayIcons from 'web/components/dashboard/display/DataDisplayIcons';
@@ -17108,6 +17725,7 @@ index 0000000..c4e9f6f
 +import EndpointAgentsPage from 'web/pages/endpoint-agents/EndpointAgentsPage';
 +import FeedUpdateSection from 'web/pages/extras/FeedUpdateSection';
 +import LoginForm from 'web/pages/login/LoginForm';
++import LoginPage from 'web/pages/login/LoginPage';
 +import {cssRules} from 'web/testing/suricatoosCss';
 +import LiveRegion from 'web/utils/suricatoosLive';
 +
@@ -17317,18 +17935,18 @@ index 0000000..c4e9f6f
 +    serve({'/agents/data.json': () => json(500, {error: 'boom'})});
 +    const {render} = rendererWith({gmp: createGmp()});
 +    render(<EndpointAgentsPage />);
-+    expect(await screen.findByRole('alert')).toHaveTextContent(
-+      'Error loading the agents',
-+    );
++    // (the region of the error of a scan is on the page, empty: what is said
++    // is what has text)
++    await waitFor(() => expect(said('alert')).toHaveLength(1));
++    expect(said('alert')[0]).toContain('Error loading the agents');
 +  });
 +
 +  test('an expired session is announced as an alert', async () => {
 +    serve({'/agents/data.json': () => json(401, {error: 'no session'})});
 +    const {render} = rendererWith({gmp: createGmp()});
 +    render(<EndpointAgentsPage />);
-+    expect(await screen.findByRole('alert')).toHaveTextContent(
-+      'Session expired',
-+    );
++    await waitFor(() => expect(said('alert')).toHaveLength(1));
++    expect(said('alert')[0]).toContain('Session expired');
 +  });
 +});
 +
@@ -18032,10 +18650,137 @@ index 0000000..c4e9f6f
 +    expect(submit).toHaveBeenCalledWith('ana', 'secret');
 +  });
 +
-+  test('without an error there is no alert', () => {
++  test('without an error the alert region is on the page, empty, and no field is marked', () => {
 +    const {render} = rendererWith({gmp: createGmp()});
 +    render(<LoginForm onGuestLoginClick={testing.fn()} onSubmit={submit} />);
-+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
++    expect(screen.getByRole('alert')).toBeEmptyDOMElement();
++    expect(screen.queryByTestId('error')).not.toBeInTheDocument();
++    for (const field of ['Username', 'Password']) {
++      const input = screen.getByLabelText(field);
++      expect(input).not.toHaveAttribute('aria-invalid', 'true');
++      expect(input).not.toHaveAttribute('aria-describedby');
++    }
++  });
++
++  test('the error is in an alert region that was on the page before it, and both fields are invalid and described by it', () => {
++    const {render} = rendererWith({gmp: createGmp()});
++    const view = render(
++      <LoginForm onGuestLoginClick={testing.fn()} onSubmit={submit} />,
++    );
++    const region = screen.getByRole('alert');
++    expect(region).toBeEmptyDOMElement();
++
++    view.rerender(
++      <LoginForm
++        error="Login Failed. Invalid password or username."
++        onGuestLoginClick={testing.fn()}
++        onSubmit={submit}
++      />,
++    );
++    // the same node, now with the message
++    expect(screen.getByRole('alert')).toBe(region);
++    expect(region).toHaveTextContent(
++      'Login Failed. Invalid password or username.',
++    );
++    for (const field of ['Username', 'Password']) {
++      const input = screen.getByLabelText(field);
++      expect(input).toHaveAttribute('aria-invalid', 'true');
++      expect(input).toHaveAccessibleDescription(
++        'Login Failed. Invalid password or username.',
++      );
++    }
++  });
++
++  describe('the page', () => {
++    const MESSAGE = 'Login Failed. Invalid password or username.';
++    const denied = () =>
++      new ResponseRejection({status: 401} as XMLHttpRequest, 'denied');
++
++    const openLoginPage = (login: ReturnType<typeof testing.fn>) => {
++      const gmp = {
++        ...createGmp(),
++        settings: {},
++        login,
++        user: {currentSettings: testing.fn().mockRejectedValue(new Error('x'))},
++      };
++      const {render} = rendererWith({gmp, router: true});
++      return render(<LoginPage />);
++    };
++
++    const signIn = async (user: User) => {
++      await user.type(screen.getByLabelText('Username'), 'ana');
++      await user.type(screen.getByLabelText('Password'), 'wrong');
++      await user.click(screen.getByRole('button', {name: 'Sign in'}));
++    };
++
++    test('the same wrong credentials sent twice are told twice: the message leaves the region and comes back', async () => {
++      const login = testing.fn().mockImplementation(async () => {
++        // the server takes a moment to answer
++        await new Promise(resolve => setTimeout(resolve, 20));
++        throw denied();
++      });
++      const {userEvent} = openLoginPage(login);
++      const region = screen.getByRole('alert');
++
++      // what goes in and out of the region: an assistive technology announces
++      // what is put INTO a live region, so a message that stays there is silent
++      const log: string[] = [];
++      const observer = new MutationObserver(records => {
++        for (const record of records) {
++          record.removedNodes.forEach(() => log.push('out'));
++          record.addedNodes.forEach(() => log.push('in'));
++        }
++      });
++      observer.observe(region, {childList: true, subtree: true});
++
++      try {
++        await signIn(userEvent);
++        await waitFor(() => expect(region).toHaveTextContent(MESSAGE));
++        expect(log).toEqual(['in']);
++
++        // the same credentials again: nothing about the message changes, but the
++        // region is cleared when the new attempt starts and told again when it fails
++        await userEvent.click(screen.getByRole('button', {name: 'Sign in'}));
++        await waitFor(() => expect(login).toHaveBeenCalledTimes(2));
++        await waitFor(() => expect(log).toEqual(['in', 'out', 'in']));
++        expect(region).toHaveTextContent(MESSAGE);
++        expect(screen.getAllByRole('alert')).toEqual([region]);
++      } finally {
++        observer.disconnect();
++      }
++    });
++
++    test('the fields are marked while the error is there and are not while the next attempt runs', async () => {
++      let release: () => void = () => {};
++      let attempts = 0;
++      const login = testing.fn().mockImplementation(async () => {
++        attempts++;
++        if (attempts === 1) {
++          throw denied();
++        }
++        await new Promise<void>(resolve => {
++          release = resolve;
++        });
++        throw denied();
++      });
++      const {userEvent} = openLoginPage(login);
++
++      await signIn(userEvent);
++      const user = screen.getByLabelText('Username');
++      await waitFor(() => expect(user).toHaveAttribute('aria-invalid', 'true'));
++      expect(user).toHaveAccessibleDescription(MESSAGE);
++
++      // the next attempt is on its way: the old message is gone from the region
++      // and from the fields
++      await userEvent.click(screen.getByRole('button', {name: 'Sign in'}));
++      await waitFor(() => expect(login).toHaveBeenCalledTimes(2));
++      expect(screen.getByRole('alert')).toBeEmptyDOMElement();
++      expect(user).not.toHaveAttribute('aria-invalid', 'true');
++      expect(user).not.toHaveAttribute('aria-describedby');
++
++      release();
++      await waitFor(() => expect(user).toHaveAttribute('aria-invalid', 'true'));
++    });
 +  });
 +
 +  test('the logo is named after the product it shows', () => {
@@ -18077,6 +18822,66 @@ index 0000000..c4e9f6f
 +      'href',
 +      '/dashboards',
 +    );
++  });
++
++  describe('the manual button', () => {
++    const MANUAL = 'https://docs.example/manual';
++
++    const openHeader = () => {
++      const {render} = rendererWith({
++        gmp: createGmp({vendorTitle: 'Suricatoos', manualUrl: MANUAL}),
++        router: true,
++      });
++      return render(<Header />);
++    };
++
++    test('has a name of its own, not only a tooltip', () => {
++      openHeader();
++      // the only manual button: the one of the header of the library is not drawn
++      const buttons = screen.getAllByTestId('manual-link');
++      expect(buttons).toHaveLength(1);
++      const manual = screen.getByRole('button', {name: 'Open manual'});
++      expect(manual).toBe(buttons[0]);
++      expect(manual).toHaveAttribute('aria-label', 'Open manual');
++      // the icon is a drawing: it has no name and assistive technology skips it
++      for (const icon of manual.querySelectorAll('svg')) {
++        expect(icon).toHaveAttribute('aria-hidden', 'true');
++      }
++    });
++
++    test('is next to the color theme switch in the Tab order and opens the manual with Enter', async () => {
++      const open = testing.spyOn(window, 'open').mockImplementation(() => null);
++      try {
++        const {userEvent} = openHeader();
++        const theme = screen.getByRole('button', {name: 'Switch color theme'});
++        const manual = screen.getByRole('button', {name: 'Open manual'});
++        await tabTo(userEvent, theme);
++        await userEvent.tab();
++        expect(manual).toHaveFocus();
++
++        await userEvent.keyboard('{Enter}');
++        expect(open).toHaveBeenCalledTimes(1);
++        expect(open).toHaveBeenCalledWith(
++          `${MANUAL}/en`,
++          '_blank',
++          'noreferrer',
++        );
++      } finally {
++        open.mockRestore();
++      }
++    });
++
++    test('keeps the divider the header draws before it', () => {
++      openHeader();
++      const manual = screen.getByRole('button', {name: 'Open manual'});
++      // a vertical separator, the same one the header puts between its items
++      expect(
++        manual.previousElementSibling?.getAttribute('data-orientation') ??
++          manual.parentElement?.previousElementSibling?.getAttribute(
++            'data-orientation',
++          ),
++      ).toEqual('vertical');
++    });
 +  });
 +
 +  test('a label the appliance table does not know still names the logo', () => {
@@ -18188,6 +18993,356 @@ index 0000000..c4e9f6f
 +      '<div tabindex="0"></div>',
 +    ])('%s keeps its focus ring', html => {
 +      expect(outlineTakenOff(focused(html))).toBe(false);
++    });
++  });
++});
++
++describe('Theme CSS: the ring of the notice that takes the focus by code', () => {
++  const theme = fs.readFileSync(
++    path.join(process.cwd(), 'public/suricatoos-theme.css'),
++    'utf8',
++  );
++  // the rules for a live region that can take the focus by code (tabindex=-1)
++  const ringRules = cssRules(theme).filter(rule =>
++    /\[role=['"]?(status|alert)['"]?\]\[tabindex=['"]?-1['"]?\]:focus-visible/.test(
++      rule.selector,
++    ),
++  );
++
++  test('there is a rule, and it draws the accent of the theme, not the ring of the browser', () => {
++    expect(ringRules.length).toBeGreaterThan(0);
++    for (const rule of ringRules) {
++      const outline = rule.declarations.find(d => d.prop === 'outline');
++      expect(outline?.value, rule.selector).toMatch(
++        /^2px solid var\(--sur-accent\)/,
++      );
++      // set apart from the text, so the ring does not cover it
++      expect(
++        rule.declarations.some(d => d.prop === 'outline-offset'),
++        rule.selector,
++      ).toBe(true);
++    }
++  });
++
++  test('the ring is for the keyboard only: every selector of the rule ends with :focus-visible', () => {
++    expect(ringRules.length).toBeGreaterThan(0);
++    for (const rule of ringRules) {
++      for (const selector of rule.selector.split(',').map(s => s.trim())) {
++        expect(selector).toMatch(/:focus-visible$/);
++      }
++    }
++  });
++
++  // the cases below write straight into the body
++  afterEach(() => {
++    document.body.innerHTML = '';
++  });
++
++  // jsdom does not know :focus-visible: the selector is tried as :focus
++  const reaches = (element: Element) =>
++    ringRules.some(rule =>
++      rule.selector
++        .split(',')
++        .some(selector =>
++          element.matches(selector.replace(':focus-visible', ':focus')),
++        ),
++    );
++
++  const focused = (html: string) => {
++    document.body.innerHTML = html;
++    const element = document.body.firstElementChild as HTMLElement;
++    element.focus();
++    expect(element).toHaveFocus();
++    return element;
++  };
++
++  test.each([
++    '<div role="status" tabindex="-1"></div>',
++    '<div role="alert" tabindex="-1"></div>',
++  ])('%s gets the ring', html => {
++    expect(reaches(focused(html))).toBe(true);
++  });
++
++  test.each([
++    '<div role="status"></div>',
++    '<button tabindex="-1">ok</button>',
++    '<div tabindex="-1"></div>',
++    '<a role="status" href="/x"></a>',
++  ])('%s is not touched', html => {
++    document.body.innerHTML = html;
++    expect(reaches(document.body.firstElementChild as Element)).toBe(false);
++  });
++
++  test('the live region of the page that takes the focus after a delete is one of them', async () => {
++    const {render} = rendererWith({});
++    render(
++      <LiveRegion role="status" tabIndex={-1}>
++        Provider deleted.
++      </LiveRegion>,
++    );
++    const region = screen.getByRole('status');
++    region.focus();
++    expect(region).toHaveFocus();
++    expect(reaches(region)).toBe(true);
++  });
++});
++
++describe('Theme CSS: contrast of controls and icons', () => {
++  const theme = fs.readFileSync(
++    path.join(process.cwd(), 'public/suricatoos-theme.css'),
++    'utf8',
++  );
++  const rules = cssRules(theme);
++  const selectorsOf = (rule: {selector: string}) =>
++    rule.selector.split(',').map(selector => selector.trim());
++  // The items of a :where( a, b, c ) list, each as one line: the selector engine
++  // of jsdom does not take :where(), so the items are tried one by one.
++  const whereItems = (selector: string): string[] => {
++    const inner = selector
++      .trim()
++      .replace(/^:where\(/, '')
++      .replace(/\)$/, '');
++    const items: string[] = [];
++    let depth = 0;
++    let start = 0;
++    for (let i = 0; i < inner.length; i++) {
++      if (inner[i] === '(') {
++        depth++;
++      } else if (inner[i] === ')') {
++        depth--;
++      } else if (inner[i] === ',' && depth === 0) {
++        items.push(inner.slice(start, i));
++        start = i + 1;
++      }
++    }
++    items.push(inner.slice(start));
++    return items.map(item => item.replace(/\s+/g, ' ').trim());
++  };
++  // (jsdom does not know :focus-within either: that part of an item is left out
++  // here and read as text in its own test)
++  const reachesWhere = (rule: {selector: string}, element: Element) =>
++    whereItems(rule.selector).some(item =>
++      element.matches(item.replace(':not(:focus-within)', '')),
++    );
++  // rules that set the property to something that follows the theme
++  const painting = (prop: string) =>
++    rules.filter(rule =>
++      rule.declarations.some(
++        d => d.prop === prop && d.value.includes('var(--sur-'),
++      ),
++    );
++
++  afterEach(() => {
++    document.body.innerHTML = '';
++  });
++
++  describe('the boundary of the form controls', () => {
++    // the rule of the fields, selects and boxes (the one of the off track of a
++    // switch is another)
++    const boundary = painting('border-color').filter(
++      rule =>
++        rule.selector.startsWith(':where(') &&
++        rule.declarations.some(
++          d =>
++            d.prop === 'border-color' &&
++            d.value.includes('--sur-control-border'),
++        ),
++    );
++
++    test('one rule draws it, with the color of the theme', () => {
++      expect(boundary).toHaveLength(1);
++    });
++
++    test('it has no specificity of its own, so the ring of the focus (section 9) and the error state of Mantine win over it', () => {
++      expect(boundary[0].selector.startsWith(':where(')).toBe(true);
++    });
++
++    test.each([
++      '<input type="text">',
++      '<select><option>a</option></select>',
++      '<textarea></textarea>',
++      '<input class="mantine-Input-input">',
++    ])(
++      '%s has its own ring, not the boundary, while it has the focus',
++      html => {
++        document.body.innerHTML = html;
++        const element = document.body.firstElementChild as HTMLElement;
++        expect(boundary.some(rule => reachesWhere(rule, element))).toBe(true);
++        element.focus();
++        expect(element).toHaveFocus();
++        expect(boundary.some(rule => reachesWhere(rule, element))).toBe(false);
++      },
++    );
++
++    test('the wrapper of a password field (focused through its input) is left alone while the input has the focus', () => {
++      // jsdom does not know :focus-within: the item of the rule is what is read
++      const wrapper = whereItems(boundary[0].selector).find(item =>
++        item.startsWith('.mantine-Input-input'),
++      );
++      expect(wrapper).toContain(':not(:focus-within)');
++    });
++
++    test.each([
++      '<input type="text">',
++      '<input type="password">',
++      '<input type="time">',
++      '<textarea></textarea>',
++      '<select><option>a</option></select>',
++      '<input class="mantine-Input-input mantine-Select-input" readonly>',
++      '<div class="mantine-Input-input mantine-PasswordInput-input"></div>',
++      '<input type="checkbox" class="mantine-Checkbox-input">',
++      '<input type="radio" class="mantine-Radio-radio">',
++    ])('%s gets the boundary', html => {
++      document.body.innerHTML = html;
++      const element = document.body.firstElementChild as Element;
++      expect(boundary.some(rule => reachesWhere(rule, element))).toBe(true);
++    });
++
++    test.each([
++      '<input type="text" disabled>',
++      '<input type="text" data-error="true">',
++      '<input type="checkbox">',
++      '<button>ok</button>',
++    ])('%s is not touched', html => {
++      document.body.innerHTML = html;
++      const element = document.body.firstElementChild as Element;
++      expect(boundary.some(rule => reachesWhere(rule, element))).toBe(false);
++    });
++
++    // the rule of the off track of a switch (the one of the fields is another)
++    const offTrack = painting('background-color').find(r =>
++      selectorsOf(r).some(selector =>
++        selector.includes('.mantine-Switch-input'),
++      ),
++    );
++
++    test('the off track of a switch is painted with the color of the theme', () => {
++      expect(
++        offTrack?.declarations.find(d => d.prop === 'background-color')?.value,
++      ).toContain('--sur-control-border');
++    });
++
++    // the switch of the feed schedule, as the page draws it
++    test.each([
++      [false, true],
++      [true, false],
++    ])(
++      'with the switch enabled=%s the rule reaches its track: %s',
++      async (enabled, reached) => {
++        serve({
++          '/feed-sync/status': () =>
++            json(200, {
++              state: 'idle',
++              last_run: '2026-10-11 10:00:00',
++              last_result: 'success',
++              updated: ['nvt'],
++              schedule: {
++                enabled,
++                frequency: 'weekly',
++                weekday: 2,
++                time: '03:00',
++              },
++            }),
++        });
++        const {render} = rendererWith({gmp: createGmp()});
++        render(<FeedUpdateSection />);
++        const input = await screen.findByRole('switch', {
++          name: 'Enable automatic update',
++        });
++        await waitFor(() => expect(input).toHaveProperty('checked', enabled));
++        const track = input
++          .closest('.mantine-Switch-root')
++          ?.querySelector('.mantine-Switch-track') as Element;
++        expect(track).not.toBeNull();
++        expect(
++          selectorsOf(offTrack as {selector: string}).some(selector =>
++            track.matches(selector),
++          ),
++        ).toBe(reached);
++      },
++    );
++  });
++
++  describe('the icons of the sort buttons of the tables', () => {
++    const stroke = painting('stroke');
++
++    const reaches = (svg: string) => {
++      document.body.innerHTML = `<table><thead><tr><th>${svg}</th></tr></thead></table>`;
++      const element = document.querySelector('svg') as Element;
++      return stroke.some(rule =>
++        selectorsOf(rule).some(selector => element.matches(selector)),
++      );
++    };
++
++    test('the black one (not sorted) takes the dimmed color', () => {
++      expect(reaches('<svg stroke="black"></svg>')).toBe(true);
++    });
++
++    test('the one of the sorted column takes the accent as text', () => {
++      expect(reaches('<svg stroke="var(--mantine-color-green-5)"></svg>')).toBe(
++        true,
++      );
++    });
++
++    test('an icon with a color of its own is left alone', () => {
++      expect(reaches('<svg stroke="#d5383c"></svg>')).toBe(false);
++    });
++  });
++
++  describe('the login', () => {
++    test('the text that Mantine puts under a field is for assistive technology only', () => {
++      const selector = '[data-suricatoos-login] .mantine-InputWrapper-error';
++      // exactly this selector: one that only starts like it would be a prefix match
++      const rule = rules.find(r =>
++        r.selector
++          .split(',')
++          .map(s => s.trim())
++          .includes(selector),
++      );
++      expect(rule).toBeDefined();
++      const props = Object.fromEntries(
++        (rule?.declarations ?? []).map(d => [d.prop, d.value]),
++      );
++      // visually hidden, still in the accessibility tree (not display:none)
++      expect(props.position).toMatch(/^absolute/);
++      expect(props.clip).toBeDefined();
++      expect(props['overflow']).toMatch(/^hidden/);
++      expect(props.display).toBeUndefined();
++      expect(props.visibility).toBeUndefined();
++
++      // and the selector reaches what the form draws: the text under each of the
++      // two fields, which sit inside the element that carries the attribute
++      const {render} = rendererWith({gmp: createGmp()});
++      const {container} = render(
++        <LoginForm
++          error="Login Failed. Invalid password or username."
++          onGuestLoginClick={testing.fn()}
++          onSubmit={testing.fn()}
++        />,
++      );
++      expect(container.querySelectorAll(selector)).toHaveLength(2);
++    });
++
++    test('the eye that shows the password takes the dimmed color', () => {
++      const selector =
++        '[data-suricatoos-login] .mantine-PasswordInput-visibilityToggle svg';
++      const rule = rules.find(r =>
++        r.selector
++          .split(',')
++          .map(s => s.trim())
++          .includes(selector),
++      );
++      expect(
++        rule?.declarations.find(d => d.prop === 'stroke')?.value,
++      ).toContain('var(--sur-text-dim)');
++
++      // and the selector reaches the eye of the form (inside the element that
++      // carries the attribute)
++      const {render} = rendererWith({gmp: createGmp()});
++      const {container} = render(
++        <LoginForm onGuestLoginClick={testing.fn()} onSubmit={testing.fn()} />,
++      );
++      expect(container.querySelectorAll(selector)).toHaveLength(1);
 +    });
 +  });
 +});
@@ -18580,3 +19735,2014 @@ index 0000000..83193ec
 +);
 +
 +export default LiveRegion;
+diff --git a/src/gmp/commands/__tests__/feed-status.test.ts b/src/gmp/commands/__tests__/feed-status.test.ts
+index 2a0d269..e58bba0 100644
+--- a/src/gmp/commands/__tests__/feed-status.test.ts
++++ b/src/gmp/commands/__tests__/feed-status.test.ts
+@@ -3,7 +3,7 @@
+  * SPDX-License-Identifier: AGPL-3.0-or-later
+  */
+ 
+-import {describe, test, expect, testing} from '@gsa/testing';
++import {afterAll, describe, expect, test, testing} from '@gsa/testing';
+ import FeedStatusCommand, {
+   NVT_FEED,
+   FEED_COMMUNITY,
+@@ -20,6 +20,16 @@ import type Http from 'gmp/http/http';
+ import {ResponseRejection} from 'gmp/http/rejection';
+ import logger from 'gmp/log';
+ 
++// Suricatoos: feed.age counts the days from the version of the feed (a time
++// without a zone, read in the local zone) to the faked now (UTC): the expected
++// 1 day is the answer of a machine in UTC (the CI), 0 in the Americas. The test
++// fixes the time zone.
++testing.stubEnv('TZ', 'UTC');
++
++afterAll(() => {
++  testing.unstubAllEnvs();
++});
++
+ describe('FeedStatusCommand tests', () => {
+   test('should return feed information', async () => {
+     testing.setSystemTime(new Date('2019-06-26T14:00:00Z'));
+diff --git a/src/gmp/locale/__tests__/date.test.ts b/src/gmp/locale/__tests__/date.test.ts
+index 90bd479..d2e6d6b 100644
+--- a/src/gmp/locale/__tests__/date.test.ts
++++ b/src/gmp/locale/__tests__/date.test.ts
+@@ -3,7 +3,14 @@
+  * SPDX-License-Identifier: AGPL-3.0-or-later
+  */
+ 
+-import {describe, test, expect, beforeEach} from '@gsa/testing';
++import {
++  afterAll,
++  beforeEach,
++  describe,
++  expect,
++  test,
++  testing,
++} from '@gsa/testing';
+ import {
+   setDateLocale,
+   getDateLocale,
+@@ -16,6 +23,18 @@ import {
+ } from 'gmp/locale/date';
+ import date, {setLocaleDayjs} from 'gmp/models/date';
+ 
++// Suricatoos: the expectations below were written for a machine in UTC (the CI):
++// new Date('2018-11-24') is midnight UTC, which formatted in the time zone of the
++// Americas is the day before. The test fixes the time zone, so it gives the same
++// answer wherever it runs. It is fixed here, not in a beforeAll: the dates of the
++// test.each tables are created while the file is collected, and a Date made in
++// the zone of the machine and formatted in UTC would be off by the offset.
++testing.stubEnv('TZ', 'UTC');
++
++afterAll(() => {
++  testing.unstubAllEnvs();
++});
++
+ describe('setLocale tests', () => {
+   test('should change locale', () => {
+     setDateLocale('en');
+diff --git a/src/gmp/locale/__tests__/languages.test.ts b/src/gmp/locale/__tests__/languages.test.ts
+index ce01277..51aa46f 100644
+--- a/src/gmp/locale/__tests__/languages.test.ts
++++ b/src/gmp/locale/__tests__/languages.test.ts
+@@ -9,7 +9,10 @@ import {isString} from 'gmp/utils/identity';
+ 
+ describe('Language tests', () => {
+   test('should contain list of languages', () => {
+-    expect(Object.keys(Languages).length).toEqual(4);
++    // Suricatoos: the fork serves pt_BR, es and en; the German and the two
++    // Chinese catalogs of the upstream are not part of it.
++    expect(Object.keys(Languages).length).toEqual(3);
++    expect(Object.keys(Languages).sort()).toEqual(['en', 'es', 'pt_BR']);
+ 
+     let called = false;
+ 
+@@ -28,7 +31,8 @@ describe('getLanguageCodes test', () => {
+   test('should return list of language codes', () => {
+     const codes = getLanguageCodes();
+ 
+-    expect(codes.length).toEqual(4);
++    expect(codes.length).toEqual(3);
++    expect([...codes].sort()).toEqual(['en', 'es', 'pt_BR']);
+ 
+     let called = false;
+ 
+diff --git a/src/web/components/error/ErrorContainer.jsx b/src/web/components/error/ErrorContainer.jsx
+index 8bff14b..a4fb2a6 100644
+--- a/src/web/components/error/ErrorContainer.jsx
++++ b/src/web/components/error/ErrorContainer.jsx
+@@ -7,11 +7,15 @@ import styled from 'styled-components';
+ import Layout from 'web/components/layout/Layout';
+ import Theme from 'web/utils/Theme';
+ 
++// Suricatoos: the colors of the error box follow the color scheme (the box was
++// light red in both, and its text took the color of the page, which is light in
++// the dark scheme: unreadable).
+ const ErrorContainer = styled(Layout)`
+   padding: 15px;
+   margin: 15px 15px 15px 15px;
+-  border: 1px solid ${Theme.mediumLightRed};
+-  background-color: ${Theme.lightRed};
++  border: 1px solid var(--sur-danger-border, ${Theme.mediumLightRed});
++  background-color: var(--sur-danger-bg, ${Theme.lightRed});
++  color: var(--sur-danger-text, inherit);
+ `;
+ 
+ export default ErrorContainer;
+diff --git a/src/web/components/structure/__tests__/Footer.test.tsx b/src/web/components/structure/__tests__/Footer.test.tsx
+index 437de6f..a54e22b 100644
+--- a/src/web/components/structure/__tests__/Footer.test.tsx
++++ b/src/web/components/structure/__tests__/Footer.test.tsx
+@@ -36,6 +36,14 @@ describe('Footer tests', () => {
+ 
+     render(<Footer />);
+ 
+-    expect(screen.getByRole('link')).toHaveAttribute('href', expectedHref);
++    // the link of the notice of Greenbone AG follows the language, as upstream
++    expect(
++      screen.getByRole('link', {name: 'www.greenbone.net'}),
++    ).toHaveAttribute('href', expectedHref);
++    // Suricatoos: the fork has a link of its own next to it, the same in every
++    // language
++    expect(
++      screen.getByRole('link', {name: 'www.suricatoos.com'}),
++    ).toHaveAttribute('href', 'https://www.suricatoos.com');
+   });
+ });
+diff --git a/src/web/components/structure/__tests__/Header.test.tsx b/src/web/components/structure/__tests__/Header.test.tsx
+index 7ab6967..2b1bef2 100644
+--- a/src/web/components/structure/__tests__/Header.test.tsx
++++ b/src/web/components/structure/__tests__/Header.test.tsx
+@@ -32,8 +32,9 @@ describe('Header tests', () => {
+ 
+     expect(screen.getByText('UTC')).toBeVisible();
+ 
++    // Suricatoos: the language switch is a menu button with a name of its own
+     const langBtn = screen.getByRole('button', {
+-      name: 'Switch language to German',
++      name: 'Select language',
+     });
+     expect(langBtn).toBeVisible();
+ 
+@@ -45,11 +46,12 @@ describe('Header tests', () => {
+     const username = screen.getByText('testUser');
+     expect(username).toBeVisible();
+ 
+-    const themeSwitch = screen.queryByRole('button', {
++    // Suricatoos: the fork shows the switch of the color theme (light/dark)
++    const themeSwitch = screen.getByRole('button', {
+       name: 'Switch color theme',
+     });
+ 
+-    expect(themeSwitch).not.toBeInTheDocument();
++    expect(themeSwitch).toBeVisible();
+ 
+     await waitFor(() => {
+       const logo = screen.getByTestId('Enterprise150');
+diff --git a/src/web/components/structure/__tests__/LanguageSwitch.test.tsx b/src/web/components/structure/__tests__/LanguageSwitch.test.tsx
+index 9a8b4b9..2cddb4f 100644
+--- a/src/web/components/structure/__tests__/LanguageSwitch.test.tsx
++++ b/src/web/components/structure/__tests__/LanguageSwitch.test.tsx
+@@ -4,9 +4,16 @@
+  */
+ 
+ import {describe, test, expect, testing} from '@gsa/testing';
+-import {rendererWith, fireEvent, screen} from 'web/testing';
++import {rendererWith, fireEvent, screen, wait} from 'web/testing';
++import LanguageProvider from 'web/components/provider/LanguageProvider';
+ import LanguageSwitch from 'web/components/structure/LanguageSwitch';
+ 
++// Suricatoos: the switch of the fork is a menu with the three languages of the
++// UI (pt_BR, es and en), not the single button that toggled English and German.
++// jsdom has no layout, so Mantine keeps the dropdown display:none: the items are
++// queried with { hidden: true }.
++const hidden = {hidden: true};
++
+ describe('LanguageSwitch', () => {
+   test('should switch language and update settings', async () => {
+     const mockSetLanguage = testing.fn().mockResolvedValue(undefined);
+@@ -20,27 +27,118 @@ describe('LanguageSwitch', () => {
+ 
+     render(<LanguageSwitch />);
+ 
+-    const button = screen.getByRole('button', {
+-      name: 'Switch language to German',
+-    });
++    const button = screen.getByRole('button', {name: 'Select language'});
+ 
+     fireEvent.click(button);
+ 
+-    expect(mockSetLanguage).toHaveBeenCalledWith('de');
++    const spanish = await screen.findByRole('menuitem', {
++      name: 'Español',
++      ...hidden,
++    });
++    fireEvent.click(spanish);
++
++    expect(mockSetLanguage).toHaveBeenCalledWith('es');
+   });
+ 
+-  test('should show English option when current language is German', async () => {
++  // Suricatoos: choosing the language that is shown is still a choice when it was only
++  // detected (the browser's), so the switch hands it to setLanguage too; whether it
++  // is saved (detected) or does nothing (already the choice of the user) is for the
++  // provider to say (suricatoosLocale.test.ts).
++  test('should hand the language that is already the current one to setLanguage, which tells if it is a choice', async () => {
+     const mockSetLanguage = testing.fn().mockResolvedValue(undefined);
+ 
+     const {render} = rendererWith({
+       language: {
+-        language: 'de',
++        language: 'en',
+         setLanguage: mockSetLanguage,
+       },
+     });
+ 
+     render(<LanguageSwitch />);
+ 
+-    expect(screen.getByTitle('Switch language to English')).toBeInTheDocument();
++    fireEvent.click(screen.getByRole('button', {name: 'Select language'}));
++    fireEvent.click(
++      await screen.findByRole('menuitem', {name: 'English', ...hidden}),
++    );
++
++    expect(mockSetLanguage).toHaveBeenCalledTimes(1);
++    expect(mockSetLanguage).toHaveBeenCalledWith('en');
++  });
++
++  test('should show English option when current language is Spanish', async () => {
++    const mockSetLanguage = testing.fn().mockResolvedValue(undefined);
++
++    const {render} = rendererWith({
++      language: {
++        language: 'es',
++        setLanguage: mockSetLanguage,
++      },
++    });
++
++    render(<LanguageSwitch />);
++
++    fireEvent.click(screen.getByRole('button', {name: 'Select language'}));
++
++    const english = await screen.findByRole('menuitem', {
++      name: 'English',
++      ...hidden,
++    });
++    expect(english).toBeInTheDocument();
++    expect(english).not.toHaveAttribute('aria-current');
++    // the current language is told, the other ones are not
++    expect(
++      screen.getByRole('menuitem', {name: 'Español', ...hidden}),
++    ).toHaveAttribute('aria-current', 'true');
++
++    fireEvent.click(english);
++    expect(mockSetLanguage).toHaveBeenCalledWith('en');
++  });
++
++  // The switch inside the real provider, choosing the language that is shown (the
++  // unit tests of the provider are in suricatoosLocale.test.ts).
++  describe('choosing the language that is shown, inside the real provider', () => {
++    const SETTING = '6765549a-934e-11e3-b358-406186ea4fc5';
++
++    // the session has the locale when the language is the choice of the user
++    const renderSwitch = (sessionLocale: string | undefined) => {
++      const saveSetting = testing.fn().mockResolvedValue(undefined);
++      const setLocale = testing.fn();
++      const {render} = rendererWith({
++        gmp: {user: {saveSetting}, session: {locale: sessionLocale, setLocale}},
++      });
++      render(
++        <LanguageProvider>
++          <LanguageSwitch />
++        </LanguageProvider>,
++      );
++      return {saveSetting, setLocale};
++    };
++
++    const chooseEnglish = async () => {
++      fireEvent.click(screen.getByRole('button', {name: 'Select language'}));
++      fireEvent.click(
++        await screen.findByRole('menuitem', {name: 'English', ...hidden}),
++      );
++      await wait();
++    };
++
++    test('saves it as the choice of the user when it was only detected', async () => {
++      // English is what the setup of the tests detects: it is shown, not in the session
++      const {saveSetting, setLocale} = renderSwitch(undefined);
++
++      await chooseEnglish();
++
++      expect(setLocale).toHaveBeenCalledWith('en');
++      expect(saveSetting).toHaveBeenCalledWith(SETTING, 'en');
++    });
++
++    test('does nothing when it already is the choice of the user', async () => {
++      const {saveSetting, setLocale} = renderSwitch('en');
++
++      await chooseEnglish();
++
++      expect(setLocale).not.toHaveBeenCalled();
++      expect(saveSetting).not.toHaveBeenCalled();
++    });
+   });
+ });
+diff --git a/src/web/pages/scanconfigs/__tests__/ScanConfigComponent.test.tsx b/src/web/pages/scanconfigs/__tests__/ScanConfigComponent.test.tsx
+index f75e1a4..dccdfca 100644
+--- a/src/web/pages/scanconfigs/__tests__/ScanConfigComponent.test.tsx
++++ b/src/web/pages/scanconfigs/__tests__/ScanConfigComponent.test.tsx
+@@ -343,7 +343,12 @@ describe('createSelectedNvts', () => {
+   });
+ });
+ 
+-describe('ScanConfigComponent', () => {
++// Suricatoos: the tests below open the edit dialog and look for the buttons of its
++// body with getAllByTitle right after findByText of its title, without waiting for
++// the body. On a loaded machine the body comes one render later and the test fails
++// once (it passes alone). The gate runs the whole suite without a global retry, so
++// the tolerance is only here, on the file that needs it.
++describe('ScanConfigComponent', {retry: 2}, () => {
+   test('should expose create, edit, import, settings via children', () => {
+     const {gmp} = createGmp();
+     const childFn = renderComponent(gmp);
+diff --git a/src/web/pages/start/__tests__/StartPage.test.jsx b/src/web/pages/start/__tests__/StartPage.test.jsx
+index abb4667..3a0a04f 100644
+--- a/src/web/pages/start/__tests__/StartPage.test.jsx
++++ b/src/web/pages/start/__tests__/StartPage.test.jsx
+@@ -99,6 +99,9 @@ describe('StartPage tests', () => {
+     );
+ 
+     // Displays
++    // Suricatoos: the donut charts are flat (no 2D/3D toggle) and the displays
++    // download the SVG with the generic download icon (the CSV download and the
++    // SVG-specific icon of the upstream are not part of the fork).
+     const tasksBySeverityClass = displays[0];
+     const withinTasksBySeverityClass = within(tasksBySeverityClass);
+     expect(tasksBySeverityClass).toHaveTextContent(
+@@ -108,14 +111,14 @@ describe('StartPage tests', () => {
+       withinTasksBySeverityClass.getByTestId('filter-icon'),
+     ).toHaveAttribute('title', 'Select Filter');
+     expect(
+-      withinTasksBySeverityClass.getByTestId('download-svg-icon'),
++      withinTasksBySeverityClass.getByTestId('download-icon'),
+     ).toHaveAttribute('title', 'Download SVG');
+     expect(
+       withinTasksBySeverityClass.getByTestId('legend-icon'),
+     ).toHaveAttribute('title', 'Toggle Legend');
+     expect(
+-      withinTasksBySeverityClass.getByTestId('toggle-3d-icon'),
+-    ).toHaveAttribute('title', 'Toggle 2D/3D view');
++      withinTasksBySeverityClass.queryByTestId('toggle-3d-icon'),
++    ).not.toBeInTheDocument();
+ 
+     const tasksByStatus = displays[1];
+     const withinTasksByStatus = within(tasksByStatus);
+@@ -124,17 +127,17 @@ describe('StartPage tests', () => {
+       'title',
+       'Select Filter',
+     );
+-    expect(
+-      withinTasksByStatus.getByTestId('download-svg-icon'),
+-    ).toHaveAttribute('title', 'Download SVG');
+-    expect(withinTasksByStatus.getByTestId('legend-icon')).toHaveAttribute(
++    expect(withinTasksByStatus.getByTestId('download-icon')).toHaveAttribute(
+       'title',
+-      'Toggle Legend',
++      'Download SVG',
+     );
+-    expect(withinTasksByStatus.getByTestId('toggle-3d-icon')).toHaveAttribute(
++    expect(withinTasksByStatus.getByTestId('legend-icon')).toHaveAttribute(
+       'title',
+-      'Toggle 2D/3D view',
++      'Toggle Legend',
+     );
++    expect(
++      withinTasksByStatus.queryByTestId('toggle-3d-icon'),
++    ).not.toBeInTheDocument();
+ 
+     const cvesByCreationTime = displays[2];
+     const withinCvesByCreationTime = within(cvesByCreationTime);
+@@ -144,7 +147,7 @@ describe('StartPage tests', () => {
+       'Select Filter',
+     );
+     expect(
+-      withinCvesByCreationTime.getByTestId('download-svg-icon'),
++      withinCvesByCreationTime.getByTestId('download-icon'),
+     ).toHaveAttribute('title', 'Download SVG');
+     expect(withinCvesByCreationTime.getByTestId('legend-icon')).toHaveAttribute(
+       'title',
+@@ -160,13 +163,13 @@ describe('StartPage tests', () => {
+       withinNvtsBySeverityClass.getByTestId('filter-icon'),
+     ).toHaveAttribute('title', 'Select Filter');
+     expect(
+-      withinNvtsBySeverityClass.getByTestId('download-svg-icon'),
++      withinNvtsBySeverityClass.getByTestId('download-icon'),
+     ).toHaveAttribute('title', 'Download SVG');
+     expect(
+       withinNvtsBySeverityClass.getByTestId('legend-icon'),
+     ).toHaveAttribute('title', 'Toggle Legend');
+     expect(
+-      withinNvtsBySeverityClass.getByTestId('toggle-3d-icon'),
+-    ).toHaveAttribute('title', 'Toggle 2D/3D view');
++      withinNvtsBySeverityClass.queryByTestId('toggle-3d-icon'),
++    ).not.toBeInTheDocument();
+   });
+ });
+diff --git a/src/web/pages/user-settings/__tests__/GeneralSettings.test.tsx b/src/web/pages/user-settings/__tests__/GeneralSettings.test.tsx
+index 47cd15e..ba43693 100644
+--- a/src/web/pages/user-settings/__tests__/GeneralSettings.test.tsx
++++ b/src/web/pages/user-settings/__tests__/GeneralSettings.test.tsx
+@@ -384,7 +384,8 @@ describe('General tab', () => {
+     const select = await screen.findByTestId('form-select');
+     expect(select).toBeVisible();
+     select.focus();
+-    fireEvent.change(select, {target: {value: 'de'}});
++    // Suricatoos: the UI languages of the fork are pt_BR, es and en (no German)
++    fireEvent.change(select, {target: {value: 'es'}});
+     const saveButton = screen.getByTestId('save-icon');
+     expect(saveButton).toBeVisible();
+     saveButton.click();
+@@ -394,12 +395,12 @@ describe('General tab', () => {
+         userinterfacelanguage: Setting.fromElement({
+           _id: 'g8',
+           name: 'userinterfacelanguage',
+-          value: 'de',
++          value: 'es',
+           comment: 'Language comment',
+         }),
+       },
+     });
+-    screen.getByText(/German|Deutsch/i);
++    screen.getByText(/Spanish|Español/i);
+   });
+ 
+   test('can edit and save Auto Cache Rebuild', async () => {
+diff --git a/src/web/testing/__tests__/unhandledErrors.test.ts b/src/web/testing/__tests__/unhandledErrors.test.ts
+new file mode 100644
+index 0000000..4404d14
+--- /dev/null
++++ b/src/web/testing/__tests__/unhandledErrors.test.ts
+@@ -0,0 +1,138 @@
++/* SPDX-FileCopyrightText: 2026 Suricatoos
++ *
++ * SPDX-License-Identifier: AGPL-3.0-or-later
++ */
++
++// `vitest run` exits 1 on any unhandled error, even when every test passes. One kind
++// of them is not a failure of any test: Mantine's useTransition can leave a timer
++// behind when a Transition is closed in the frame that opened it (its first
++// animation frame calls flushSync, and the close runs inside it and starts a second
++// chain of frames that the cleanup on unmount does not cancel). The timer fires
++// after the test file ended and the jsdom window is gone, and setStatus of an
++// unmounted component reaches `window` in react-dom: "ReferenceError: window is not
++// defined". vitest.config.ts lets exactly that error through (onUnhandledError) and
++// nothing else: the rest of the unhandled errors, the ones of the patch's own
++// async code included, still fail the run.
++
++/// <reference types="node" />
++
++import {describe, expect, test} from '@gsa/testing';
++import config from '../../../../vitest.config';
++
++const onUnhandledError = config.test?.onUnhandledError;
++
++interface Unhandled {
++  name: string;
++  message: string;
++  stack?: string;
++  type: string;
++}
++
++const unhandled = (
++  name: string,
++  message: string,
++  stack: string | undefined,
++): Unhandled => ({name, message, stack, type: 'Uncaught Exception'});
++
++// the stack as CI printed it (run of the PR #155)
++const TRANSITION_STACK = [
++  'ReferenceError: window is not defined',
++  ' ❯ getCurrentEventPriority node_modules/react-dom/cjs/react-dom.development.js:8168:25',
++  ' ❯ requestUpdateLane node_modules/react-dom/cjs/react-dom.development.js:25421:30',
++  ' ❯ dispatchSetState node_modules/react-dom/cjs/react-dom.development.js:16408:18',
++  ' ❯ Timeout._onTimeout node_modules/@mantine/core/esm/components/Transition/use-transition.mjs:61:13',
++  ' ❯ listOnTimeout node:internal/timers:588:17',
++  ' ❯ processTimers node:internal/timers:523:7',
++].join('\n');
++
++const REACT_STACK = TRANSITION_STACK.split('\n')
++  .filter(line => !line.includes('use-transition'))
++  .join('\n');
++
++// what the callback says: false is "ignore it"
++const ignored = (error: Unhandled): boolean =>
++  (onUnhandledError as (e: Unhandled) => boolean | void)(error) === false;
++
++describe('unhandled errors of the test run', () => {
++  test('the config has the callback and does not switch the report off', () => {
++    expect(typeof onUnhandledError).toBe('function');
++    expect(config.test?.dangerouslyIgnoreUnhandledErrors).toBeFalsy();
++  });
++
++  test('"window is not defined" from the timer of a Mantine Transition is let through', () => {
++    expect(
++      ignored(
++        unhandled('ReferenceError', 'window is not defined', TRANSITION_STACK),
++      ),
++    ).toBe(true);
++  });
++
++  test('it is let through with the path as Windows or Linux prints it', () => {
++    for (const stack of [
++      TRANSITION_STACK.replace(
++        'node_modules/@mantine',
++        'file:///C:/work/gsa-src/node_modules/@mantine',
++      ),
++      TRANSITION_STACK.replace(
++        'node_modules/@mantine',
++        '/home/runner/work/suricatoos-infra/gsa-src/node_modules/@mantine',
++      ),
++    ]) {
++      expect(
++        ignored(unhandled('ReferenceError', 'window is not defined', stack)),
++      ).toBe(true);
++    }
++  });
++
++  test.each([
++    [
++      'the same stack, another kind of error',
++      unhandled('TypeError', 'window is not defined', TRANSITION_STACK),
++    ],
++    [
++      'the same stack, another message',
++      unhandled('ReferenceError', 'document is not defined', TRANSITION_STACK),
++    ],
++    [
++      'the same error from somewhere else in react-dom (not the Transition)',
++      unhandled('ReferenceError', 'window is not defined', REACT_STACK),
++    ],
++    [
++      'the same error from another Mantine file',
++      unhandled(
++        'ReferenceError',
++        'window is not defined',
++        TRANSITION_STACK.replace(
++          'components/Transition/use-transition.mjs',
++          'components/Popover/use-popover.mjs',
++        ),
++      ),
++    ],
++    [
++      'the same error from the code of the patch',
++      unhandled(
++        'ReferenceError',
++        'window is not defined',
++        'ReferenceError: window is not defined\n ❯ copyCommand src/web/pages/downloads/DownloadsPage.tsx:181:7',
++      ),
++    ],
++    [
++      'an error that only talks about the Transition',
++      unhandled(
++        'Error',
++        'use-transition.mjs: window is not defined',
++        'Error: use-transition.mjs: window is not defined\n ❯ somewhere src/web/foo.ts:1:1',
++      ),
++    ],
++    [
++      'an error with no stack',
++      unhandled('ReferenceError', 'window is not defined', undefined),
++    ],
++    [
++      'an unrelated error',
++      unhandled('Error', 'boom', 'Error: boom\n ❯ src/web/foo.ts:1:1'),
++    ],
++  ])('%s is still reported', (_label, error) => {
++    expect(ignored(error)).toBe(false);
++  });
++});
+diff --git a/src/web/utils/__tests__/suricatoosContrast.test.ts b/src/web/utils/__tests__/suricatoosContrast.test.ts
+new file mode 100644
+index 0000000..d60abf1
+--- /dev/null
++++ b/src/web/utils/__tests__/suricatoosContrast.test.ts
+@@ -0,0 +1,603 @@
++/* SPDX-FileCopyrightText: 2026 Suricatoos
++ *
++ * SPDX-License-Identifier: AGPL-3.0-or-later
++ */
++
++// Contrast of the colors of the theme of Suricatoos (public/suricatoos-theme.css)
++// in both color schemes, by WCAG 2.1 AA: 4.5:1 for text, 3:1 for the boundary of
++// a form control and for the ring of the focus. The colors are read from the
++// style sheet itself (the custom properties of each scheme, with the cascade of
++// the file), so a color that is changed there is checked here.
++
++/// <reference types="node" />
++
++import {describe, expect, test} from '@gsa/testing';
++import fs from 'node:fs';
++import path from 'node:path';
++import {cssRules} from 'web/testing/suricatoosCss';
++import {PILL_COLORS, SurColors} from 'web/utils/suricatoosColors';
++
++type Scheme = 'light' | 'dark';
++type Rgba = [number, number, number, number];
++
++const theme = fs.readFileSync(
++  path.join(process.cwd(), 'public/suricatoos-theme.css'),
++  'utf8',
++);
++const rules = cssRules(theme);
++
++interface Declared {
++  value: string;
++  important: boolean;
++  order: number;
++}
++
++// The custom properties a color scheme sees: those of :root and of the block of
++// the scheme. Of two declarations of the same property the !important one wins,
++// and among equals (same specificity) the later one in the file, as the browser
++// does.
++const customProperties = (scheme: Scheme): Map<string, string> => {
++  const best = new Map<string, Declared>();
++  let order = 0;
++  for (const rule of rules) {
++    const selectors = rule.selector.split(',').map(s => s.trim());
++    const applies = selectors.some(
++      s => s === ':root' || s === `[data-mantine-color-scheme='${scheme}']`,
++    );
++    for (const declaration of rule.declarations) {
++      order++;
++      if (!applies || !declaration.prop.startsWith('--')) {
++        continue;
++      }
++      const important = /!important\s*$/i.test(declaration.value);
++      const value = declaration.value.replace(/\s*!important\s*$/i, '').trim();
++      const current = best.get(declaration.prop);
++      if (
++        current === undefined ||
++        (important && !current.important) ||
++        (important === current.important && order > current.order)
++      ) {
++        best.set(declaration.prop, {value, important, order});
++      }
++    }
++  }
++  return new Map([...best].map(([name, d]) => [name, d.value]));
++};
++
++const parseColor = (text: string): Rgba => {
++  const value = text.trim().toLowerCase();
++  const hex = /^#([0-9a-f]{3}|[0-9a-f]{6})$/.exec(value);
++  if (hex) {
++    const h =
++      hex[1].length === 3 ? [...hex[1]].map(c => c + c).join('') : hex[1];
++    return [
++      parseInt(h.slice(0, 2), 16),
++      parseInt(h.slice(2, 4), 16),
++      parseInt(h.slice(4, 6), 16),
++      1,
++    ];
++  }
++  const fn = /^rgba?\(([^)]*)\)$/.exec(value);
++  if (fn) {
++    const p = fn[1]
++      .split(/[,\s/]+/)
++      .filter(Boolean)
++      .map(Number);
++    return [p[0], p[1], p[2], p.length > 3 ? p[3] : 1];
++  }
++  throw new Error(`not a color: ${text}`);
++};
++
++// A value with var() references, resolved against the properties of the scheme.
++const resolve = (
++  props: Map<string, string>,
++  name: string,
++  depth = 0,
++): string => {
++  const raw = props.get(name);
++  if (raw === undefined || depth > 8) {
++    throw new Error(`the theme does not define ${name}`);
++  }
++  const ref = /^var\(\s*(--[\w-]+)\s*(?:,[^)]*)?\)$/.exec(raw);
++  return ref ? resolve(props, ref[1], depth + 1) : raw;
++};
++
++const over = ([r, g, b, a]: Rgba, base: Rgba): Rgba => [
++  r * a + base[0] * (1 - a),
++  g * a + base[1] * (1 - a),
++  b * a + base[2] * (1 - a),
++  1,
++];
++
++const channel = (c: number) => {
++  const s = c / 255;
++  return s <= 0.04045 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
++};
++
++const luminance = ([r, g, b]: Rgba) =>
++  0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
++
++// foreground over background; a translucent foreground is laid on the background
++const contrast = (fg: Rgba, bg: Rgba): number => {
++  const top = fg[3] < 1 ? over(fg, bg) : fg;
++  const [a, b] = [luminance(top), luminance(bg)].sort((x, y) => y - x);
++  return (a + 0.05) / (b + 0.05);
++};
++
++const WHITE: Rgba = [255, 255, 255, 1];
++
++// What the theme says about one color scheme.
++const scheme = (name: Scheme) => {
++  const props = customProperties(name);
++  const color = (token: string): Rgba => parseColor(resolve(props, token));
++  const surface = color('--sur-surface');
++  const canvas = color('--sur-canvas');
++  const soft = color('--sur-accent-soft');
++  // the rule that stripes the rows of the tables: one for each scheme
++  const stripe = rules
++    .filter(
++      r =>
++        r.selector.includes('nth-child(even)') &&
++        r.selector.includes('dark') === (name === 'dark'),
++    )
++    .map(r => r.declarations.find(d => d.prop === 'background')?.value)
++    .filter((v): v is string => v !== undefined)
++    .pop();
++  const zebra = over(
++    parseColor((stripe ?? '').replace(/\s*!important\s*$/i, '')),
++    surface,
++  );
++  // the surfaces a piece of text can be on
++  const backgrounds: Record<string, Rgba> = {
++    surface,
++    'surface-2': color('--sur-surface-2'),
++    canvas,
++    'table header': color('--sur-header'),
++    'striped row': zebra,
++    'hover on surface': over(soft, surface),
++    'hover on canvas': over(soft, canvas),
++    'hover on striped row': over(soft, zebra),
++  };
++  return {props, color, backgrounds, surface, canvas};
++};
++
++const SCHEMES: Scheme[] = ['light', 'dark'];
++
++describe.each(SCHEMES)('theme colors, %s scheme', name => {
++  const {color, backgrounds, surface, canvas, props} = scheme(name);
++  const onEvery = (token: string, only?: string[]) =>
++    Object.entries(backgrounds)
++      .filter(([bg]) => only === undefined || only.includes(bg))
++      .map(([bg, rgba]): [string, Rgba] => [bg, rgba])
++      .map(([bg, rgba]) => ({
++        pair: `${token} on ${bg}`,
++        ratio: contrast(color(token), rgba),
++      }));
++
++  test('the text of the page reads on every surface', () => {
++    for (const {pair, ratio} of onEvery('--sur-text')) {
++      expect(ratio, pair).toBeGreaterThanOrEqual(4.5);
++    }
++  });
++
++  test('the dimmed text (descriptions, headers of tables, ticks of charts) reads on every surface', () => {
++    for (const {pair, ratio} of onEvery('--sur-text-dim')) {
++      expect(ratio, pair).toBeGreaterThanOrEqual(4.5);
++    }
++    for (const {pair, ratio} of onEvery('--sur-chart-text', [
++      'surface',
++      'canvas',
++    ])) {
++      expect(ratio, pair).toBeGreaterThanOrEqual(4.5);
++    }
++  });
++
++  test('the accent as text (links, active item of the menu and of the tabs) reads on every surface', () => {
++    for (const {pair, ratio} of onEvery('--sur-accent-text')) {
++      expect(ratio, pair).toBeGreaterThanOrEqual(4.5);
++    }
++  });
++
++  test('the text of an error reads on the page and in its box', () => {
++    for (const {pair, ratio} of onEvery('--sur-danger-text', [
++      'surface',
++      'canvas',
++      'striped row',
++    ])) {
++      expect(ratio, pair).toBeGreaterThanOrEqual(4.5);
++    }
++    expect(
++      contrast(
++        color('--sur-danger-text'),
++        over(color('--sur-danger-bg'), canvas),
++      ),
++      '--sur-danger-text on --sur-danger-bg',
++    ).toBeGreaterThanOrEqual(4.5);
++  });
++
++  test('the eyebrow of the login reads on the card', () => {
++    expect(
++      contrast(color('--sur-coral-text'), surface),
++      '--sur-coral-text on the card',
++    ).toBeGreaterThanOrEqual(4.5);
++  });
++
++  test('the text of a button on its fill (primary and red buttons)', () => {
++    const fills = [
++      '--mantine-primary-color-filled',
++      '--mantine-color-green-filled',
++      '--mantine-color-blue-filled',
++      '--mantine-color-teal-filled',
++      '--mantine-color-red-filled',
++      '--mantine-color-red-filled-hover',
++      '--mantine-color-green-filled-hover',
++    ];
++    for (const fill of fills) {
++      expect(
++        contrast(WHITE, color(fill)),
++        `white on ${fill}`,
++      ).toBeGreaterThanOrEqual(4.5);
++    }
++  });
++
++  test('the colored text of Mantine (light buttons, badges, alerts, outline buttons, links) reads on the surfaces and on its own light fill', () => {
++    const texts = [
++      '--mantine-color-green-text',
++      '--mantine-color-green-light-color',
++      '--mantine-color-green-outline',
++      '--mantine-color-blue-text',
++      '--mantine-color-blue-light-color',
++      '--mantine-color-blue-outline',
++      '--mantine-color-teal-text',
++      '--mantine-color-teal-light-color',
++      '--mantine-color-red-text',
++      '--mantine-color-red-light-color',
++      '--mantine-color-red-outline',
++      '--mantine-color-yellow-light-color',
++      '--mantine-color-gray-light-color',
++      '--mantine-color-anchor',
++      '--mantine-color-error',
++    ];
++    for (const token of texts) {
++      for (const bg of ['surface', 'canvas']) {
++        expect(
++          contrast(color(token), backgrounds[bg]),
++          `${token} on ${bg}`,
++        ).toBeGreaterThanOrEqual(4.5);
++      }
++    }
++    // a light badge or alert: the text on its own translucent fill over the surface
++    const lights: Array<[string, string]> = [
++      ['--mantine-color-green-light-color', '--mantine-color-green-light'],
++      ['--mantine-color-blue-light-color', '--mantine-color-blue-light'],
++      ['--mantine-color-red-light-color', '--mantine-color-red-light'],
++      ['--mantine-color-yellow-light-color', '--mantine-color-yellow-light'],
++      ['--mantine-color-gray-light-color', '--mantine-color-gray-light'],
++    ];
++    for (const [text, fill] of lights) {
++      for (const bg of ['surface', 'canvas']) {
++        expect(
++          contrast(color(text), over(color(fill), backgrounds[bg])),
++          `${text} on ${fill} over ${bg}`,
++        ).toBeGreaterThanOrEqual(4.5);
++      }
++    }
++  });
++
++  test('the boundary of a form control (field, select, checkbox, switch) is 3:1 against its surroundings', () => {
++    for (const {pair, ratio} of onEvery('--sur-control-border', [
++      'surface',
++      'surface-2',
++      'canvas',
++      'table header',
++      'striped row',
++    ])) {
++      expect(ratio, pair).toBeGreaterThanOrEqual(3);
++    }
++  });
++
++  test('the accent of the focus ring and of the borders is 3:1 against the surfaces', () => {
++    for (const {pair, ratio} of onEvery('--sur-accent', [
++      'surface',
++      'canvas',
++    ])) {
++      expect(ratio, pair).toBeGreaterThanOrEqual(3);
++    }
++  });
++
++  test('every token of the theme that a rule uses is defined for this scheme', () => {
++    // a misspelled token is an invalid value: the color falls back to the
++    // inherited one and no test of a pair of colors would see it
++    const used = new Set<string>();
++    for (const rule of rules) {
++      for (const declaration of rule.declarations) {
++        for (const match of declaration.value.matchAll(
++          /var\((--sur-[\w-]+)/g,
++        )) {
++          used.add(match[1]);
++        }
++      }
++    }
++    expect(used.size).toBeGreaterThan(10);
++    expect([...used].filter(token => !props.has(token))).toEqual([]);
++  });
++
++  test('the dimmed color of Mantine is the dimmed color of the theme', () => {
++    expect(resolve(props, '--mantine-color-dimmed')).toEqual(
++      resolve(props, '--sur-text-dim'),
++    );
++  });
++});
++
++describe('the icons of the menu', () => {
++  // The ui-lib paints the icon of a menu item (24 px, next to its label) with the
++  // gray-6 of Mantine: 2.9:1 on the page of the light scheme, short of the 3:1 of a
++  // graphic. Its declaration is on :root:not([data-mantine-color-scheme=dark]),
++  // which is more specific than the block of the scheme in the theme, so the one
++  // of the theme only wins with !important. In the dark scheme the gray-5 of the
++  // ui-lib is 9.3:1 on the page and is left as it is.
++  const NAME = '--app-navigation-link-icon-left-color';
++  const light = scheme('light');
++
++  test('the theme paints them with a color that is 3:1 against the page', () => {
++    for (const bg of ['canvas', 'surface'] as const) {
++      expect(
++        contrast(light.color(NAME), light.backgrounds[bg]),
++        `${NAME} on ${bg}`,
++      ).toBeGreaterThanOrEqual(3);
++    }
++  });
++
++  test('and the declaration wins over the one of the ui-lib (!important, in the block of the light scheme)', () => {
++    const declared = rules
++      .filter(r =>
++        r.selector
++          .split(',')
++          .map(s => s.trim())
++          .includes("[data-mantine-color-scheme='light']"),
++      )
++      .flatMap(r => r.declarations)
++      .filter(d => d.prop === NAME);
++    expect(declared).toHaveLength(1);
++    expect(declared[0].value).toMatch(/!important\s*$/i);
++  });
++});
++
++describe('the footer of the login', () => {
++  // The backdrop of the login is the same in both schemes: a night gradient with
++  // two glows over it. The footer is low on the page; the bound used here is the
++  // lightest stop of the gradient with both glows at their strongest on top of it,
++  // so the real background is never lighter than this.
++  const LOGIN = '#app:not(:has([class*="_header_"])) > div';
++  const items = (selector: string) =>
++    selector.split(',').map(item => item.trim());
++
++  test('reads on the backdrop (4.5:1 against the lightest it can be)', () => {
++    const backdrop = rules
++      .filter(r => r.selector === LOGIN)
++      .flatMap(r => r.declarations)
++      .find(d => d.prop === 'background')?.value;
++    expect(backdrop).toBeDefined();
++    const stops = [...(backdrop ?? '').matchAll(/#[0-9a-fA-F]{6}\b/g)].map(m =>
++      parseColor(m[0]),
++    );
++    const glows = [...(backdrop ?? '').matchAll(/rgba\([^)]*\)/g)]
++      .map(m => parseColor(m[0]))
++      .filter(c => c[3] > 0);
++    expect(stops.length).toBeGreaterThan(0);
++    const lightest = stops.reduce((a, b) =>
++      luminance(b) > luminance(a) ? b : a,
++    );
++    const background = glows.reduce(
++      (under, glow) => over(glow, under),
++      lightest,
++    );
++
++    // the text of the footer and of everything inside it
++    const rule = rules.find(r =>
++      items(r.selector).includes(`${LOGIN} > footer`),
++    );
++    expect(rule && items(rule.selector)).toContain(`${LOGIN} > footer *`);
++    const declared = rule?.declarations.find(d => d.prop === 'color')?.value;
++    expect(declared).toBeDefined();
++    const text = parseColor((declared ?? '').replace(/\s*!important\s*$/i, ''));
++
++    expect(contrast(text, background)).toBeGreaterThanOrEqual(4.5);
++  });
++});
++
++describe('the icon buttons of the header', () => {
++  // The header is dark in both color schemes (the theme forces its gradient), so what
++  // an icon button turns into under the mouse is read against that dark, not against
++  // the page of the scheme: the accent as text of the light scheme is an indigo made
++  // for a light page and is 2.4:1 on the header. The global hover rule of the icon
++  // buttons paints them with it; the rule of the header has to win over that one.
++  const HEADER = '[class*="_header_"]';
++  const items = (selector: string) =>
++    selector.split(',').map(item => item.trim());
++  // enough for the selectors of the hover rules: ids, then classes + attributes +
++  // pseudo-classes, then types
++  const specificity = (selector: string): [number, number, number] => {
++    const attributes = selector.match(/\[[^\]]*\]/g)?.length ?? 0;
++    const bare = selector.replace(/\[[^\]]*\]/g, '');
++    return [
++      bare.match(/#[\w-]+/g)?.length ?? 0,
++      attributes +
++        (bare.match(/\.[\w-]+/g)?.length ?? 0) +
++        (bare.match(/(?<!:):[\w-]+/g)?.length ?? 0),
++      bare.match(/(?:^|[\s>+~])[a-z][\w-]*/gi)?.length ?? 0,
++    ];
++  };
++  const stronger = (
++    a: {important: boolean; spec: number[]; order: number},
++    b: {important: boolean; spec: number[]; order: number},
++  ) => {
++    if (a.important !== b.important) {
++      return a.important;
++    }
++    for (let i = 0; i < 3; i++) {
++      if (a.spec[i] !== b.spec[i]) {
++        return a.spec[i] > b.spec[i];
++      }
++    }
++    return a.order > b.order;
++  };
++
++  // The `color` that wins for an icon button under the mouse, in a header or outside
++  // of it (jsdom does not know :hover: the items with it are tried without it).
++  const hoverColor = (inHeader: boolean): string | undefined => {
++    document.body.innerHTML = inHeader
++      ? '<div class="x_header_y"><button class="mantine-ActionIcon-root"></button></div>'
++      : '<main><button class="mantine-ActionIcon-root"></button></main>';
++    const button = document.querySelector('button') as Element;
++    let best:
++      | {important: boolean; spec: number[]; order: number; value: string}
++      | undefined;
++    rules.forEach((rule, order) => {
++      const declaration = rule.declarations.find(d => d.prop === 'color');
++      if (declaration === undefined) {
++        return;
++      }
++      for (const item of items(rule.selector)) {
++        if (
++          !item.includes(':hover') ||
++          !button.matches(item.replace(':hover', ''))
++        ) {
++          continue;
++        }
++        const candidate = {
++          important: /!important\s*$/i.test(declaration.value),
++          spec: specificity(item),
++          order,
++          value: declaration.value.replace(/\s*!important\s*$/i, '').trim(),
++        };
++        if (best === undefined || stronger(candidate, best)) {
++          best = candidate;
++        }
++      }
++    });
++    document.body.innerHTML = '';
++    return best?.value;
++  };
++
++  test('under the mouse an icon button of the header takes the light accent of the header', () => {
++    expect(hoverColor(true)).toBe('var(--sur-header-accent)');
++  });
++
++  test('the icon buttons of the rest of the page keep the accent as text', () => {
++    expect(hoverColor(false)).toBe('var(--sur-accent-text)');
++  });
++
++  test.each(SCHEMES)(
++    'and the icon reads on the header with the hover fill on it (%s scheme, 4.5:1)',
++    name => {
++      const {color} = scheme(name);
++      const background = rules
++        .filter(r => r.selector === HEADER)
++        .flatMap(r => r.declarations)
++        .find(d => d.prop === 'background')?.value;
++      expect(background).toBeDefined();
++      const stops = [...(background ?? '').matchAll(/#[0-9a-fA-F]{6}\b/g)].map(
++        m => parseColor(m[0]),
++      );
++      expect(stops.length).toBeGreaterThan(0);
++      // the lightest the header can be, with the fill of the hover on it
++      const lightest = stops.reduce((a, b) =>
++        luminance(b) > luminance(a) ? b : a,
++      );
++      const fill = over(color('--sur-accent-soft'), lightest);
++      const token = /^var\((--[\w-]+)\)$/.exec(hoverColor(true) ?? '')?.[1];
++      expect(token).toBeDefined();
++      expect(contrast(color(token as string), fill)).toBeGreaterThanOrEqual(
++        4.5,
++      );
++    },
++  );
++});
++
++describe('the theme never paints text with a color that is only for borders and fills', () => {
++  const textRules = rules.flatMap(rule =>
++    rule.declarations
++      .filter(d => d.prop === 'color' || d.prop === 'fill')
++      .map(d => ({selector: rule.selector, prop: d.prop, value: d.value})),
++  );
++
++  test('--sur-accent is not a text color (--sur-accent-text is)', () => {
++    const offenders = textRules.filter(r =>
++      /var\(--sur-accent\)/.test(r.value),
++    );
++    expect(
++      offenders.map(r => `${r.selector} { ${r.prop}: ${r.value} }`),
++    ).toEqual([]);
++  });
++
++  test('--sur-coral is not a text color (--sur-coral-text is)', () => {
++    const offenders = textRules.filter(r => /var\(--sur-coral\)/.test(r.value));
++    expect(
++      offenders.map(r => `${r.selector} { ${r.prop}: ${r.value} }`),
++    ).toEqual([]);
++  });
++});
++
++describe('the colors of the screens', () => {
++  const light = scheme('light');
++  const dark = scheme('dark');
++
++  test('the fallback of each var() is the value of the light scheme of the theme', () => {
++    for (const [name, value] of Object.entries(SurColors)) {
++      const parts = /^var\((--[\w-]+),\s*(#[0-9a-fA-F]{3,6})\)$/.exec(value);
++      expect(parts, `${name}: ${value}`).not.toBeNull();
++      const [, token, fallback] = parts as RegExpExecArray;
++      expect(parseColor(fallback), `${name} (${token})`).toEqual(
++        light.color(token),
++      );
++    }
++  });
++
++  test('every color of the screens is a token that both schemes define', () => {
++    for (const value of Object.values(SurColors)) {
++      const token = /var\((--[\w-]+)/.exec(value)?.[1] as string;
++      expect(() => light.color(token), token).not.toThrow();
++      expect(() => dark.color(token), token).not.toThrow();
++    }
++  });
++
++  test('white text on the status pills reads (4.5:1)', () => {
++    for (const [status, fill] of Object.entries(PILL_COLORS)) {
++      expect(
++        contrast(WHITE, parseColor(fill)),
++        `white on the ${status} pill`,
++      ).toBeGreaterThanOrEqual(4.5);
++    }
++  });
++
++  test.each([
++    ['light', light],
++    ['dark', dark],
++  ])(
++    'the text of the screens reads on every surface, %s scheme',
++    (_name, t) => {
++      for (const key of ['text', 'dimText', 'dangerText'] as const) {
++        const token = /var\((--[\w-]+)/.exec(SurColors[key])?.[1] as string;
++        for (const bg of ['surface', 'canvas', 'striped row']) {
++          expect(
++            contrast(t.color(token), t.backgrounds[bg]),
++            `${key} (${token}) on ${bg}`,
++          ).toBeGreaterThanOrEqual(4.5);
++        }
++      }
++      // the box of the command: the text of the page on the surface it is drawn on
++      for (const [text, bg] of [
++        [SurColors.text, SurColors.codeBg],
++        [SurColors.text, SurColors.surface],
++      ]) {
++        const fg = /var\((--[\w-]+)/.exec(text)?.[1] as string;
++        const back = /var\((--[\w-]+)/.exec(bg)?.[1] as string;
++        expect(
++          contrast(t.color(fg), t.color(back)),
++          `${fg} on ${back}`,
++        ).toBeGreaterThanOrEqual(4.5);
++      }
++    },
++  );
++});
+diff --git a/src/web/utils/__tests__/suricatoosScreens.test.tsx b/src/web/utils/__tests__/suricatoosScreens.test.tsx
+new file mode 100644
+index 0000000..35d0344
+--- /dev/null
++++ b/src/web/utils/__tests__/suricatoosScreens.test.tsx
+@@ -0,0 +1,731 @@
++/* SPDX-FileCopyrightText: 2026 Suricatoos
++ *
++ * SPDX-License-Identifier: AGPL-3.0-or-later
++ */
++
++// What the screens of the Suricatoos patch say and do when something goes wrong
++// or is not there: an error is shown in the context where it happened (agents,
++// activate agent), the AI page has a title and shows what the server explained,
++// the copy button works in a page without the clipboard (HTTP), and the colors
++// of the screens are the ones of the theme. Queries go by role and name.
++
++/* eslint-disable @typescript-eslint/naming-convention --
++   the keys of the fixtures and of the routes mirror the JSON and the paths of the API */
++
++import {
++  afterEach,
++  beforeEach,
++  describe,
++  expect,
++  test,
++  testing,
++} from '@gsa/testing';
++import {notifications} from '@mantine/notifications';
++import {rendererWith, screen, waitFor, within} from 'web/testing';
++import {createSession} from 'gmp/testing';
++import {DEFAULT_SEVERITY_RATING} from 'gmp/utils/severity';
++import ErrorContainer from 'web/components/error/ErrorContainer';
++import Footer from 'web/components/structure/Footer';
++import AiProvidersPage from 'web/pages/ai-providers/AiProvidersPage';
++import DownloadsPage from 'web/pages/downloads/DownloadsPage';
++import EndpointAgentsPage from 'web/pages/endpoint-agents/EndpointAgentsPage';
++import FeedUpdateSection from 'web/pages/extras/FeedUpdateSection';
++import LoginForm from 'web/pages/login/LoginForm';
++
++type Handler = (url: URL, init?: RequestInit) => Response | Promise<Response>;
++
++const fetchMock = testing.fn<typeof fetch>();
++
++const json = (status: number, body: unknown) =>
++  new Response(body === null ? null : JSON.stringify(body), {
++    status,
++    headers: {'Content-Type': 'application/json'},
++  });
++
++// Answers by path; whatever has no route is a 404 that names the path.
++const serve = (routes: Record<string, Handler>) => {
++  fetchMock.mockImplementation(async (input, init) => {
++    const url = new URL(String(input), 'http://localhost');
++    const handler = routes[url.pathname];
++    return handler
++      ? handler(url, init)
++      : json(404, {error: `no route for ${url.pathname}`});
++  });
++};
++
++const calls = (path: string) =>
++  fetchMock.mock.calls.filter(
++    ([input]) => new URL(String(input), 'http://localhost').pathname === path,
++  );
++
++const createGmp = (settings: Record<string, unknown> = {}) => ({
++  settings: {
++    severityRating: DEFAULT_SEVERITY_RATING,
++    vendorTitle: 'Suricatoos',
++    ...settings,
++  },
++  session: createSession({token: 'tok', timezone: 'UTC', username: 'ana'}),
++});
++
++// What the live regions of a page say now (they are on the page, empty, until
++// there is something to say).
++const said = (role: 'status' | 'alert', root: HTMLElement = document.body) =>
++  within(root)
++    .queryAllByRole(role)
++    .map(region => region.textContent ?? '')
++    .filter(text => text !== '');
++
++beforeEach(() => {
++  fetchMock.mockReset();
++  testing.stubGlobal('fetch', fetchMock);
++});
++
++afterEach(() => {
++  testing.unstubAllGlobals();
++  notifications.clean();
++});
++
++// WCAG contrast of two opaque colors given as rgb(...)
++const channel = (c: number) => {
++  const s = c / 255;
++  return s <= 0.04045 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
++};
++
++const luminanceOf = (rgb: string): number => {
++  const [r, g, b] = (/rgba?\(([^)]*)\)/.exec(rgb)?.[1] ?? '0,0,0')
++    .split(',')
++    .map(Number);
++  return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
++};
++
++function ratio(fg: string, bg: string): number {
++  const [a, b] = [luminanceOf(fg), luminanceOf(bg)].sort((x, y) => y - x);
++  return (a + 0.05) / (b + 0.05);
++}
++
++// The CSS that styled-components wrote for an element: the declarations of the
++// rules whose selector is one of its classes. The var() of the theme is not
++// resolved in jsdom, so what is checked is which color the component asks for.
++const cssOf = (element: Element): string => {
++  const sheet = [...document.head.querySelectorAll('style')]
++    .map(style => style.textContent ?? '')
++    .join('\n');
++  return [...element.classList]
++    .flatMap(name => [
++      ...sheet.matchAll(new RegExp(`\\.${name}\\s*\\{([^}]*)\\}`, 'g')),
++    ])
++    .map(match => match[1])
++    .join(' ');
++};
++
++const agent = (host: string, status: string) => ({
++  host,
++  task: `Agent ${host}`,
++  task_id: `t-${host}`,
++  severity: 5.4,
++  threat: 'Medium',
++  findings: 2,
++  critical: 0,
++  high: 0,
++  medium: 2,
++  low: 0,
++  last_report: '2026-10-10T10:00:00Z',
++  report_id: `r-${host}`,
++  reports: 1,
++  last_seen: '2026-10-11T10:00:00Z',
++  online: status === 'online',
++  status,
++});
++
++const AGENTS = [
++  agent('srv-web-01', 'online'),
++  agent('srv-db-02', 'offline'),
++  agent('srv-app-03', 'unknown'),
++];
++
++const ENROLL = {
++  tenant: 'acme',
++  target: 'windows',
++  command: 'iwr https://scanner.example/install.ps1 | iex',
++  server: 's',
++  ca_pin: 'p',
++  token_id: 'k',
++  max_uses: 5,
++  expires_at: '2026-10-20T12:00:00Z',
++};
++
++// Activate Agent, with the tenants loaded
++const openActivate = async (routes: Record<string, Handler>) => {
++  serve({
++    '/agent/provision/tenants': () => json(200, {tenants: ['acme', 'beta']}),
++    ...routes,
++  });
++  const {render} = rendererWith({gmp: createGmp()});
++  const view = render(<DownloadsPage />);
++  const select = screen.getByRole('combobox', {name: 'Tenant:'});
++  await waitFor(() =>
++    expect(within(select).getAllByRole('option')).toHaveLength(3),
++  );
++  return {...view, select};
++};
++
++const generate = async (
++  view: Awaited<ReturnType<typeof openActivate>>,
++  platform = 'Windows',
++) => {
++  await view.userEvent.selectOptions(view.select, 'acme');
++  await view.userEvent.click(screen.getByRole('button', {name: platform}));
++};
++
++// Activate Agent with a command on the page
++const withCommand = async () => {
++  const view = await openActivate({
++    '/agent/provision/enroll-command': () => json(200, ENROLL),
++  });
++  await generate(view);
++  await screen.findByText(ENROLL.command);
++  return view;
++};
++
++const PROVIDERS = [
++  {
++    id: 'openrouter',
++    name: 'OpenRouter',
++    kind: 'openrouter',
++    base_url: 'https://openrouter.ai/api/v1',
++    model: 'x/free-model:free',
++    eu_region: false,
++    zdr: false,
++    enabled: true,
++    has_key: true,
++    key_last4: 'abcd',
++    data_policy_ack: true,
++  },
++  {
++    id: 'unorouter',
++    name: 'UnoRouter',
++    kind: 'unorouter',
++    base_url: 'https://api.unorouter.com/v1',
++    model: '',
++    eu_region: false,
++    zdr: false,
++    enabled: false,
++    has_key: false,
++    data_policy_ack: false,
++  },
++];
++const FREE_ONLY = {
++  free_models_only: true,
++  presets: ['openrouter', 'unorouter'],
++};
++const OPEN = {free_models_only: false, presets: []};
++
++const serveProviders = (policy: unknown, save: Handler) =>
++  serve({
++    '/ai-providers/api/policy': () => json(200, policy),
++    '/ai-providers/api/providers': (url, init) =>
++      init?.method === 'POST'
++        ? save(url, init)
++        : json(200, {providers: PROVIDERS}),
++  });
++
++describe('Endpoint Agents: errors in their context', () => {
++  const scanNowOf = async (host: string) =>
++    screen.findByRole('button', {name: `Scan now: ${host}`});
++
++  test('a scan that fails is told for its host, and not as an error of loading the agents', async () => {
++    serve({
++      '/agents/data.json': () => json(200, AGENTS),
++      '/agents/scan': () => json(502, {error: 'gvmd is not answering'}),
++    });
++    const {render} = rendererWith({gmp: createGmp()});
++    const {userEvent} = render(<EndpointAgentsPage />);
++
++    await userEvent.click(await scanNowOf('srv-web-01'));
++
++    await waitFor(() =>
++      expect(said('alert')).toEqual([
++        'Error requesting the scan of srv-web-01: gvmd is not answering',
++      ]),
++    );
++    expect(screen.queryByText(/Error loading the agents/)).toBeNull();
++    // the agents were loaded: the table is still there
++    expect(screen.getByText('srv-db-02')).toBeInTheDocument();
++  });
++
++  test('the error of a scan goes away when the next scan is asked, and the table keeps polling', async () => {
++    let answer = 502;
++    serve({
++      '/agents/data.json': () => json(200, AGENTS),
++      '/agents/scan': () =>
++        answer === 200 ? json(200, {}) : json(answer, {error: 'busy'}),
++    });
++    const {render} = rendererWith({gmp: createGmp()});
++    const {userEvent} = render(<EndpointAgentsPage />);
++
++    await userEvent.click(await scanNowOf('srv-web-01'));
++    await waitFor(() => expect(said('alert')).toHaveLength(1));
++
++    answer = 200;
++    await userEvent.click(await scanNowOf('srv-db-02'));
++    await waitFor(() => expect(calls('/agents/scan')).toHaveLength(2));
++    // (the toast that says the scan was requested is an alert too)
++    await waitFor(() =>
++      expect(
++        said('alert').filter(text => text.includes('Error requesting')),
++      ).toEqual([]),
++    );
++    expect(screen.getByText('srv-web-01')).toBeInTheDocument();
++  });
++
++  test('a session that expires in the middle of a scan is still the message of the session', async () => {
++    serve({
++      '/agents/data.json': () => json(200, AGENTS),
++      '/agents/scan': () => json(401, {error: 'no session'}),
++    });
++    const {render} = rendererWith({gmp: createGmp()});
++    const {userEvent} = render(<EndpointAgentsPage />);
++
++    await userEvent.click(await scanNowOf('srv-web-01'));
++
++    await waitFor(() =>
++      expect(said('alert')).toEqual([
++        'Session expired. Sign in again to see the endpoint agents.',
++      ]),
++    );
++  });
++});
++
++describe('Activate Agent: errors in their context', () => {
++  test('a tenant list that fails to load says it is about the tenants', async () => {
++    serve({
++      '/agent/provision/tenants': () => json(502, {error: 'tenants are down'}),
++    });
++    const {render} = rendererWith({gmp: createGmp()});
++    render(<DownloadsPage />);
++
++    await waitFor(() =>
++      expect(said('alert')).toEqual([
++        'Error loading the tenants: tenants are down',
++      ]),
++    );
++    expect(screen.queryByText(/generating the command/)).toBeNull();
++  });
++
++  test('a command that fails to generate says it is about the command, and the tenants stay', async () => {
++    const view = await openActivate({
++      '/agent/provision/enroll-command': () =>
++        json(502, {error: 'no token left'}),
++    });
++    await generate(view);
++
++    await waitFor(() =>
++      expect(said('alert')).toEqual([
++        'Error generating the command: no token left',
++      ]),
++    );
++    expect(screen.queryByText(/loading the tenants/)).toBeNull();
++    expect(within(view.select).getAllByRole('option')).toHaveLength(3);
++  });
++
++  test('the error of the command goes away when another tenant is picked', async () => {
++    const view = await openActivate({
++      '/agent/provision/enroll-command': () =>
++        json(502, {error: 'no token left'}),
++    });
++    await generate(view);
++    await waitFor(() => expect(said('alert')).toHaveLength(1));
++
++    await view.userEvent.selectOptions(view.select, 'beta');
++    expect(said('alert')).toEqual([]);
++  });
++
++  test('an expired session is the message of the session, for the tenants and for the command', async () => {
++    serve({
++      '/agent/provision/tenants': () => json(401, {error: 'no session'}),
++    });
++    const {render} = rendererWith({gmp: createGmp()});
++    render(<DownloadsPage />);
++    await waitFor(() =>
++      expect(said('alert')).toEqual([
++        'Session expired. Sign in again to activate agents.',
++      ]),
++    );
++  });
++
++  test('both errors describe the tenant select', async () => {
++    const view = await openActivate({
++      '/agent/provision/enroll-command': () =>
++        json(502, {error: 'no token left'}),
++    });
++    await generate(view);
++    await waitFor(() => expect(said('alert')).toHaveLength(1));
++    expect(view.select).toHaveAccessibleDescription(said('alert')[0]);
++  });
++});
++
++describe('Activate Agent: copy', () => {
++  // The page of an HTTP address has no navigator.clipboard: the browser only
++  // gives it to a secure context.
++  const withoutClipboard = () =>
++    Object.defineProperty(navigator, 'clipboard', {
++      value: undefined,
++      configurable: true,
++    });
++
++  afterEach(() => {
++    Reflect.deleteProperty(navigator, 'clipboard');
++    Reflect.deleteProperty(document, 'execCommand');
++    window.getSelection()?.removeAllRanges();
++  });
++
++  test('in a page without the clipboard the button selects the command and says how to copy it', async () => {
++    const view = await withCommand();
++    withoutClipboard();
++
++    await view.userEvent.click(screen.getByRole('button', {name: 'Copy'}));
++
++    expect(window.getSelection()?.toString()).toEqual(ENROLL.command);
++    await waitFor(() =>
++      expect(said('status')).toContain(
++        'The command is selected. Press Ctrl+C to copy it.',
++      ),
++    );
++    // nothing was copied, so it does not say it was
++    expect(said('status')).not.toContain('Copied ✓');
++    expect(screen.getByRole('button', {name: 'Copy'})).toBeInTheDocument();
++  });
++
++  test('the note is in a live region that was on the page before the click', async () => {
++    const view = await withCommand();
++    const copy = screen.getByRole('button', {name: 'Copy'});
++    const status = within(copy.parentElement as HTMLElement).getByRole(
++      'status',
++    );
++    expect(status).toBeEmptyDOMElement();
++    withoutClipboard();
++
++    await view.userEvent.click(copy);
++
++    await waitFor(() =>
++      expect(status).toHaveTextContent('Press Ctrl+C to copy it.'),
++    );
++    expect(within(copy.parentElement as HTMLElement).getByRole('status')).toBe(
++      status,
++    );
++  });
++
++  test('a clipboard that refuses ends the same way', async () => {
++    const view = await withCommand();
++    Object.defineProperty(navigator, 'clipboard', {
++      value: {writeText: testing.fn().mockRejectedValue(new Error('denied'))},
++      configurable: true,
++    });
++
++    await view.userEvent.click(screen.getByRole('button', {name: 'Copy'}));
++
++    expect(window.getSelection()?.toString()).toEqual(ENROLL.command);
++    await waitFor(() =>
++      expect(said('status')).toContain(
++        'The command is selected. Press Ctrl+C to copy it.',
++      ),
++    );
++  });
++
++  test('the old copy command is used when it works, with the command selected', async () => {
++    const view = await withCommand();
++    withoutClipboard();
++    const selectedWhenCopied: string[] = [];
++    Object.defineProperty(document, 'execCommand', {
++      value: testing.fn((name: string) => {
++        selectedWhenCopied.push(`${name}:${window.getSelection()?.toString()}`);
++        return true;
++      }),
++      configurable: true,
++    });
++
++    await view.userEvent.click(screen.getByRole('button', {name: 'Copy'}));
++
++    expect(selectedWhenCopied).toEqual([`copy:${ENROLL.command}`]);
++    await waitFor(() => expect(said('status')).toContain('Copied ✓'));
++    expect(said('status').join(' ')).not.toContain('Ctrl+C');
++  });
++
++  test('with the clipboard it copies, as before', async () => {
++    const view = await withCommand();
++
++    await view.userEvent.click(screen.getByRole('button', {name: 'Copy'}));
++
++    await waitFor(() => expect(said('status')).toContain('Copied ✓'));
++    expect(await navigator.clipboard.readText()).toEqual(ENROLL.command);
++  });
++
++  // What is put INTO a live region is announced; a note that is already there and
++  // stays there is silent. A second click that ends the same way has to put the note
++  // in again: the region is cleared when the copy starts.
++  describe('a second click with the same result says the note again', () => {
++    const noteLog = (status: HTMLElement) => {
++      const log: string[] = [];
++      const observer = new MutationObserver(records => {
++        for (const record of records) {
++          record.removedNodes.forEach(() => log.push('out'));
++          record.addedNodes.forEach(() => log.push('in'));
++        }
++      });
++      observer.observe(status, {childList: true, subtree: true});
++      return {log, stop: () => observer.disconnect()};
++    };
++
++    test.each([
++      [
++        'the note about Ctrl+C (no clipboard, the old command does not copy)',
++        'Press Ctrl+C to copy it.',
++        withoutClipboard,
++      ],
++      [
++        'the note that it was copied (the old command copies)',
++        'Copied ✓',
++        () => {
++          withoutClipboard();
++          Object.defineProperty(document, 'execCommand', {
++            value: testing.fn(() => true),
++            configurable: true,
++          });
++        },
++      ],
++      ['the note that it was copied (the clipboard)', 'Copied ✓', () => {}],
++    ])('%s', async (_label, text, setUp) => {
++      const view = await withCommand();
++      setUp();
++      const copy = screen.getByRole('button', {name: 'Copy'});
++      const status = within(copy.parentElement as HTMLElement).getByRole(
++        'status',
++      );
++      const {log, stop} = noteLog(status);
++
++      try {
++        await view.userEvent.click(copy);
++        await waitFor(() => expect(status).toHaveTextContent(text));
++        expect(log).toEqual(['in']);
++
++        // the same click again: the same note, but out and in again
++        await view.userEvent.click(copy);
++        await waitFor(() => expect(log).toEqual(['in', 'out', 'in']));
++        expect(status).toHaveTextContent(text);
++      } finally {
++        stop();
++      }
++    });
++  });
++});
++
++describe('AI Providers', () => {
++  test('sets the title of the page', async () => {
++    serveProviders(FREE_ONLY, () => json(200, {}));
++    const {render} = rendererWith({gmp: createGmp()});
++    render(<AiProvidersPage />);
++
++    expect(document.title).toEqual('Suricatoos - AI Providers');
++    await screen.findByRole('group', {name: 'OpenRouter'});
++    expect(document.title).toEqual('Suricatoos - AI Providers');
++  });
++
++  test('a preset that the server refuses with a 400 shows what the server explains', async () => {
++    serveProviders(FREE_ONLY, () =>
++      json(400, {error: 'api_key has the wrong format for this provider'}),
++    );
++    const {render} = rendererWith({gmp: createGmp()});
++    const {userEvent} = render(<AiProvidersPage />);
++    const group = await screen.findByRole('group', {name: 'UnoRouter'});
++
++    await userEvent.click(within(group).getByRole('button', {name: 'Save'}));
++
++    await waitFor(() =>
++      expect(said('alert', group)).toEqual([
++        'api_key has the wrong format for this provider',
++      ]),
++    );
++  });
++
++  test('the generic form shows what the server explains about a 400, too', async () => {
++    serveProviders(OPEN, () =>
++      json(400, {error: 'base_url must be an https URL'}),
++    );
++    const {render} = rendererWith({gmp: createGmp()});
++    const {userEvent} = render(<AiProvidersPage />);
++    await screen.findByText('Add provider');
++
++    await userEvent.click(screen.getByRole('button', {name: 'Save'}));
++
++    await waitFor(() =>
++      expect(said('alert')).toEqual(['base_url must be an https URL']),
++    );
++  });
++});
++
++describe('the colors of the screens', () => {
++  describe('Endpoint Agents', () => {
++    test('white text on every status pill reads (4.5:1)', async () => {
++      serve({'/agents/data.json': () => json(200, AGENTS)});
++      const {render} = rendererWith({gmp: createGmp()});
++      render(<EndpointAgentsPage />);
++
++      for (const label of ['Online', 'Offline', 'Unknown']) {
++        const pill = await screen.findByText(label);
++        const style = getComputedStyle(pill);
++        expect(style.color, label).toEqual('rgb(255, 255, 255)');
++        expect(
++          ratio(style.color, style.backgroundColor),
++          label,
++        ).toBeGreaterThanOrEqual(4.5);
++      }
++    });
++
++    test('the secondary lines of the table take the dimmed color of the theme', async () => {
++      serve({'/agents/data.json': () => json(200, AGENTS)});
++      const {render} = rendererWith({gmp: createGmp()});
++      render(<EndpointAgentsPage />);
++
++      for (const text of [
++        'Agent srv-web-01',
++        /^check-in /,
++        /critical · \d+ high/,
++        /report\(s\)/,
++      ]) {
++        const [line] = await screen.findAllByText(text);
++        expect(line.getAttribute('style'), String(text)).toContain(
++          'var(--sur-text-dim',
++        );
++      }
++    });
++  });
++
++  describe('Activate Agent', () => {
++    afterEach(() => {
++      window.getSelection()?.removeAllRanges();
++    });
++
++    test('the box of the command takes its colors from the theme, so it reads in both schemes', async () => {
++      await withCommand();
++
++      const style =
++        screen.getByText(ENROLL.command).getAttribute('style') ?? '';
++      expect(style).toContain('background: var(--sur-surface-2');
++      expect(style).toMatch(/[^-]color: var\(--sur-text,/);
++      // no light color fixed in the box (it took the color of the page, light in
++      // the dark scheme, over a fixed light background)
++      expect(style).not.toMatch(/#f6f8fa/i);
++    });
++
++    test('the secondary text, the warning and the select take their colors from the theme', async () => {
++      const view = await withCommand();
++
++      const note = screen.getByText(/Deployment token/);
++      expect(note.getAttribute('style')).toContain('var(--sur-text-dim');
++      const warning = screen.getByText(/Do not run as SYSTEM/);
++      expect(warning.getAttribute('style')).toContain('var(--sur-text');
++      expect(view.select.getAttribute('style')).toContain(
++        'var(--sur-control-border',
++      );
++    });
++  });
++
++  describe('AI Providers', () => {
++    test('the notice of a saved preset and the one of a failure take the colors of the theme', async () => {
++      let answer = 200;
++      serveProviders(FREE_ONLY, () =>
++        answer === 200
++          ? json(200, {provider: PROVIDERS[1]})
++          : json(422, {error: 'acknowledgement required'}),
++      );
++      const {render} = rendererWith({gmp: createGmp()});
++      const {userEvent} = render(<AiProvidersPage />);
++      const group = await screen.findByRole('group', {name: 'UnoRouter'});
++      const save = within(group).getByRole('button', {name: 'Save'});
++
++      await userEvent.click(save);
++      const saved = await screen.findByText('Provider saved.');
++      // the success is the accent as text, not the Mantine green (3.2:1 on the page)
++      expect(saved.getAttribute('style')).toContain(
++        'color: var(--sur-accent-text)',
++      );
++
++      answer = 422;
++      await userEvent.click(save);
++      const failed = await screen.findByText('acknowledgement required');
++      expect(failed.getAttribute('style')).toContain(
++        'color: var(--sur-danger-text)',
++      );
++    });
++  });
++
++  describe('Feed update', () => {
++    test('the "Saved" of the schedule takes the accent as text, not the Mantine green', async () => {
++      const STATUS = {
++        state: 'idle',
++        last_run: '2026-10-11 10:00:00',
++        last_result: 'success',
++        updated: ['nvt'],
++        schedule: {
++          enabled: true,
++          frequency: 'weekly',
++          weekday: 2,
++          time: '03:00',
++        },
++      };
++      serve({
++        '/feed-sync/status': () => json(200, STATUS),
++        '/feed-sync/schedule': () => json(200, STATUS.schedule),
++      });
++      const {render} = rendererWith({gmp: createGmp()});
++      const {userEvent} = render(<FeedUpdateSection />);
++      await screen.findByLabelText('Time');
++
++      await userEvent.click(
++        screen.getByRole('button', {name: 'Save schedule'}),
++      );
++
++      const saved = await screen.findByText('Saved');
++      expect(saved.getAttribute('style')).toContain(
++        'color: var(--sur-accent-text)',
++      );
++    });
++  });
++
++  describe('shared components', () => {
++    test('the error box (login, error pages) takes its colors from the theme, so its text reads in both schemes', () => {
++      const {render} = rendererWith({gmp: createGmp()});
++      render(<ErrorContainer data-testid="box">boom</ErrorContainer>);
++      const css = cssOf(screen.getByTestId('box'));
++      expect(css).toMatch(/background-color:\s*var\(--sur-danger-bg/);
++      expect(css).toMatch(/border:[^;]*var\(--sur-danger-border/);
++      // the text color is the theme's too (it took the one of the page, light in
++      // the dark scheme, over a light red box)
++      expect(css).toMatch(/(^|[;\s])color:\s*var\(--sur-danger-text/);
++    });
++
++    test('the warning of the login about the connection takes the color of the errors of the theme', () => {
++      const {render} = rendererWith({gmp: createGmp()});
++      render(
++        <LoginForm
++          showProtocolInsecure
++          onGuestLoginClick={() => {}}
++          onSubmit={() => {}}
++        />,
++      );
++      const warning = screen.getByText('Warning: Connection unencrypted');
++      expect(cssOf(warning)).toMatch(
++        /(^|[;\s])color:\s*var\(--sur-danger-text/,
++      );
++    });
++
++    test('the footer takes the dimmed color of the theme', () => {
++      const {render} = rendererWith({gmp: createGmp(), store: true});
++      render(<Footer />);
++      const footer = screen.getByText(/Copyright/).closest('footer') as Element;
++      expect(cssOf(footer)).toMatch(/(^|[;\s])color:\s*var\(--sur-text-dim/);
++      const link = screen.getByRole('link', {name: 'www.greenbone.net'});
++      expect(cssOf(link)).toMatch(/(^|[;\s])color:\s*var\(--sur-text-dim/);
++    });
++  });
++});
+diff --git a/src/web/utils/suricatoosColors.ts b/src/web/utils/suricatoosColors.ts
+new file mode 100644
+index 0000000..196f3d8
+--- /dev/null
++++ b/src/web/utils/suricatoosColors.ts
+@@ -0,0 +1,40 @@
++/* SPDX-FileCopyrightText: 2026 Suricatoos
++ *
++ * SPDX-License-Identifier: AGPL-3.0-or-later
++ */
++
++/* Suricatoos: the colors of the text and of the surfaces of the screens of the
++ * patch. Each one is a custom property of the theme (public/suricatoos-theme.css),
++ * which has a value for the light and another for the dark scheme, so the page
++ * follows the scheme. The fallback of each var() is the value of the light
++ * scheme, for a page that the theme does not reach (the test suricatoosContrast
++ * keeps the fallbacks equal to the theme). The text colors (text, dimText,
++ * dangerText) read on every surface of the theme with 4.5:1 (WCAG 2.1 AA) and
++ * controlBorder, the boundary of a field, has 3:1 against its surroundings (WCAG
++ * 1.4.11), as the same test measures; the others are fills and decorative borders. */
++
++export const SurColors = {
++  text: 'var(--sur-text, #0f1825)',
++  // descriptions, secondary lines of a table, notes
++  dimText: 'var(--sur-text-dim, #566579)',
++  // text of an error
++  dangerText: 'var(--sur-danger-text, #a62c16)',
++  // box of an error
++  dangerBg: 'var(--sur-danger-bg, #fdf3f3)',
++  dangerBorder: 'var(--sur-danger-border, #f0c2c2)',
++  // a block of text that is not the text of the page (the command to copy)
++  codeBg: 'var(--sur-surface-2, #f8fafc)',
++  codeBorder: 'var(--sur-border-strong, #d3dae6)',
++  // field, select: the boundary has 3:1 against the surroundings
++  controlBorder: 'var(--sur-control-border, #718096)',
++  surface: 'var(--sur-surface, #ffffff)',
++} as const;
++
++// The fill of the status pill of an agent (white text on it, 4.5:1): the green
++// and the gray of the shared theme (statusNewGreen, mediumGray) gave 2.1:1 and
++// 4.0:1.
++export const PILL_COLORS = {
++  online: '#2e7d32',
++  offline: '#c83814',
++  unknown: '#666666',
++} as const;
+diff --git a/vitest.config.ts b/vitest.config.ts
+index 125ba33..4283e9b 100644
+--- a/vitest.config.ts
++++ b/vitest.config.ts
+@@ -1,7 +1,25 @@
+ import {defineConfig} from 'vitest/config';
+ 
++// Suricatoos: `vitest run` exits 1 on any unhandled error, even when every test
++// passes. One kind is let through, and only it: the timer that a Mantine Transition
++// leaves behind (closed in the frame that opened it), which fires after the test
++// file ended and the jsdom window is gone. The reason, and what must still be
++// reported, is in src/web/testing/__tests__/unhandledErrors.test.ts.
++const isMantineTransitionAfterTeardown = (error: {
++  name?: string;
++  message?: string;
++  stack?: string;
++}) =>
++  error.name === 'ReferenceError' &&
++  error.message === 'window is not defined' &&
++  /@mantine\/core\/esm\/components\/Transition\/use-transition\.mjs/.test(
++    error.stack ?? '',
++  );
++
+ export default defineConfig({
+   test: {
++    onUnhandledError: error =>
++      isMantineTransitionAfterTeardown(error) ? false : undefined,
+     projects: [
+       {
+         extends: './vite.config.ts',

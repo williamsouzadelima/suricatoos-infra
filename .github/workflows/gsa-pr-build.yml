@@ -2,9 +2,12 @@ name: gsa-pr-build
 
 # Valida em PR o patch da UI (greenbone/gsa + patches/gsa-*.patch) e o do gsad
 # ANTES do merge: aplica os dois nas tags pinadas, roda o type-check (tsc) e o
-# build de produção (Vite) da UI, os testes vitest que o patch traz, confere
-# os catálogos de idioma e as chaves das telas da Suricatoos neles e confere
-# que o bundle traz as fontes sem chamar um serviço de terceiros.
+# build de produção (Vite) da UI, confere os catálogos de idioma e as chaves
+# das telas da Suricatoos neles, confere que o bundle traz as fontes sem chamar
+# um serviço de terceiros e roda a suíte vitest INTEIRA do GSA (os testes do
+# upstream e os que o patch traz): falha de qualquer teste reprova o PR, na
+# primeira falha, e erro não tratado também (o vitest sai com 1 mesmo com todos
+# os testes passando).
 # Não publica nada, não usa secrets e não faz login em registry: a publicação
 # continua só no build-publish.yml (push na main).
 on:
@@ -25,7 +28,10 @@ jobs:
   validate:
     name: aplica patches + type-check + build (GSA)
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # A suíte inteira do GSA (~7.500 testes, 787 arquivos) leva ~11 min no runner
+    # de 4 vCPU (10 min 40 s só o vitest, na run da PR #155) e de 7 a 11 min numa
+    # máquina de desenvolvimento rápida.
+    timeout-minutes: 60
     env:
       # Folga de heap para o tsc e o Vite (runner com 16 GB).
       NODE_OPTIONS: --max-old-space-size=6144
@@ -121,32 +127,6 @@ jobs:
           set -eu
           npm run build
           test -s build/index.html
-
-      # Os testes que o patch traz (cliente HTTP e polling das telas da
-      # Suricatoos; idioma padrão, detecção do navegador, primeira visita e
-      # datas no idioma; acessibilidade das telas e fontes locais; o
-      # lang.test.ts do upstream ajustado ao padrão pt-BR): só esses
-      # arquivos, uns segundos. A suíte inteira do GSA não é portão deste
-      # workflow. Teste novo no patch entra na lista.
-      # Acessibilidade: o GSA da tag não traz eslint-plugin-jsx-a11y nem
-      # equivalente (axe etc.) e este workflow não acrescenta dependência só
-      # para isso; quem confere nome acessível, rótulo, aviso de erro e uso
-      # pelo teclado das telas do patch são os testes de suricatoosA11y.
-      - name: Testes do patch (vitest)
-        id: tests
-        # Roda mesmo com o type-check ou o build quebrados (o job continua
-        # falhando), desde que as dependências tenham instalado.
-        if: ${{ !cancelled() && steps.deps.outcome == 'success' }}
-        working-directory: gsa-src
-        run: |
-          set -eu
-          npx vitest run --project web --project gmp \
-            src/web/utils/__tests__/suricatoosApi.test.ts \
-            src/web/utils/__tests__/suricatoosLocale.test.ts \
-            src/web/utils/__tests__/suricatoosFirstVisit.test.tsx \
-            src/web/utils/__tests__/suricatoosA11y.test.tsx \
-            src/web/utils/__tests__/suricatoosFonts.test.ts \
-            src/gmp/locale/__tests__/lang.test.ts
 
       # O Vite copia public/ sem validar: um JSON quebrado ou com chave repetida
       # num catálogo só apareceria no navegador.
@@ -552,6 +532,45 @@ jobs:
           echo "fontes no bundle: $(ls build/assets/*.woff2 2>/dev/null | wc -l) arquivos .woff2; $errors problema(s)"
           [ "$errors" -eq 0 ]
 
+      # A suíte vitest INTEIRA do GSA, sem lista de arquivos: os testes do
+      # upstream e os do patch (cliente HTTP e polling das telas da Suricatoos;
+      # idioma padrão, detecção do navegador, primeira visita e datas no idioma;
+      # acessibilidade, fontes locais, contraste e telas), nos três projetos do
+      # vitest.config.ts da tag (web, gmp e store; um projeto novo do upstream
+      # entra sozinho). Falha de qualquer teste reprova o PR; teste novo no patch
+      # entra sem mexer aqui. Os testes do upstream que o fork contradiz de
+      # propósito (idiomas, rodapé, cabeçalho, seletor de idioma, gráficos) e os
+      # que dependem do fuso da máquina são ajustados no próprio patch: o que o
+      # fork muda de propósito vira o que o teste afirma, e o fuso é fixado no
+      # teste, não no runner.
+      # Acessibilidade: o GSA da tag não traz eslint-plugin-jsx-a11y nem
+      # equivalente (axe etc.) e este workflow não acrescenta dependência só
+      # para isso; quem confere nome acessível, rótulo, aviso de erro e uso
+      # pelo teclado das telas do patch são os testes de suricatoosA11y.
+      # Sem tentativa extra: um teste que falha reprova o PR na primeira falha, os
+      # do patch inclusive. A única tolerância fica no patch, num arquivo só, e
+      # declarada no próprio teste: ScanConfigComponent.test.tsx (`{retry: 2}`)
+      # procura o botão do corpo do diálogo sem esperar por ele, falhou 1 vez em 6
+      # execuções completas e passa sozinho 14 de 14.
+      # Erro não tratado também reprova, menos um: o timer que o Transition do
+      # Mantine deixa para trás quando fecha no quadro em que abriu, e que dispara
+      # depois do fim do arquivo, com a janela do jsdom já desmontada ("window is
+      # not defined" em use-transition.mjs; a run da PR #155 caiu nisso com todos
+      # os testes verdes). O vitest.config.ts do patch (onUnhandledError) deixa
+      # passar exatamente esse e mais nenhum; o porquê e o que continua reportado
+      # estão em src/web/testing/__tests__/unhandledErrors.test.ts.
+      # É o último passo de conferência: os outros são rápidos e respondem
+      # antes; todos rodam mesmo se um falhar.
+      - name: Testes (vitest, suíte inteira do GSA)
+        id: tests
+        # Roda mesmo com o type-check, o build ou uma conferência quebrados (o
+        # job continua falhando), desde que as dependências tenham instalado.
+        if: ${{ !cancelled() && steps.deps.outcome == 'success' }}
+        working-directory: gsa-src
+        run: |
+          set -eu
+          npx vitest run
+
       - name: Resumo
         if: always()
         env:
@@ -580,8 +599,8 @@ jobs:
             echo "| npm ci | ${R_DEPS:-skipped} |"
             echo "| type-check (tsc --noEmit) | ${R_TYPECHECK:-skipped} |"
             echo "| build de produção (npm run build) | ${R_BUILD:-skipped} |"
-            echo "| testes do patch (vitest) | ${R_TESTS:-skipped} |"
             echo "| catálogos de idioma | ${R_LOCALES:-skipped} |"
             echo "| chaves das telas da Suricatoos (pt_BR, es) | ${R_KEYS:-skipped} |"
             echo "| fontes do bundle (sem Google Fonts, arquivos locais) | ${R_FONTS:-skipped} |"
+            echo "| testes (vitest, suíte inteira do GSA) | ${R_TESTS:-skipped} |"
           } >> "$GITHUB_STEP_SUMMARY"
