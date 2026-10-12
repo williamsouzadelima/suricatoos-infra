@@ -14,15 +14,18 @@ import (
 )
 
 // Violation is one contract violation found while decoding or validating a body: a JSON Schema keyword
-// ("required", "additionalProperties", "type", "pattern", "enum", "const", "minimum", …) or one of the lexical
-// checks of schema/examples/fleet/index.json ("json_syntax", "duplicate_key", "integer_lexical"), at a JSON
-// pointer (RFC 6901; "" = the value itself). Two keywords exist only on the Go side: "size" (the byte caps of
-// "Limites") and "base64" (a fail-safe behind the schema's canonical-base64 pattern of the signature: a
+// ("required", "additionalProperties", "type", "pattern", "enum", "const", "minimum", …) or one of the checks of
+// schema/examples/fleet/index.json ("json_syntax", "duplicate_key", "integer_lexical", "export_filter"), at a
+// JSON pointer (RFC 6901; "" = the value itself). Two keywords exist only on the Go side: "size" (the byte caps
+// of "Limites") and "base64" (a fail-safe behind the schema's canonical-base64 pattern of the signature: a
 // signature that does not decode to exactly 64 bytes).
 type Violation struct {
 	Keyword string
-	Path    string
-	Detail  string // short text; member names from the input are quoted and truncated
+	// Path is RAW INPUT: the JSON pointer is built from member names exactly as received, so it is unbounded and
+	// may carry control characters. Compare it freely, but log or show a Violation only through Error(), which
+	// quotes it and cuts it to a short prefix — never write Path itself to a log, an ack or a reply.
+	Path   string
+	Detail string // short text; member names from the input are quoted and truncated
 }
 
 // Error is bounded: the JSON pointer (which carries member names taken from the input) is quoted and cut to a

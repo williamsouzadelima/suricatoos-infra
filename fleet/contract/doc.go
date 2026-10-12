@@ -6,8 +6,10 @@
 //
 //   - the Go types of every body of the six schemas schema/fleet-{enroll,heartbeat,state,event,command,result}
 //     .schema.json, the constants of their enums and the v1 command catalog as data (Catalog);
-//   - the strict JSON rules of "Codificação JSON" (DecodeStrict, MarshalCompact): valid UTF-8, one value, no
-//     duplicate key at any level, case-exact member names, integers without fraction or exponent;
+//   - the strict JSON rules of "Codificação JSON" (DecodeStrict, MarshalCompact): valid UTF-8 without BOM, no
+//     unpaired surrogate escape in any string (key or value), one value, no duplicate key at any level,
+//     case-exact member names, nesting at most 32 levels deep (the top-level value is level 1), integers without
+//     fraction or exponent;
 //   - the signed command envelope: the canonical form (Canonical), Sign (hub side) and the verification lines
 //     0–4 of "Verificação no nó" (Verify = lines 0–2, VerifyAt = lines 0–4), with errors that carry the exact
 //     reject_reason (RejectError), and the classification of every reason (ack / recorded / final / deferred);
@@ -15,7 +17,8 @@
 //   - the pure replay classification the anti-replay store reuses for lines 2a and 5 (ClassifyReplay);
 //   - the version helpers of "Versões e evolução" (PeekSchemaVersion, HighestCommon);
 //   - the pins (KeyPin, CAPin, IsGoldenTestKey) and the PEM format of control-plane/signkeys;
-//   - the golden vectors testdata/golden-v1.json and the code that runs them (GoldenFile.Check).
+//   - the golden vectors testdata/golden-v1.json and the code that runs them (GoldenFile.Check), with the vector
+//     runner the ADR makes normative (GoldenVector.Outcome).
 //
 // What it is NOT: it opens no connection and keeps no state. The anti-replay store and journal, the local
 // policy and budgets, the tenant registry, the scope gate (lines 5–9 and unavailable), the HTTP client and the
