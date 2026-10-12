@@ -81,8 +81,11 @@ var breakers = []breaker{
 	}},
 }
 
-// exclusive are pairs that cannot coexist (both set the instant of the verification).
-var exclusive = map[[2]string]bool{{"not_yet_valid", "expired"}: true}
+// exclusive are pairs that cannot coexist. not_yet_valid and expired: both set the instant of the verification.
+// not_yet_valid and replay_floor: the floor comes from the verification clock (floor <= t; a boot raises the clock to
+// it) and issued_at and skew are whole seconds, so issued_at < ceil(floor) + skew gives issued_at < floor + skew <=
+// t + skew, while not_yet_valid needs issued_at > t + skew.
+var exclusive = map[[2]string]bool{{"not_yet_valid", "expired"}: true, {"not_yet_valid", "replay_floor"}: true}
 
 func (s *scenario) run(t *testing.T) Outcome {
 	t.Helper()

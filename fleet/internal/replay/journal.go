@@ -318,8 +318,10 @@ func (s *Store) RecordResult(j Job, r Result, t time.Time) error {
 	})
 }
 
-// MarkDelivered records that the hub accepted the result of j (result → delivered).
-func (s *Store) MarkDelivered(j Job, t time.Time) error {
+// MarkDelivered records that the hub accepted the result of j (result → delivered). now is the wall clock; the step
+// is dated, and the job looked up, by the verification clock t = max(now, watermark).
+func (s *Store) MarkDelivered(j Job, now time.Time) error {
+	t := s.clk.Now(now)
 	if !validInstant(t) {
 		return invalid("instante inválido")
 	}

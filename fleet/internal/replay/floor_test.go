@@ -443,3 +443,44 @@ func TestBootSemConfirmacaoNaoConfiaNoQueLeu(t *testing.T) {
 		t.Fatalf("stats %+v", s2.Stats())
 	}
 }
+
+// SetFloor, Compact e MarkDelivered — as chamadas que o conector faz direto no store — usam o relógio de
+// verificação por construção: recebem a leitura do relógio de parede e decidem com t = max(agora, marca). Um relógio
+// de parede atrás da marca não dá um piso mais baixo, não salva da compactação uma entrada já vencida na marca, e não
+// data o passo do journal no passado.
+func TestChamadasDiretasUsamORelogioDeVerificacao(t *testing.T) {
+	s, dir := firstBoot(t)
+	mark := t0.Add(2 * time.Hour)
+	s.Clock().Now(mark)
+	behind := t0.Add(-time.Hour) // relógio de parede cru, atrás da marca
+
+	if err := s.SetFloor(behind); err != nil {
+		t.Fatal(err)
+	}
+	if got := floorOf(t, s); !got.Equal(mark) {
+		t.Fatalf("piso %v, esperava a marca %v", got, mark)
+	}
+
+	j := acceptedJob(t, s.Store, "a", contract.TypeTaskStart, taskPayload)
+	if err := s.RecordResult(j, failed(contract.ErrorGVM), mark); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.MarkDelivered(j, behind); err != nil {
+		t.Fatal(err)
+	}
+	lines := storeLines(t, dir)
+	r, err := decodeLine([]byte(lines[len(lines)-1]))
+	if err != nil || r.K != kindDelivered || r.At != mark.UnixNano() {
+		t.Fatalf("passo delivered %+v (%v), esperava at = marca", r, err)
+	}
+
+	mustRecord(t, s.Store, expiringEnv(t, "vence", "2026-10-11T12:30:00Z"), accepted, mark)
+	later := time.Date(2026, 10, 18, 12, 30, 1, 0, time.UTC) // a "vence" já venceu aqui
+	s.Clock().Now(later)
+	if err := s.Compact(behind); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(storeBytes(t, dir)), expiringEnv(t, "vence", "2026-10-11T12:30:00Z").CanonicalSHA256()) {
+		t.Fatal("a compactação decidiu pelo relógio de parede cru: a entrada vencida na marca ficou")
+	}
+}

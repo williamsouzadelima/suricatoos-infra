@@ -711,11 +711,13 @@ func (s *Store) MarkFloorAnnounced(replayFloor string) {
 	}
 }
 
-// SetFloor sets the replay floor to t — the verification clock at a (re)enroll — and makes it durable. The floor only
+// SetFloor sets the replay floor at a (re)enroll and makes it durable. now is the wall clock: the floor is the
+// verification clock t = max(now, watermark), so a wall clock behind the mark never gives a lower floor. The floor only
 // moves forward. Call it BEFORE persisting the new identity: should the node stop in between, the next boot still
 // sees the floor (or, with no identity, enrolls again). An error means the floor is in force in memory but not
 // durable; the next write tries again first, and nothing is recorded before it succeeds.
-func (s *Store) SetFloor(t time.Time) error {
+func (s *Store) SetFloor(now time.Time) error {
+	t := s.clk.Now(now)
 	if !validInstant(t) {
 		return invalid("piso de replay num instante inválido")
 	}
@@ -747,9 +749,12 @@ func (s *Store) Stats() Stats {
 	}
 }
 
-// Compact rewrites the file without the entries whose life ended at t (and their journal): temp + rename with fsync.
-// Nothing to drop, nothing written. The connector calls it on a timer; Record also compacts at the entries ceiling.
-func (s *Store) Compact(t time.Time) error {
+// Compact rewrites the file without the entries whose life ended (and their journal): temp + rename with fsync.
+// Nothing to drop, nothing written. now is the wall clock: an entry ends by the verification clock t = max(now,
+// watermark) — the clock line 2a and line 5 look up with —, never by a reading behind it. The connector calls it on a
+// timer; Record also compacts at the entries ceiling.
+func (s *Store) Compact(now time.Time) error {
+	t := s.clk.Now(now)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if !s.hasDeadLocked(t) {
