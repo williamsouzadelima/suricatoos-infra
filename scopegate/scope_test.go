@@ -33,16 +33,19 @@ func TestScopeAbsoluteDeny(t *testing.T) {
 }
 
 func TestScopeSelfDeny(t *testing.T) {
-	// A allowlist inclui a faixa, mas SCAN_SELF_DENY_IPS nega o próprio IP do sensor + a nuvem.
-	s, _ := New("10.20.0.0/16", "10.20.0.9, 203.0.113.97")
+	// A allowlist inclui as faixas do sensor E da nuvem, mas SCAN_SELF_DENY_IPS nega o
+	// próprio IP do sensor + a nuvem: quem nega é o self-deny, não o escopo.
+	s, _ := New("10.20.0.0/16, 203.0.113.0/24", "10.20.0.9, 203.0.113.97")
 	if _, err := s.CheckHost("10.20.0.9"); err == nil {
 		t.Error("IP do próprio sensor deveria ser negado")
 	}
 	if _, err := s.CheckHost("203.0.113.97"); err == nil {
 		t.Error("endpoint da nuvem deveria ser negado")
 	}
-	if _, err := s.CheckHost("10.20.0.10"); err != nil {
-		t.Errorf("outro host da faixa deveria passar: %v", err)
+	for _, ok := range []string{"10.20.0.10", "203.0.113.98"} {
+		if _, err := s.CheckHost(ok); err != nil {
+			t.Errorf("outro host da faixa deveria passar: %v", err)
+		}
 	}
 }
 
