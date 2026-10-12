@@ -110,7 +110,8 @@ type Collector struct {
 	hasNode    bool
 }
 
-// Open checks the configuration and reads FLEET_STATE_DIR/state-sent.json (see Recovery).
+// Open checks the configuration and reads FLEET_STATE_DIR/state-sent.json (see Recovery). There is one Collector
+// per FLEET_STATE_DIR, opened while the connector holds the directory's exclusive lock (replay.Open takes it).
 func Open(cfg Config) (*Collector, error) {
 	kinds := KindsOf(cfg.NodeKind)
 	switch {
