@@ -228,7 +228,10 @@ func TestContagemNegativaDaFonteEErroDoKind(t *testing.T) {
 	f := newFakes()
 	f.gvm.tasks = contract.DataTasks{Items: []contract.TaskItem{fullTask(uuidTask1, "acme")}}
 	c := collectOnce(t, f, contract.NodeStandalone)
-	before, _ := c.Current(contract.KindTasks)
+	before, ok := c.Current(contract.KindTasks)
+	if !ok {
+		t.Fatal("sem o retrato bom de antes")
+	}
 	f.gvm.tasks.UnattributedCount = -1
 	c.Collect(context.Background())
 	if after, _ := c.Current(contract.KindTasks); after.SHA256 != before.SHA256 || c.Errors()[contract.KindTasks] == nil {

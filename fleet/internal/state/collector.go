@@ -144,6 +144,10 @@ func (c *Collector) Collect(ctx context.Context) {
 
 func (c *Collector) collectKind(ctx context.Context, cyc *cycle, kind contract.StateKind) ([]byte, error) {
 	switch kind {
+	case contract.KindScope:
+		return c.collectScope(cyc)
+	case contract.KindAuditTail:
+		return c.collectAuditTail()
 	case contract.KindTasks:
 		return c.collectTasks(ctx, cyc)
 	case contract.KindTargets:

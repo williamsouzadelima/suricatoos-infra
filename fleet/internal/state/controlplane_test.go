@@ -155,7 +155,10 @@ func TestFalhaDeUmaLeituraDoControlPlaneIsolada(t *testing.T) {
 	f.cp.tokens = []contract.TokenItem{{TokenID: "tok_ABCdef12", Tenant: "acme", TokenType: contract.TokenSingleHost,
 		MaxUses: 1, Remaining: 1, ExpiresAt: "2026-10-18T12:00:00Z"}}
 	c := collectOnce(t, f, contract.NodeCentral)
-	before, _ := c.Current(contract.KindAgents)
+	before, ok := c.Current(contract.KindAgents)
+	if !ok {
+		t.Fatal("sem o retrato bom de antes")
+	}
 	f.cp.errs[contract.KindAgents] = errFonte
 	f.cp.agents = nil
 	f.cp.tokens = append(f.cp.tokens, contract.TokenItem{TokenID: "tok_ABCdef13", Tenant: "acme",
