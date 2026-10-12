@@ -26,7 +26,7 @@ todo o resto e upstream Greenbone, e os 8 containers de feed permanecem Greenbon
 - Logo header: mark do suricato (icon/svg/greenbone.svg + Greenbone_white_logo.svg), size 38px
 - Login: wordmark navy; favicon/splash: mark; decoracoes de fundo vazias
 - Tema: claro/escuro (auto), acento indigo, dentro do patch do gsa (public/suricatoos-theme.css + Theme.tsx)
-- Fontes (Inter, Space Grotesk, JetBrains Mono): vem do proprio bundle (@fontsource, licenca OFL em public/licenses/); o tema nunca usa @import de URL externa (a CSP so aceita font-src 'self')
+- Fontes (Inter, Space Grotesk, JetBrains Mono): vem do proprio bundle (@fontsource, licenca OFL em public/licenses/); o tema nunca usa @import de URL externa (a CSP padrao da imagem gvm-config aceita so font-src 'self')
 - Footer/titulo/versao: via Footer.tsx + env GSA_VENDOR_TITLE/GSA_VENDOR_VERSION
 
 ## Upgrade (nova release GVM)
