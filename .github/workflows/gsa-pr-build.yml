@@ -489,7 +489,17 @@ jobs:
       #      do sistema);
       #   c) nenhuma fonte vira data: URI. O CSP do nginx tem font-src 'self',
       #      que não aceita data:, e o Vite embute os arquivos menores que
-      #      4 KiB (vite.config.ts do patch: assetsInlineLimit).
+      #      4 KiB (vite.config.ts do patch: assetsInlineLimit); para uma
+      #      extensão que não conhece, ele declara application/octet-stream.
+      #      Por isso a checagem não depende do tipo declarado:
+      #        c1) no CSS, nenhum data: dentro de um @font-face;
+      #        c2) em qualquer arquivo de texto de build/ (CSS, chunks de JS,
+      #            HTML), nenhum data: de tipo de fonte (font/*,
+      #            application/font-*, application/x-font-*,
+      #            application/vnd.ms-fontobject) e nenhum que comece como um
+      #            arquivo de fonte (woff2, woff, ttf ou otf em base64), seja
+      #            qual for o tipo declarado. Um data: de imagem, que o CSP
+      #            (img-src) aceita, não é tocado.
       - name: Fontes do bundle (sem Google Fonts, arquivos locais)
         id: fonts
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
@@ -516,9 +526,26 @@ jobs:
             fi
           done
 
-          inline=$(grep -rIlE 'url\(.?data:(font/|application/(x-)?font)' build --include='*.css' || true)
-          for f in $inline; do
-            echo "::error file=$f::fonte embutida como data: URI no CSS do bundle; o CSP do nginx (font-src 'self') a recusa. Confira assetsInlineLimit no vite.config.ts"
+          # c1: o que um @font-face carrega nunca vem num data: (de qualquer tipo,
+          # também application/octet-stream). -z lê o arquivo inteiro de uma vez,
+          # então o bloco pode ter várias linhas (CSS sem minificar).
+          for f in $(find build -type f -name '*.css'); do
+            blocks=$(LC_ALL=C grep -Pzo '@font-face\s*\{[^}]*\}' "$f" | tr '\0' '\n' || true)
+            if printf '%s\n' "$blocks" | grep -q 'data:'; then
+              echo "::error file=$f::@font-face com data: URI no CSS do bundle (de qualquer tipo, também application/octet-stream); o CSP do nginx (font-src 'self') a recusa. Confira assetsInlineLimit no vite.config.ts"
+              printf '%s\n' "$blocks" | grep -o 'data:.\{0,40\}' | head -3
+              errors=$((errors + 1))
+            fi
+          done
+
+          # c2: data: com tipo de fonte, ou que começa como um arquivo de fonte
+          # (d09GMg = wOF2, d09GRg = wOFF, AAEAAA = ttf, T1RUTw = otf em base64),
+          # em CSS, chunk de JS ou HTML: o tipo declarado não importa.
+          font_data='data:(font/|application/(x-)?font|application/vnd\.ms-fontobject)|data:[^,]{0,100}base64,(d09GMg|d09GRg|AAEAAA|T1RUTw)'
+          embedded=$(LC_ALL=C grep -rIlP "$font_data" build || true)
+          for f in $embedded; do
+            echo "::error file=$f::fonte embutida como data: URI neste arquivo do bundle (CSS, chunk de JS ou HTML); o CSP do nginx (font-src 'self') a recusa. Confira assetsInlineLimit no vite.config.ts e como a fonte é importada"
+            LC_ALL=C grep -oP "($font_data).{0,20}" "$f" | cut -c1-90 | head -3
             errors=$((errors + 1))
           done
 
