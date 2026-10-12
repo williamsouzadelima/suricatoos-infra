@@ -723,7 +723,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
          do produto (as duas primeiras palavras do nome do feed, o que o titulo
          do card mostra depois de grp_title): a ordem do plano e' a mesma nas
          tres linguas. -->
-    <s k="prio_order" en="Order: severity class (Critical, High, Medium, Low); more affected hosts first; higher EPSS first, no EPSS last; higher CVSS first; name and OID ascending. Affected hosts are those with an instance of Low severity or higher (false positives and Log do not count); for an outstanding update, the hosts of all its advisories count once each, and its severity, EPSS and CVSS are the highest among them; the name is the NVT name as in the feed, and for an outstanding update it is the product, with the OID of its first advisory in the report." pt="Ordem: classe de severidade (Crítico, Alto, Médio, Baixo); mais hosts afetados primeiro; EPSS maior primeiro, sem EPSS por último; CVSS maior primeiro; nome e OID em ordem crescente. Hosts afetados são os que têm instância de severidade Baixa ou maior (falso positivo e Log não contam); numa atualização pendente, os hosts de todos os advisories dela contam uma vez cada, e a severidade, o EPSS e o CVSS dela são os maiores deles; o nome é o do NVT como no feed, e o de uma atualização pendente é o produto, com o OID do primeiro advisory dela no relatório." es="Orden: clase de severidad (Crítico, Alto, Medio, Bajo); más hosts afectados primero; EPSS mayor primero, sin EPSS al final; CVSS mayor primero; nombre y OID en orden ascendente. Los hosts afectados son los que tienen una instancia de severidad Baja o mayor (falso positivo y Log no cuentan); en una actualización pendiente, los hosts de todos sus advisories cuentan una vez cada uno, y su severidad, EPSS y CVSS son los mayores de ellos; el nombre es el del NVT como en el feed, y el de una actualización pendiente es el producto, con el OID de su primer advisory en el informe."/>
+    <s k="prio_order" en="Order: severity class (Critical, High, Medium, Low); more affected hosts first; higher EPSS first, no EPSS last; higher CVSS first; name and OID ascending. Affected hosts and EPSS only take into account instances of Low severity or higher (false positives and Log do not count): the affected hosts are those with one of them, and the EPSS is the highest among them. For an outstanding update, those instances are the ones of all its advisories (each host counts once), and its severity and CVSS are the highest among them; the name is the NVT name as in the feed, and for an outstanding update it is the product, with the OID of its first advisory in the order of the export results." pt="Ordem: classe de severidade (Crítico, Alto, Médio, Baixo); mais hosts afetados primeiro; EPSS maior primeiro, sem EPSS por último; CVSS maior primeiro; nome e OID em ordem crescente. Hosts afetados e EPSS só levam em conta as instâncias de severidade Baixa ou maior (falso positivo e Log não contam): os hosts afetados são os que têm uma delas, e o EPSS é o maior entre elas. Numa atualização pendente, essas instâncias são as de todos os advisories dela (cada host conta uma vez), e a severidade e o CVSS dela são os maiores deles; o nome é o do NVT como no feed, e o de uma atualização pendente é o produto, com o OID do primeiro advisory dela na ordem dos resultados do export." es="Orden: clase de severidad (Crítico, Alto, Medio, Bajo); más hosts afectados primero; EPSS mayor primero, sin EPSS al final; CVSS mayor primero; nombre y OID en orden ascendente. Los hosts afectados y el EPSS solo tienen en cuenta las instancias de severidad Baja o mayor (falso positivo y Log no cuentan): los hosts afectados son los que tienen una de ellas, y el EPSS es el mayor entre ellas. En una actualización pendiente, esas instancias son las de todos sus advisories (cada host cuenta una vez), y su severidad y su CVSS son los mayores de ellos; el nombre es el del NVT como en el feed, y el de una actualización pendiente es el producto, con el OID de su primer advisory en el orden de los resultados de la exportación."/>
     <!-- A frase calculada, nas suas formas: N acoes / uma acao tratam X de Y;
          um so' achado critico ou alto (nada de "1 de 1"); nenhum (nada de
          "0 de 0"); e nenhum host medido, que nao e' boa noticia. -->
@@ -742,7 +742,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
     <s k="prio_trunc_a" en=" more action(s), not listed in this table; each one is described in the " pt=" ação(ões) a mais, não listada(s) nesta tabela; cada uma está descrita na seção " es=" acción(es) más, no listada(s) en esta tabla; cada una se describe en la sección "/>
     <s k="prio_trunc_b" en=" section." pt="." es="."/>
     <s k="prio_epss_none" en="EPSS not stated in the report: the EPSS column reads --- and the criterion plays no part in the order." pt="EPSS não informado no relatório: a coluna EPSS sai com --- e o critério não pesa na ordem." es="EPSS no informado en el informe: la columna EPSS sale con --- y el criterio no pesa en el orden."/>
-    <s k="prio_epss_some" en="In the EPSS column, --- means the report carries no EPSS for any NVT of that action." pt="Na coluna EPSS, --- quer dizer que o relatório não traz EPSS para nenhum NVT daquela ação." es="En la columna EPSS, --- significa que el informe no trae EPSS para ningún NVT de esa acción."/>
+    <s k="prio_epss_some" en="In the EPSS column, --- means that none of the instances of Low severity or higher of that action carries an EPSS in the report." pt="Na coluna EPSS, --- quer dizer que nenhuma das instâncias de severidade Baixa ou maior daquela ação traz EPSS no relatório." es="En la columna EPSS, --- significa que ninguna de las instancias de severidad Baja o mayor de esa acción trae EPSS en el informe."/>
     <!-- O numero entre _b e _c e' o parametro $qod-min. -->
     <s k="prio_ind_a" en="Left out of this plan: " pt="Fora deste plano: " es="Fuera de este plan: "/>
     <s k="prio_ind_b" en=" indicator(s) to validate, with a detection quality below " pt=" indicador(es) a validar, com qualidade de detecção abaixo de " es=" indicador(es) a validar, con calidad de detección por debajo de "/>
@@ -2493,9 +2493,12 @@ SPDX-License-Identifier: GPL-2.0-or-later
            ela casa todo resultado VendorFix do produto, inclusive o advisory
            indicador que nao e' membro, e o host cujo 1o no' fosse dele sumiria
            em silencio (o defeito descrito em gvm:grp-confreps);
-         - severidade, CVSS e EPSS = os maiores entre as instancias dos membros;
-           o CVSS impresso e' o texto cru da instancia que o card poe no
-           \chipsev ($maxsev de consolidated-update-cards);
+         - severidade e CVSS = os maiores entre as instancias dos membros (o
+           CVSS impresso e' o texto cru da instancia que o card poe no
+           \chipsev, $maxsev de consolidated-update-cards); EPSS = o maior entre
+           as instancias dos membros que sao achado (>= 0.1), a mesma regra dos
+           hosts: um advisory so' com falso positivo continua membro do card,
+           mas o EPSS dele nao entra;
          - a ACAO e' a acao unica do card: a solucao do membro mais severo (o 1o
            na ordem numerica decrescente de severidade, a do documento no
            empate), que nao e' necessariamente o representante do grupo (o 1o
@@ -2535,7 +2538,11 @@ SPDX-License-Identifier: GPL-2.0-or-later
        do NVT de maior EPSS). Sem os dados de EPSS carregados, ou NVT sem CVE
        pontuado, o elemento nao vem — e a celula sai um travessao, nunca um numero
        presumido. O criterio usa max_epss/score (a maior probabilidade de
-       exploracao entre os CVEs do NVT), o maior entre as instancias.
+       exploracao entre os CVEs do NVT), o maior entre as instancias que sao
+       achado (severidade >= 0.1; falso positivo e Log nao contam, como nos
+       hosts). No card de NVT isso so' muda algo se as instancias trouxerem
+       EPSS diferentes (o gvmd escreve o mesmo por NVT); no consolidado, tira o
+       EPSS do advisory que so' tem falso positivo ou Log.
 
        A TABELA mostra as $prio-rows-max primeiras acoes; o resto e' declarado
        em \priotrunc ("+ N ... cada uma esta' na secao Achados Detalhados").
@@ -2623,7 +2630,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
         <xsl:variable name="inst" select="key('by-nvt', nvt/@oid)"/>
         <xsl:variable name="smax" select="gvm:sev-max($inst)"/>
         <xsl:if test="$smax &gt;= 0.1">
-          <xsl:variable name="emax" select="math:max($inst/nvt/epss/max_epss/score[number(.) = number(.)])"/>
+          <xsl:variable name="emax" select="math:max($inst[number(severity) &gt;= 0.1]/nvt/epss/max_epss/score[number(.) = number(.)])"/>
           <xsl:variable name="sol-orig">
             <xsl:choose>
               <xsl:when test="string-length(normalize-space(nvt/solution)) &gt; 0">
@@ -2665,7 +2672,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
         <xsl:variable name="smax" select="gvm:sev-max($members)"/>
         <xsl:variable name="gnum" select="position()"/>
         <xsl:if test="$smax &gt;= 0.1">
-          <xsl:variable name="emax" select="math:max($members/nvt/epss/max_epss/score[number(.) = number(.)])"/>
+          <xsl:variable name="emax" select="math:max($members[number(severity) &gt;= 0.1]/nvt/epss/max_epss/score[number(.) = number(.)])"/>
           <!-- Hosts: a uniao, deduplicada numa lista ordenada SO' das instancias
                dos membros que sao achado (nada de chave por produto). -->
           <xsl:variable name="gh-rtf">
