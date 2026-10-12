@@ -104,11 +104,17 @@ type Clock struct {
 // Open reads stateDir/clock.json. A missing file is a clock with no mark (Found false). A file that exists but cannot
 // be used — unreadable, too big, not a regular file, not the expected JSON — is not an error either: the clock starts
 // with no mark and Lost says why (the caller decides what the loss costs). The only error is an empty stateDir.
+//
+// Open also removes the clock.json.tmp-* files that a crash left between a temporary file and its rename (only those,
+// since the directory is shared with the other state files; it assumes no other Clock is writing there — the store
+// opens it under the directory lock).
 func Open(stateDir string) (*Clock, error) {
 	if stateDir == "" {
 		return nil, errors.New("clock: FLEET_STATE_DIR vazio")
 	}
 	c := &Clock{path: filepath.Join(stateDir, FileName), write: fsutil.WriteAtomic}
+	// leftovers of a Persist that a crash interrupted; best effort: a file that will not go does not stop the boot
+	_, _ = fsutil.RemoveOrphanTemps(c.path)
 	data, err := fsutil.ReadBounded(c.path, maxFileBytes)
 	switch {
 	case errors.Is(err, fs.ErrNotExist):

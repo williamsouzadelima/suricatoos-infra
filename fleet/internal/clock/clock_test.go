@@ -261,3 +261,46 @@ func TestMarcaLidaSoContaComoDuravelDepoisDeRegravada(t *testing.T) {
 		t.Fatalf("marca %v", got)
 	}
 }
+
+// Uma queda entre criar o temporário e o rename de um Persist deixa clock.json.tmp-* no FLEET_STATE_DIR. O Open do
+// relógio limpa os seus, e só os seus: o diretório é dividido com os outros arquivos de estado, e um arquivo do
+// operador que só divide o prefixo não é temporário.
+func TestOpenRemoveOsTemporariosOrfaosSoDoProprioArquivo(t *testing.T) {
+	setups := map[string]func(t *testing.T, dir string){
+		"marca íntegra": func(t *testing.T, dir string) {
+			c := openClock(t, dir)
+			c.Now(t0)
+			if err := c.Persist(); err != nil {
+				t.Fatal(err)
+			}
+		},
+		"marca inutilizável": func(t *testing.T, dir string) {
+			if err := os.WriteFile(filepath.Join(dir, FileName), []byte("lixo"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+		},
+		"sem marca": func(*testing.T, string) {},
+	}
+	for name, prepare := range setups {
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			prepare(t, dir)
+			for _, f := range []string{"clock.json.tmp-111", "clock.json.tmp-222", "clock.json.tmp-old", "clock.json.bak", "budget.json.tmp-9", "replay.log.tmp-3"} {
+				if err := os.WriteFile(filepath.Join(dir, f), []byte("x"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			openClock(t, dir)
+			for _, gone := range []string{"clock.json.tmp-111", "clock.json.tmp-222"} {
+				if _, err := os.Stat(filepath.Join(dir, gone)); !errors.Is(err, os.ErrNotExist) {
+					t.Errorf("%s deveria ter sido removido: %v", gone, err)
+				}
+			}
+			for _, kept := range []string{"clock.json.tmp-old", "clock.json.bak", "budget.json.tmp-9", "replay.log.tmp-3"} {
+				if _, err := os.Stat(filepath.Join(dir, kept)); err != nil {
+					t.Errorf("%s não é temporário do relógio e tinha de ficar: %v", kept, err)
+				}
+			}
+		})
+	}
+}
