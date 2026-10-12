@@ -158,7 +158,18 @@ func (b *box) open() {
 }
 
 // restart abre outra outbox sobre o mesmo diretório, como um reinício do conector (a anterior não segura arquivo).
+// Um reinício que não seja de um teste de corrupção exige um boot limpo: nenhum registro recusado nem descartado.
 func (b *box) restart() *box {
+	b.t.Helper()
+	b.open()
+	if r := b.Recovery(); r.Corrupt != 0 || r.DiscardedBytes != 0 || r.Unreadable != nil {
+		b.t.Fatalf("o boot achou o arquivo estragado: %+v", r)
+	}
+	return b
+}
+
+// restartRaw é o reinício de um teste que estragou o arquivo de propósito.
+func (b *box) restartRaw() *box {
 	b.t.Helper()
 	b.open()
 	return b
@@ -636,7 +647,7 @@ func TestRegistroFinalIncompletoDescartado(t *testing.T) {
 		t.Fatal(err)
 	}
 	f.Close()
-	b.restart()
+	b.restartRaw()
 	if r := b.Recovery(); r.DiscardedBytes == 0 || r.Corrupt != 0 || r.Events != 2 {
 		t.Fatalf("%+v", r)
 	}
@@ -688,7 +699,7 @@ func TestRegistroCorrompidoFicaDeFora(t *testing.T) {
 	if err := os.WriteFile(path, bytes.Join(lines, nil), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	b.restart()
+	b.restartRaw()
 	if r := b.Recovery(); r.Corrupt != 1 || !r.BaselineLost || r.FirstCorrupt == "" || r.Events != 2 {
 		t.Fatalf("%+v", r)
 	}

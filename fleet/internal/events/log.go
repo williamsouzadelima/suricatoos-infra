@@ -317,8 +317,8 @@ type scan struct {
 }
 
 // scanLocked reads the whole log into memory, without following a symbolic link. A record whose checksum or decode
-// fails, or whose events or Done break the rules (seq after the last one, each a valid event; Done between the current
-// head and its last seq), is corruption and is skipped whole. A delta that does not apply to the baseline read so far
+// fails, or whose events or Done break the rules (seq after the last one, each a valid event; Done never below the
+// current head), is corruption and is skipped whole. A delta that does not apply to the baseline read so far
 // is corruption too, but the events of its tx are still taken (each one passed every check: delivering it again is
 // safer than losing it). Corruption drops the baseline — every delta after it would apply to a baseline that is not
 // the one it was computed from —, while the events of the valid records that follow are still taken.
@@ -404,9 +404,12 @@ func (o *Outbox) takeLocked(r record, lineNo int, lost bool) error {
 		}
 		last = s.Seq
 	}
-	if r.Done < o.head || r.Done > last {
-		return errors.New("done fora do intervalo do que entrou")
+	if r.Done < o.head {
+		return errors.New("done abaixo da cabeça da outbox")
 	}
+	// a Done past the last seq read is the head of a rewrite whose outbox was empty: every event up to it left before
+	// the file was written, and the next seq comes after it
+	last = max(last, r.Done)
 	var derr error
 	if r.Delta != nil && !lost {
 		if derr = o.base.check(r.Delta, trackedKinds); derr == nil {
