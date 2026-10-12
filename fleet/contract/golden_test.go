@@ -299,6 +299,17 @@ func goldenSpecs() []vectorSpec {
 	add(vectorSpec{name: "bad_payload/export-filter-without-levels", cmd: gCommand("bad_payload/export-filter-without-levels", TypeReportExport), expect: "bad_payload",
 		payload: `{"report_id":"4b8d0f2a-6c1e-4a3b-8d5f-7e9a1c3b5d04","format":"suricatoos-pdf","lang":"pt_BR","variant":"technical","filter":"apply_overrides=1 min_qod=70 rows=-1"}`})
 
+	// amendment 3 and df5bc24, beyond the ADR's list: the year is 0001-9999 (Go's time would take 0000); the
+	// export filter has no double quote at all (gvmd reads a quoted part as ONE term: this phrase hides the three
+	// keywords, which a plain split on spaces would still find); and a key alone belongs to the key (the three
+	// keys are valid here, so a runner that ignored the bare one would accept)
+	bad("issued-at-year-0000", func(c *Command) { c.IssuedAt = "0000-10-11T12:00:00Z" }, "", nil)
+	quotedPhrase, _ := json.Marshal(`"x apply_overrides=1 min_qod=0 levels=hml x"`)
+	add(vectorSpec{name: "bad_payload/export-filter-quoted-phrase", cmd: gCommand("bad_payload/export-filter-quoted-phrase", TypeReportExport), expect: "bad_payload",
+		payload: `{"report_id":"4b8d0f2a-6c1e-4a3b-8d5f-7e9a1c3b5d04","format":"suricatoos-pdf","lang":"pt_BR","variant":"technical","filter":` + string(quotedPhrase) + `}`})
+	add(vectorSpec{name: "bad_payload/export-filter-bare-key", cmd: gCommand("bad_payload/export-filter-bare-key", TypeReportExport), expect: "bad_payload",
+		payload: `{"report_id":"4b8d0f2a-6c1e-4a3b-8d5f-7e9a1c3b5d04","format":"suricatoos-pdf","lang":"pt_BR","variant":"technical","filter":"apply_overrides=1 min_qod=0 levels=hml levels"}`})
+
 	// canonical framing: values holding '\n', '=' and ':' (refused by the v1 envelope, bad_envelope) still
 	// cannot move a field boundary; the a/b pair collides in a naive "key=value\n" join
 	shift := gCommand("canonical/newline-shift", TypeTaskStop)
@@ -677,6 +688,9 @@ func TestGoldenCoverage(t *testing.T) {
 		"bad_envelope/not-after-second-60", "bad_envelope/nesting-depth-33", "bad_envelope/lone-surrogate",
 		"bad_envelope/lone-surrogate-key", "bad_envelope/type-trailing-newline",
 		"bad_payload/name-noncharacter", "bad_payload/token-id-trailing-newline",
+		// pinned beyond the ADR's list (amendments 2 and 3)
+		"bad_payload/export-filter-without-levels", "bad_envelope/issued-at-year-0000",
+		"bad_payload/export-filter-quoted-phrase", "bad_payload/export-filter-bare-key",
 	}
 	for _, n := range mandatory {
 		if _, ok := byName[n]; !ok {

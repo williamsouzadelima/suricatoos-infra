@@ -823,6 +823,36 @@
       "expect": "bad_payload"
     },
     {
+      "name": "bad_envelope/issued-at-year-0000",
+      "own_node_id": "node-lab-0001",
+      "verify_at": "2026-10-11T12:30:00Z",
+      "command_json": "{\"schema_version\":\"1.0.0\",\"command_id\":\"96acf72b-03b5-42bc-92cf-1b8695152184\",\"node_id\":\"node-lab-0001\",\"tenant\":\"acme\",\"type\":\"task.start\",\"issued_by\":\"op-7f3a\",\"issued_at\":\"0000-10-11T12:00:00Z\",\"not_after\":\"2026-10-11T13:00:00Z\",\"nonce\":\"2b42022953f46b1fcea9e8ad700c286250c64db8c8a1395e0a814b6bd3e50274\",\"payload_sha256\":\"202e584626515573d531f5508c9094f8d6b705e0fc0fe6fbf29c76969fef313f\",\"payload\":{\"task_id\":\"2d5b8f0e-1c4a-4e6b-9a3d-7f0c5e1b2a49\"},\"signature\":\"YBHly+ZxxVLpO1DTbCBdoaRKJ0F5UAGTxpIppvIR1ev9K/Al1TwrN4CwFWqUaGdqQ5pG0kwvL0xM+oXRhyj3Bw==\"}",
+      "canonical": "suricatoos-fleet-command-v1\nschema_version=5:1.0.0\ncommand_id=36:96acf72b-03b5-42bc-92cf-1b8695152184\nnode_id=13:node-lab-0001\ntenant=4:acme\ntype=10:task.start\nissued_by=7:op-7f3a\nissued_at=20:0000-10-11T12:00:00Z\nnot_after=20:2026-10-11T13:00:00Z\nnonce=64:2b42022953f46b1fcea9e8ad700c286250c64db8c8a1395e0a814b6bd3e50274\npayload_sha256=64:202e584626515573d531f5508c9094f8d6b705e0fc0fe6fbf29c76969fef313f\n",
+      "canonical_sha256": "afdfcee89c892ca8de00ed94543a42fff939a268ee720731f35d5d9d96437dcd",
+      "payload_sha256": "202e584626515573d531f5508c9094f8d6b705e0fc0fe6fbf29c76969fef313f",
+      "expect": "bad_envelope"
+    },
+    {
+      "name": "bad_payload/export-filter-quoted-phrase",
+      "own_node_id": "node-lab-0001",
+      "verify_at": "2026-10-11T12:30:00Z",
+      "command_json": "{\"schema_version\":\"1.0.0\",\"command_id\":\"48a4e236-e845-458f-9d68-a7176992b6ad\",\"node_id\":\"node-lab-0001\",\"tenant\":\"acme\",\"type\":\"report.export\",\"issued_by\":\"op-7f3a\",\"issued_at\":\"2026-10-11T12:00:00Z\",\"not_after\":\"2026-10-11T13:00:00Z\",\"nonce\":\"02ce23a91aa53b4a6910a11cb1e73a86948e107e5c6c91d673d2b8637a961ff6\",\"payload_sha256\":\"56c609743fb660c905a095c6809fbd6ba416be5a9898bb6fcbbfdc958f226377\",\"payload\":{\"report_id\":\"4b8d0f2a-6c1e-4a3b-8d5f-7e9a1c3b5d04\",\"format\":\"suricatoos-pdf\",\"lang\":\"pt_BR\",\"variant\":\"technical\",\"filter\":\"\\\"x apply_overrides=1 min_qod=0 levels=hml x\\\"\"},\"signature\":\"bzaNQ993nW5108COd7TVpPIRdyKH8Moy4PIhvqf/F0W2EjanEi1TVIU+Q+WMIL25GJM99/NfmmxK4KGa0ETeDg==\"}",
+      "canonical": "suricatoos-fleet-command-v1\nschema_version=5:1.0.0\ncommand_id=36:48a4e236-e845-458f-9d68-a7176992b6ad\nnode_id=13:node-lab-0001\ntenant=4:acme\ntype=13:report.export\nissued_by=7:op-7f3a\nissued_at=20:2026-10-11T12:00:00Z\nnot_after=20:2026-10-11T13:00:00Z\nnonce=64:02ce23a91aa53b4a6910a11cb1e73a86948e107e5c6c91d673d2b8637a961ff6\npayload_sha256=64:56c609743fb660c905a095c6809fbd6ba416be5a9898bb6fcbbfdc958f226377\n",
+      "canonical_sha256": "93553ad1e3fd9521510b8e99be7e7edb1c1960c1cf67bb039a2aa1a4f877d2e0",
+      "payload_sha256": "56c609743fb660c905a095c6809fbd6ba416be5a9898bb6fcbbfdc958f226377",
+      "expect": "bad_payload"
+    },
+    {
+      "name": "bad_payload/export-filter-bare-key",
+      "own_node_id": "node-lab-0001",
+      "verify_at": "2026-10-11T12:30:00Z",
+      "command_json": "{\"schema_version\":\"1.0.0\",\"command_id\":\"868b5a4e-2eb3-46ea-bcfe-02bcf2c80415\",\"node_id\":\"node-lab-0001\",\"tenant\":\"acme\",\"type\":\"report.export\",\"issued_by\":\"op-7f3a\",\"issued_at\":\"2026-10-11T12:00:00Z\",\"not_after\":\"2026-10-11T13:00:00Z\",\"nonce\":\"69838a6319fab66c4f9be114229a4b9580ebbbd97f119a96df42f0d796d6b809\",\"payload_sha256\":\"da232468b3a76270f1a2e8f3ad229356f022d3ce76e631897184fb6bbdf71840\",\"payload\":{\"report_id\":\"4b8d0f2a-6c1e-4a3b-8d5f-7e9a1c3b5d04\",\"format\":\"suricatoos-pdf\",\"lang\":\"pt_BR\",\"variant\":\"technical\",\"filter\":\"apply_overrides=1 min_qod=0 levels=hml levels\"},\"signature\":\"K7V//GxxB5J18IA9rOyuyI8c2JOjWJ2plVzBc7qJRiNXFHGAAC4t5cCddsfndzHvUF+59tTXmctorH5lM1ixBw==\"}",
+      "canonical": "suricatoos-fleet-command-v1\nschema_version=5:1.0.0\ncommand_id=36:868b5a4e-2eb3-46ea-bcfe-02bcf2c80415\nnode_id=13:node-lab-0001\ntenant=4:acme\ntype=13:report.export\nissued_by=7:op-7f3a\nissued_at=20:2026-10-11T12:00:00Z\nnot_after=20:2026-10-11T13:00:00Z\nnonce=64:69838a6319fab66c4f9be114229a4b9580ebbbd97f119a96df42f0d796d6b809\npayload_sha256=64:da232468b3a76270f1a2e8f3ad229356f022d3ce76e631897184fb6bbdf71840\n",
+      "canonical_sha256": "595de3a9f43f5b3bf05600f2fe22073bdd2df63bbc91e452c08a9d57855040ef",
+      "payload_sha256": "da232468b3a76270f1a2e8f3ad229356f022d3ce76e631897184fb6bbdf71840",
+      "expect": "bad_payload"
+    },
+    {
       "name": "canonical/newline-shift-a",
       "own_node_id": "node-lab-0001",
       "verify_at": "2026-10-11T12:30:00Z",
