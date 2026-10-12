@@ -170,7 +170,7 @@ type Corruption struct {
 
 // Recovery is what Open found and did. Interrupted and SecretLost are for the connector (F2.6) to report.
 type Recovery struct {
-	Absent         bool        // there was no store file, or one without a single complete record (0 bytes, or a partial one)
+	Absent         bool        // no store file, or one without a single complete record (0 bytes, or a partial one)
 	Unreadable     error       // the file could not be read: nothing of it was kept
 	Corrupt        int         // complete records refused (checksum, decode, rules) — and a file without its head
 	FirstCorrupt   *Corruption // the first of them
@@ -289,7 +289,8 @@ func (s *Store) resetLocked() {
 // bootLocked decides, at the verification clock t, the replay floor and what to do with the file.
 func (s *Store) bootLocked(t time.Time, sc scan, opts Options) {
 	rec := &s.recovery
-	absent := sc.absent || sc.empty // a file without a single complete record holds nothing: it is rewritten like a missing one
+	// a file without a single complete record holds nothing: it is rewritten like a missing one
+	absent := sc.absent || sc.empty
 	rec.Absent, rec.Unreadable, rec.Corrupt, rec.FirstCorrupt = absent, sc.unreadable, sc.corrupt, sc.first
 	rec.DiscardedBytes = sc.partial
 	if sc.unreadable != nil {
@@ -612,9 +613,10 @@ func checkDecision(d Decision) error {
 // canonical form, its nonce and its command_id — the pipeline calls it BEFORE the ack. It returns only once the record
 // is durable (fsync); then the memory has it. ErrRecorded: the canonical form is already recorded (never
 // overwritten). ErrKeyTaken: an accepted decision under a nonce or command_id that a live entry of another canonical
-// form holds — never two accepted under one key, whatever the order of the callers. ErrFull: a ceiling. ErrInvalid: a decision the ADR does not record (line 3, deferred, lines 0–2), an
-// envelope Verify did not produce or whose window is invalid, an accepted type outside the catalog. Any other error
-// is a write that did not happen — the pipeline answers unavailable.
+// form holds — never two accepted under one key, whatever the order of the callers. ErrFull: a ceiling. ErrInvalid:
+// a decision the ADR does not record (line 3, deferred, lines 0–2), an envelope Verify did not produce or whose window
+// is invalid, an accepted type outside the catalog. Any other error is a write that did not happen — the pipeline
+// answers unavailable.
 func (s *Store) Record(v *contract.Verified, d Decision, t time.Time) (Entry, error) {
 	if err := checkDecision(d); err != nil {
 		return Entry{}, err

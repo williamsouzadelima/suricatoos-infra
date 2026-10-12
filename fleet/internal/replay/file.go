@@ -242,7 +242,8 @@ func entryOf(r record) (entry, error) {
 	if _, ok := contract.LookupType(typ); !ok || !reTenant.MatchString(r.Tenant) {
 		return entry{}, errors.New("accepted sem tipo do catálogo ou sem tenant")
 	}
-	e.job = &job{typ: typ, tenant: r.Tenant, state: StateReceived, restored: true} // read at boot: an earlier run's
+	// read at boot: accepted by an earlier run of the connector, so it is never run (job.restored)
+	e.job = &job{typ: typ, tenant: r.Tenant, state: StateReceived, restored: true}
 	return e, nil
 }
 
