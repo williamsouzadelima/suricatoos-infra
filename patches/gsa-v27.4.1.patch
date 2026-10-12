@@ -18580,3 +18580,350 @@ index 0000000..83193ec
 +);
 +
 +export default LiveRegion;
+diff --git a/src/gmp/commands/__tests__/feed-status.test.ts b/src/gmp/commands/__tests__/feed-status.test.ts
+index 2a0d269..e58bba0 100644
+--- a/src/gmp/commands/__tests__/feed-status.test.ts
++++ b/src/gmp/commands/__tests__/feed-status.test.ts
+@@ -3,7 +3,7 @@
+  * SPDX-License-Identifier: AGPL-3.0-or-later
+  */
+ 
+-import {describe, test, expect, testing} from '@gsa/testing';
++import {afterAll, describe, expect, test, testing} from '@gsa/testing';
+ import FeedStatusCommand, {
+   NVT_FEED,
+   FEED_COMMUNITY,
+@@ -20,6 +20,16 @@ import type Http from 'gmp/http/http';
+ import {ResponseRejection} from 'gmp/http/rejection';
+ import logger from 'gmp/log';
+ 
++// Suricatoos: feed.age counts the days from the version of the feed (a time
++// without a zone, read in the local zone) to the faked now (UTC): the expected
++// 1 day is the answer of a machine in UTC (the CI), 0 in the Americas. The test
++// fixes the time zone.
++testing.stubEnv('TZ', 'UTC');
++
++afterAll(() => {
++  testing.unstubAllEnvs();
++});
++
+ describe('FeedStatusCommand tests', () => {
+   test('should return feed information', async () => {
+     testing.setSystemTime(new Date('2019-06-26T14:00:00Z'));
+diff --git a/src/gmp/locale/__tests__/date.test.ts b/src/gmp/locale/__tests__/date.test.ts
+index 90bd479..d2e6d6b 100644
+--- a/src/gmp/locale/__tests__/date.test.ts
++++ b/src/gmp/locale/__tests__/date.test.ts
+@@ -3,7 +3,14 @@
+  * SPDX-License-Identifier: AGPL-3.0-or-later
+  */
+ 
+-import {describe, test, expect, beforeEach} from '@gsa/testing';
++import {
++  afterAll,
++  beforeEach,
++  describe,
++  expect,
++  test,
++  testing,
++} from '@gsa/testing';
+ import {
+   setDateLocale,
+   getDateLocale,
+@@ -16,6 +23,18 @@ import {
+ } from 'gmp/locale/date';
+ import date, {setLocaleDayjs} from 'gmp/models/date';
+ 
++// Suricatoos: the expectations below were written for a machine in UTC (the CI):
++// new Date('2018-11-24') is midnight UTC, which formatted in the time zone of the
++// Americas is the day before. The test fixes the time zone, so it gives the same
++// answer wherever it runs. It is fixed here, not in a beforeAll: the dates of the
++// test.each tables are created while the file is collected, and a Date made in
++// the zone of the machine and formatted in UTC would be off by the offset.
++testing.stubEnv('TZ', 'UTC');
++
++afterAll(() => {
++  testing.unstubAllEnvs();
++});
++
+ describe('setLocale tests', () => {
+   test('should change locale', () => {
+     setDateLocale('en');
+diff --git a/src/gmp/locale/__tests__/languages.test.ts b/src/gmp/locale/__tests__/languages.test.ts
+index ce01277..51aa46f 100644
+--- a/src/gmp/locale/__tests__/languages.test.ts
++++ b/src/gmp/locale/__tests__/languages.test.ts
+@@ -9,7 +9,10 @@ import {isString} from 'gmp/utils/identity';
+ 
+ describe('Language tests', () => {
+   test('should contain list of languages', () => {
+-    expect(Object.keys(Languages).length).toEqual(4);
++    // Suricatoos: the fork serves pt_BR, es and en; the German and the two
++    // Chinese catalogs of the upstream are not part of it.
++    expect(Object.keys(Languages).length).toEqual(3);
++    expect(Object.keys(Languages).sort()).toEqual(['en', 'es', 'pt_BR']);
+ 
+     let called = false;
+ 
+@@ -28,7 +31,8 @@ describe('getLanguageCodes test', () => {
+   test('should return list of language codes', () => {
+     const codes = getLanguageCodes();
+ 
+-    expect(codes.length).toEqual(4);
++    expect(codes.length).toEqual(3);
++    expect([...codes].sort()).toEqual(['en', 'es', 'pt_BR']);
+ 
+     let called = false;
+ 
+diff --git a/src/web/components/structure/__tests__/Footer.test.tsx b/src/web/components/structure/__tests__/Footer.test.tsx
+index 437de6f..a54e22b 100644
+--- a/src/web/components/structure/__tests__/Footer.test.tsx
++++ b/src/web/components/structure/__tests__/Footer.test.tsx
+@@ -36,6 +36,14 @@ describe('Footer tests', () => {
+ 
+     render(<Footer />);
+ 
+-    expect(screen.getByRole('link')).toHaveAttribute('href', expectedHref);
++    // the link of the notice of Greenbone AG follows the language, as upstream
++    expect(
++      screen.getByRole('link', {name: 'www.greenbone.net'}),
++    ).toHaveAttribute('href', expectedHref);
++    // Suricatoos: the fork has a link of its own next to it, the same in every
++    // language
++    expect(
++      screen.getByRole('link', {name: 'www.suricatoos.com'}),
++    ).toHaveAttribute('href', 'https://www.suricatoos.com');
+   });
+ });
+diff --git a/src/web/components/structure/__tests__/Header.test.tsx b/src/web/components/structure/__tests__/Header.test.tsx
+index 7ab6967..2b1bef2 100644
+--- a/src/web/components/structure/__tests__/Header.test.tsx
++++ b/src/web/components/structure/__tests__/Header.test.tsx
+@@ -32,8 +32,9 @@ describe('Header tests', () => {
+ 
+     expect(screen.getByText('UTC')).toBeVisible();
+ 
++    // Suricatoos: the language switch is a menu button with a name of its own
+     const langBtn = screen.getByRole('button', {
+-      name: 'Switch language to German',
++      name: 'Select language',
+     });
+     expect(langBtn).toBeVisible();
+ 
+@@ -45,11 +46,12 @@ describe('Header tests', () => {
+     const username = screen.getByText('testUser');
+     expect(username).toBeVisible();
+ 
+-    const themeSwitch = screen.queryByRole('button', {
++    // Suricatoos: the fork shows the switch of the color theme (light/dark)
++    const themeSwitch = screen.getByRole('button', {
+       name: 'Switch color theme',
+     });
+ 
+-    expect(themeSwitch).not.toBeInTheDocument();
++    expect(themeSwitch).toBeVisible();
+ 
+     await waitFor(() => {
+       const logo = screen.getByTestId('Enterprise150');
+diff --git a/src/web/components/structure/__tests__/LanguageSwitch.test.tsx b/src/web/components/structure/__tests__/LanguageSwitch.test.tsx
+index 9a8b4b9..6263c39 100644
+--- a/src/web/components/structure/__tests__/LanguageSwitch.test.tsx
++++ b/src/web/components/structure/__tests__/LanguageSwitch.test.tsx
+@@ -7,6 +7,12 @@ import {describe, test, expect, testing} from '@gsa/testing';
+ import {rendererWith, fireEvent, screen} from 'web/testing';
+ import LanguageSwitch from 'web/components/structure/LanguageSwitch';
+ 
++// Suricatoos: the switch of the fork is a menu with the three languages of the
++// UI (pt_BR, es and en), not the single button that toggled English and German.
++// jsdom has no layout, so Mantine keeps the dropdown display:none: the items are
++// queried with { hidden: true }.
++const hidden = {hidden: true};
++
+ describe('LanguageSwitch', () => {
+   test('should switch language and update settings', async () => {
+     const mockSetLanguage = testing.fn().mockResolvedValue(undefined);
+@@ -20,27 +26,65 @@ describe('LanguageSwitch', () => {
+ 
+     render(<LanguageSwitch />);
+ 
+-    const button = screen.getByRole('button', {
+-      name: 'Switch language to German',
+-    });
++    const button = screen.getByRole('button', {name: 'Select language'});
+ 
+     fireEvent.click(button);
+ 
+-    expect(mockSetLanguage).toHaveBeenCalledWith('de');
++    const spanish = await screen.findByRole('menuitem', {
++      name: 'Español',
++      ...hidden,
++    });
++    fireEvent.click(spanish);
++
++    expect(mockSetLanguage).toHaveBeenCalledWith('es');
+   });
+ 
+-  test('should show English option when current language is German', async () => {
++  test('should not set the language that is already the current one', async () => {
+     const mockSetLanguage = testing.fn().mockResolvedValue(undefined);
+ 
+     const {render} = rendererWith({
+       language: {
+-        language: 'de',
++        language: 'en',
+         setLanguage: mockSetLanguage,
+       },
+     });
+ 
+     render(<LanguageSwitch />);
+ 
+-    expect(screen.getByTitle('Switch language to English')).toBeInTheDocument();
++    fireEvent.click(screen.getByRole('button', {name: 'Select language'}));
++    fireEvent.click(
++      await screen.findByRole('menuitem', {name: 'English', ...hidden}),
++    );
++
++    expect(mockSetLanguage).not.toHaveBeenCalled();
++  });
++
++  test('should show English option when current language is Spanish', async () => {
++    const mockSetLanguage = testing.fn().mockResolvedValue(undefined);
++
++    const {render} = rendererWith({
++      language: {
++        language: 'es',
++        setLanguage: mockSetLanguage,
++      },
++    });
++
++    render(<LanguageSwitch />);
++
++    fireEvent.click(screen.getByRole('button', {name: 'Select language'}));
++
++    const english = await screen.findByRole('menuitem', {
++      name: 'English',
++      ...hidden,
++    });
++    expect(english).toBeInTheDocument();
++    expect(english).not.toHaveAttribute('aria-current');
++    // the current language is told, the other ones are not
++    expect(
++      screen.getByRole('menuitem', {name: 'Español', ...hidden}),
++    ).toHaveAttribute('aria-current', 'true');
++
++    fireEvent.click(english);
++    expect(mockSetLanguage).toHaveBeenCalledWith('en');
+   });
+ });
+diff --git a/src/web/pages/start/__tests__/StartPage.test.jsx b/src/web/pages/start/__tests__/StartPage.test.jsx
+index abb4667..3a0a04f 100644
+--- a/src/web/pages/start/__tests__/StartPage.test.jsx
++++ b/src/web/pages/start/__tests__/StartPage.test.jsx
+@@ -99,6 +99,9 @@ describe('StartPage tests', () => {
+     );
+ 
+     // Displays
++    // Suricatoos: the donut charts are flat (no 2D/3D toggle) and the displays
++    // download the SVG with the generic download icon (the CSV download and the
++    // SVG-specific icon of the upstream are not part of the fork).
+     const tasksBySeverityClass = displays[0];
+     const withinTasksBySeverityClass = within(tasksBySeverityClass);
+     expect(tasksBySeverityClass).toHaveTextContent(
+@@ -108,14 +111,14 @@ describe('StartPage tests', () => {
+       withinTasksBySeverityClass.getByTestId('filter-icon'),
+     ).toHaveAttribute('title', 'Select Filter');
+     expect(
+-      withinTasksBySeverityClass.getByTestId('download-svg-icon'),
++      withinTasksBySeverityClass.getByTestId('download-icon'),
+     ).toHaveAttribute('title', 'Download SVG');
+     expect(
+       withinTasksBySeverityClass.getByTestId('legend-icon'),
+     ).toHaveAttribute('title', 'Toggle Legend');
+     expect(
+-      withinTasksBySeverityClass.getByTestId('toggle-3d-icon'),
+-    ).toHaveAttribute('title', 'Toggle 2D/3D view');
++      withinTasksBySeverityClass.queryByTestId('toggle-3d-icon'),
++    ).not.toBeInTheDocument();
+ 
+     const tasksByStatus = displays[1];
+     const withinTasksByStatus = within(tasksByStatus);
+@@ -124,17 +127,17 @@ describe('StartPage tests', () => {
+       'title',
+       'Select Filter',
+     );
+-    expect(
+-      withinTasksByStatus.getByTestId('download-svg-icon'),
+-    ).toHaveAttribute('title', 'Download SVG');
+-    expect(withinTasksByStatus.getByTestId('legend-icon')).toHaveAttribute(
++    expect(withinTasksByStatus.getByTestId('download-icon')).toHaveAttribute(
+       'title',
+-      'Toggle Legend',
++      'Download SVG',
+     );
+-    expect(withinTasksByStatus.getByTestId('toggle-3d-icon')).toHaveAttribute(
++    expect(withinTasksByStatus.getByTestId('legend-icon')).toHaveAttribute(
+       'title',
+-      'Toggle 2D/3D view',
++      'Toggle Legend',
+     );
++    expect(
++      withinTasksByStatus.queryByTestId('toggle-3d-icon'),
++    ).not.toBeInTheDocument();
+ 
+     const cvesByCreationTime = displays[2];
+     const withinCvesByCreationTime = within(cvesByCreationTime);
+@@ -144,7 +147,7 @@ describe('StartPage tests', () => {
+       'Select Filter',
+     );
+     expect(
+-      withinCvesByCreationTime.getByTestId('download-svg-icon'),
++      withinCvesByCreationTime.getByTestId('download-icon'),
+     ).toHaveAttribute('title', 'Download SVG');
+     expect(withinCvesByCreationTime.getByTestId('legend-icon')).toHaveAttribute(
+       'title',
+@@ -160,13 +163,13 @@ describe('StartPage tests', () => {
+       withinNvtsBySeverityClass.getByTestId('filter-icon'),
+     ).toHaveAttribute('title', 'Select Filter');
+     expect(
+-      withinNvtsBySeverityClass.getByTestId('download-svg-icon'),
++      withinNvtsBySeverityClass.getByTestId('download-icon'),
+     ).toHaveAttribute('title', 'Download SVG');
+     expect(
+       withinNvtsBySeverityClass.getByTestId('legend-icon'),
+     ).toHaveAttribute('title', 'Toggle Legend');
+     expect(
+-      withinNvtsBySeverityClass.getByTestId('toggle-3d-icon'),
+-    ).toHaveAttribute('title', 'Toggle 2D/3D view');
++      withinNvtsBySeverityClass.queryByTestId('toggle-3d-icon'),
++    ).not.toBeInTheDocument();
+   });
+ });
+diff --git a/src/web/pages/user-settings/__tests__/GeneralSettings.test.tsx b/src/web/pages/user-settings/__tests__/GeneralSettings.test.tsx
+index 47cd15e..ba43693 100644
+--- a/src/web/pages/user-settings/__tests__/GeneralSettings.test.tsx
++++ b/src/web/pages/user-settings/__tests__/GeneralSettings.test.tsx
+@@ -384,7 +384,8 @@ describe('General tab', () => {
+     const select = await screen.findByTestId('form-select');
+     expect(select).toBeVisible();
+     select.focus();
+-    fireEvent.change(select, {target: {value: 'de'}});
++    // Suricatoos: the UI languages of the fork are pt_BR, es and en (no German)
++    fireEvent.change(select, {target: {value: 'es'}});
+     const saveButton = screen.getByTestId('save-icon');
+     expect(saveButton).toBeVisible();
+     saveButton.click();
+@@ -394,12 +395,12 @@ describe('General tab', () => {
+         userinterfacelanguage: Setting.fromElement({
+           _id: 'g8',
+           name: 'userinterfacelanguage',
+-          value: 'de',
++          value: 'es',
+           comment: 'Language comment',
+         }),
+       },
+     });
+-    screen.getByText(/German|Deutsch/i);
++    screen.getByText(/Spanish|Español/i);
+   });
+ 
+   test('can edit and save Auto Cache Rebuild', async () => {
