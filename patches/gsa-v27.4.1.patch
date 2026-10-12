@@ -5349,10 +5349,10 @@ index eaff647..d6e39ef 100644
 \ No newline at end of file
 diff --git a/public/locales/gsa-es.json b/public/locales/gsa-es.json
 new file mode 100644
-index 0000000..ea0404a
+index 0000000..727b14a
 --- /dev/null
 +++ b/public/locales/gsa-es.json
-@@ -0,0 +1,2488 @@
+@@ -0,0 +1,2492 @@
 +{
 +  "AI Providers": "Proveedores de IA",
 +  "Configure LLM providers (OpenRouter, UnoRouter and others) used to draft remediation plans. Keys are stored encrypted and never shown.": "Configure los proveedores de LLM (OpenRouter, UnoRouter y otros) usados para redactar planes de remediación. Las claves se guardan cifradas y nunca se muestran.",
@@ -7839,14 +7839,18 @@ index 0000000..ea0404a
 +  "View findings": "Ver hallazgos",
 +  "Scan now": "Escanear ahora",
 +  "Scan requested for {{- host}} — new collection in ~60 s.": "Escaneo solicitado para {{- host}}: nueva recolección en ~60 s.",
-+  "EU": "UE"
++  "EU": "UE",
++  "Scan now: {{- host}}": "Escanear ahora: {{- host}}",
++  "View findings: {{- host}}": "Ver hallazgos: {{- host}}",
++  "Edit: {{- name}}": "Editar: {{- name}}",
++  "Delete: {{- name}}": "Eliminar: {{- name}}"
 +}
 \ No newline at end of file
 diff --git a/public/locales/gsa-pt_BR.json b/public/locales/gsa-pt_BR.json
-index 10e592f..761694c 100644
+index 10e592f..df45fc3 100644
 --- a/public/locales/gsa-pt_BR.json
 +++ b/public/locales/gsa-pt_BR.json
-@@ -1,216 +1,2488 @@
+@@ -1,216 +1,2492 @@
  {
 -  "# of OVAL Definitions": "OVAL defini\u00e7\u00e3o",
 -  "# of Operating Systems": "Sistema Operacional",
@@ -10533,21 +10537,26 @@ index 10e592f..761694c 100644
 +  "View findings": "Ver achados",
 +  "Scan now": "Varrer agora",
 +  "Scan requested for {{- host}} — new collection in ~60 s.": "Varredura solicitada para {{- host}} — nova coleta em ~60 s.",
-+  "EU": "UE"
++  "EU": "UE",
++  "Scan now: {{- host}}": "Varrer agora: {{- host}}",
++  "View findings: {{- host}}": "Ver achados: {{- host}}",
++  "Edit: {{- name}}": "Editar: {{- name}}",
++  "Delete: {{- name}}": "Excluir: {{- name}}"
 +}
 \ No newline at end of file
 diff --git a/public/suricatoos-theme.css b/public/suricatoos-theme.css
 new file mode 100644
-index 0000000..37be1ae
+index 0000000..74b3d5d
 --- /dev/null
 +++ b/public/suricatoos-theme.css
-@@ -0,0 +1,306 @@
-+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
-+
+@@ -0,0 +1,312 @@
 +/* ============================================================
 +   SURICATOOS — Tema Premium v2 (claro + escuro) — GSA / Mantine v7
 +   Carregado por ULTIMO. Foco: profundidade, cards, tabelas, nav,
 +   tipografia corporativa (Inter body + Space Grotesk headings).
++   As fontes (Inter, Space Grotesk, JetBrains Mono) vêm do próprio bundle
++   (@fontsource, importadas em src/index.tsx; licença OFL-1.1 em
++   /licenses/fonts-OFL-1.1.txt): NÃO importar fontes de CDN de terceiros aqui.
 +   Assinatura "De Vigília" no login (suricato-sentinela).
 +   ============================================================ */
 +
@@ -10704,8 +10713,13 @@ index 0000000..37be1ae
 +
 +/* ============================================================
 +   9. INPUTS — foco com anel do acento
++   Campos de texto, textarea e select: a borda vira o acento (>= 3:1 sobre a
++   superfície nos dois temas) e ganha o halo; o contorno do navegador sai porque
++   isto o substitui. Checkbox e radio ficam de fora: marcados, a borda já é a cor
++   do acento e o halo quase não aparece, então neles vale o anel de foco do
++   Mantine (:focus-visible, contorno de 2px no acento).
 +   ============================================================ */
-+input:focus, textarea:focus, select:focus, [class*="Input-input"]:focus {
++input:not([type='checkbox']):not([type='radio']):focus, textarea:focus, select:focus, [class*="Input-input"]:focus {
 +  border-color:var(--sur-accent)!important; box-shadow:0 0 0 3px var(--sur-accent-soft)!important; outline:none!important;
 +}
 +.mantine-Input-input, input, textarea { border-radius:9px!important; }
@@ -11096,7 +11110,7 @@ index ab34daa..5fe67cd 100644
            endAngle: currentArc.endAngle,
            padAngle: currentArc.padAngle,
 diff --git a/src/web/components/dashboard/display/DataDisplayIcons.tsx b/src/web/components/dashboard/display/DataDisplayIcons.tsx
-index 966a360..d354c38 100644
+index 966a360..2e69ebb 100644
 --- a/src/web/components/dashboard/display/DataDisplayIcons.tsx
 +++ b/src/web/components/dashboard/display/DataDisplayIcons.tsx
 @@ -6,11 +6,9 @@
@@ -11112,7 +11126,7 @@ index 966a360..d354c38 100644
  } from 'web/components/icon';
  interface DataDisplayIconsState {
    showLegend?: boolean;
-@@ -37,24 +35,14 @@ export const renderDonutChartIcons = <S extends DonutChartState>({
+@@ -37,39 +35,35 @@ export const renderDonutChartIcons = <S extends DonutChartState>({
    setState,
    ...iconsProps
  }: DataDisplayIconsProps<S>): React.ReactNode => (
@@ -11138,18 +11152,32 @@ index 966a360..d354c38 100644
    onDownloadSvgClick,
    onSelectFilterClick,
  }: DataDisplayIconsProps<S>) => (
-@@ -63,10 +51,7 @@ const DataDisplayIcons = <S extends DataDisplayIconsState>({
-       <FilterIcon title={_('Select Filter')} onClick={onSelectFilterClick} />
+   <React.Fragment>
+     {showFilterSelection && (
+-      <FilterIcon title={_('Select Filter')} onClick={onSelectFilterClick} />
++      <FilterIcon
++        aria-label={_('Select Filter')}
++        title={_('Select Filter')}
++        onClick={onSelectFilterClick}
++      />
      )}
      {showSvgDownload && (
 -      <DownloadSvgIcon title={_('Download SVG')} onClick={onDownloadSvgClick} />
 -    )}
 -    {showCsvDownload && (
 -      <DownloadCsvIcon title={_('Download CSV')} onClick={onDownloadCsvClick} />
-+      <DownloadIcon title={_('Download SVG')} onClick={onDownloadSvgClick} />
++      <DownloadIcon
++        aria-label={_('Download SVG')}
++        title={_('Download SVG')}
++        onClick={onDownloadSvgClick}
++      />
      )}
      {showToggleLegend && (
        <LegendIcon
++        aria-label={_('Toggle Legend')}
+         title={_('Toggle Legend')}
+         onClick={() => {
+           setState(({showLegend}: S) => ({showLegend: !showLegend}) as S);
 diff --git a/src/web/components/dashboard/display/Display.tsx b/src/web/components/dashboard/display/Display.tsx
 index 4895369..dd97938 100644
 --- a/src/web/components/dashboard/display/Display.tsx
@@ -11364,7 +11392,7 @@ index 44eb460..d6e39ef 100644
 +</svg>
 \ No newline at end of file
 diff --git a/src/web/components/img/LoginLogo.tsx b/src/web/components/img/LoginLogo.tsx
-index d68da89..2bbd0cb 100644
+index d68da89..cb5495a 100644
 --- a/src/web/components/img/LoginLogo.tsx
 +++ b/src/web/components/img/LoginLogo.tsx
 @@ -3,12 +3,14 @@
@@ -11382,7 +11410,7 @@ index d68da89..2bbd0cb 100644
  
  const StyledImage = styled(Image)`
    display: flex;
-@@ -17,9 +19,13 @@ const StyledImage = styled(Image)`
+@@ -17,17 +19,21 @@ const StyledImage = styled(Image)`
  
  const LoginLogo = () => {
    const gmp = useGmp();
@@ -11397,8 +11425,23 @@ index d68da89..2bbd0cb 100644
 +        ? OPENVAS_SCAN_LOGO
 +        : OPENVAS_LOGO;
  
-   return (
-     <StyledImage
+-  return (
+-    <StyledImage
+-      alt={gmp.settings.vendorLabel ? 'OPENVAS SCAN' : 'OPENVAS'}
+-      data-testid="login-logo"
+-      src={loginTopLogo}
+-    />
+-  );
++  // The wordmark is the product's own (GSA_VENDOR_TITLE, as in the page title);
++  // without a configured title the text stays what the upstream shows.
++  const alt =
++    gmp.settings.vendorTitle ??
++    (gmp.settings.vendorLabel ? 'OPENVAS SCAN' : 'OPENVAS');
++
++  return <StyledImage alt={alt} data-testid="login-logo" src={loginTopLogo} />;
+ };
+ 
+ export default LoginLogo;
 diff --git a/src/web/components/menu/Menu.tsx b/src/web/components/menu/Menu.tsx
 index 13fca0c..8166998 100644
 --- a/src/web/components/menu/Menu.tsx
@@ -11463,23 +11506,58 @@ index 9775497..5c7d152 100644
    );
  };
 diff --git a/src/web/components/structure/Header.tsx b/src/web/components/structure/Header.tsx
-index 6958f21..d703dc1 100644
+index 6958f21..bca13b5 100644
 --- a/src/web/components/structure/Header.tsx
 +++ b/src/web/components/structure/Header.tsx
-@@ -63,7 +63,7 @@ const Header = () => {
+@@ -16,7 +16,7 @@ import useTranslation from 'web/hooks/useTranslation';
+ import useUserIsLoggedIn from 'web/hooks/useUserIsLoggedIn';
+ import useUserName from 'web/hooks/useUserName';
+ import useUserTimezone from 'web/hooks/useUserTimezone';
+-import {type ApplianceLogo} from 'web/utils/appliance-data';
++import {applianceTitle, type ApplianceLogo} from 'web/utils/appliance-data';
+ import {saveLastVisitedPage} from 'web/utils/user-last-visited-page';
+ 
+ const Header = () => {
+@@ -28,6 +28,12 @@ const Header = () => {
+   const navigate = useNavigate();
+   const location = useLocation();
+   const logoComponent = getLogo(gmp?.settings?.vendorLabel as ApplianceLogo);
++  // The logo is the only content of the link to the start page, so it names the
++  // link: the title of the product, the same as in the title of the page.
++  const productName =
++    gmp?.settings?.vendorTitle ??
++    applianceTitle[gmp?.settings?.vendorLabel ?? 'defaultVendorLabel'] ??
++    applianceTitle.defaultVendorLabel;
+   const [timezone] = useUserTimezone();
+   const manualURL = useManualURL();
+ 
+@@ -63,9 +69,19 @@ const Header = () => {
      <AppHeader
        ianaTimeZone={timezone}
        isLoggedIn={isLoggedIn}
 -      isThemeSwitchVisible={false}
 +      isThemeSwitchVisible={true}
        languageSwitch={<LanguageSwitch />}
-       logo={logoComponent}
+-      logo={logoComponent}
++      logo={
++        logoComponent ? (
++          <span
++            aria-label={productName}
++            role="img"
++            style={{display: 'inline-flex'}}
++          >
++            {logoComponent}
++          </span>
++        ) : undefined
++      }
        logoLink="/dashboards"
+       manualLink={manualURL}
+       menuPoints={menuPoints}
 diff --git a/src/web/components/structure/LanguageSwitch.tsx b/src/web/components/structure/LanguageSwitch.tsx
-index 7f74728..b7c8165 100644
+index 7f74728..de42221 100644
 --- a/src/web/components/structure/LanguageSwitch.tsx
 +++ b/src/web/components/structure/LanguageSwitch.tsx
-@@ -3,64 +3,116 @@
+@@ -3,64 +3,135 @@
   * SPDX-License-Identifier: AGPL-3.0-or-later
   */
  
@@ -11504,29 +11582,36 @@ index 7f74728..b7c8165 100644
 -  EN: LanguageCode;
 -  DE: LanguageCode;
 -}
-+const FlagBR: React.FC = () => (
-+  <svg style={flagStyle} viewBox="0 0 28 20">
-+    <rect fill="#009b3a" height="20" width="28" />
-+    <polygon fill="#fedf00" points="14,2.5 25.5,10 14,17.5 2.5,10" />
-+    <circle cx="14" cy="10" fill="#002776" r="4.2" />
-+  </svg>
-+);
++// The flags are decorative: the language is named by the text next to them (or
++// by the label of the button), so assistive technology skips the drawing.
++const flagProps = {
++  'aria-hidden': true,
++  focusable: 'false',
++  style: flagStyle,
++  viewBox: '0 0 28 20',
++} as const;
  
 -const LANGUAGES: Languages = {
 -  EN: DEFAULT_LANGUAGE as LanguageCode,
 -  DE: 'de',
 -};
++const FlagBR: React.FC = () => (
++  <svg {...flagProps}>
++    <rect fill="#009b3a" height="20" width="28" />
++    <polygon fill="#fedf00" points="14,2.5 25.5,10 14,17.5 2.5,10" />
++    <circle cx="14" cy="10" fill="#002776" r="4.2" />
++  </svg>
++);
++
 +const FlagES: React.FC = () => (
-+  <svg style={flagStyle} viewBox="0 0 28 20">
++  <svg {...flagProps}>
 +    <rect fill="#aa151b" height="20" width="28" />
 +    <rect fill="#f1bf00" height="10" width="28" y="5" />
 +  </svg>
 +);
- 
--const getNextLanguage = (language: LanguageCode): LanguageCode =>
--  language === LANGUAGES.EN ? LANGUAGES.DE : LANGUAGES.EN;
++
 +const FlagUS: React.FC = () => (
-+  <svg style={flagStyle} viewBox="0 0 28 20">
++  <svg {...flagProps}>
 +    <rect fill="#b22234" height="20" width="28" />
 +    <rect fill="#fff" height="1.54" width="28" y="1.54" />
 +    <rect fill="#fff" height="1.54" width="28" y="4.62" />
@@ -11557,30 +11642,34 @@ index 7f74728..b7c8165 100644
 +    </g>
 +  </svg>
 +);
-+
+ 
+-const getNextLanguage = (language: LanguageCode): LanguageCode =>
+-  language === LANGUAGES.EN ? LANGUAGES.DE : LANGUAGES.EN;
 +interface LangDef {
 +  code: string;
++  // BCP 47 tag of the label: each name is written in its own language
++  htmlLang: string;
 +  label: string;
 +  Flag: React.FC;
 +}
 +
 +const LANGS: LangDef[] = [
-+  {code: 'pt_BR', label: 'Português (Brasil)', Flag: FlagBR},
-+  {code: 'es', label: 'Español', Flag: FlagES},
-+  {code: 'en', label: 'English', Flag: FlagUS},
++  {code: 'pt_BR', htmlLang: 'pt-BR', label: 'Português (Brasil)', Flag: FlagBR},
++  {code: 'es', htmlLang: 'es', label: 'Español', Flag: FlagES},
++  {code: 'en', htmlLang: 'en', label: 'English', Flag: FlagUS},
 +];
  
  const LanguageSwitch: React.FC = () => {
    const [language, setLanguage] = useLanguage();
    const [_] = useTranslation();
 -  const [isChangingLanguage, setIsChangingLanguage] = useState<boolean>(false);
--
+ 
 -  const nextLanguage: LanguageCode = getNextLanguage(language as LanguageCode);
 -  const titles: Record<LanguageCode, string> = {
 -    en: _('Switch language to English'),
 -    de: _('Switch language to German'),
 -  };
- 
+-
 -  const handleLanguageChange = async (): Promise<void> => {
 -    if (isChangingLanguage) {
 -      return;
@@ -11614,6 +11703,7 @@ index 7f74728..b7c8165 100644
 +    <Menu position="bottom-end" shadow="md" width={210}>
 +      <Menu.Target>
 +        <ActionIcon
++          aria-label={_('Select language')}
 +          color="neutral.0"
 +          title={_('Select language')}
 +          variant="transparent"
@@ -11623,11 +11713,18 @@ index 7f74728..b7c8165 100644
 +      </Menu.Target>
 +      <Menu.Dropdown>
 +        <Menu.Label>{_('Language')}</Menu.Label>
-+        {LANGS.map(({code, label, Flag}) => (
-+          <Menu.Item key={code} onClick={() => handleSelect(code)}>
++        {LANGS.map(({code, htmlLang, label, Flag}) => (
++          <Menu.Item
++            key={code}
++            aria-current={code === language ? 'true' : undefined}
++            onClick={() => handleSelect(code)}
++          >
 +            <div style={{alignItems: 'center', display: 'flex', gap: 10}}>
 +              <Flag />
-+              <span style={{fontWeight: code === language ? 700 : 400}}>
++              <span
++                lang={htmlLang}
++                style={{fontWeight: code === language ? 700 : 400}}
++              >
 +                {label}
 +              </span>
 +            </div>
@@ -11658,10 +11755,10 @@ index a057cf9..409c93b 100644
    },
 diff --git a/src/web/pages/downloads/DownloadsPage.tsx b/src/web/pages/downloads/DownloadsPage.tsx
 new file mode 100644
-index 0000000..92c84e8
+index 0000000..772575f
 --- /dev/null
 +++ b/src/web/pages/downloads/DownloadsPage.tsx
-@@ -0,0 +1,245 @@
+@@ -0,0 +1,261 @@
 +/* SPDX-FileCopyrightText: 2024 Greenbone AG
 + *
 + * SPDX-License-Identifier: AGPL-3.0-or-later
@@ -11674,7 +11771,8 @@ index 0000000..92c84e8
 + * per-tenant token and returns a ready-to-run command with the token
 + * already embedded — the dynamic per-tenant token. Renders inside the GSA shell. */
 +
-+import React, {useState, useCallback, useEffect} from 'react';
++import React, {useState, useCallback, useEffect, useId} from 'react';
++import {VisuallyHidden} from '@mantine/core';
 +import Button from 'web/components/form/Button';
 +import Layout from 'web/components/layout/Layout';
 +import PageTitle from 'web/components/layout/PageTitle';
@@ -11689,6 +11787,7 @@ index 0000000..92c84e8
 +  SuricatoosApiError,
 +} from 'web/utils/suricatoosApi';
 +import {formatApiDate} from 'web/utils/suricatoosDate';
++import LiveRegion from 'web/utils/suricatoosLive';
 +import Theme from 'web/utils/Theme';
 +
 +interface EnrollResponse {
@@ -11751,6 +11850,9 @@ index 0000000..92c84e8
 +  const [loading, setLoading] = useState<boolean>(false);
 +  const [error, setError] = useState<Error | null>(null);
 +  const [copied, setCopied] = useState<boolean>(false);
++  // ids that tie the label and the error message to the select
++  const tenantId = useId();
++  const errorId = useId();
 +
 +  // Load the tenant list on mount (behind the nginx session gate: cookie +
 +  // token, which the shared client adds). Aborted on unmount.
@@ -11822,10 +11924,15 @@ index 0000000..92c84e8
 +            )}
 +          </p>
 +          <Layout>
-+            <label style={{marginRight: '10px', alignSelf: 'center'}}>
++            <label
++              htmlFor={tenantId}
++              style={{marginRight: '10px', alignSelf: 'center'}}
++            >
 +              {_('Tenant')}:
 +            </label>
 +            <select
++              aria-describedby={error ? errorId : undefined}
++              id={tenantId}
 +              value={tenant}
 +              onChange={e => {
 +                setTenant(e.target.value);
@@ -11852,9 +11959,11 @@ index 0000000..92c84e8
 +            ))}
 +          </Layout>
 +
-+          {loading ? <p>{_('Generating command…')}</p> : null}
++          <LiveRegion role="status">
++            {loading && <p>{_('Generating command…')}</p>}
++          </LiveRegion>
 +          {error ? (
-+            <p style={{color: Theme.errorRed}}>
++            <p id={errorId} role="alert" style={{color: Theme.errorRed}}>
 +              {isSessionExpired(error)
 +                ? _('Session expired. Sign in again to activate agents.')
 +                : _('Error generating the command: {{- error}}', {
@@ -11884,6 +11993,10 @@ index 0000000..92c84e8
 +                <Button title={_('Copy')} onClick={copy}>
 +                  {copied ? _('Copied ✓') : _('Copy')}
 +                </Button>
++                {/* the result of the copy, said aloud without moving the focus */}
++                <VisuallyHidden role="status">
++                  {copied ? _('Copied ✓') : ''}
++                </VisuallyHidden>
 +              </Layout>
 +              <p style={{color: Theme.mediumGray, fontSize: '12px'}}>
 +                {resp.max_uses > 1
@@ -11909,10 +12022,10 @@ index 0000000..92c84e8
 +export default DownloadsPage;
 diff --git a/src/web/pages/endpoint-agents/EndpointAgentsPage.tsx b/src/web/pages/endpoint-agents/EndpointAgentsPage.tsx
 new file mode 100644
-index 0000000..92e75a5
+index 0000000..06e9d9a
 --- /dev/null
 +++ b/src/web/pages/endpoint-agents/EndpointAgentsPage.tsx
-@@ -0,0 +1,333 @@
+@@ -0,0 +1,343 @@
 +/* SPDX-FileCopyrightText: 2024 Greenbone AG
 + *
 + * SPDX-License-Identifier: AGPL-3.0-or-later
@@ -11949,6 +12062,7 @@ index 0000000..92e75a5
 +  usePolling,
 +} from 'web/utils/suricatoosApi';
 +import {formatApiRelativeTime as relTime} from 'web/utils/suricatoosDate';
++import LiveRegion from 'web/utils/suricatoosLive';
 +import Theme from 'web/utils/Theme';
 +
 +interface Agent {
@@ -12134,7 +12248,7 @@ index 0000000..92e75a5
 +            </Button>
 +          </div>
 +            {error ? (
-+              <p style={{color: Theme.errorRed}}>
++              <p role="alert" style={{color: Theme.errorRed}}>
 +                {isSessionExpired(error)
 +                  ? _(
 +                      'Session expired. Sign in again to see the endpoint agents.',
@@ -12144,9 +12258,10 @@ index 0000000..92e75a5
 +                    })}
 +              </p>
 +            ) : null}
-+            {loading ? (
-+              <p>{_('Loading...')}</p>
-+            ) : agents.length === 0 ? (
++            <LiveRegion role="status">
++              {loading && <p>{_('Loading...')}</p>}
++            </LiveRegion>
++            {loading ? null : agents.length === 0 ? (
 +              <p>
 +                {_('No agents yet. Install one from the Activate Agent page.')}
 +              </p>
@@ -12222,11 +12337,19 @@ index 0000000..92e75a5
 +                          }}
 +                        >
 +                          {agent.report_id ? (
-+                            <Link to={`report/${agent.report_id}`}>
++                            <Link
++                              aria-label={_('View findings: {{- host}}', {
++                                host: agent.host,
++                              })}
++                              to={`report/${agent.report_id}`}
++                            >
 +                              {_('View findings')}
 +                            </Link>
 +                          ) : null}
 +                          <Button
++                            aria-label={_('Scan now: {{- host}}', {
++                              host: agent.host,
++                            })}
 +                            title={_('Scan now')}
 +                            onClick={() => scanNow(agent.host)}
 +                          >
@@ -12268,16 +12391,16 @@ index b995df4..be67f0d 100644
              <TableRow>
 diff --git a/src/web/pages/extras/FeedUpdateSection.tsx b/src/web/pages/extras/FeedUpdateSection.tsx
 new file mode 100644
-index 0000000..d3a69b9
+index 0000000..2bb8d5a
 --- /dev/null
 +++ b/src/web/pages/extras/FeedUpdateSection.tsx
-@@ -0,0 +1,318 @@
+@@ -0,0 +1,332 @@
 +/* SPDX-FileCopyrightText: 2026 Suricatoos
 + *
 + * SPDX-License-Identifier: AGPL-3.0-or-later
 + */
 +
-+import React, {useCallback, useEffect, useRef, useState} from 'react';
++import React, {useCallback, useEffect, useId, useRef, useState} from 'react';
 +import {Button, Group, Loader, Select, Stack, Switch, Text} from '@mantine/core';
 +import useGmp from 'web/hooks/useGmp';
 +import useTranslation from 'web/hooks/useTranslation';
@@ -12288,6 +12411,7 @@ index 0000000..d3a69b9
 +  usePolling,
 +} from 'web/utils/suricatoosApi';
 +import {formatApiDate} from 'web/utils/suricatoosDate';
++import LiveRegion from 'web/utils/suricatoosLive';
 +
 +const API = '/feed-sync';
 +
@@ -12332,6 +12456,8 @@ index 0000000..d3a69b9
 +  const [sch, setSch] = useState<Schedule>(DEFAULT_SCHEDULE);
 +  const [busy, setBusy] = useState(false);
 +  const [saved, setSaved] = useState(false);
++  // ties the label to the time field
++  const timeId = useId();
 +  // o agendamento eh carregado no form UMA vez; o polling depois so atualiza o
 +  // status do sync, sem clobberar o que o usuario esta editando (senao o toggle
 +  // "desabilita sozinho" quando o poll traz o estado antigo do servidor).
@@ -12471,6 +12597,7 @@ index 0000000..d3a69b9
 +      }}
 +    >
 +      <Text
++        component="h3"
 +        fw={700}
 +        mb="md"
 +        size="lg"
@@ -12504,7 +12631,7 @@ index 0000000..d3a69b9
 +        </div>
 +        <Button
 +          disabled={busy || running || semPermissao}
-+          leftSection={running ? <Loader size="xs" /> : undefined}
++          leftSection={running ? <Loader aria-hidden size="xs" /> : undefined}
 +          onClick={syncNow}
 +        >
 +          {running ? _('Updating...') : _('Update now')}
@@ -12551,11 +12678,19 @@ index 0000000..d3a69b9
 +            />
 +          )}
 +          <div>
-+            <Text fw={500} mb={4} size="sm">
++            <Text
++              component="label"
++              display="block"
++              fw={500}
++              htmlFor={timeId}
++              mb={4}
++              size="sm"
++            >
 +              {_('Time')}
 +            </Text>
 +            <input
 +              disabled={!sch.enabled || semPermissao}
++              id={timeId}
 +              style={{
 +                padding: '7px 10px',
 +                borderRadius: 9,
@@ -12578,11 +12713,13 @@ index 0000000..d3a69b9
 +          >
 +            {_('Save schedule')}
 +          </Button>
-+          {saved && (
-+            <Text c="green" size="sm">
-+              {_('Saved')}
-+            </Text>
-+          )}
++          <LiveRegion role="status">
++            {saved && (
++              <Text c="green" size="sm">
++                {_('Saved')}
++              </Text>
++            )}
++          </LiveRegion>
 +        </Group>
 +      </div>
 +    </div>
@@ -12591,7 +12728,7 @@ index 0000000..d3a69b9
 +
 +export default FeedUpdateSection;
 diff --git a/src/web/pages/login/LoginForm.tsx b/src/web/pages/login/LoginForm.tsx
-index 4c667ec..434d0dd 100644
+index 4c667ec..4885889 100644
 --- a/src/web/pages/login/LoginForm.tsx
 +++ b/src/web/pages/login/LoginForm.tsx
 @@ -29,9 +29,13 @@ interface LoginFormProps {
@@ -12611,6 +12748,15 @@ index 4c667ec..434d0dd 100644
    padding: 4rem;
    width: 30rem;
    z-index: ${Theme.Layers.higher};
+@@ -128,7 +132,7 @@ const LoginForm = ({
+ 
+         <>
+           {isDefined(error) && (
+-            <StyledErrorContainer data-testid="error">
++            <StyledErrorContainer data-testid="error" role="alert">
+               {error}
+             </StyledErrorContainer>
+           )}
 @@ -172,9 +176,6 @@ const LoginForm = ({
            </FormGroup>
          )}
@@ -12836,16 +12982,16 @@ index dd0b390..9316ed8 100644
    Layers: {
 diff --git a/src/web/pages/ai-providers/AiProvidersPage.tsx b/src/web/pages/ai-providers/AiProvidersPage.tsx
 new file mode 100644
-index 0000000..7bc97f5
+index 0000000..679e946
 --- /dev/null
 +++ b/src/web/pages/ai-providers/AiProvidersPage.tsx
-@@ -0,0 +1,1073 @@
+@@ -0,0 +1,1201 @@
 +/* SPDX-FileCopyrightText: 2026 Suricatoos
 + *
 + * SPDX-License-Identifier: AGPL-3.0-or-later
 + */
 +
-+import React, {useCallback, useEffect, useRef, useState} from 'react';
++import React, {useCallback, useEffect, useId, useRef, useState} from 'react';
 +import {
 +  Alert,
 +  Anchor,
@@ -12860,6 +13006,7 @@ index 0000000..7bc97f5
 +  Switch,
 +  Text,
 +  TextInput,
++  VisuallyHidden,
 +} from '@mantine/core';
 +import useGmp from 'web/hooks/useGmp';
 +import useTranslation, {type TranslateFunc} from 'web/hooks/useTranslation';
@@ -12871,6 +13018,7 @@ index 0000000..7bc97f5
 +  SuricatoosApiError,
 +} from 'web/utils/suricatoosApi';
 +import {formatApiDate} from 'web/utils/suricatoosDate';
++import LiveRegion from 'web/utils/suricatoosLive';
 +
 +interface Provider {
 +  id: string;
@@ -12934,6 +13082,8 @@ index 0000000..7bc97f5
 +
 +interface NoticeTextProps {
 +  notice: Notice | null;
++  // lets the page move the keyboard focus to the message of a success
++  statusRef?: React.Ref<HTMLDivElement>;
 +}
 +
 +interface AckCheckboxProps {
@@ -12964,6 +13114,7 @@ index 0000000..7bc97f5
 +  token: string;
 +  deleting: ReadonlySet<string>;
 +  notice: Notice | null;
++  noticeRef: React.Ref<HTMLDivElement>;
 +  onSaved: (p: Provider) => void;
 +  onDelete: (p: Provider) => void;
 +}
@@ -12973,6 +13124,7 @@ index 0000000..7bc97f5
 +  token: string;
 +  deleting: ReadonlySet<string>;
 +  notice: Notice | null;
++  noticeRef: React.Ref<HTMLDivElement>;
 +  onNotice: (n: Notice | null) => void;
 +  onSaved: (p: Provider) => void;
 +  onDelete: (p: Provider) => void;
@@ -13118,12 +13270,45 @@ index 0000000..7bc97f5
 +  return options;
 +};
 +
-+const NoticeText = ({notice}: NoticeTextProps) =>
-+  notice === null ? null : (
-+    <Text c={notice.error ? 'red' : 'green'} size="sm">
-+      {notice.text}
-+    </Text>
++// True when the keyboard focus is still where an action left it, so moving it
++// takes nothing from the operator: on no element (the one that had it left the
++// page, or was disabled) or inside `where` (the question that was answered). If
++// it is anywhere else, the operator went on while the request ran: it stays.
++const focusIsFree = (where?: Element | null): boolean => {
++  const active = document.activeElement;
++  return (
++    active === null ||
++    active === document.body ||
++    (where?.contains(active) ?? false)
 +  );
++};
++
++// The result of a save or a delete shows up away from the button that was
++// pressed: an error is read at once, a success in turn. The two live regions
++// are on the page from the start and the text goes into the one that fits, so
++// no node swaps its role between one attempt and the next.
++const NoticeText = ({notice, statusRef}: NoticeTextProps) => (
++  <>
++    <LiveRegion
++      ref={statusRef}
++      role="status"
++      tabIndex={statusRef ? -1 : undefined}
++    >
++      {notice !== null && !notice.error && (
++        <Text c="green" size="sm">
++          {notice.text}
++        </Text>
++      )}
++    </LiveRegion>
++    <LiveRegion role="alert">
++      {notice !== null && notice.error && (
++        <Text c="red" size="sm">
++          {notice.text}
++        </Text>
++      )}
++    </LiveRegion>
++  </>
++);
 +
 +const AckCheckbox = ({checked, description, onChange}: AckCheckboxProps) => {
 +  const [_] = useTranslation();
@@ -13168,10 +13353,43 @@ index 0000000..7bc97f5
 +const DeleteAction = ({name, busy, onConfirm}: DeleteActionProps) => {
 +  const [_] = useTranslation();
 +  const [asking, setAsking] = useState<boolean>(false);
++  const questionId = useId();
++  const deleteButton = useRef<HTMLButtonElement>(null);
++  const cancelButton = useRef<HTMLButtonElement>(null);
++  const question = useRef<HTMLDivElement>(null);
++  const wasAsking = useRef<boolean>(false);
++  const wasBusy = useRef<boolean>(false);
++
++  // The button that was pressed leaves the page when the question shows up (and
++  // the other way round), which would drop the keyboard focus on the page: it
++  // goes to "Cancel", the safe answer, and back to "Delete" if the question is
++  // dropped. Nothing is focused when the page opens.
++  useEffect(() => {
++    if (asking) {
++      cancelButton.current?.focus();
++    } else if (wasAsking.current) {
++      deleteButton.current?.focus();
++    }
++    wasAsking.current = asking;
++  }, [asking]);
++
++  // While the delete runs the buttons are disabled, which takes the focus away.
++  // If it fails the question stays open and the focus goes back to "Cancel" as
++  // soon as the button is enabled again, unless the operator went on to
++  // something else in the meantime. (If it works, the provider and this
++  // component leave the page, and the page moves the focus.)
++  useEffect(() => {
++    if (wasBusy.current && !busy && focusIsFree(question.current)) {
++      cancelButton.current?.focus();
++    }
++    wasBusy.current = busy;
++  }, [busy]);
 +
 +  if (!asking) {
 +    return (
 +      <Button
++        ref={deleteButton}
++        aria-label={_('Delete: {{- name}}', {name})}
 +        color="red"
 +        size="xs"
 +        variant="outline"
@@ -13182,14 +13400,21 @@ index 0000000..7bc97f5
 +    );
 +  }
 +  return (
-+    <Group gap="xs" justify="flex-end">
-+      <Text size="xs">
++    <Group
++      ref={question}
++      aria-labelledby={questionId}
++      gap="xs"
++      justify="flex-end"
++      role="group"
++    >
++      <Text id={questionId} size="xs">
 +        {_('Delete the provider {{- name}}? This cannot be undone.', {name})}
 +      </Text>
 +      <Button color="red" loading={busy} size="xs" onClick={onConfirm}>
 +        {_('Delete')}
 +      </Button>
 +      <Button
++        ref={cancelButton}
 +        disabled={busy}
 +        size="xs"
 +        variant="default"
@@ -13210,6 +13435,7 @@ index 0000000..7bc97f5
 +  const [notice, setNotice] = useState<Notice | null>(null);
 +  const mounted = useMounted();
 +  const listRequest = useLatestRequest();
++  const titleId = useId();
 +
 +  // OpenRouter's catalog is public; UnoRouter lists only with a stored key (the
 +  // server answers 409 without one, so do not even ask).
@@ -13364,11 +13590,13 @@ index 0000000..7bc97f5
 +  );
 +
 +  return (
-+    <Paper withBorder p="md" radius="md">
++    <Paper withBorder aria-labelledby={titleId} p="md" radius="md" role="group">
 +      <Stack gap="sm">
 +        <Group align="flex-start" justify="space-between" wrap="nowrap">
 +          <div>
-+            <Text fw={700}>{p.name}</Text>
++            <Text fw={700} id={titleId}>
++              {p.name}
++            </Text>
 +            <Text c="dimmed" size="xs">
 +              {p.base_url}
 +            </Text>
@@ -13416,7 +13644,11 @@ index 0000000..7bc97f5
 +          allowDeselect={false}
 +          data={options}
 +          description={modelHint}
-+          error={list.state === 'failed' ? list.message : undefined}
++          error={
++            list.state === 'failed' ? (
++              <span role="alert">{list.message}</span>
++            ) : undefined
++          }
 +          label={_('Model')}
 +          nothingFoundMessage={
 +            list.state === 'loading'
@@ -13425,7 +13657,9 @@ index 0000000..7bc97f5
 +          }
 +          placeholder={_('Choose a free model')}
 +          rightSection={
-+            list.state === 'loading' ? <Loader size="xs" /> : undefined
++            list.state === 'loading' ? (
++              <Loader aria-hidden size="xs" />
++            ) : undefined
 +          }
 +          value={form.model === '' ? null : form.model}
 +          onChange={v => setForm(f => ({...f, model: v ?? f.model}))}
@@ -13474,6 +13708,7 @@ index 0000000..7bc97f5
 +  token,
 +  deleting,
 +  notice,
++  noticeRef,
 +  onSaved,
 +  onDelete,
 +}: FreeModelsProps) => {
@@ -13487,7 +13722,12 @@ index 0000000..7bc97f5
 +
 +  return (
 +    <Stack gap="md" maw={760}>
-+      <Alert color="blue" title={_('Free models only')} variant="light">
++      <Alert
++        color="blue"
++        role="note"
++        title={_('Free models only')}
++        variant="light"
++      >
 +        {_(
 +          'Only the free models of OpenRouter and UnoRouter are available (zero cost). Paste the API key of each provider and confirm the acknowledgement to enable it.',
 +        )}
@@ -13546,7 +13786,7 @@ index 0000000..7bc97f5
 +        </Paper>
 +      )}
 +
-+      <NoticeText notice={notice} />
++      <NoticeText notice={notice} statusRef={noticeRef} />
 +    </Stack>
 +  );
 +};
@@ -13557,6 +13797,7 @@ index 0000000..7bc97f5
 +  token,
 +  deleting,
 +  notice,
++  noticeRef,
 +  onNotice,
 +  onSaved,
 +  onDelete,
@@ -13645,7 +13886,7 @@ index 0000000..7bc97f5
 +
 +  return (
 +    <Stack gap="md">
-+      <NoticeText notice={notice} />
++      <NoticeText notice={notice} statusRef={noticeRef} />
 +
 +      {providers.length === 0 ? (
 +        <Text c="dimmed">{_('No providers configured.')}</Text>
@@ -13655,7 +13896,12 @@ index 0000000..7bc97f5
 +            <Group key={p.id} justify="space-between" wrap="nowrap">
 +              <ProviderSummary provider={p} />
 +              <Group gap="xs" wrap="nowrap">
-+                <Button size="xs" variant="default" onClick={() => edit(p)}>
++                <Button
++                  aria-label={_('Edit: {{- name}}', {name: p.name})}
++                  size="xs"
++                  variant="default"
++                  onClick={() => edit(p)}
++                >
 +                  {_('Edit')}
 +                </Button>
 +                <DeleteAction
@@ -13760,6 +14006,12 @@ index 0000000..7bc97f5
 +  );
 +  const [notice, setNotice] = useState<Notice | null>(null);
 +  const mounted = useMounted();
++  // When a delete works, the button that was pressed leaves the page with the
++  // provider and the keyboard focus would fall to the top of the document. It
++  // goes to the notice that says so ("Provider deleted."), once that is on the
++  // page, unless the operator went on to something else while the request ran.
++  const noticeRegion = useRef<HTMLDivElement>(null);
++  const focusNotice = useRef<boolean>(false);
 +
 +  const load = useCallback(
 +    async (signal: AbortSignal) => {
@@ -13811,6 +14063,15 @@ index 0000000..7bc97f5
 +    return () => controller.abort();
 +  }, [load]);
 +
++  useEffect(() => {
++    if (focusNotice.current) {
++      focusNotice.current = false;
++      if (focusIsFree()) {
++        noticeRegion.current?.focus();
++      }
++    }
++  }, [notice]);
++
 +  // The POST answers with the saved provider: the list is updated in place
 +  // instead of reloaded, since every call counts against the nginx rate limit.
 +  const onSaved = useCallback((saved: Provider) => {
@@ -13838,6 +14099,7 @@ index 0000000..7bc97f5
 +          return;
 +        }
 +        setProviders(list => list.filter(x => x.id !== p.id));
++        focusNotice.current = true;
 +        setNotice({text: _('Provider deleted.'), error: false});
 +      } catch (e) {
 +        if (mounted.current) {
@@ -13856,44 +14118,48 @@ index 0000000..7bc97f5
 +    [token, _, mounted],
 +  );
 +
-+  let body: React.ReactNode;
-+  if (loading) {
-+    body = <Loader />;
-+  } else if (loadError !== '') {
-+    body = (
-+      <Alert color="red" variant="light">
-+        {loadError}
-+      </Alert>
-+    );
-+  } else if (policy?.free_models_only === true) {
-+    body = (
-+      <FreeModels
-+        deleting={deleting}
-+        notice={notice}
-+        presets={policy.presets}
-+        providers={providers}
-+        token={token}
-+        onDelete={p => void onDelete(p)}
-+        onSaved={onSaved}
-+      />
-+    );
-+  } else {
-+    body = (
-+      <GenericProviders
-+        deleting={deleting}
-+        notice={notice}
-+        providers={providers}
-+        token={token}
-+        onDelete={p => void onDelete(p)}
-+        onNotice={setNotice}
-+        onSaved={onSaved}
-+      />
-+    );
++  // While it loads there is no body: the loader is in the live region below,
++  // which stays on the page.
++  let body: React.ReactNode = null;
++  if (!loading) {
++    if (loadError !== '') {
++      body = (
++        <Alert color="red" variant="light">
++          {loadError}
++        </Alert>
++      );
++    } else if (policy?.free_models_only === true) {
++      body = (
++        <FreeModels
++          deleting={deleting}
++          notice={notice}
++          noticeRef={noticeRegion}
++          presets={policy.presets}
++          providers={providers}
++          token={token}
++          onDelete={p => void onDelete(p)}
++          onSaved={onSaved}
++        />
++      );
++    } else {
++      body = (
++        <GenericProviders
++          deleting={deleting}
++          notice={notice}
++          noticeRef={noticeRegion}
++          providers={providers}
++          token={token}
++          onDelete={p => void onDelete(p)}
++          onNotice={setNotice}
++          onSaved={onSaved}
++        />
++      );
++    }
 +  }
 +
 +  return (
 +    <Stack gap="md" p="md">
-+      <Text fw={700} size="lg">
++      <Text component="h2" fw={700} size="lg">
 +        {_('AI Providers')}
 +      </Text>
 +      {policy !== null && (
@@ -13907,6 +14173,14 @@ index 0000000..7bc97f5
 +              )}
 +        </Text>
 +      )}
++      <LiveRegion role="status">
++        {loading && (
++          <>
++            <Loader />
++            <VisuallyHidden>{_('Loading...')}</VisuallyHidden>
++          </>
++        )}
++      </LiveRegion>
 +      {body}
 +    </Stack>
 +  );
@@ -16134,15 +16408,28 @@ index 54db558..1ce36f3 100644
  });
  
 diff --git a/src/index.tsx b/src/index.tsx
-index f13de1d..3276ac4 100644
+index f13de1d..02e7e3a 100644
 --- a/src/index.tsx
 +++ b/src/index.tsx
-@@ -5,11 +5,16 @@
+@@ -5,11 +5,29 @@
  
  import {createRoot} from 'react-dom/client';
  import {StyleSheetManager} from 'styled-components';
 +import {onLocaleReady} from 'gmp/locale/lang';
  import App from 'web/App';
++// Suricatoos: the fonts of the theme (public/suricatoos-theme.css) come from
++// this bundle (@fontsource, OFL-1.1; the notices are in
++// public/licenses/fonts-OFL-1.1.txt): nothing is requested from a third-party
++// CDN. Only the weights the theme uses.
++import '@fontsource/inter/400.css';
++import '@fontsource/inter/500.css';
++import '@fontsource/inter/600.css';
++import '@fontsource/inter/700.css';
++import '@fontsource/jetbrains-mono/400.css';
++import '@fontsource/jetbrains-mono/500.css';
++import '@fontsource/space-grotesk/500.css';
++import '@fontsource/space-grotesk/600.css';
++import '@fontsource/space-grotesk/700.css';
  
  const root = createRoot(document.getElementById('app') as HTMLElement);
 -root.render(
@@ -16401,3 +16688,1895 @@ index 0000000..1052f1e
 +  const now = date();
 +  return (parsed.isAfter(now) ? now : parsed).fromNow();
 +};
+diff --git a/package-lock.json b/package-lock.json
+index 69e7f6f..94627e6 100644
+--- a/package-lock.json
++++ b/package-lock.json
+@@ -11,6 +11,9 @@
+       "dependencies": {
+         "@dnd-kit/helpers": "^0.3.2",
+         "@dnd-kit/react": "^0.4.0",
++        "@fontsource/inter": "5.3.0",
++        "@fontsource/jetbrains-mono": "5.3.0",
++        "@fontsource/space-grotesk": "5.3.0",
+         "@greenbone/ui-lib": "^2.8.0",
+         "@mantine/core": "^8.3.16",
+         "@mantine/dates": "^8.3.16",
+@@ -2364,6 +2367,33 @@
+       "integrity": "sha512-aGTxbpbg8/b5JfU1HXSrbH3wXZuLPJcNEcZQFMxLs3oSzgtVu6nFPkbbGGUvBcUjKV2YyB9Wxxabo+HEH9tcRQ==",
+       "license": "MIT"
+     },
++    "node_modules/@fontsource/inter": {
++      "version": "5.3.0",
++      "resolved": "https://registry.npmjs.org/@fontsource/inter/-/inter-5.3.0.tgz",
++      "integrity": "sha512-RofMylZmjlJEfELXeNHFWBRcSs75rGU/6bV2S2jfnvv/3rPXPGe0LgUJTklcHZ9lM4OZmAVFhcJPnACfb91A3g==",
++      "license": "OFL-1.1",
++      "funding": {
++        "url": "https://github.com/sponsors/ayuhito"
++      }
++    },
++    "node_modules/@fontsource/jetbrains-mono": {
++      "version": "5.3.0",
++      "resolved": "https://registry.npmjs.org/@fontsource/jetbrains-mono/-/jetbrains-mono-5.3.0.tgz",
++      "integrity": "sha512-fqDfB5I9f1p1TV486aUgB9t8zP84P0O1FtQR5Ol9vjwPy+S+EIGlVYm1cvj2W5shcZMTg2nZFdVMoH5wFu8a1A==",
++      "license": "OFL-1.1",
++      "funding": {
++        "url": "https://github.com/sponsors/ayuhito"
++      }
++    },
++    "node_modules/@fontsource/space-grotesk": {
++      "version": "5.3.0",
++      "resolved": "https://registry.npmjs.org/@fontsource/space-grotesk/-/space-grotesk-5.3.0.tgz",
++      "integrity": "sha512-ksnGizDPXIDuvqcTYTSrmZ+evx9sDlS8rp7+42BQ7wU+spt3twEoXfbJz672C+5CLg6VeUQwRy5RXshWb67LcQ==",
++      "license": "OFL-1.1",
++      "funding": {
++        "url": "https://github.com/sponsors/ayuhito"
++      }
++    },
+     "node_modules/@greenbone/ui-lib": {
+       "version": "2.8.0",
+       "resolved": "https://registry.npmjs.org/@greenbone/ui-lib/-/ui-lib-2.8.0.tgz",
+diff --git a/package.json b/package.json
+index 18f9765..690bf51 100644
+--- a/package.json
++++ b/package.json
+@@ -39,6 +39,9 @@
+   "dependencies": {
+     "@dnd-kit/helpers": "^0.3.2",
+     "@dnd-kit/react": "^0.4.0",
++    "@fontsource/inter": "5.3.0",
++    "@fontsource/jetbrains-mono": "5.3.0",
++    "@fontsource/space-grotesk": "5.3.0",
+     "@greenbone/ui-lib": "^2.8.0",
+     "@mantine/core": "^8.3.16",
+     "@mantine/dates": "^8.3.16",
+diff --git a/public/licenses/fonts-OFL-1.1.txt b/public/licenses/fonts-OFL-1.1.txt
+new file mode 100644
+index 0000000..79d2216
+--- /dev/null
++++ b/public/licenses/fonts-OFL-1.1.txt
+@@ -0,0 +1,301 @@
++Fonts served by this interface
++==============================
++
++The font files (.woff2 and .woff) under /assets/ come from the @fontsource
++packages below (versions pinned in package.json) and are distributed under the
++SIL Open Font License, Version 1.1 (OFL-1.1). The copyright notice and the
++license text of each font follow, as shipped in its package.
++
++----------------------------------------------------------------------
++Inter - @fontsource/inter 5.3.0
++----------------------------------------------------------------------
++
++Copyright 2016 The Inter Project Authors (https://github.com/rsms/inter) Inter-Italic[opsz,wght].ttf: Copyright 2016 The Inter Project Authors (https://github.com/rsms/inter)
++
++This Font Software is licensed under the SIL Open Font License, Version 1.1.
++This license is copied below, and is also available with a FAQ at:
++http://scripts.sil.org/OFL
++
++
++-----------------------------------------------------------
++SIL OPEN FONT LICENSE Version 1.1 - 26 February 2007
++-----------------------------------------------------------
++
++PREAMBLE
++The goals of the Open Font License (OFL) are to stimulate worldwide
++development of collaborative font projects, to support the font creation
++efforts of academic and linguistic communities, and to provide a free and
++open framework in which fonts may be shared and improved in partnership
++with others.
++
++The OFL allows the licensed fonts to be used, studied, modified and
++redistributed freely as long as they are not sold by themselves. The
++fonts, including any derivative works, can be bundled, embedded,
++redistributed and/or sold with any software provided that any reserved
++names are not used by derivative works. The fonts and derivatives,
++however, cannot be released under any other type of license. The
++requirement for fonts to remain under this license does not apply
++to any document created using the fonts or their derivatives.
++
++DEFINITIONS
++"Font Software" refers to the set of files released by the Copyright
++Holder(s) under this license and clearly marked as such. This may
++include source files, build scripts and documentation.
++
++"Reserved Font Name" refers to any names specified as such after the
++copyright statement(s).
++
++"Original Version" refers to the collection of Font Software components as
++distributed by the Copyright Holder(s).
++
++"Modified Version" refers to any derivative made by adding to, deleting,
++or substituting -- in part or in whole -- any of the components of the
++Original Version, by changing formats or by porting the Font Software to a
++new environment.
++
++"Author" refers to any designer, engineer, programmer, technical
++writer or other person who contributed to the Font Software.
++
++PERMISSION & CONDITIONS
++Permission is hereby granted, free of charge, to any person obtaining
++a copy of the Font Software, to use, study, copy, merge, embed, modify,
++redistribute, and sell modified and unmodified copies of the Font
++Software, subject to the following conditions:
++
++1) Neither the Font Software nor any of its individual components,
++in Original or Modified Versions, may be sold by itself.
++
++2) Original or Modified Versions of the Font Software may be bundled,
++redistributed and/or sold with any software, provided that each copy
++contains the above copyright notice and this license. These can be
++included either as stand-alone text files, human-readable headers or
++in the appropriate machine-readable metadata fields within text or
++binary files as long as those fields can be easily viewed by the user.
++
++3) No Modified Version of the Font Software may use the Reserved Font
++Name(s) unless explicit written permission is granted by the corresponding
++Copyright Holder. This restriction only applies to the primary font name as
++presented to the users.
++
++4) The name(s) of the Copyright Holder(s) or the Author(s) of the Font
++Software shall not be used to promote, endorse or advertise any
++Modified Version, except to acknowledge the contribution(s) of the
++Copyright Holder(s) and the Author(s) or with their explicit written
++permission.
++
++5) The Font Software, modified or unmodified, in part or in whole,
++must be distributed entirely under this license, and must not be
++distributed under any other license. The requirement for fonts to
++remain under this license does not apply to any document created
++using the Font Software.
++
++TERMINATION
++This license becomes null and void if any of the above conditions are
++not met.
++
++DISCLAIMER
++THE FONT SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
++EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO ANY WARRANTIES OF
++MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT
++OF COPYRIGHT, PATENT, TRADEMARK, OR OTHER RIGHT. IN NO EVENT SHALL THE
++COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
++INCLUDING ANY GENERAL, SPECIAL, INDIRECT, INCIDENTAL, OR CONSEQUENTIAL
++DAMAGES, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
++FROM, OUT OF THE USE OR INABILITY TO USE THE FONT SOFTWARE OR FROM
++OTHER DEALINGS IN THE FONT SOFTWARE.
++
++----------------------------------------------------------------------
++Space Grotesk - @fontsource/space-grotesk 5.3.0
++----------------------------------------------------------------------
++
++Copyright 2020 The Space Grotesk Project Authors (https://github.com/floriankarsten/space-grotesk)
++
++This Font Software is licensed under the SIL Open Font License, Version 1.1.
++This license is copied below, and is also available with a FAQ at:
++http://scripts.sil.org/OFL
++
++
++-----------------------------------------------------------
++SIL OPEN FONT LICENSE Version 1.1 - 26 February 2007
++-----------------------------------------------------------
++
++PREAMBLE
++The goals of the Open Font License (OFL) are to stimulate worldwide
++development of collaborative font projects, to support the font creation
++efforts of academic and linguistic communities, and to provide a free and
++open framework in which fonts may be shared and improved in partnership
++with others.
++
++The OFL allows the licensed fonts to be used, studied, modified and
++redistributed freely as long as they are not sold by themselves. The
++fonts, including any derivative works, can be bundled, embedded,
++redistributed and/or sold with any software provided that any reserved
++names are not used by derivative works. The fonts and derivatives,
++however, cannot be released under any other type of license. The
++requirement for fonts to remain under this license does not apply
++to any document created using the fonts or their derivatives.
++
++DEFINITIONS
++"Font Software" refers to the set of files released by the Copyright
++Holder(s) under this license and clearly marked as such. This may
++include source files, build scripts and documentation.
++
++"Reserved Font Name" refers to any names specified as such after the
++copyright statement(s).
++
++"Original Version" refers to the collection of Font Software components as
++distributed by the Copyright Holder(s).
++
++"Modified Version" refers to any derivative made by adding to, deleting,
++or substituting -- in part or in whole -- any of the components of the
++Original Version, by changing formats or by porting the Font Software to a
++new environment.
++
++"Author" refers to any designer, engineer, programmer, technical
++writer or other person who contributed to the Font Software.
++
++PERMISSION & CONDITIONS
++Permission is hereby granted, free of charge, to any person obtaining
++a copy of the Font Software, to use, study, copy, merge, embed, modify,
++redistribute, and sell modified and unmodified copies of the Font
++Software, subject to the following conditions:
++
++1) Neither the Font Software nor any of its individual components,
++in Original or Modified Versions, may be sold by itself.
++
++2) Original or Modified Versions of the Font Software may be bundled,
++redistributed and/or sold with any software, provided that each copy
++contains the above copyright notice and this license. These can be
++included either as stand-alone text files, human-readable headers or
++in the appropriate machine-readable metadata fields within text or
++binary files as long as those fields can be easily viewed by the user.
++
++3) No Modified Version of the Font Software may use the Reserved Font
++Name(s) unless explicit written permission is granted by the corresponding
++Copyright Holder. This restriction only applies to the primary font name as
++presented to the users.
++
++4) The name(s) of the Copyright Holder(s) or the Author(s) of the Font
++Software shall not be used to promote, endorse or advertise any
++Modified Version, except to acknowledge the contribution(s) of the
++Copyright Holder(s) and the Author(s) or with their explicit written
++permission.
++
++5) The Font Software, modified or unmodified, in part or in whole,
++must be distributed entirely under this license, and must not be
++distributed under any other license. The requirement for fonts to
++remain under this license does not apply to any document created
++using the Font Software.
++
++TERMINATION
++This license becomes null and void if any of the above conditions are
++not met.
++
++DISCLAIMER
++THE FONT SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
++EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO ANY WARRANTIES OF
++MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT
++OF COPYRIGHT, PATENT, TRADEMARK, OR OTHER RIGHT. IN NO EVENT SHALL THE
++COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
++INCLUDING ANY GENERAL, SPECIAL, INDIRECT, INCIDENTAL, OR CONSEQUENTIAL
++DAMAGES, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
++FROM, OUT OF THE USE OR INABILITY TO USE THE FONT SOFTWARE OR FROM
++OTHER DEALINGS IN THE FONT SOFTWARE.
++
++----------------------------------------------------------------------
++JetBrains Mono - @fontsource/jetbrains-mono 5.3.0
++----------------------------------------------------------------------
++
++Copyright 2020 The JetBrains Mono Project Authors (https://github.com/JetBrains/JetBrainsMono) JetBrainsMono-Italic[wght].ttf: Copyright 2020 The JetBrains Mono Project Authors (https://github.com/JetBrains/JetBrainsMono)
++
++This Font Software is licensed under the SIL Open Font License, Version 1.1.
++This license is copied below, and is also available with a FAQ at:
++http://scripts.sil.org/OFL
++
++
++-----------------------------------------------------------
++SIL OPEN FONT LICENSE Version 1.1 - 26 February 2007
++-----------------------------------------------------------
++
++PREAMBLE
++The goals of the Open Font License (OFL) are to stimulate worldwide
++development of collaborative font projects, to support the font creation
++efforts of academic and linguistic communities, and to provide a free and
++open framework in which fonts may be shared and improved in partnership
++with others.
++
++The OFL allows the licensed fonts to be used, studied, modified and
++redistributed freely as long as they are not sold by themselves. The
++fonts, including any derivative works, can be bundled, embedded,
++redistributed and/or sold with any software provided that any reserved
++names are not used by derivative works. The fonts and derivatives,
++however, cannot be released under any other type of license. The
++requirement for fonts to remain under this license does not apply
++to any document created using the fonts or their derivatives.
++
++DEFINITIONS
++"Font Software" refers to the set of files released by the Copyright
++Holder(s) under this license and clearly marked as such. This may
++include source files, build scripts and documentation.
++
++"Reserved Font Name" refers to any names specified as such after the
++copyright statement(s).
++
++"Original Version" refers to the collection of Font Software components as
++distributed by the Copyright Holder(s).
++
++"Modified Version" refers to any derivative made by adding to, deleting,
++or substituting -- in part or in whole -- any of the components of the
++Original Version, by changing formats or by porting the Font Software to a
++new environment.
++
++"Author" refers to any designer, engineer, programmer, technical
++writer or other person who contributed to the Font Software.
++
++PERMISSION & CONDITIONS
++Permission is hereby granted, free of charge, to any person obtaining
++a copy of the Font Software, to use, study, copy, merge, embed, modify,
++redistribute, and sell modified and unmodified copies of the Font
++Software, subject to the following conditions:
++
++1) Neither the Font Software nor any of its individual components,
++in Original or Modified Versions, may be sold by itself.
++
++2) Original or Modified Versions of the Font Software may be bundled,
++redistributed and/or sold with any software, provided that each copy
++contains the above copyright notice and this license. These can be
++included either as stand-alone text files, human-readable headers or
++in the appropriate machine-readable metadata fields within text or
++binary files as long as those fields can be easily viewed by the user.
++
++3) No Modified Version of the Font Software may use the Reserved Font
++Name(s) unless explicit written permission is granted by the corresponding
++Copyright Holder. This restriction only applies to the primary font name as
++presented to the users.
++
++4) The name(s) of the Copyright Holder(s) or the Author(s) of the Font
++Software shall not be used to promote, endorse or advertise any
++Modified Version, except to acknowledge the contribution(s) of the
++Copyright Holder(s) and the Author(s) or with their explicit written
++permission.
++
++5) The Font Software, modified or unmodified, in part or in whole,
++must be distributed entirely under this license, and must not be
++distributed under any other license. The requirement for fonts to
++remain under this license does not apply to any document created
++using the Font Software.
++
++TERMINATION
++This license becomes null and void if any of the above conditions are
++not met.
++
++DISCLAIMER
++THE FONT SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
++EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO ANY WARRANTIES OF
++MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT
++OF COPYRIGHT, PATENT, TRADEMARK, OR OTHER RIGHT. IN NO EVENT SHALL THE
++COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
++INCLUDING ANY GENERAL, SPECIAL, INDIRECT, INCIDENTAL, OR CONSEQUENTIAL
++DAMAGES, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
++FROM, OUT OF THE USE OR INABILITY TO USE THE FONT SOFTWARE OR FROM
++OTHER DEALINGS IN THE FONT SOFTWARE.
+diff --git a/src/web/utils/__tests__/suricatoosA11y.test.tsx b/src/web/utils/__tests__/suricatoosA11y.test.tsx
+new file mode 100644
+index 0000000..c4e9f6f
+--- /dev/null
++++ b/src/web/utils/__tests__/suricatoosA11y.test.tsx
+@@ -0,0 +1,1159 @@
++/* SPDX-FileCopyrightText: 2026 Suricatoos
++ *
++ * SPDX-License-Identifier: AGPL-3.0-or-later
++ */
++
++// Accessibility of the screens the Suricatoos patch creates or alters: every
++// control has a name and a label tied to it, what happens is announced, and
++// what is clickable works from the keyboard. Queries go by role and name, the
++// way assistive technology sees the page.
++
++/// <reference types="node" />
++
++/* eslint-disable @typescript-eslint/naming-convention --
++   the keys of the fixtures and of the routes mirror the JSON and the paths of the API */
++
++import {
++  afterEach,
++  beforeEach,
++  describe,
++  expect,
++  test,
++  testing,
++} from '@gsa/testing';
++import {notifications} from '@mantine/notifications';
++import {
++  rendererWith,
++  screen,
++  type userEvent,
++  waitFor,
++  within,
++} from 'web/testing';
++import fs from 'node:fs';
++import path from 'node:path';
++import {renderToStaticMarkup} from 'react-dom/server';
++import {createSession} from 'gmp/testing';
++import {DEFAULT_SEVERITY_RATING} from 'gmp/utils/severity';
++import DataDisplayIcons from 'web/components/dashboard/display/DataDisplayIcons';
++import LoginLogo from 'web/components/img/LoginLogo';
++import Header from 'web/components/structure/Header';
++import LanguageSwitch from 'web/components/structure/LanguageSwitch';
++import AiProvidersPage from 'web/pages/ai-providers/AiProvidersPage';
++import DownloadsPage from 'web/pages/downloads/DownloadsPage';
++import EndpointAgentsPage from 'web/pages/endpoint-agents/EndpointAgentsPage';
++import FeedUpdateSection from 'web/pages/extras/FeedUpdateSection';
++import LoginForm from 'web/pages/login/LoginForm';
++import {cssRules} from 'web/testing/suricatoosCss';
++import LiveRegion from 'web/utils/suricatoosLive';
++
++type Handler = (url: URL, init?: RequestInit) => Response | Promise<Response>;
++
++type User = ReturnType<typeof userEvent.setup>;
++
++const fetchMock = testing.fn<typeof fetch>();
++
++const json = (status: number, body: unknown) =>
++  new Response(body === null ? null : JSON.stringify(body), {
++    status,
++    headers: {'Content-Type': 'application/json'},
++  });
++
++// Answers by path; whatever has no route is a 404 that names the path.
++const serve = (routes: Record<string, Handler>) => {
++  fetchMock.mockImplementation(async (input, init) => {
++    const url = new URL(String(input), 'http://localhost');
++    const handler = routes[url.pathname];
++    return handler
++      ? handler(url, init)
++      : json(404, {error: `no route for ${url.pathname}`});
++  });
++};
++
++const never = () => new Promise<Response>(() => {});
++
++const calls = (path: string) =>
++  fetchMock.mock.calls.filter(
++    ([input]) => new URL(String(input), 'http://localhost').pathname === path,
++  );
++
++const createGmp = (settings: Record<string, unknown> = {}) => ({
++  settings: {severityRating: DEFAULT_SEVERITY_RATING, ...settings},
++  session: createSession({token: 'tok', timezone: 'UTC', username: 'ana'}),
++  doLogout: testing.fn().mockResolvedValue(undefined),
++});
++
++// Tab until the element has the focus: proves it can be reached by keyboard.
++const tabTo = async (user: User, element: HTMLElement, limit = 60) => {
++  for (let i = 0; i < limit && document.activeElement !== element; i++) {
++    await user.tab();
++  }
++  expect(element).toHaveFocus();
++};
++
++// What the live regions of a page say now. They are on the page, empty, until
++// there is something to say, so asking "is there an alert?" is not enough.
++const said = (role: 'status' | 'alert', root: HTMLElement = document.body) =>
++  within(root)
++    .queryAllByRole(role)
++    .map(region => region.textContent ?? '')
++    .filter(text => text !== '');
++
++// The live region that says `text` now (for the focus, which goes to a region).
++const regionSaying = (role: 'status' | 'alert', text: string) => {
++  const region = within(document.body)
++    .queryAllByRole(role)
++    .find(candidate => candidate.textContent === text);
++  if (region === undefined) {
++    throw new Error(`no ${role} region says "${text}"`);
++  }
++  return region;
++};
++
++beforeEach(() => {
++  fetchMock.mockReset();
++  testing.stubGlobal('fetch', fetchMock);
++});
++
++afterEach(() => {
++  testing.unstubAllGlobals();
++  // the toasts live in a store of their own, which outlives each render
++  notifications.clean();
++});
++
++const AGENTS = [
++  {
++    host: 'srv-web-01',
++    task: 'Agent srv-web-01',
++    task_id: 't1',
++    severity: 9.1,
++    threat: 'Critical',
++    findings: 4,
++    critical: 1,
++    high: 2,
++    medium: 1,
++    low: 0,
++    last_report: '2026-10-10T10:00:00Z',
++    report_id: 'r1',
++    reports: 3,
++    last_seen: '2026-10-11T10:00:00Z',
++    online: true,
++    status: 'online',
++  },
++  {
++    host: 'srv-db-02',
++    task: 'Agent srv-db-02',
++    task_id: 't2',
++    severity: 0,
++    threat: 'Log',
++    findings: 0,
++    critical: 0,
++    high: 0,
++    medium: 0,
++    low: 0,
++    last_report: '',
++    report_id: '',
++    reports: 0,
++    last_seen: '',
++    online: false,
++    status: 'offline',
++  },
++];
++
++describe('Endpoint Agents', () => {
++  test('the actions of a row name the host and keep the visible text in the name', async () => {
++    serve({'/agents/data.json': () => json(200, AGENTS)});
++    const {render} = rendererWith({gmp: createGmp()});
++    render(<EndpointAgentsPage />);
++
++    const scan = await screen.findByRole('button', {
++      name: 'Scan now: srv-web-01',
++    });
++    expect(scan).toHaveTextContent('Scan now');
++    const findings = screen.getByRole('link', {
++      name: 'View findings: srv-web-01',
++    });
++    expect(findings).toHaveTextContent('View findings');
++    expect(findings).toHaveAttribute('href', '/report/r1');
++
++    // the host without a report has no link, but its action has a name too
++    expect(
++      screen.getByRole('button', {name: 'Scan now: srv-db-02'}),
++    ).toBeInTheDocument();
++    expect(
++      screen.queryByRole('link', {name: /srv-db-02/}),
++    ).not.toBeInTheDocument();
++  });
++
++  test('Scan now is reached with Tab and works with Enter and Space', async () => {
++    serve({
++      '/agents/data.json': () => json(200, AGENTS),
++      '/agents/scan': () => json(200, {}),
++    });
++    const {render} = rendererWith({gmp: createGmp()});
++    const {userEvent} = render(<EndpointAgentsPage />);
++
++    const scan = await screen.findByRole('button', {
++      name: 'Scan now: srv-web-01',
++    });
++    await tabTo(userEvent, scan);
++    await userEvent.keyboard('{Enter}');
++    await waitFor(() => expect(calls('/agents/scan')).toHaveLength(1));
++    expect(String(calls('/agents/scan')[0][0])).toBe(
++      '/agents/scan?id=srv-web-01&token=tok',
++    );
++    expect(calls('/agents/scan')[0][1]?.method).toBe('POST');
++
++    await userEvent.keyboard(' ');
++    await waitFor(() => expect(calls('/agents/scan')).toHaveLength(2));
++  });
++
++  test('the columns sort from the keyboard', async () => {
++    serve({'/agents/data.json': () => json(200, AGENTS)});
++    const {render} = rendererWith({gmp: createGmp()});
++    const {userEvent} = render(<EndpointAgentsPage />);
++
++    await screen.findByText('srv-web-01');
++    const hostsInOrder = () =>
++      screen
++        .getAllByRole('row')
++        .slice(1)
++        .map(row => within(row).getAllByRole('cell')[0].textContent);
++    // by severity, the highest first
++    expect(hostsInOrder()[0]).toContain('srv-web-01');
++
++    const host = screen.getByTestId('table-header-sort-by-host');
++    expect(host.tagName).toBe('BUTTON');
++    await tabTo(userEvent, host);
++    await userEvent.keyboard('{Enter}');
++    await waitFor(() => expect(hostsInOrder()[0]).toContain('srv-db-02'));
++  });
++
++  test('says aloud that it is loading, in a region that was already on the page', async () => {
++    let release: (answer: Response) => void = () => {};
++    serve({
++      '/agents/data.json': () =>
++        new Promise<Response>(resolve => {
++          release = resolve;
++        }),
++    });
++    const {render} = rendererWith({gmp: createGmp()});
++    render(<EndpointAgentsPage />);
++    const status = screen.getByRole('status');
++    expect(status).toHaveTextContent('Loading...');
++
++    release(json(200, AGENTS));
++    await screen.findByText('srv-web-01');
++    // the node stays, empty, instead of going away with the message
++    expect(screen.getByRole('status')).toBe(status);
++    expect(status).toBeEmptyDOMElement();
++  });
++
++  test('says aloud what went wrong', async () => {
++    serve({'/agents/data.json': () => json(500, {error: 'boom'})});
++    const {render} = rendererWith({gmp: createGmp()});
++    render(<EndpointAgentsPage />);
++    expect(await screen.findByRole('alert')).toHaveTextContent(
++      'Error loading the agents',
++    );
++  });
++
++  test('an expired session is announced as an alert', async () => {
++    serve({'/agents/data.json': () => json(401, {error: 'no session'})});
++    const {render} = rendererWith({gmp: createGmp()});
++    render(<EndpointAgentsPage />);
++    expect(await screen.findByRole('alert')).toHaveTextContent(
++      'Session expired',
++    );
++  });
++});
++
++describe('Activate Agent', () => {
++  const ENROLL = {
++    tenant: 'acme',
++    target: 'windows',
++    command: 'iwr https://x.example/install.ps1 | iex',
++    server: 's',
++    ca_pin: 'p',
++    token_id: 'k',
++    max_uses: 5,
++    expires_at: '2026-10-20T12:00:00Z',
++  };
++
++  test('the tenant select has the label tied to it', async () => {
++    serve({
++      '/agent/provision/tenants': () => json(200, {tenants: ['acme', 'beta']}),
++    });
++    const {render} = rendererWith({gmp: createGmp()});
++    render(<DownloadsPage />);
++
++    const select = screen.getByRole('combobox', {name: 'Tenant:'});
++    expect(screen.getByLabelText('Tenant:')).toBe(select);
++    await waitFor(() =>
++      expect(within(select).getAllByRole('option')).toHaveLength(3),
++    );
++  });
++
++  test('the whole flow works from the keyboard', async () => {
++    serve({
++      '/agent/provision/tenants': () => json(200, {tenants: ['acme', 'beta']}),
++      '/agent/provision/enroll-command': () => json(200, ENROLL),
++    });
++    const {render} = rendererWith({gmp: createGmp()});
++    const {userEvent} = render(<DownloadsPage />);
++
++    const select = screen.getByRole('combobox', {name: 'Tenant:'});
++    await waitFor(() =>
++      expect(within(select).getAllByRole('option')).toHaveLength(3),
++    );
++    const docker = screen.getByRole('button', {name: 'Docker'});
++    expect(docker).toBeDisabled();
++
++    await tabTo(userEvent, select);
++    await userEvent.selectOptions(select, 'acme');
++    expect(docker).toBeEnabled();
++
++    await tabTo(userEvent, docker);
++    await userEvent.keyboard('{Enter}');
++    await screen.findByText(ENROLL.command);
++    expect(String(calls('/agent/provision/enroll-command')[0][0])).toBe(
++      '/agent/provision/enroll-command?tenant=acme&target=docker&token=tok',
++    );
++  });
++
++  test('says aloud that it is generating the command', async () => {
++    serve({
++      '/agent/provision/tenants': () => json(200, {tenants: ['acme']}),
++      '/agent/provision/enroll-command': never,
++    });
++    const {render} = rendererWith({gmp: createGmp()});
++    const {userEvent} = render(<DownloadsPage />);
++    // the region is on the page, empty, before anything is asked
++    const status = screen.getByRole('status');
++    expect(status).toBeEmptyDOMElement();
++
++    const docker = await screen.findByRole('button', {name: 'Docker'});
++    await waitFor(() => expect(docker).toBeEnabled());
++    await userEvent.click(docker);
++    await waitFor(() =>
++      expect(status).toHaveTextContent('Generating command…'),
++    );
++  });
++
++  test('the error is an alert and describes the select', async () => {
++    serve({
++      '/agent/provision/tenants': () => json(200, {tenants: ['acme']}),
++      '/agent/provision/enroll-command': () => json(500, {error: 'boom'}),
++    });
++    const {render} = rendererWith({gmp: createGmp()});
++    const {userEvent} = render(<DownloadsPage />);
++    const select = screen.getByRole('combobox', {name: 'Tenant:'});
++    expect(select).not.toHaveAttribute('aria-describedby');
++
++    const docker = await screen.findByRole('button', {name: 'Docker'});
++    await waitFor(() => expect(docker).toBeEnabled());
++    await userEvent.click(docker);
++
++    const alert = await screen.findByRole('alert');
++    expect(alert).toHaveTextContent('Error generating the command');
++    expect(select).toHaveAccessibleDescription(alert.textContent as string);
++  });
++
++  test('a tenant list that fails to load is announced too', async () => {
++    serve({'/agent/provision/tenants': () => json(500, {error: 'boom'})});
++    const {render} = rendererWith({gmp: createGmp()});
++    render(<DownloadsPage />);
++    const alert = await screen.findByRole('alert');
++    expect(
++      screen.getByRole('combobox', {name: 'Tenant:'}),
++    ).toHaveAccessibleDescription(alert.textContent as string);
++  });
++
++  test('says aloud that the command was copied', async () => {
++    serve({
++      '/agent/provision/tenants': () => json(200, {tenants: ['acme']}),
++      '/agent/provision/enroll-command': () => json(200, ENROLL),
++    });
++    const {render} = rendererWith({gmp: createGmp()});
++    const {userEvent} = render(<DownloadsPage />);
++    const windows = await screen.findByRole('button', {name: 'Windows'});
++    await waitFor(() => expect(windows).toBeEnabled());
++    await userEvent.click(windows);
++    await screen.findByText(ENROLL.command);
++
++    // the region of the result is already on the page, empty, when the button
++    // is pressed (next to the button; the region of "generating" is elsewhere)
++    const copy = screen.getByRole('button', {name: 'Copy'});
++    const status = within(copy.parentElement as HTMLElement).getByRole(
++      'status',
++    );
++    expect(status).toBeEmptyDOMElement();
++    await tabTo(userEvent, copy);
++    await userEvent.keyboard('{Enter}');
++    await waitFor(() => expect(status).toHaveTextContent('Copied ✓'));
++    expect(await navigator.clipboard.readText()).toBe(ENROLL.command);
++  });
++});
++
++describe('Feed update', () => {
++  const STATUS = {
++    state: 'idle',
++    last_run: '2026-10-11 10:00:00',
++    last_result: 'success',
++    updated: ['nvt'],
++    schedule: {enabled: true, frequency: 'weekly', weekday: 2, time: '03:00'},
++  };
++
++  test('the time field has its label, and the title is a heading', async () => {
++    serve({'/feed-sync/status': () => json(200, STATUS)});
++    const {render} = rendererWith({gmp: createGmp()});
++    render(<FeedUpdateSection />);
++
++    const time = await screen.findByLabelText('Time');
++    expect(time.tagName).toBe('INPUT');
++    expect(time).toHaveAttribute('type', 'time');
++    await waitFor(() => expect(time).toHaveValue('03:00'));
++    expect(
++      screen.getByRole('heading', {level: 3, name: 'Feed update'}),
++    ).toBeInTheDocument();
++    // every field of the form is named
++    expect(
++      screen.getByRole('switch', {name: 'Enable automatic update'}),
++    ).toBeInTheDocument();
++    expect(
++      screen.getByRole('textbox', {name: 'Frequency'}),
++    ).toBeInTheDocument();
++    expect(
++      screen.getByRole('textbox', {name: 'Day of week'}),
++    ).toBeInTheDocument();
++  });
++
++  test('says aloud that the schedule was saved', async () => {
++    serve({
++      '/feed-sync/status': () => json(200, STATUS),
++      '/feed-sync/schedule': () => json(200, STATUS.schedule),
++    });
++    const {render} = rendererWith({gmp: createGmp()});
++    const {userEvent} = render(<FeedUpdateSection />);
++    await screen.findByLabelText('Time');
++
++    // the region is on the page before the save, so the change is announced; it
++    // takes no room while empty (no gap slot in the row of the button)
++    const status = screen.getByRole('status');
++    expect(status).toBeEmptyDOMElement();
++    expect(status).toHaveStyle({position: 'absolute'});
++    await tabTo(userEvent, screen.getByRole('button', {name: 'Save schedule'}));
++    await userEvent.keyboard('{Enter}');
++    await waitFor(() => expect(status).toHaveTextContent('Saved'));
++    expect(status).toHaveStyle({position: 'static'});
++    expect(screen.getByRole('status')).toBe(status);
++  });
++
++  test('the error is an alert', async () => {
++    serve({'/feed-sync/status': () => json(403, {error: 'forbidden'})});
++    const {render} = rendererWith({gmp: createGmp()});
++    render(<FeedUpdateSection />);
++    expect(await screen.findByRole('alert')).toHaveTextContent(
++      'No permission from this network',
++    );
++  });
++});
++
++describe('AI Providers', () => {
++  const PROVIDERS = [
++    {
++      id: 'openrouter',
++      name: 'OpenRouter',
++      kind: 'openrouter',
++      base_url: 'https://openrouter.ai/api/v1',
++      model: 'x/free-model:free',
++      eu_region: false,
++      zdr: false,
++      enabled: true,
++      has_key: true,
++      key_last4: 'abcd',
++      data_policy_ack: true,
++      data_policy_ack_by: 'ana',
++      data_policy_ack_at: '2026-10-01T12:00:00Z',
++    },
++    {
++      id: 'unorouter',
++      name: 'UnoRouter',
++      kind: 'unorouter',
++      base_url: 'https://api.unorouter.com/v1',
++      model: '',
++      eu_region: false,
++      zdr: false,
++      enabled: false,
++      has_key: false,
++      data_policy_ack: false,
++    },
++    {
++      id: 'legacy',
++      name: 'Legacy',
++      kind: 'openai_compatible',
++      base_url: 'https://llm.example.com/v1',
++      model: 'gpt-x',
++      eu_region: true,
++      zdr: true,
++      enabled: false,
++      has_key: true,
++      key_last4: '1234',
++    },
++  ];
++
++  const FREE_ONLY = {
++    free_models_only: true,
++    presets: ['openrouter', 'unorouter'],
++  };
++  const OPEN = {free_models_only: false, presets: []};
++
++  const serveProviders = (
++    policy: unknown,
++    extra: Record<string, Handler> = {},
++  ) =>
++    serve({
++      '/ai-providers/api/policy': () => json(200, policy),
++      '/ai-providers/api/providers': () => json(200, {providers: PROVIDERS}),
++      ...extra,
++    });
++
++  test('the page title is a heading and the loading is said aloud', async () => {
++    serve({
++      '/ai-providers/api/policy': never,
++      '/ai-providers/api/providers': never,
++    });
++    const {render} = rendererWith({gmp: createGmp()});
++    render(<AiProvidersPage />);
++    expect(
++      screen.getByRole('heading', {level: 2, name: 'AI Providers'}),
++    ).toBeInTheDocument();
++    expect(screen.getByRole('status')).toHaveTextContent('Loading...');
++  });
++
++  test('the region of the loading stays on the page when the loading ends', async () => {
++    serveProviders(FREE_ONLY);
++    const {render} = rendererWith({gmp: createGmp()});
++    render(<AiProvidersPage />);
++    const status = screen.getByRole('status');
++    expect(status).toHaveTextContent('Loading...');
++
++    await screen.findByRole('group', {name: 'OpenRouter'});
++    // the same node, empty: the page does not hand a new region to the reader
++    expect(status).toBeInTheDocument();
++    expect(status).toBeEmptyDOMElement();
++  });
++
++  test('the fixed notice about free models is a note, not an alert', async () => {
++    serveProviders(FREE_ONLY);
++    const {render} = rendererWith({gmp: createGmp()});
++    render(<AiProvidersPage />);
++
++    const note = await screen.findByRole('note', {name: 'Free models only'});
++    expect(note).toHaveTextContent(
++      'Only the free models of OpenRouter and UnoRouter',
++    );
++    // a screen that is just shown must not interrupt the reader: the notice is
++    // not an alert and is not inside one. The alert regions of the cards are on
++    // the page, empty, waiting for a result, so "no alert" is "no alert with
++    // text".
++    expect(note.closest('[role="alert"]')).toBeNull();
++    expect(within(note).queryAllByRole('alert')).toEqual([]);
++    expect(said('alert')).toEqual([]);
++  });
++
++  test('each preset is a group named by its provider, with its fields labelled', async () => {
++    serveProviders(FREE_ONLY);
++    const {render} = rendererWith({gmp: createGmp()});
++    render(<AiProvidersPage />);
++
++    for (const name of ['OpenRouter', 'UnoRouter']) {
++      const card = await screen.findByRole('group', {name});
++      const inside = within(card);
++      expect(inside.getByLabelText('API key')).toHaveAttribute(
++        'type',
++        'password',
++      );
++      expect(inside.getByRole('textbox', {name: 'Model'})).toBeInTheDocument();
++      expect(
++        inside.getByRole('checkbox', {name: /Free models may log/}),
++      ).toBeInTheDocument();
++      expect(inside.getByRole('switch', {name: /^Enable/})).toBeInTheDocument();
++      expect(inside.getByRole('button', {name: 'Save'})).toBeInTheDocument();
++    }
++  });
++
++  test('the form of the open policy has every field labelled', async () => {
++    serveProviders(OPEN);
++    const {render} = rendererWith({gmp: createGmp()});
++    render(<AiProvidersPage />);
++    await screen.findByText('Add provider');
++
++    for (const label of ['Name', 'Base URL', 'Model']) {
++      expect(screen.getByRole('textbox', {name: label})).toBeInTheDocument();
++    }
++    expect(
++      screen.getByLabelText('API key (leave blank to keep the current one)'),
++    ).toHaveAttribute('type', 'password');
++    expect(screen.getByRole('textbox', {name: 'Type'})).toBeInTheDocument();
++    for (const label of ['EU region', 'Zero data retention (ZDR)', 'Enabled']) {
++      expect(screen.getByRole('switch', {name: label})).toBeInTheDocument();
++    }
++    expect(
++      screen.getByRole('checkbox', {name: /Free models may log/}),
++    ).toBeInTheDocument();
++  });
++
++  test('a saved preset is announced as a status, a failed one as an alert', async () => {
++    let answer = 200;
++    serveProviders(FREE_ONLY, {
++      '/ai-providers/api/providers': (_url, init) =>
++        init?.method === 'POST'
++          ? answer === 200
++            ? json(200, {provider: PROVIDERS[1]})
++            : json(422, {error: 'ack required'})
++          : json(200, {providers: PROVIDERS}),
++    });
++    const {render} = rendererWith({gmp: createGmp()});
++    const {userEvent} = render(<AiProvidersPage />);
++    const card = within(await screen.findByRole('group', {name: 'UnoRouter'}));
++    const save = card.getByRole('button', {name: 'Save'});
++
++    // both regions are on the card from the start, empty
++    const status = card.getByRole('status');
++    const alert = card.getByRole('alert');
++    expect(status).toBeEmptyDOMElement();
++    expect(alert).toBeEmptyDOMElement();
++
++    await tabTo(userEvent, save);
++    await userEvent.keyboard('{Enter}');
++    await waitFor(() => expect(status).toHaveTextContent('Provider saved.'));
++    expect(alert).toBeEmptyDOMElement();
++
++    answer = 422;
++    await userEvent.click(save);
++    await waitFor(() => expect(alert).not.toBeEmptyDOMElement());
++    expect(status).toBeEmptyDOMElement();
++
++    // and the success again, after the error: still the same two nodes, each
++    // with the role it had, so no region swaps its role between attempts
++    answer = 200;
++    await userEvent.click(save);
++    await waitFor(() => expect(status).toHaveTextContent('Provider saved.'));
++    expect(alert).toBeEmptyDOMElement();
++    expect(card.getByRole('status')).toBe(status);
++    expect(card.getByRole('alert')).toBe(alert);
++  });
++
++  test('the failure to list the models is an alert tied to the field', async () => {
++    serveProviders(FREE_ONLY, {
++      '/ai-providers/api/providers/openrouter/models': () =>
++        json(500, {error: 'boom'}),
++    });
++    const {render} = rendererWith({gmp: createGmp()});
++    const {userEvent} = render(<AiProvidersPage />);
++    const card = within(await screen.findByRole('group', {name: 'OpenRouter'}));
++    const model = card.getByRole('textbox', {name: 'Model'});
++
++    await userEvent.click(model);
++    await waitFor(() => expect(model).toHaveAttribute('aria-invalid', 'true'));
++    // the alert of the field is the one with text (the one of the card is empty)
++    const alerts = card
++      .getAllByRole('alert')
++      .filter(region => region.textContent !== '');
++    expect(alerts).toHaveLength(1);
++    expect(model).toHaveAccessibleDescription(alerts[0].textContent as string);
++  });
++
++  test('the rows of the providers name the provider in Edit and Delete', async () => {
++    serveProviders(OPEN);
++    const {render} = rendererWith({gmp: createGmp()});
++    render(<AiProvidersPage />);
++    await screen.findByText('Add provider');
++
++    for (const name of ['OpenRouter', 'UnoRouter', 'Legacy']) {
++      const edit = screen.getByRole('button', {name: `Edit: ${name}`});
++      expect(edit).toHaveTextContent('Edit');
++      const del = screen.getByRole('button', {name: `Delete: ${name}`});
++      expect(del).toHaveTextContent('Delete');
++    }
++  });
++
++  test('the focus follows the delete question and goes back when it is dropped', async () => {
++    serveProviders(OPEN, {
++      '/ai-providers/api/providers/legacy': () => json(204, null),
++    });
++    const {render} = rendererWith({gmp: createGmp()});
++    const {userEvent} = render(<AiProvidersPage />);
++    await screen.findByText('Add provider');
++    // nothing takes the focus when the page opens
++    expect(document.body).toHaveFocus();
++
++    const remove = screen.getByRole('button', {name: 'Delete: Legacy'});
++    await tabTo(userEvent, remove);
++    await userEvent.keyboard('{Enter}');
++
++    const question = await screen.findByRole('group', {
++      name: /Delete the provider Legacy\? This cannot be undone\./,
++    });
++    const cancel = within(question).getByRole('button', {name: 'Cancel'});
++    expect(cancel).toHaveFocus();
++
++    // Cancel drops the question and the focus is back on the button that asked
++    await userEvent.keyboard('{Enter}');
++    await waitFor(() =>
++      expect(
++        screen.getByRole('button', {name: 'Delete: Legacy'}),
++      ).toHaveFocus(),
++    );
++    expect(
++      screen.queryByRole('group', {name: /Delete the provider/}),
++    ).toBeNull();
++
++    // asked again, the answer "Delete" is reached with Tab and sends the DELETE
++    await userEvent.keyboard('{Enter}');
++    const asked = await screen.findByRole('group', {
++      name: /Delete the provider/,
++    });
++    await userEvent.tab({shift: true});
++    const confirm = within(asked).getAllByRole('button', {name: 'Delete'})[0];
++    expect(confirm).toHaveFocus();
++    await userEvent.keyboard('{Enter}');
++    await waitFor(() =>
++      expect(calls('/ai-providers/api/providers/legacy')).toHaveLength(1),
++    );
++    expect(calls('/ai-providers/api/providers/legacy')[0][1]?.method).toBe(
++      'DELETE',
++    );
++    await waitFor(() => expect(said('status')).toEqual(['Provider deleted.']));
++    // the button that was pressed left the page with the provider: the focus is
++    // on the notice that says so (it is read with the focus), and not on the
++    // top of the document
++    expect(regionSaying('status', 'Provider deleted.')).toHaveFocus();
++  });
++
++  test('the notice takes the focus after a delete in the free-models layout too', async () => {
++    serveProviders(FREE_ONLY, {
++      '/ai-providers/api/providers/legacy': () => json(204, null),
++    });
++    const {render} = rendererWith({gmp: createGmp()});
++    const {userEvent} = render(<AiProvidersPage />);
++    await screen.findByRole('group', {name: 'OpenRouter'});
++    await userEvent.click(screen.getByRole('button', {name: 'Delete: Legacy'}));
++    const asked = await screen.findByRole('group', {
++      name: /Delete the provider/,
++    });
++    await userEvent.click(
++      within(asked).getAllByRole('button', {name: 'Delete'})[0],
++    );
++
++    await waitFor(() => expect(said('status')).toEqual(['Provider deleted.']));
++    expect(regionSaying('status', 'Provider deleted.')).toHaveFocus();
++  });
++
++  test('a failed delete is announced as an alert and the focus goes back to Cancel', async () => {
++    serveProviders(OPEN, {
++      '/ai-providers/api/providers/legacy': () => json(500, {error: 'boom'}),
++    });
++    const {render} = rendererWith({gmp: createGmp()});
++    const {userEvent} = render(<AiProvidersPage />);
++    await screen.findByText('Add provider');
++    await userEvent.click(screen.getByRole('button', {name: 'Delete: Legacy'}));
++    const asked = await screen.findByRole('group', {
++      name: /Delete the provider/,
++    });
++    const cancel = within(asked).getByRole('button', {name: 'Cancel'});
++    await userEvent.click(
++      within(asked).getAllByRole('button', {name: 'Delete'})[0],
++    );
++
++    await waitFor(() => expect(said('alert')).toHaveLength(1));
++    expect(said('status')).toEqual([]);
++    // the buttons were disabled while the request ran, which took the focus
++    // away: once enabled again the focus goes back to "Cancel"
++    await waitFor(() => expect(cancel).toHaveFocus());
++    expect(
++      screen.getByRole('group', {name: /Delete the provider/}),
++    ).toBeInTheDocument();
++  });
++
++  describe('when the operator goes on to another field while the delete runs', () => {
++    // The DELETE is held until the test lets it go; the operator confirms it
++    // and then clicks into the "Name" field of the form.
++    const startAndMoveOn = async (): Promise<{
++      answer: (response: Response) => void;
++      name: HTMLElement;
++    }> => {
++      let answer: (response: Response) => void = () => {};
++      serveProviders(OPEN, {
++        '/ai-providers/api/providers/legacy': () =>
++          new Promise<Response>(resolve => {
++            answer = resolve;
++          }),
++      });
++      const {render} = rendererWith({gmp: createGmp()});
++      const {userEvent} = render(<AiProvidersPage />);
++      await screen.findByText('Add provider');
++      await userEvent.click(
++        screen.getByRole('button', {name: 'Delete: Legacy'}),
++      );
++      const asked = await screen.findByRole('group', {
++        name: /Delete the provider/,
++      });
++      await userEvent.click(
++        within(asked).getAllByRole('button', {name: 'Delete'})[0],
++      );
++      await waitFor(() =>
++        expect(calls('/ai-providers/api/providers/legacy')).toHaveLength(1),
++      );
++
++      const name = screen.getByRole('textbox', {name: 'Name'});
++      await userEvent.click(name);
++      expect(name).toHaveFocus();
++      return {answer: response => answer(response), name};
++    };
++
++    test('a delete that works does not take the focus from the field', async () => {
++      const {answer, name} = await startAndMoveOn();
++
++      answer(json(204, null));
++      await waitFor(() =>
++        expect(said('status')).toEqual(['Provider deleted.']),
++      );
++      expect(name).toHaveFocus();
++      expect(regionSaying('status', 'Provider deleted.')).not.toHaveFocus();
++    });
++
++    test('a delete that fails does not take the focus from the field', async () => {
++      const {answer, name} = await startAndMoveOn();
++
++      answer(json(500, {error: 'boom'}));
++      await waitFor(() => expect(said('alert')).toHaveLength(1));
++      const asked = screen.getByRole('group', {name: /Delete the provider/});
++      const cancel = within(asked).getByRole('button', {name: 'Cancel'});
++      await waitFor(() => expect(cancel).toBeEnabled());
++      expect(name).toHaveFocus();
++      expect(cancel).not.toHaveFocus();
++    });
++  });
++
++  test('the load error is an alert', async () => {
++    serve({
++      '/ai-providers/api/policy': () => json(500, {error: 'boom'}),
++      '/ai-providers/api/providers': () => json(500, {error: 'boom'}),
++    });
++    const {render} = rendererWith({gmp: createGmp()});
++    render(<AiProvidersPage />);
++    expect(await screen.findByRole('alert')).toBeInTheDocument();
++  });
++});
++
++describe('Language switch', () => {
++  // jsdom has no layout, so Mantine never gets the position of the dropdown and
++  // keeps it display:none: the menu is queried with { hidden: true } here.
++  const hidden = {hidden: true};
++
++  const renderSwitch = (language = 'pt_BR') => {
++    const setLanguage = testing.fn().mockResolvedValue(undefined);
++    const {render} = rendererWith({language: {language, setLanguage}});
++    return {...render(<LanguageSwitch />), setLanguage};
++  };
++
++  test('the button has a name of its own, not only a tooltip', () => {
++    renderSwitch();
++    const button = screen.getByRole('button', {name: 'Select language'});
++    expect(button).toHaveAttribute('aria-label', 'Select language');
++    expect(button).toHaveAttribute('aria-haspopup', 'menu');
++    expect(button).toHaveAttribute('aria-expanded', 'false');
++    // the flag is a drawing: it has no name and assistive technology skips it
++    for (const flag of button.querySelectorAll('svg')) {
++      expect(flag).toHaveAttribute('aria-hidden', 'true');
++    }
++  });
++
++  test('opens from the keyboard and tells the languages and the current one', async () => {
++    const {userEvent} = renderSwitch('es');
++    const button = screen.getByRole('button', {name: 'Select language'});
++    await tabTo(userEvent, button);
++    await userEvent.keyboard('{Enter}');
++
++    // the menu is named by the button that opened it (the name of a display:none
++    // element is empty for the DOM, so the link is what is asserted)
++    const menu = await screen.findByRole('menu', hidden);
++    expect(menu).toHaveAttribute('aria-labelledby', button.id);
++    expect(button.id).not.toBe('');
++    const items = within(menu).getAllByRole('menuitem', hidden);
++    expect(items.map(i => i.textContent)).toEqual([
++      'Português (Brasil)',
++      'Español',
++      'English',
++    ]);
++    // each name is in its own language
++    expect(
++      items.map(i => i.querySelector('[lang]')?.getAttribute('lang')),
++    ).toEqual(['pt-BR', 'es', 'en']);
++    // the current one is told, not only shown in bold
++    expect(items.map(i => i.getAttribute('aria-current'))).toEqual([
++      null,
++      'true',
++      null,
++    ]);
++    for (const flag of menu.querySelectorAll('svg')) {
++      expect(flag).toHaveAttribute('aria-hidden', 'true');
++    }
++  });
++
++  test('picks a language with the arrow keys and Enter', async () => {
++    const {userEvent, setLanguage} = renderSwitch('pt_BR');
++    await tabTo(
++      userEvent,
++      screen.getByRole('button', {name: 'Select language'}),
++    );
++    await userEvent.keyboard('{Enter}');
++    await screen.findByRole('menu', hidden);
++
++    // the first arrow lands on the first item: pt-BR, es, en
++    await userEvent.keyboard('{ArrowDown}{ArrowDown}{ArrowDown}');
++    expect(
++      screen.getByRole('menuitem', {name: 'English', ...hidden}),
++    ).toHaveFocus();
++    await userEvent.keyboard('{Enter}');
++    expect(setLanguage).toHaveBeenCalledWith('en');
++  });
++
++  test('Escape closes the menu and the focus returns to the button', async () => {
++    const {userEvent} = renderSwitch();
++    const button = screen.getByRole('button', {name: 'Select language'});
++    await tabTo(userEvent, button);
++    await userEvent.keyboard('{Enter}');
++    await screen.findByRole('menu', hidden);
++    expect(button).toHaveAttribute('aria-expanded', 'true');
++    await userEvent.keyboard('{Escape}');
++    await waitFor(() => expect(screen.queryByRole('menu', hidden)).toBeNull());
++    expect(button).toHaveAttribute('aria-expanded', 'false');
++    expect(button).toHaveFocus();
++  });
++});
++
++describe('Login', () => {
++  const submit = testing.fn();
++
++  test('the fields are labelled and the error is an alert', async () => {
++    const {render} = rendererWith({gmp: createGmp()});
++    const {userEvent} = render(
++      <LoginForm
++        error="Login Failed. Invalid password or username."
++        onGuestLoginClick={testing.fn()}
++        onSubmit={submit}
++      />,
++    );
++
++    const user = screen.getByLabelText('Username');
++    const password = screen.getByLabelText('Password');
++    expect(user).toHaveAttribute('name', 'username');
++    expect(password).toHaveAttribute('name', 'password');
++    expect(screen.getByRole('alert')).toHaveTextContent(
++      'Login Failed. Invalid password or username.',
++    );
++
++    // Tab order: username, password, Sign in; Enter on the button submits
++    expect(user).toHaveFocus();
++    await userEvent.type(user, 'ana');
++    await userEvent.tab();
++    expect(password).toHaveFocus();
++    await userEvent.type(password, 'secret');
++    await userEvent.tab();
++    expect(screen.getByRole('button', {name: 'Sign in'})).toHaveFocus();
++    await userEvent.keyboard('{Enter}');
++    expect(submit).toHaveBeenCalledWith('ana', 'secret');
++  });
++
++  test('without an error there is no alert', () => {
++    const {render} = rendererWith({gmp: createGmp()});
++    render(<LoginForm onGuestLoginClick={testing.fn()} onSubmit={submit} />);
++    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
++  });
++
++  test('the logo is named after the product it shows', () => {
++    const {render} = rendererWith({
++      gmp: createGmp({vendorTitle: 'Suricatoos'}),
++    });
++    render(<LoginLogo />);
++    expect(screen.getByRole('img', {name: 'Suricatoos'})).toBeInTheDocument();
++  });
++
++  test('without a configured title the logo keeps the upstream text', () => {
++    const {render} = rendererWith({gmp: createGmp()});
++    render(<LoginLogo />);
++    expect(screen.getByRole('img', {name: 'OPENVAS'})).toBeInTheDocument();
++  });
++});
++
++describe('Header', () => {
++  test('the logo names the link to the start page', async () => {
++    const {render} = rendererWith({
++      gmp: createGmp({vendorTitle: 'Suricatoos'}),
++      router: true,
++    });
++    render(<Header />);
++
++    const link = screen.getByRole('link', {name: 'Suricatoos'});
++    expect(link).toHaveAttribute('href', '/dashboards');
++    // the logo is still drawn inside the named image
++    await waitFor(() =>
++      expect(screen.getByTestId('GreenboneWhiteLogo')).toBeVisible(),
++    );
++    expect(link).toContainElement(screen.getByTestId('GreenboneWhiteLogo'));
++  });
++
++  test('without a configured title the name is the one of the page title', () => {
++    const {render} = rendererWith({gmp: createGmp(), router: true});
++    render(<Header />);
++    expect(screen.getByRole('link', {name: 'OPENVAS'})).toHaveAttribute(
++      'href',
++      '/dashboards',
++    );
++  });
++
++  test('a label the appliance table does not know still names the logo', () => {
++    const {render} = rendererWith({
++      gmp: createGmp({vendorLabel: 'not-in-the-table.svg'}),
++      router: true,
++    });
++    render(<Header />);
++    expect(screen.getByRole('link', {name: 'OPENVAS'})).toBeInTheDocument();
++  });
++});
++
++describe('Dashboard icons', () => {
++  test('the buttons that have only an icon are named in the language of the page', async () => {
++    const {render} = rendererWith({gmp: createGmp()});
++    const onFilter = testing.fn();
++    const onDownload = testing.fn();
++    const setState = testing.fn();
++    const {userEvent} = render(
++      <DataDisplayIcons
++        setState={setState}
++        onDownloadSvgClick={onDownload}
++        onSelectFilterClick={onFilter}
++      />,
++    );
++
++    // the name comes from aria-label: the generic one the icon brings
++    // ("Filter Icon") is English and says nothing about what the button does
++    const filter = screen.getByRole('button', {name: 'Select Filter'});
++    const download = screen.getByRole('button', {name: 'Download SVG'});
++    const legend = screen.getByRole('button', {name: 'Toggle Legend'});
++    expect(filter).toHaveAttribute('aria-label', 'Select Filter');
++    expect(download).toHaveAttribute('aria-label', 'Download SVG');
++    expect(legend).toHaveAttribute('aria-label', 'Toggle Legend');
++
++    await tabTo(userEvent, filter);
++    await userEvent.keyboard('{Enter}');
++    expect(onFilter).toHaveBeenCalledTimes(1);
++    await userEvent.tab();
++    expect(download).toHaveFocus();
++    await userEvent.keyboard(' ');
++    expect(onDownload).toHaveBeenCalledTimes(1);
++    await userEvent.tab();
++    expect(legend).toHaveFocus();
++    await userEvent.keyboard('{Enter}');
++    expect(setState).toHaveBeenCalledTimes(1);
++  });
++});
++
++describe('Theme CSS', () => {
++  const theme = fs.readFileSync(
++    path.join(process.cwd(), 'public/suricatoos-theme.css'),
++    'utf8',
++  );
++
++  // An outline taken off needs a visible substitute, and checkboxes and radios
++  // (whose border does not change when they are checked) keep their ring.
++  describe('focus', () => {
++    const outlineOff = cssRules(theme)
++      .filter(rule =>
++        rule.declarations.some(
++          d =>
++            d.prop === 'outline' &&
++            /^(none|0|0px)$/i.test(d.value.replace(/!important/i, '').trim()),
++        ),
++      )
++      .map(rule => ({
++        selector: rule.selector,
++        props: rule.declarations.map(d => d.prop),
++      }));
++
++    test('there is a rule that takes the outline off the text fields', () => {
++      expect(outlineOff.length).toBeGreaterThan(0);
++    });
++
++    test('a rule that takes the outline off draws the border and a halo instead', () => {
++      for (const {selector, props} of outlineOff) {
++        expect(props, selector).toContain('border-color');
++        expect(props, selector).toContain('box-shadow');
++      }
++    });
++
++    const focused = (html: string) => {
++      document.body.innerHTML = html;
++      const element = document.body.firstElementChild as HTMLElement;
++      element.focus();
++      expect(element).toHaveFocus();
++      return element;
++    };
++    const outlineTakenOff = (element: Element) =>
++      outlineOff.some(({selector}) => element.matches(selector));
++
++    test.each([
++      '<input type="text">',
++      '<input type="password">',
++      '<input type="time">',
++      '<textarea></textarea>',
++      '<select><option>a</option></select>',
++      '<input class="mantine-Input-input mantine-Select-input" readonly>',
++    ])('the outline of %s is replaced by the ring of the accent', html => {
++      expect(outlineTakenOff(focused(html))).toBe(true);
++    });
++
++    test.each([
++      '<input type="checkbox">',
++      '<input type="radio">',
++      '<button>ok</button>',
++      '<a href="/x">ok</a>',
++      '<div tabindex="0"></div>',
++    ])('%s keeps its focus ring', html => {
++      expect(outlineTakenOff(focused(html))).toBe(false);
++    });
++  });
++});
++
++describe('LiveRegion', () => {
++  test('is rendered empty, with no room: the text goes in after it is mounted', () => {
++    // a render that runs no effects shows what the region is before its text
++    expect(
++      renderToStaticMarkup(<LiveRegion role="status">hello</LiveRegion>),
++    ).toBe('<div role="status" style="position:absolute"></div>');
++  });
++
++  test('takes the text and gives it back in the same node, with a role that does not change', () => {
++    const {render} = rendererWith({});
++    const view = render(<LiveRegion role="alert">one</LiveRegion>);
++    const region = screen.getByRole('alert');
++    expect(region).toHaveTextContent('one');
++    expect(region).toHaveStyle({position: 'static'});
++
++    view.rerender(<LiveRegion role="alert">{''}</LiveRegion>);
++    expect(screen.getByRole('alert')).toBe(region);
++    expect(region).toBeEmptyDOMElement();
++    expect(region).toHaveStyle({position: 'absolute'});
++
++    view.rerender(
++      <LiveRegion role="alert">
++        <p>two</p>
++      </LiveRegion>,
++    );
++    expect(screen.getByRole('alert')).toBe(region);
++    expect(region).toHaveTextContent('two');
++    expect(region).toHaveStyle({position: 'static'});
++  });
++});
+diff --git a/src/web/utils/__tests__/suricatoosFonts.test.ts b/src/web/utils/__tests__/suricatoosFonts.test.ts
+new file mode 100644
+index 0000000..3171341
+--- /dev/null
++++ b/src/web/utils/__tests__/suricatoosFonts.test.ts
+@@ -0,0 +1,204 @@
++/* SPDX-FileCopyrightText: 2026 Suricatoos
++ *
++ * SPDX-License-Identifier: AGPL-3.0-or-later
++ */
++
++// The fonts of the theme come from the bundle, not from a third-party CDN: the
++// UI must not call anyone when it opens (the IP of the operator is personal
++// data), must keep its type on a node without internet, and the CSP of the
++// nginx (font-src 'self') refuses anything that is not a file of this origin.
++
++/// <reference types="node" />
++
++import {describe, expect, test} from '@gsa/testing';
++import fs from 'node:fs';
++import path from 'node:path';
++import {cssRules} from 'web/testing/suricatoosCss';
++
++// The tests run from the root of the project (vitest is started there).
++const root = process.cwd();
++
++const read = (file: string) =>
++  fs.readFileSync(path.join(root, file), 'utf8').replace(/\r\n/g, '\n');
++
++const fontFiles = (pkg: string) =>
++  fs.readdirSync(path.join(root, 'node_modules/@fontsource', pkg, 'files'));
++
++// The weights the theme uses (the ones the old Google URL asked for).
++const FONTS = [
++  {pkg: 'inter', family: 'Inter', weights: [400, 500, 600, 700]},
++  {pkg: 'space-grotesk', family: 'Space Grotesk', weights: [500, 600, 700]},
++  {pkg: 'jetbrains-mono', family: 'JetBrains Mono', weights: [400, 500]},
++];
++
++const unquote = (value: string) => value.replace(/^['"]|['"]$/g, '');
++
++describe('theme CSS', () => {
++  const theme = read('public/suricatoos-theme.css');
++
++  test('does not reference a font service of a third party', () => {
++    expect(theme).not.toMatch(/fonts\.(googleapis|gstatic)\.com/i);
++    // nor any other address: no @import and no url() leaves this origin
++    expect(theme).not.toMatch(/@import/i);
++    expect(theme).not.toMatch(/url\(\s*['"]?(https?:)?\/\//i);
++  });
++
++  // What the CSS falls back to while a font does not load: not shipped, on purpose.
++  const FALLBACKS = [
++    'system-ui',
++    '-apple-system',
++    'Segoe UI',
++    'sans-serif',
++    'monospace',
++    'ui-monospace',
++    'Menlo',
++  ];
++
++  test('the theme asks for the fonts the bundle ships, and only for them', () => {
++    const asked = new Set<string>();
++    for (const {declarations} of cssRules(theme)) {
++      for (const {prop, value} of declarations) {
++        if (
++          prop === 'font-family' ||
++          prop.startsWith('--mantine-font-family')
++        ) {
++          for (const part of value.replace(/!important/i, '').split(',')) {
++            asked.add(unquote(part.trim()));
++          }
++        }
++      }
++    }
++    const shipped = FONTS.map(({family}) => family);
++    // a font the theme names that is neither shipped nor a fallback would fall
++    // back to the system font without anyone noticing
++    for (const family of asked) {
++      expect([...shipped, ...FALLBACKS], family).toContain(family);
++    }
++    // and a font that is shipped but never used only weighs on the bundle
++    for (const family of shipped) {
++      expect([...asked], family).toContain(family);
++    }
++  });
++});
++
++describe('fontsource packages', () => {
++  const pkg = JSON.parse(read('package.json')) as {
++    dependencies: Record<string, string>;
++  };
++  const lock = JSON.parse(read('package-lock.json')) as {
++    packages: Record<
++      string,
++      {version: string; resolved: string; integrity: string; license: string}
++    >;
++  };
++
++  test.each(FONTS)(
++    '$pkg is pinned to one exact version, locked and OFL',
++    ({pkg: name}) => {
++      const version = pkg.dependencies[`@fontsource/${name}`];
++      expect(version).toMatch(/^\d+\.\d+\.\d+$/);
++
++      const locked = lock.packages[`node_modules/@fontsource/${name}`];
++      expect(locked.version).toBe(version);
++      expect(locked.license).toBe('OFL-1.1');
++      expect(locked.resolved).toBe(
++        `https://registry.npmjs.org/@fontsource/${name}/-/${name}-${version}.tgz`,
++      );
++      expect(locked.integrity).toMatch(/^sha512-[A-Za-z0-9+/]+={0,2}$/);
++
++      const installed = JSON.parse(
++        read(`node_modules/@fontsource/${name}/package.json`),
++      ) as {version: string; license: string};
++      expect(installed.version).toBe(version);
++      expect(installed.license).toBe('OFL-1.1');
++    },
++  );
++
++  test('the OFL notice shipped with the UI carries each license as the package has it', () => {
++    const notice = read('public/licenses/fonts-OFL-1.1.txt');
++    for (const {pkg: name, family} of FONTS) {
++      const version = pkg.dependencies[`@fontsource/${name}`];
++      expect(notice).toContain(`${family} - @fontsource/${name} ${version}`);
++      expect(notice).toContain(
++        read(`node_modules/@fontsource/${name}/LICENSE`).trimEnd(),
++      );
++    }
++  });
++});
++
++describe('what the entry point imports', () => {
++  const entry = read('src/index.tsx');
++  const imported = [
++    ...entry.matchAll(/^import '(@fontsource\/[^']+)';$/gm),
++  ].map(m => m[1]);
++
++  test('is only the weights the theme uses', () => {
++    const expected = FONTS.flatMap(({pkg, weights}) =>
++      weights.map(weight => `@fontsource/${pkg}/${weight}.css`),
++    );
++    expect([...imported].sort()).toEqual([...expected].sort());
++  });
++
++  describe.each(FONTS)('$family', ({pkg, family, weights}) => {
++    test.each(weights)(
++      '%i: files of this origin, with font-display swap',
++      weight => {
++        const faces = cssRules(
++          read(`node_modules/@fontsource/${pkg}/${weight}.css`),
++        ).filter(rule => rule.selector === '@font-face');
++        expect(faces.length).toBeGreaterThan(0);
++
++        for (const face of faces) {
++          const decl = (prop: string) =>
++            face.declarations.find(d => d.prop === prop)?.value ?? '';
++          expect(unquote(decl('font-family'))).toBe(family);
++          expect(decl('font-weight')).toBe(String(weight));
++          expect(decl('font-display')).toBe('swap');
++
++          const urls = [...decl('src').matchAll(/url\(([^)]+)\)/g)].map(m =>
++            unquote(m[1]),
++          );
++          expect(urls.length).toBeGreaterThan(0);
++          for (const url of urls) {
++            // a relative file of the package, which the build bundles
++            expect(url).toMatch(/^\.\/files\/[a-z0-9-]+\.woff2?$/);
++            expect(fontFiles(pkg), url).toContain(path.basename(url));
++          }
++        }
++      },
++    );
++  });
++});
++
++describe('the CSS reader of the tests', () => {
++  test('reads rules, drops comments and the at-rules around them', () => {
++    const rules = cssRules(`
++      /* a comment with { braces } and a: b; */
++      a, b:hover { color: red!important; --x: 1 }
++      @media (min-width: 1px) {
++        .c { MARGIN: 0 }
++        @keyframes k { to { opacity: 1 } }
++      }
++    `);
++    expect(rules.map(r => r.selector)).toEqual(['a, b:hover', '.c', 'to']);
++    expect(rules[0].declarations).toEqual([
++      {prop: 'color', value: 'red!important'},
++      {prop: '--x', value: '1'},
++    ]);
++    // the name of a property is not case sensitive
++    expect(rules[1].declarations).toEqual([{prop: 'margin', value: '0'}]);
++  });
++
++  test('does not split a declaration at the semicolon of a url() or a string', () => {
++    const [face] = cssRules(
++      `@font-face { font-family: 'A;B'; src: url(data:font/woff2;base64,AAAA) format('woff2'); font-display: swap }`,
++    );
++    expect(face.selector).toBe('@font-face');
++    expect(face.declarations.map(d => d.prop)).toEqual([
++      'font-family',
++      'src',
++      'font-display',
++    ]);
++    expect(face.declarations[1].value).toContain('data:font/woff2;base64,AAAA');
++  });
++});
+diff --git a/vite.config.ts b/vite.config.ts
+index 6d1eaef..04a7022 100644
+--- a/vite.config.ts
++++ b/vite.config.ts
+@@ -64,6 +64,9 @@ export default defineConfig({
+   },
+   build: {
+     outDir: 'build',
++    // Suricatoos: the fonts stay files. The small ones (< 4 KiB) would become
++    // data: URIs, which the font-src 'self' of the CSP of the nginx refuses.
++    assetsInlineLimit: file => (/\.woff2?$/.test(file) ? false : undefined),
+     rolldownOptions: {
+       output: {
+         minify: {
+diff --git a/src/web/testing/suricatoosCss.ts b/src/web/testing/suricatoosCss.ts
+new file mode 100644
+index 0000000..9b2d721
+--- /dev/null
++++ b/src/web/testing/suricatoosCss.ts
+@@ -0,0 +1,69 @@
++/* SPDX-FileCopyrightText: 2026 Suricatoos
++ *
++ * SPDX-License-Identifier: AGPL-3.0-or-later
++ */
++
++export interface CssDeclaration {
++  prop: string;
++  value: string;
++}
++
++export interface CssRule {
++  selector: string;
++  declarations: CssDeclaration[];
++}
++
++// Splits a declaration block at the semicolons that are not inside parentheses
++// or quotes (a url(data:...;base64,...) has one).
++const splitDeclarations = (block: string): string[] => {
++  const parts: string[] = [];
++  let depth = 0;
++  let quote = '';
++  let start = 0;
++  for (let i = 0; i < block.length; i++) {
++    const c = block[i];
++    if (quote !== '') {
++      if (c === quote && block[i - 1] !== String.fromCharCode(92)) {
++        quote = '';
++      }
++    } else if (c === '"' || c === "'") {
++      quote = c;
++    } else if (c === '(') {
++      depth++;
++    } else if (c === ')') {
++      depth = Math.max(0, depth - 1);
++    } else if (c === ';' && depth === 0) {
++      parts.push(block.slice(start, i));
++      start = i + 1;
++    }
++  }
++  parts.push(block.slice(start));
++  return parts;
++};
++
++/**
++ * The rules of a style sheet, nested ones included: the @media or @keyframes
++ * around a rule are dropped, and @font-face comes out as a rule whose selector
++ * is "@font-face". Enough for the CSS of the Suricatoos theme and of the font
++ * packages (comments are removed; no braces inside a declaration block). The
++ * tests use it instead of a CSS library: no dependency that the project does
++ * not declare.
++ */
++export const cssRules = (css: string): CssRule[] => {
++  const text = css.replace(/\/\*[\s\S]*?\*\//g, '');
++  const rules: CssRule[] = [];
++  for (const match of text.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
++    const declarations: CssDeclaration[] = [];
++    for (const part of splitDeclarations(match[2])) {
++      const colon = part.indexOf(':');
++      if (colon > 0) {
++        declarations.push({
++          prop: part.slice(0, colon).trim().toLowerCase(),
++          value: part.slice(colon + 1).trim(),
++        });
++      }
++    }
++    rules.push({selector: match[1].trim(), declarations});
++  }
++  return rules;
++};
+diff --git a/src/web/utils/suricatoosLive.tsx b/src/web/utils/suricatoosLive.tsx
+new file mode 100644
+index 0000000..83193ec
+--- /dev/null
++++ b/src/web/utils/suricatoosLive.tsx
+@@ -0,0 +1,53 @@
++/* SPDX-FileCopyrightText: 2026 Suricatoos
++ *
++ * SPDX-License-Identifier: AGPL-3.0-or-later
++ */
++
++import {Children, forwardRef, type ReactNode, useEffect, useState} from 'react';
++
++interface LiveRegionProps {
++  children?: ReactNode;
++  role: 'status' | 'alert';
++  // -1 lets the page move the keyboard focus to the region (with a ref), which
++  // reads the message with the focus. The region stays out of the Tab order.
++  tabIndex?: -1;
++}
++
++/**
++ * A live region that is on the page before its text.
++ *
++ * Assistive technology announces what is put INTO a live region that already
++ * exists; a region that shows up with its text inside is announced unevenly.
++ * So the region is always rendered, empty, and the text goes in later, also on
++ * the first render of a page (it is put in right after the region mounts).
++ * The role of a node never changes: a message that is a status and one that is
++ * an alert go to two regions, not to one region that swaps its role.
++ *
++ * Empty, the region takes no room (position: absolute): the pages put it in
++ * flex layouts with a gap, which an empty child would otherwise widen.
++ */
++const LiveRegion = forwardRef<HTMLDivElement, LiveRegionProps>(
++  function LiveRegion({children, role, tabIndex}, ref) {
++    const [mounted, setMounted] = useState(false);
++
++    useEffect(() => {
++      setMounted(true);
++    }, []);
++
++    const content = mounted ? children : null;
++    const empty = Children.toArray(content).every(child => child === '');
++
++    return (
++      <div
++        ref={ref}
++        role={role}
++        style={{position: empty ? 'absolute' : 'static'}}
++        tabIndex={tabIndex}
++      >
++        {content}
++      </div>
++    );
++  },
++);
++
++export default LiveRegion;

@@ -23,7 +23,7 @@ docker compose logs -f gvmd       # logs do manager
   ```bash
   ssh -N -L 8443:127.0.0.1:443 root@SERVIDOR    # depois: https://localhost:8443
   ```
-- Tema: claro/escuro (auto, segue o SO). Acento indigo. `assets/suricatoos-theme.css`.
+- Tema: claro/escuro (auto, segue o SO). Acento indigo. Vem no patch do gsa (`public/suricatoos-theme.css`, servido em `/suricatoos-theme.css`); as fontes vem do proprio bundle e o tema nunca usa `@import` de URL externa.
 
 ## Usuario admin (GMP)
 

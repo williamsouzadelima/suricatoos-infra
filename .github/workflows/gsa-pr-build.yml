@@ -2,8 +2,9 @@ name: gsa-pr-build
 
 # Valida em PR o patch da UI (greenbone/gsa + patches/gsa-*.patch) e o do gsad
 # ANTES do merge: aplica os dois nas tags pinadas, roda o type-check (tsc) e o
-# build de produção (Vite) da UI, os testes vitest que o patch traz e confere
-# os catálogos de idioma e as chaves das telas da Suricatoos neles.
+# build de produção (Vite) da UI, os testes vitest que o patch traz, confere
+# os catálogos de idioma e as chaves das telas da Suricatoos neles e confere
+# que o bundle traz as fontes sem chamar um serviço de terceiros.
 # Não publica nada, não usa secrets e não faz login em registry: a publicação
 # continua só no build-publish.yml (push na main).
 on:
@@ -123,9 +124,14 @@ jobs:
 
       # Os testes que o patch traz (cliente HTTP e polling das telas da
       # Suricatoos; idioma padrão, detecção do navegador, primeira visita e
-      # datas no idioma; o lang.test.ts do upstream ajustado ao padrão
-      # pt-BR): só esses arquivos, uns segundos. A suíte inteira do GSA não
-      # é portão deste workflow. Teste novo no patch entra na lista.
+      # datas no idioma; acessibilidade das telas e fontes locais; o
+      # lang.test.ts do upstream ajustado ao padrão pt-BR): só esses
+      # arquivos, uns segundos. A suíte inteira do GSA não é portão deste
+      # workflow. Teste novo no patch entra na lista.
+      # Acessibilidade: o GSA da tag não traz eslint-plugin-jsx-a11y nem
+      # equivalente (axe etc.) e este workflow não acrescenta dependência só
+      # para isso; quem confere nome acessível, rótulo, aviso de erro e uso
+      # pelo teclado das telas do patch são os testes de suricatoosA11y.
       - name: Testes do patch (vitest)
         id: tests
         # Roda mesmo com o type-check ou o build quebrados (o job continua
@@ -138,6 +144,8 @@ jobs:
             src/web/utils/__tests__/suricatoosApi.test.ts \
             src/web/utils/__tests__/suricatoosLocale.test.ts \
             src/web/utils/__tests__/suricatoosFirstVisit.test.tsx \
+            src/web/utils/__tests__/suricatoosA11y.test.tsx \
+            src/web/utils/__tests__/suricatoosFonts.test.ts \
             src/gmp/locale/__tests__/lang.test.ts
 
       # O Vite copia public/ sem validar: um JSON quebrado ou com chave repetida
@@ -470,6 +478,80 @@ jobs:
           sys.exit(1 if errors else 0)
           PY
 
+      # O bundle traz as fontes do tema (@fontsource, importadas em
+      # src/index.tsx) e a UI não chama um serviço de terceiros ao abrir: o IP
+      # do operador é dado pessoal, e um nó sem internet ficaria sem as fontes.
+      #   a) nenhum arquivo de build/ cita fonts.googleapis.com nem
+      #      fonts.gstatic.com (o tema importava as fontes de lá);
+      #   b) as três famílias estão em build/assets como .woff2 e o CSS do
+      #      bundle aponta para esses arquivos (sem isto, tirar as fontes do
+      #      bundle passaria pela checagem a: a UI cairia em silêncio na fonte
+      #      do sistema);
+      #   c) nenhuma fonte vira data: URI. O CSP do nginx tem font-src 'self',
+      #      que não aceita data:, e o Vite embute os arquivos menores que
+      #      4 KiB (vite.config.ts do patch: assetsInlineLimit); para uma
+      #      extensão que não conhece, ele declara application/octet-stream.
+      #      Por isso a checagem não depende do tipo declarado:
+      #        c1) no CSS, nenhum data: dentro de um @font-face;
+      #        c2) em qualquer arquivo de texto de build/ (CSS, chunks de JS,
+      #            HTML), nenhum data: de tipo de fonte (font/*,
+      #            application/font-*, application/x-font-*,
+      #            application/vnd.ms-fontobject) e nenhum que comece como um
+      #            arquivo de fonte (woff2, woff, ttf ou otf em base64), seja
+      #            qual for o tipo declarado. Um data: de imagem, que o CSP
+      #            (img-src) aceita, não é tocado.
+      - name: Fontes do bundle (sem Google Fonts, arquivos locais)
+        id: fonts
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        working-directory: gsa-src
+        run: |
+          set -u
+          errors=0
+          test -d build/assets || { echo "::error::build/assets não existe"; exit 1; }
+
+          hits=$(grep -rIlE 'fonts\.(googleapis|gstatic)\.com' build || true)
+          for f in $hits; do
+            echo "::error file=$f::o bundle referencia fonts.googleapis.com ou fonts.gstatic.com: fonte de terceiros (o IP do operador iria para o Google e um nó sem internet ficaria sem a fonte)"
+            grep -noE '.{0,50}fonts\.(googleapis|gstatic)\.com.{0,50}' "$f" | head -3
+            errors=$((errors + 1))
+          done
+
+          for family in inter space-grotesk jetbrains-mono; do
+            if ! ls build/assets/"$family"-*.woff2 > /dev/null 2>&1; then
+              echo "::error::build/assets não tem arquivos $family-*.woff2: a fonte não entrou no bundle"
+              errors=$((errors + 1))
+            elif ! grep -rqE "/assets/$family-[a-z-]+-[0-9]+-normal-[A-Za-z0-9_-]+\.woff2" build/assets --include='*.css'; then
+              echo "::error::o CSS do bundle não aponta para os arquivos $family-*.woff2"
+              errors=$((errors + 1))
+            fi
+          done
+
+          # c1: o que um @font-face carrega nunca vem num data: (de qualquer tipo,
+          # também application/octet-stream). -z lê o arquivo inteiro de uma vez,
+          # então o bloco pode ter várias linhas (CSS sem minificar).
+          for f in $(find build -type f -name '*.css'); do
+            blocks=$(LC_ALL=C grep -Pzo '@font-face\s*\{[^}]*\}' "$f" | tr '\0' '\n' || true)
+            if printf '%s\n' "$blocks" | grep -q 'data:'; then
+              echo "::error file=$f::@font-face com data: URI no CSS do bundle (de qualquer tipo, também application/octet-stream); o CSP do nginx (font-src 'self') a recusa. Confira assetsInlineLimit no vite.config.ts"
+              printf '%s\n' "$blocks" | grep -o 'data:.\{0,40\}' | head -3
+              errors=$((errors + 1))
+            fi
+          done
+
+          # c2: data: com tipo de fonte, ou que começa como um arquivo de fonte
+          # (d09GMg = wOF2, d09GRg = wOFF, AAEAAA = ttf, T1RUTw = otf em base64),
+          # em CSS, chunk de JS ou HTML: o tipo declarado não importa.
+          font_data='data:(font/|application/(x-)?font|application/vnd\.ms-fontobject)|data:[^,]{0,100}base64,(d09GMg|d09GRg|AAEAAA|T1RUTw)'
+          embedded=$(LC_ALL=C grep -rIlP "$font_data" build || true)
+          for f in $embedded; do
+            echo "::error file=$f::fonte embutida como data: URI neste arquivo do bundle (CSS, chunk de JS ou HTML); o CSP do nginx (font-src 'self') a recusa. Confira assetsInlineLimit no vite.config.ts e como a fonte é importada"
+            LC_ALL=C grep -oP "($font_data).{0,20}" "$f" | cut -c1-90 | head -3
+            errors=$((errors + 1))
+          done
+
+          echo "fontes no bundle: $(ls build/assets/*.woff2 2>/dev/null | wc -l) arquivos .woff2; $errors problema(s)"
+          [ "$errors" -eq 0 ]
+
       - name: Resumo
         if: always()
         env:
@@ -484,6 +566,7 @@ jobs:
           R_TESTS: ${{ steps.tests.outcome }}
           R_LOCALES: ${{ steps.locales.outcome }}
           R_KEYS: ${{ steps.keys.outcome }}
+          R_FONTS: ${{ steps.fonts.outcome }}
         run: |
           {
             echo "### Patch do GSA/gsad — validação de PR"
@@ -500,4 +583,5 @@ jobs:
             echo "| testes do patch (vitest) | ${R_TESTS:-skipped} |"
             echo "| catálogos de idioma | ${R_LOCALES:-skipped} |"
             echo "| chaves das telas da Suricatoos (pt_BR, es) | ${R_KEYS:-skipped} |"
+            echo "| fontes do bundle (sem Google Fonts, arquivos locais) | ${R_FONTS:-skipped} |"
           } >> "$GITHUB_STEP_SUMMARY"
