@@ -132,7 +132,7 @@ func (c *check) scope(st tenant.Standing, payload any) (scoped, error) {
 		if err != nil {
 			return scoped{}, err
 		}
-		if info.ScheduleID == "" {
+		if info.ScheduleID == "" || info.TargetID == "" { // no schedule, or a task without a target: nothing is scanned
 			return scoped{}, nil
 		}
 		return scoped{}, g.targetHosts(info.TargetID)

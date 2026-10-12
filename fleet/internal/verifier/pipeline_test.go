@@ -378,6 +378,18 @@ func TestLinha9RegraCompleta(t *testing.T) {
 	n.scope.tasks[taskID] = TaskInfo{TargetID: tgtID}
 	n.scope.targets[tgtID] = TargetHosts{Hosts: []string{"203.0.113.0/24"}} // fora: não importa, nada se varre
 	expectAck(t, n.process(env("clone sem agenda", contract.TypeTaskClone), tv), Ack, contract.DecisionAccepted, "")
+
+	// tarefa com agenda e SEM alvo: nada se varre, então task.clone passa como task.start (sonda P4 da revisão) — e
+	// nenhum alvo "" é pedido ao gvmd
+	n = newNode(t)
+	n.scope.tasks[taskID] = TaskInfo{ScheduleID: schedID}
+	for _, typ := range []contract.CommandType{contract.TypeTaskClone, contract.TypeTaskStart} {
+		n.scope.reads = nil
+		expectAck(t, n.process(env("sem alvo "+string(typ), typ), tv), Ack, contract.DecisionAccepted, "")
+		if !slices.Equal(n.scope.reads, []string{"task " + taskID}) {
+			t.Fatalf("%s de tarefa sem alvo: leituras %v", typ, n.scope.reads)
+		}
+	}
 }
 
 // Aceito: as listas CANÔNICAS do portão substituem os hosts no payload que o executor recebe, e são as da linha
