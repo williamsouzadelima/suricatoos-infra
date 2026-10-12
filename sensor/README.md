@@ -11,7 +11,8 @@ Ver o design completo em [`docs/adr/0007-sensor-scanner-interno.md`](../docs/adr
 
 - `cmd/sensor-agent` — supervisor: enroll → poll job → scan local (scope-gated) →
   push report → heartbeat.
-- `internal/scope` — allowlist baked (faixas internas autorizadas − self-protection).
+- [`../scopegate`](../scopegate) — allowlist baked (faixas internas autorizadas −
+  self-protection); módulo compartilhado com o conector da frota (ADR-0011).
 - `internal/scanrun` — dirige `scan_bridge.py` contra o gvmd **local**.
 - `internal/cloud` — cliente mTLS (poll/ack/report/heartbeat).
 - `internal/enroll` — keygen + CSR + troca do token pelo cert.

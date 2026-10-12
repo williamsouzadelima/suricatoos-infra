@@ -15,7 +15,7 @@ import (
 	"os/exec"
 	"time"
 
-	"github.com/williamsouzadelima/suricatoos-infra/sensor/internal/scope"
+	"github.com/williamsouzadelima/suricatoos-infra/scopegate"
 )
 
 // Finding is one normalized OpenVAS result from scan_bridge.py (same shape the
@@ -50,7 +50,7 @@ type Config struct {
 	TaskPrefix   string // default "suricatoos-sensor"
 	PollInterval time.Duration
 	MaxDuration  time.Duration
-	Scope        *scope.Scope // baked authorization
+	Scope        *scopegate.Scope // baked authorization
 }
 
 // Job is one scan to run (from the cloud dispatch).

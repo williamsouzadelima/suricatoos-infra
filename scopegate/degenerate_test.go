@@ -1,4 +1,4 @@
-package scope
+package scopegate
 
 import "testing"
 

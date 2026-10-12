@@ -1,5 +1,6 @@
-// Package scope is the sensor's LOCAL, baked authorization gate on scan targets
-// (ADR-0007). It is the sensor-side twin of the cloud dispatch scope-gate: even
+// Package scopegate is the LOCAL, baked authorization gate on scan targets, shared
+// by the sensor (ADR-0007) and the fleet connector (ADR-0011) so neither keeps a
+// diverging copy. It is the sensor-side twin of the cloud dispatch scope-gate: even
 // though the cloud only dispatches in-scope jobs, the sensor independently
 // re-validates every target so a compromised/misbehaving cloud channel can't make
 // it scan outside its authorized ranges or its own/cloud infrastructure.
@@ -11,7 +12,7 @@
 //     unspecified + the sensor's own interfaces and the cloud endpoints, via
 //     SCAN_SELF_DENY_IPS). The self-deny is env-driven because a sensor's "self"
 //     is its client, not the Suricatoos prod boxes.
-package scope
+package scopegate
 
 import (
 	"fmt"

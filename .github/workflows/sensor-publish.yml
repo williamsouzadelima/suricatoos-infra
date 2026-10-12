@@ -9,6 +9,7 @@ on:
     branches: [main]
     paths:
       - "sensor/**"
+      - "scopegate/**"
       - "ingest/**"
       - "correlation/**"
       - "gmp-bridge/**"
@@ -35,8 +36,8 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GHCR_PAT }}
 
-      # Build context is the repo root: sensor/Dockerfile copies sensor/ + ingest/ +
-      # correlation/ (resolved via an in-image go.work) and the gmp-bridge scripts.
+      # Build context is the repo root: sensor/Dockerfile copies sensor/ + scopegate/ +
+      # ingest/ + correlation/ (resolved via an in-image go.work) and the gmp-bridge scripts.
       - name: Build & push suricatoos-sensor-agent
         run: |
           docker build \

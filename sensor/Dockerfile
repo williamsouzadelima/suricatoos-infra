@@ -1,15 +1,17 @@
 # Build context is the REPO ROOT: the runtime needs gmp-bridge/{scan_bridge,bridge}.py,
-# and the sensor module imports ingest/scanlaunch (which pulls the ingest module, whose
-# go.mod requires correlation). Bring all three modules + a minimal go.work so the build
-# resolves the intra-repo imports LOCALLY (mirroring the repo-root workspace) — a plain
-# GOWORK=off build of only sensor/ cannot resolve ingest/scanlaunch and fails.
+# and the sensor module imports the sibling scopegate module (the scope gate shared with
+# the fleet connector, ADR-0011; require + replace => ../scopegate). Bring the modules
+# (ingest/ + correlation/ as before) + a minimal go.work so the build resolves the
+# intra-repo imports LOCALLY (mirroring the repo-root workspace) — a build of only
+# sensor/ cannot resolve scopegate and fails.
 #   docker build -f sensor/Dockerfile -t suricatoos-sensor-agent .
 FROM golang:1.25-alpine AS build
 WORKDIR /src
 COPY sensor/ ./sensor/
+COPY scopegate/ ./scopegate/
 COPY ingest/ ./ingest/
 COPY correlation/ ./correlation/
-RUN printf 'go 1.25\n\nuse (\n\t./sensor\n\t./ingest\n\t./correlation\n)\n' > go.work
+RUN printf 'go 1.25\n\nuse (\n\t./sensor\n\t./scopegate\n\t./ingest\n\t./correlation\n)\n' > go.work
 WORKDIR /src/sensor
 RUN CGO_ENABLED=0 GOOS=linux \
     go build -trimpath -ldflags="-s -w" -o /sensor-agent ./cmd/sensor-agent/

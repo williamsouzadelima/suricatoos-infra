@@ -32,12 +32,12 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/williamsouzadelima/suricatoos-infra/scopegate"
 	"github.com/williamsouzadelima/suricatoos-infra/sensor/internal/cloud"
 	"github.com/williamsouzadelima/suricatoos-infra/sensor/internal/enroll"
 	"github.com/williamsouzadelima/suricatoos-infra/sensor/internal/feedsync"
 	"github.com/williamsouzadelima/suricatoos-infra/sensor/internal/renew"
 	"github.com/williamsouzadelima/suricatoos-infra/sensor/internal/scanrun"
-	"github.com/williamsouzadelima/suricatoos-infra/sensor/internal/scope"
 	"github.com/williamsouzadelima/suricatoos-infra/sensor/internal/supervisor"
 )
 
@@ -60,7 +60,7 @@ func main() {
 	}
 
 	// Baked scope: the sensor independently re-validates every target.
-	sc, err := scope.New(os.Getenv("SCAN_SCOPE"), os.Getenv("SCAN_SELF_DENY_IPS"))
+	sc, err := scopegate.New(os.Getenv("SCAN_SCOPE"), os.Getenv("SCAN_SELF_DENY_IPS"))
 	if err != nil {
 		log.Fatalf("scope: %v", err)
 	}
