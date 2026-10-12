@@ -711,11 +711,19 @@ SPDX-License-Identifier: GPL-2.0-or-later
          frase calculada, as contagens das notas — vem do XSLT, nunca daqui. -->
     <s k="sec_prio" en="Priorities and Next Steps" pt="Prioridades e Próximos Passos" es="Prioridades y Próximos Pasos"/>
     <s k="sec_prio_run" en="PRIORITIES" pt="PRIORIDADES" es="PRIORIDADES"/>
-    <s k="prio_intro_a" en="Where to start, from what this report records and nothing else. Each action is one confirmed NVT (detection quality of at least " pt="Por onde começar, a partir só do que este relatório registra. Cada ação é um NVT confirmado (qualidade de detecção de pelo menos " es="Por dónde empezar, a partir solo de lo que este informe registra. Cada acción es un NVT confirmado (calidad de detección de al menos "/>
-    <s k="prio_intro_b" en="\%) of Low severity or higher, with all of its instances; the action is the first sentence of the solution the NVT gives." pt="\%) de severidade Baixa ou maior, com todas as suas instâncias; a ação é a primeira frase da solução que o NVT indica." es="\%) de severidad Baja o mayor, con todas sus instancias; la acción es la primera frase de la solución que indica el NVT."/>
-    <!-- O nome do desempate e' o do feed (nvt/name), nao o traduzido: a ordem
-         do plano e' a mesma nas tres linguas. -->
-    <s k="prio_order" en="Order: severity class (Critical, High, Medium, Low); then number of affected hosts, EPSS (highest first; none last), highest CVSS, NVT name (as in the feed) and OID." pt="Ordem: classe de severidade (Crítico, Alto, Médio, Baixo); depois número de hosts afetados, EPSS (maior primeiro; sem EPSS por último), maior CVSS, nome do NVT (o do feed) e OID." es="Orden: clase de severidad (Crítico, Alto, Medio, Bajo); después número de hosts afectados, EPSS (mayor primero; sin EPSS al final), mayor CVSS, nombre del NVT (el del feed) y OID."/>
+    <!-- Uma acao = um achado como a secao de achados detalhados o mostra: o
+         card de um NVT, ou o card consolidado (o titulo dele e' grp_title, o
+         selo e' grp_badge, a acao unica e' grp_action), que tem de ser descrito
+         pelo que o proprio card diz. O checador le estas frases deste catalogo:
+         ele nao pega uma descricao que fique falsa, so' a revisao. -->
+    <s k="prio_intro_a" en="Where to start, from what this report records and nothing else. Each action is one confirmed finding (detection quality of at least " pt="Por onde começar, a partir só do que este relatório registra. Cada ação é um achado confirmado (qualidade de detecção de pelo menos " es="Por dónde empezar, a partir solo de lo que este informe registra. Cada acción es un hallazgo confirmado (calidad de detección de al menos "/>
+    <s k="prio_intro_b" en="\%) of Low severity or higher: an NVT, or an outstanding update, the consolidated finding that gathers the confirmed vendor-fix advisories of one product. The action is the first sentence of the solution; for an outstanding update, of its single remediation action, which is the fix of its most severe advisory." pt="\%) de severidade Baixa ou maior: um NVT, ou uma atualização pendente, o achado consolidado que reúne os advisories confirmados com correção do fornecedor de um mesmo produto. A ação é a primeira frase da solução; numa atualização pendente, a da ação única de remediação dela, que é a solução do advisory mais severo." es="\%) de severidad Baja o mayor: un NVT, o una actualización pendiente, el hallazgo consolidado que reúne los advisories confirmados con corrección del proveedor de un mismo producto. La acción es la primera frase de la solución; en una actualización pendiente, la de su acción única de remediación, que es la solución del advisory más severo."/>
+    <!-- A ordem e o que cada chave quer dizer. O nome do desempate e' o do feed
+         (nvt/name), nao o traduzido, e o de uma atualizacao pendente e' a chave
+         do produto (as duas primeiras palavras do nome do feed, o que o titulo
+         do card mostra depois de grp_title): a ordem do plano e' a mesma nas
+         tres linguas. -->
+    <s k="prio_order" en="Order: severity class (Critical, High, Medium, Low); more affected hosts first; higher EPSS first, no EPSS last; higher CVSS first; name and OID ascending. Affected hosts are those with an instance of Low severity or higher (false positives and Log do not count); for an outstanding update, the hosts of all its advisories count once each, and its severity, EPSS and CVSS are the highest among them; the name is the NVT name as in the feed, and for an outstanding update it is the product, with the OID of its first advisory in the report." pt="Ordem: classe de severidade (Crítico, Alto, Médio, Baixo); mais hosts afetados primeiro; EPSS maior primeiro, sem EPSS por último; CVSS maior primeiro; nome e OID em ordem crescente. Hosts afetados são os que têm instância de severidade Baixa ou maior (falso positivo e Log não contam); numa atualização pendente, os hosts de todos os advisories dela contam uma vez cada, e a severidade, o EPSS e o CVSS dela são os maiores deles; o nome é o do NVT como no feed, e o de uma atualização pendente é o produto, com o OID do primeiro advisory dela no relatório." es="Orden: clase de severidad (Crítico, Alto, Medio, Bajo); más hosts afectados primero; EPSS mayor primero, sin EPSS al final; CVSS mayor primero; nombre y OID en orden ascendente. Los hosts afectados son los que tienen una instancia de severidad Baja o mayor (falso positivo y Log no cuentan); en una actualización pendiente, los hosts de todos sus advisories cuentan una vez cada uno, y su severidad, EPSS y CVSS son los mayores de ellos; el nombre es el del NVT como en el feed, y el de una actualización pendiente es el producto, con el OID de su primer advisory en el informe."/>
     <!-- A frase calculada, nas suas formas: N acoes / uma acao tratam X de Y;
          um so' achado critico ou alto (nada de "1 de 1"); nenhum (nada de
          "0 de 0"); e nenhum host medido, que nao e' boa noticia. -->
@@ -734,7 +742,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
     <s k="prio_trunc_a" en=" more action(s), not listed in this table; each one is described in the " pt=" ação(ões) a mais, não listada(s) nesta tabela; cada uma está descrita na seção " es=" acción(es) más, no listada(s) en esta tabla; cada una se describe en la sección "/>
     <s k="prio_trunc_b" en=" section." pt="." es="."/>
     <s k="prio_epss_none" en="EPSS not stated in the report: the EPSS column reads --- and the criterion plays no part in the order." pt="EPSS não informado no relatório: a coluna EPSS sai com --- e o critério não pesa na ordem." es="EPSS no informado en el informe: la columna EPSS sale con --- y el criterio no pesa en el orden."/>
-    <s k="prio_epss_some" en="In the EPSS column, --- means the report carries no EPSS for that NVT." pt="Na coluna EPSS, --- quer dizer que o relatório não traz EPSS para esse NVT." es="En la columna EPSS, --- significa que el informe no trae EPSS para ese NVT."/>
+    <s k="prio_epss_some" en="In the EPSS column, --- means the report carries no EPSS for any NVT of that action." pt="Na coluna EPSS, --- quer dizer que o relatório não traz EPSS para nenhum NVT daquela ação." es="En la columna EPSS, --- significa que el informe no trae EPSS para ningún NVT de esa acción."/>
     <!-- O numero entre _b e _c e' o parametro $qod-min. -->
     <s k="prio_ind_a" en="Left out of this plan: " pt="Fora deste plano: " es="Fuera de este plan: "/>
     <s k="prio_ind_b" en=" indicator(s) to validate, with a detection quality below " pt=" indicador(es) a validar, com qualidade de detecção abaixo de " es=" indicador(es) a validar, con calidad de detección por debajo de "/>
@@ -2456,34 +2464,68 @@ SPDX-License-Identifier: GPL-2.0-or-later
   <!-- A SECAO 2 diz POR ONDE COMECAR: um plano de acao ordenado, so' com dado
        do proprio relatorio (nada consultado ao gvmd, nada de outra fonte).
 
-       UNIDADE DE ACAO = UM NVT, o mesmo conjunto que os cards contam ($nvt-conf,
-       "O CONJUNTO DE ACHADOS" la' em cima): o NVT confirmado, com todas as suas
-       instancias, de severidade MAXIMA >= 0.1 — sem Log, sem falso positivo
-       (codigo -1 do gvmd, com ou sem override). O indicador (todas as
-       instancias abaixo de $qod-min) fica FORA do plano: o resumo executivo ja'
-       se recusa a mandar remediar o que precisa de validacao manual, e o plano
-       nao desfaz isso; uma nota conta quantos ficaram de fora. NVTs diferentes
-       nunca se fundem numa acao, nem por texto de solucao parecido (a mesma
-       solucao generica de dois produtos seria UMA acao errada): o advisory que
-       um card consolidado absorveu continua sendo acao propria, e o link dela
-       leva ao card consolidado, que e' onde ele esta' descrito.
+       UNIDADE DE ACAO = UM CARD da secao de achados detalhados, como o
+       relatorio o mostra, e so' os do bloco de achados confirmados:
+         - o card de um NVT ($rows-conf: o NVT confirmado que nenhum card
+           consolidado absorveu, com todas as suas instancias);
+         - o card CONSOLIDADO de uma atualizacao pendente ($grp-reps, o mesmo
+           agrupamento de consolidated-update-cards): UMA acao, com todas as
+           instancias dos advisories confirmados do grupo (gvm:grp-members). O
+           agrupamento e' o do card (as duas primeiras palavras do nome do feed,
+           VendorFix, $group-min confirmados), nunca texto de solucao: a mesma
+           solucao generica de dois produtos seria UMA acao errada.
+       Entra no plano o card cuja severidade MAXIMA e' >= 0.1 — sem Log, sem
+       falso positivo (codigo -1 do gvmd, com ou sem override); um grupo cujos
+       membros sao todos Log ou falso positivo fica fora, como o NVT. O
+       indicador (todas as instancias abaixo de $qod-min) tambem fica FORA: o
+       resumo executivo ja' se recusa a mandar remediar o que precisa de
+       validacao manual, e o plano nao desfaz isso; uma nota conta os
+       indicadores, inclusive os advisories do produto de um grupo que, por
+       serem de baixa confianca, nao sao membros dele.
 
-       A ORDEM, em chaves de xsl:sort sobre uma lista ja' com os valores de
-       cada acao, nesta precedencia:
+       OS VALORES de cada acao sao calculados num passo so' sobre o documento de
+       origem (acts-rtf): key() e o catalogo de traducao (nvt-i18n, que le
+       current()) devolvem vazio, sem erro, num laco sobre RTF. O segundo passo
+       so' ordena e formata. Num card consolidado:
+         - hosts afetados = a UNIAO dos hosts das instancias dos membros com
+           severidade >= 0.1, deduplicada por uma lista ordenada (RTF) feita SO'
+           dessas instancias. Nada de chave de Muenchian no molde do by-updgrp:
+           ela casa todo resultado VendorFix do produto, inclusive o advisory
+           indicador que nao e' membro, e o host cujo 1o no' fosse dele sumiria
+           em silencio (o defeito descrito em gvm:grp-confreps);
+         - severidade, CVSS e EPSS = os maiores entre as instancias dos membros;
+           o CVSS impresso e' o texto cru da instancia que o card poe no
+           \chipsev ($maxsev de consolidated-update-cards);
+         - a ACAO e' a acao unica do card: a solucao do membro mais severo (o 1o
+           na ordem numerica decrescente de severidade, a do documento no
+           empate), que nao e' necessariamente o representante do grupo (o 1o
+           confirmado, dono da ancora grp-; a fixture v4-instancias pina isso);
+         - o nome impresso e' o titulo do card (grp_title + ": " + a chave do
+           produto, com o escape do card), o tipo e' Vendor Fix, o link e' o do
+           card (grp-<OID do representante>, #N da linha do grupo no sumario).
+       A regra de hosts afetados e' a do PLANO e esta' escrita no relatorio
+       (prio_order); o chip "N HOSTS" do card consolidado conta outra coisa
+       (todo host de toda instancia), e nao e' tocado aqui.
+
+       A ORDEM, em chaves de xsl:sort sobre a lista ja' com os valores, nesta
+       precedencia:
          1. classe de severidade da maxima (Critico > Alto > Medio > Baixo);
          2. hosts afetados, decrescente: os hosts DISTINTOS entre as instancias
             que sao achado (severidade >= 0.1) — uma instancia falso positivo
-            num host nao o torna afetado; a de baixa confianca de um NVT
+            ou Log num host nao o torna afetado; a de baixa confianca de um NVT
             confirmado torna, como no card;
          3. EPSS, decrescente, sem EPSS por ultimo (NaN na chave numerica
             decrescente);
          4. maior CVSS (a severidade maxima), decrescente;
-         5. nome do NVT (o do feed, normalizado), crescente;
-         6. OID, crescente.
+         5. nome, crescente: o do NVT como no feed (normalizado), e o de um card
+            consolidado, a chave do produto — os dois independem da lingua, entao
+            o plano e' o mesmo nas tres;
+         6. OID, crescente: o do NVT, ou o do representante do grupo.
        Texto comparado como o xsl:sort do libxslt faz sem @lang: ponto de
-       codigo a ponto de codigo. A frase prio_order documenta a ordem no
-       proprio relatorio; o oraculo do CI (check-veracity.py, PrioOracle) a
-       reescreve de forma independente.
+       codigo a ponto de codigo (a v21 pina caixa e acento). A frase prio_order
+       documenta a ordem e o sentido de cada chave no proprio relatorio; o
+       oraculo do CI (check-veracity.py, PrioOracle) a reescreve de forma
+       independente.
 
        EPSS. O gvmd 26 escreve, em cada <result>, nvt/epss com max_severity e
        max_epss (score e percentile com 5 casas e o CVE de cada um) quando o
@@ -2497,22 +2539,22 @@ SPDX-License-Identifier: GPL-2.0-or-later
 
        A TABELA mostra as $prio-rows-max primeiras acoes; o resto e' declarado
        em \priotrunc ("+ N ... cada uma esta' na secao Achados Detalhados").
-       A ACAO e' a primeira frase da solucao — a mesma solucao do card
-       (catalogo do idioma, senao nvt/solution, senao a tag solution) — cortada
-       em $prio-action-max caracteres em fronteira de palavra, com o corte
-       declarado do escape_break; sem solucao, \prionosol. Embaixo dela, o nome
-       do NVT (o do sumario de achados), que diz DE QUE a acao trata. O link
-       (\priolink) leva ao card do achado e mostra o numero que o card tem: o
-       #N do card normal, ou o da linha do grupo no sumario para o advisory
-       absorvido num card consolidado.
+       A ACAO de um NVT e' a primeira frase da solucao do card (catalogo do
+       idioma, senao nvt/solution, senao a tag solution), cortada em
+       $prio-action-max caracteres em fronteira de palavra, com o corte
+       declarado do escape_break; sem solucao, \prionosol (num card consolidado
+       cujo membro mais severo nao traz solucao, tambem, com o tipo Vendor Fix).
+       Embaixo dela, o nome (o do sumario de achados, ou o titulo do card
+       consolidado), que diz DE QUE a acao trata. O link (\priolink) leva ao card
+       e mostra o numero que ele tem.
 
        A FRASE calculada conta as instancias com severidade >= 7.0 (achados
-       criticos e altos) das N primeiras acoes (X) e de todas (Y). Y = 0 diz
-       que nao ha criticos nem altos (nunca "0 de 0"); Y = 1 fala do unico
-       achado; sem acao e sem host medido, diz que nada foi medido — a
-       ausencia de acoes ali nao e' boa noticia. As notas dizem o que o plano
-       nao ve: EPSS ausente, indicadores fora do plano e export parcial (a regra
-       unica $export-partial). -->
+       criticos e altos) das N primeiras acoes (X) e de todas (Y); num card
+       consolidado, as dos membros. Y = 0 diz que nao ha criticos nem altos
+       (nunca "0 de 0"); Y = 1 fala do unico achado; sem acao e sem host medido,
+       diz que nada foi medido — a ausencia de acoes ali nao e' boa noticia. As
+       notas dizem o que o plano nao ve: EPSS ausente, indicadores fora do plano
+       e export parcial (a regra unica $export-partial). -->
   <xsl:param name="prio-rows-max" select="20"/>
   <xsl:param name="prio-action-max" select="160"/>
 
@@ -2561,20 +2603,106 @@ SPDX-License-Identifier: GPL-2.0-or-later
   </xsl:template>
 
   <xsl:template name="priorities-section">
-    <!-- 1. As acoes com os valores da ordem, numa passada sobre o documento de
-         origem (key() so' funciona la', nunca num laco sobre RTF). -->
+    <!-- O numero que cada card normal mostra, pela MESMA chave de ordenacao e
+         o mesmo node-set de finding-cards: a posicao + os cards consolidados. -->
+    <xsl:variable name="cardnum-rtf">
+      <xsl:for-each select="$rows-conf">
+        <xsl:sort select="gvm:sev-max(key('by-nvt', nvt/@oid))" data-type="number" order="descending"/>
+        <c o="{nvt/@oid}" n="{position() + count($grp-reps)}"/>
+      </xsl:for-each>
+    </xsl:variable>
+    <!-- 1. As acoes, com TODOS os valores (ordem e colunas), numa passada so'
+         sobre o documento de origem: key() e o nvt-i18n (que le current())
+         devolvem vazio num laco sobre RTF. @n/@o sao as chaves de nome e OID;
+         @k so' existe num card consolidado (a chave do produto, para o titulo);
+         <sol> e' a solucao (ja' traduzida) e <nm> o nome traduzido do NVT. -->
     <xsl:variable name="acts-rtf">
-      <xsl:for-each select="$nvt-conf">
+      <!-- O card de um NVT. -->
+      <xsl:for-each select="$rows-conf">
+        <xsl:variable name="o" select="string(nvt/@oid)"/>
         <xsl:variable name="inst" select="key('by-nvt', nvt/@oid)"/>
         <xsl:variable name="smax" select="gvm:sev-max($inst)"/>
         <xsl:if test="$smax &gt;= 0.1">
           <xsl:variable name="emax" select="math:max($inst/nvt/epss/max_epss/score[number(.) = number(.)])"/>
-          <a o="{nvt/@oid}" s="{$smax}" n="{normalize-space(nvt/name)}"
+          <xsl:variable name="sol-orig">
+            <xsl:choose>
+              <xsl:when test="string-length(normalize-space(nvt/solution)) &gt; 0">
+                <xsl:value-of select="nvt/solution"/>
+              </xsl:when>
+              <xsl:otherwise><xsl:value-of select="gvm:get-nvt-tag('solution')"/></xsl:otherwise>
+            </xsl:choose>
+          </xsl:variable>
+          <a o="{$o}" n="{normalize-space(nvt/name)}" s="{$smax}"
              r="{1 + ($smax &gt;= 4.0) + ($smax &gt;= 7.0) + ($smax &gt;= 9.0)}"
              h="{count($inst[number(severity) &gt;= 0.1][string-length(normalize-space(host/text())) &gt; 0]
                             [generate-id() = generate-id(key('by-prio-host', concat(nvt/@oid, '|', normalize-space(host/text())))[1])])}"
-             x="{count($inst[number(severity) &gt;= 7.0])}">
+             x="{count($inst[number(severity) &gt;= 7.0])}"
+             cv="{$inst[number(severity) = $smax][1]/severity}" t="{nvt/solution/@type}"
+             lk="{concat('fnd-', translate($o, '.', '-'))}"
+             ln="{exsl:node-set($cardnum-rtf)/c[@o = $o]/@n}">
             <xsl:attribute name="e"><xsl:if test="$emax = $emax"><xsl:value-of select="$emax"/></xsl:if></xsl:attribute>
+            <sol>
+              <xsl:call-template name="nvt-i18n">
+                <xsl:with-param name="field" select="'solution'"/>
+                <xsl:with-param name="orig" select="string($sol-orig)"/>
+              </xsl:call-template>
+            </sol>
+            <nm>
+              <xsl:call-template name="nvt-i18n">
+                <xsl:with-param name="field" select="'name'"/>
+                <xsl:with-param name="orig" select="string(nvt/name)"/>
+              </xsl:call-template>
+            </nm>
+          </a>
+        </xsl:if>
+      </xsl:for-each>
+      <!-- O card consolidado: UMA acao. Na ordem de consolidated-update-cards
+           (a mesma chave), entao position() e' o #N da linha do grupo. -->
+      <xsl:for-each select="$grp-reps">
+        <xsl:sort select="gvm:sev-max(gvm:grp-members(gvm:grp(nvt/name)))" data-type="number" order="descending"/>
+        <xsl:variable name="g" select="gvm:grp(nvt/name)"/>
+        <xsl:variable name="members" select="gvm:grp-members($g)"/>
+        <xsl:variable name="smax" select="gvm:sev-max($members)"/>
+        <xsl:variable name="gnum" select="position()"/>
+        <xsl:if test="$smax &gt;= 0.1">
+          <xsl:variable name="emax" select="math:max($members/nvt/epss/max_epss/score[number(.) = number(.)])"/>
+          <!-- Hosts: a uniao, deduplicada numa lista ordenada SO' das instancias
+               dos membros que sao achado (nada de chave por produto). -->
+          <xsl:variable name="gh-rtf">
+            <xsl:for-each select="$members[number(severity) &gt;= 0.1][string-length(normalize-space(host/text())) &gt; 0]">
+              <xsl:sort select="normalize-space(host/text())"/>
+              <h v="{normalize-space(host/text())}"/>
+            </xsl:for-each>
+          </xsl:variable>
+          <a o="{nvt/@oid}" n="{$g}" k="{$g}" s="{$smax}"
+             r="{1 + ($smax &gt;= 4.0) + ($smax &gt;= 7.0) + ($smax &gt;= 9.0)}"
+             h="{count(exsl:node-set($gh-rtf)/h[not(@v = preceding-sibling::h[1]/@v)])}"
+             x="{count($members[number(severity) &gt;= 7.0])}" t="VendorFix"
+             lk="{concat('grp-', translate(nvt/@oid, '.', '-'))}" ln="{$gnum}">
+            <xsl:attribute name="e"><xsl:if test="$emax = $emax"><xsl:value-of select="$emax"/></xsl:if></xsl:attribute>
+            <!-- A acao unica do card e o CVSS do \chipsev dele: o membro mais
+                 severo, na MESMA ordem de consolidated-update-cards (severidade
+                 numerica decrescente, a do documento no empate). -->
+            <xsl:for-each select="$members">
+              <xsl:sort select="severity" data-type="number" order="descending"/>
+              <xsl:if test="position() = 1">
+                <xsl:attribute name="cv"><xsl:value-of select="severity"/></xsl:attribute>
+                <xsl:variable name="act-orig">
+                  <xsl:choose>
+                    <xsl:when test="string-length(normalize-space(nvt/solution)) &gt; 0">
+                      <xsl:value-of select="nvt/solution"/>
+                    </xsl:when>
+                    <xsl:otherwise><xsl:value-of select="gvm:get-nvt-tag('solution')"/></xsl:otherwise>
+                  </xsl:choose>
+                </xsl:variable>
+                <sol>
+                  <xsl:call-template name="nvt-i18n">
+                    <xsl:with-param name="field" select="'solution'"/>
+                    <xsl:with-param name="orig" select="string($act-orig)"/>
+                  </xsl:call-template>
+                </sol>
+              </xsl:if>
+            </xsl:for-each>
           </a>
         </xsl:if>
       </xsl:for-each>
@@ -2601,22 +2729,6 @@ SPDX-License-Identifier: GPL-2.0-or-later
     <xsl:variable name="nind" select="count($nvt-low[key('by-nvt', nvt/@oid)[number(severity) &gt;= 0.1]])"/>
     <xsl:variable name="epss-any"
       select="count(gvm:report()/results/result/nvt/epss/max_epss/score[number(.) = number(.)]) &gt; 0"/>
-    <!-- O numero que cada card mostra, pela MESMA chave de ordenacao e o mesmo
-         node-set das linhas do sumario e dos cards (findings-summary-table,
-         consolidated-update-cards, finding-cards): grupo consolidado = a
-         posicao dele entre os grupos; card normal = a posicao + os grupos. -->
-    <xsl:variable name="grpnum-rtf">
-      <xsl:for-each select="$grp-reps">
-        <xsl:sort select="gvm:sev-max(gvm:grp-members(gvm:grp(nvt/name)))" data-type="number" order="descending"/>
-        <g k="{gvm:grp(nvt/name)}" n="{position()}" a="{concat('grp-', translate(nvt/@oid, '.', '-'))}"/>
-      </xsl:for-each>
-    </xsl:variable>
-    <xsl:variable name="cardnum-rtf">
-      <xsl:for-each select="$rows-conf">
-        <xsl:sort select="gvm:sev-max(key('by-nvt', nvt/@oid))" data-type="number" order="descending"/>
-        <c o="{nvt/@oid}" n="{position() + count($grp-reps)}"/>
-      </xsl:for-each>
-    </xsl:variable>
 
     <xsl:call-template name="section-open"><xsl:with-param name="n" select="2"/></xsl:call-template>
     <xsl:text>
@@ -2648,103 +2760,79 @@ SPDX-License-Identifier: GPL-2.0-or-later
     <xsl:text>}
 </xsl:text>
 
+    <!-- 3. A tabela: so' formata o que o passo 1 calculou (contexto no RTF,
+         nenhum key() daqui para baixo). -->
     <xsl:if test="$nact &gt; 0">
       <xsl:text>\begin{prioritytable}
 </xsl:text>
       <xsl:for-each select="$acts[position() &lt;= $nshow]">
-        <xsl:variable name="o" select="string(@o)"/>
-        <xsl:variable name="num" select="position()"/>
-        <xsl:variable name="e" select="string(@e)"/>
-        <xsl:variable name="h" select="string(@h)"/>
+        <xsl:variable name="S" select="normalize-space(sol)"/>
         <xsl:variable name="smax" select="number(@s)"/>
-        <!-- De volta ao documento de origem: o representante do NVT. -->
-        <xsl:for-each select="$nvt-conf[nvt/@oid = $o]">
-          <xsl:variable name="sol-orig">
-            <xsl:choose>
-              <xsl:when test="string-length(normalize-space(nvt/solution)) &gt; 0">
-                <xsl:value-of select="nvt/solution"/>
-              </xsl:when>
-              <xsl:otherwise><xsl:value-of select="gvm:get-nvt-tag('solution')"/></xsl:otherwise>
-            </xsl:choose>
-          </xsl:variable>
-          <xsl:variable name="sol">
-            <xsl:call-template name="nvt-i18n">
-              <xsl:with-param name="field" select="'solution'"/>
-              <xsl:with-param name="orig" select="string($sol-orig)"/>
-            </xsl:call-template>
-          </xsl:variable>
-          <xsl:variable name="S" select="normalize-space($sol)"/>
-          <xsl:variable name="name">
-            <xsl:call-template name="nvt-i18n">
-              <xsl:with-param name="field" select="'name'"/>
-              <xsl:with-param name="orig" select="string(nvt/name)"/>
-            </xsl:call-template>
-          </xsl:variable>
-          <xsl:variable name="sevk">
-            <xsl:choose>
-              <xsl:when test="$smax &gt;= 9.0">critico</xsl:when>
-              <xsl:when test="$smax &gt;= 7.0">alto</xsl:when>
-              <xsl:when test="$smax &gt;= 4.0">medio</xsl:when>
-              <xsl:otherwise>baixo</xsl:otherwise>
-            </xsl:choose>
-          </xsl:variable>
-          <xsl:variable name="g" select="gvm:grp(nvt/name)"/>
-          <xsl:text>\priorow{</xsl:text><xsl:value-of select="$num"/><xsl:text>}{</xsl:text>
+        <xsl:variable name="e" select="string(@e)"/>
+        <xsl:variable name="sevk">
           <xsl:choose>
-            <xsl:when test="string-length($S) = 0"><xsl:text>\prionosol</xsl:text></xsl:when>
-            <xsl:otherwise>
-              <xsl:variable name="fs">
-                <xsl:call-template name="prio-first-sentence">
-                  <xsl:with-param name="s" select="$S"/>
-                </xsl:call-template>
-              </xsl:variable>
-              <xsl:call-template name="escape_break">
-                <xsl:with-param name="string" select="string($fs)"/>
-                <xsl:with-param name="max" select="$prio-action-max"/>
+            <xsl:when test="$smax &gt;= 9.0">critico</xsl:when>
+            <xsl:when test="$smax &gt;= 7.0">alto</xsl:when>
+            <xsl:when test="$smax &gt;= 4.0">medio</xsl:when>
+            <xsl:otherwise>baixo</xsl:otherwise>
+          </xsl:choose>
+        </xsl:variable>
+        <xsl:text>\priorow{</xsl:text><xsl:value-of select="position()"/><xsl:text>}{</xsl:text>
+        <xsl:choose>
+          <xsl:when test="string-length($S) = 0"><xsl:text>\prionosol</xsl:text></xsl:when>
+          <xsl:otherwise>
+            <xsl:variable name="fs">
+              <xsl:call-template name="prio-first-sentence">
+                <xsl:with-param name="s" select="$S"/>
               </xsl:call-template>
-            </xsl:otherwise>
-          </xsl:choose>
-          <xsl:text>}{</xsl:text>
-          <xsl:call-template name="escape_name">
-            <xsl:with-param name="string" select="normalize-space($name)"/>
-          </xsl:call-template>
-          <xsl:text>}{</xsl:text>
-          <xsl:choose>
-            <xsl:when test="string-length(nvt/solution/@type) &gt; 0">
-              <xsl:call-template name="escape_break">
-                <xsl:with-param name="string" select="gvm:solution-type-label(nvt/solution/@type)"/>
-              </xsl:call-template>
-            </xsl:when>
-            <xsl:otherwise><xsl:text>---</xsl:text></xsl:otherwise>
-          </xsl:choose>
-          <xsl:text>}{</xsl:text><xsl:value-of select="$h"/>
-          <xsl:text>}{</xsl:text><xsl:value-of select="$sevk"/>
-          <xsl:text>}{</xsl:text><xsl:value-of select="key('by-nvt', $o)[number(severity) = $smax][1]/severity"/>
-          <xsl:text>}{</xsl:text>
-          <xsl:choose>
-            <xsl:when test="string-length($e) = 0"><xsl:text>---</xsl:text></xsl:when>
-            <xsl:when test="$L = 'en'">
-              <xsl:value-of select="format-number(number($e) * 100, '0.0##')"/><xsl:text>\%</xsl:text>
-            </xsl:when>
-            <xsl:otherwise>
-              <xsl:value-of select="format-number(number($e) * 100, '0,0##', 'ptes')"/><xsl:text>\%</xsl:text>
-            </xsl:otherwise>
-          </xsl:choose>
-          <xsl:text>}{\priolink{</xsl:text>
-          <xsl:choose>
-            <!-- Absorvido num card consolidado: a mesma regra de $rows-conf. -->
-            <xsl:when test="nvt/solution/@type = 'VendorFix' and $g = $grp-keys">
-              <xsl:variable name="gn" select="exsl:node-set($grpnum-rtf)/g[@k = $g]"/>
-              <xsl:value-of select="$gn/@a"/><xsl:text>}{\#</xsl:text><xsl:value-of select="$gn/@n"/>
-            </xsl:when>
-            <xsl:otherwise>
-              <xsl:value-of select="concat('fnd-', translate($o, '.', '-'))"/><xsl:text>}{\#</xsl:text>
-              <xsl:value-of select="exsl:node-set($cardnum-rtf)/c[@o = $o]/@n"/>
-            </xsl:otherwise>
-          </xsl:choose>
-          <xsl:text>}}
+            </xsl:variable>
+            <xsl:call-template name="escape_break">
+              <xsl:with-param name="string" select="string($fs)"/>
+              <xsl:with-param name="max" select="$prio-action-max"/>
+            </xsl:call-template>
+          </xsl:otherwise>
+        </xsl:choose>
+        <xsl:text>}{</xsl:text>
+        <xsl:choose>
+          <!-- O titulo do card consolidado, como o card o escreve. -->
+          <xsl:when test="@k">
+            <xsl:value-of select="gvm:t('grp_title')"/><xsl:text>: </xsl:text>
+            <xsl:call-template name="escape_name">
+              <xsl:with-param name="string" select="string(@k)"/>
+            </xsl:call-template>
+          </xsl:when>
+          <xsl:otherwise>
+            <xsl:call-template name="escape_name">
+              <xsl:with-param name="string" select="normalize-space(nm)"/>
+            </xsl:call-template>
+          </xsl:otherwise>
+        </xsl:choose>
+        <xsl:text>}{</xsl:text>
+        <xsl:choose>
+          <xsl:when test="string-length(@t) &gt; 0">
+            <xsl:call-template name="escape_break">
+              <xsl:with-param name="string" select="gvm:solution-type-label(string(@t))"/>
+            </xsl:call-template>
+          </xsl:when>
+          <xsl:otherwise><xsl:text>---</xsl:text></xsl:otherwise>
+        </xsl:choose>
+        <xsl:text>}{</xsl:text><xsl:value-of select="gvm:num(@h)"/>
+        <xsl:text>}{</xsl:text><xsl:value-of select="$sevk"/>
+        <xsl:text>}{</xsl:text><xsl:value-of select="@cv"/>
+        <xsl:text>}{</xsl:text>
+        <xsl:choose>
+          <xsl:when test="string-length($e) = 0"><xsl:text>---</xsl:text></xsl:when>
+          <xsl:when test="$L = 'en'">
+            <xsl:value-of select="format-number(number($e) * 100, '0.0##')"/><xsl:text>\%</xsl:text>
+          </xsl:when>
+          <xsl:otherwise>
+            <xsl:value-of select="format-number(number($e) * 100, '0,0##', 'ptes')"/><xsl:text>\%</xsl:text>
+          </xsl:otherwise>
+        </xsl:choose>
+        <xsl:text>}{\priolink{</xsl:text><xsl:value-of select="@lk"/>
+        <xsl:text>}{\#</xsl:text><xsl:value-of select="@ln"/>
+        <xsl:text>}}
 </xsl:text>
-        </xsl:for-each>
       </xsl:for-each>
       <xsl:text>\end{prioritytable}
 </xsl:text>
@@ -2759,7 +2847,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
       </xsl:if>
     </xsl:if>
 
-    <!-- 3. O que o plano nao ve. -->
+    <!-- 4. O que o plano nao ve. -->
     <xsl:if test="$nact = 0 and $nhosts &gt; 0">
       <xsl:text>\blocknote{</xsl:text><xsl:value-of select="gvm:t('prio_none')"/><xsl:text>}
 </xsl:text>

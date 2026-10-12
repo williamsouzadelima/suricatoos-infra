@@ -1187,14 +1187,15 @@
 % 2px fechando, e um vao de 1% da medida entre as colunas, porque aqui tambem
 % as celulas quebram em varias linhas (a acao, o nome do NVT, o tipo de
 % solucao); larguras + vaos somam exatamente a medida.
-% \priorow{n}{acao}{nome}{tipo}{hosts}{sev}{cvss}{epss}{link}: a acao em Sans
-% `ink' e, embaixo dela, o nome do NVT menor e `muted' (o do \findingorig: e'
-% a referencia de QUE a acao trata, porque "Atualize para a versao 2.4.58"
-% sozinha nao diz de que); a severidade e' CHAVE, como nas outras tabelas, e
-% sai no \sevbadges (a coluna ja' diz severidade, o numero e' o CVSS); o link
-% e' um \priolink. O \suri@rowfill fecha TODA celula (cada uma e' um \vtop;
-% veja o \authrow); na da acao ele fica DENTRO do paragrafo do nome, antes do
-% \par -- depois dele seria uma linha a mais.
+% \priorow{n}{acao}{nome}{tipo}{hosts}{sev}{cvss}{epss}{link}: uma acao por
+% card de achado (o card consolidado e' uma). A acao em Sans `ink' e, embaixo
+% dela, o nome menor e `muted' -- o do NVT (o do \findingorig) ou o titulo do
+% card consolidado: e' a referencia de QUE a acao trata, porque "Atualize para
+% a versao 2.4.58" sozinha nao diz de que; a severidade e' CHAVE, como nas
+% outras tabelas, e sai no \sevbadges (a coluna ja' diz severidade, o numero
+% e' o CVSS); o link e' um \priolink. O \suri@rowfill fecha TODA celula (cada
+% uma e' um \vtop; veja o \authrow); na da acao ele fica DENTRO do paragrafo
+% do nome, antes do \par -- depois dele seria uma linha a mais.
 %
 % \priolink{ancora}{texto} e' um \hyperlink com outro nome no .tex: o portao de
 % links do CI (gates.sh) faz a conta exata alvos == \hyperlink + cortes do
@@ -1203,7 +1204,8 @@
 % passa pela mesma regra de "nenhum link sem alvo" (gates.sh e o check
 % `ancoras' do check-veracity.py).
 %
-% \prionosol e' a acao de um NVT cuja solucao o relatorio nao traz: a frase de
+% \prionosol e' a acao de um card cuja solucao o relatorio nao traz (num card
+% consolidado, a do membro mais severo, que e' a acao unica dele): a frase de
 % \suriLblNoSolution em Sans regular italico `muted' (face do subset), como o
 % \scopena, para nao se confundir com uma acao.
 %
