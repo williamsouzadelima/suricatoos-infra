@@ -12,6 +12,31 @@ import (
 	"github.com/williamsouzadelima/suricatoos-infra/fleet/internal/tenant"
 )
 
+// DefaultInterval and MinInterval are FLEET_STATE_INTERVAL's default and floor (ADR-0011 "Configuração do nó").
+const (
+	DefaultInterval = 60 * time.Second
+	MinInterval     = 30 * time.Second
+)
+
+// ErrInvalidInterval: FLEET_STATE_INTERVAL is not a duration the connector accepts. The connector does not start
+// with it.
+var ErrInvalidInterval = errors.New("state: FLEET_STATE_INTERVAL inválido")
+
+// ParseInterval parses FLEET_STATE_INTERVAL: empty (unset) is DefaultInterval; anything else is a Go duration
+// ("60s", "1m", "1m30s") of whole seconds, at least MinInterval, or ErrInvalidInterval.
+func ParseInterval(s string) (time.Duration, error) {
+	if s == "" {
+		return DefaultInterval, nil
+	}
+	d, err := time.ParseDuration(s)
+	if err != nil || !validInterval(d) {
+		return 0, fmt.Errorf("%w: %.32q (mínimo %s, em segundos inteiros)", ErrInvalidInterval, s, MinInterval)
+	}
+	return d, nil
+}
+
+func validInterval(d time.Duration) bool { return d >= MinInterval && d%time.Second == 0 }
+
 // Tenants is what the state reads of the node's tenants (tenant.Source has it).
 type Tenants interface {
 	List() ([]tenant.Listing, error)
@@ -34,6 +59,9 @@ type Config struct {
 	NodeKind         contract.NodeKind
 	ConnectorVersion string // the connector's version_string
 	StateDir         string // FLEET_STATE_DIR: policy.json is read there, state-sent.json written there
+	// Interval is the collection period (FLEET_STATE_INTERVAL, ParseInterval): zero means DefaultInterval, and
+	// below MinInterval — or with a fraction of a second — Open refuses it.
+	Interval time.Duration
 	// GVM is the gvmd side (Bridge over fleet_ops.py): node in part, tasks, targets, schedules, reports.
 	GVM GVM
 	// Tenants is the node's tenant knowledge (tenant.Open): scope, and the attribution of every list kind.
@@ -63,12 +91,15 @@ type Config struct {
 // while the sender reads Pending/Current and calls MarkSent.
 type Collector struct {
 	cfg       Config
+	interval  time.Duration
 	kinds     []contract.StateKind
 	tracker   *tracker
 	recovery  Recovery
 	log       *slog.Logger
 	now       func() time.Time
 	dataLimit int // maxDataBytes; a field only so that a test can lower it
+	// newTicker is the clock of Run (a time.Ticker); a field only so that a test can drive the cycles.
+	newTicker func(d time.Duration) (<-chan time.Time, func())
 
 	collecting sync.Mutex // one cycle at a time
 
@@ -92,6 +123,13 @@ func Open(cfg Config) (*Collector, error) {
 	case cfg.NodeKind == contract.NodeCentral && cfg.ControlPlane == nil:
 		return nil, errors.New("state: o nó central precisa da API admin do control-plane")
 	}
+	interval := cfg.Interval
+	if interval == 0 {
+		interval = DefaultInterval
+	}
+	if !validInterval(interval) {
+		return nil, fmt.Errorf("%w: %s (mínimo %s, em segundos inteiros)", ErrInvalidInterval, interval, MinInterval)
+	}
 	tr, rec, err := openTracker(cfg.StateDir, kinds)
 	if err != nil {
 		return nil, err
@@ -107,8 +145,29 @@ func Open(cfg Config) (*Collector, error) {
 	if rec.Lost != nil {
 		logger.Warn("estado: arquivo do que o hub já tem inutilizável; todo kind será reenviado", "erro", rec.Lost.Error())
 	}
-	return &Collector{cfg: cfg, kinds: kinds, tracker: tr, recovery: rec, log: logger, now: now,
-		dataLimit: maxDataBytes, logged: map[contract.StateKind]string{}}, nil
+	return &Collector{cfg: cfg, interval: interval, kinds: kinds, tracker: tr, recovery: rec, log: logger, now: now,
+		dataLimit: maxDataBytes, newTicker: realTicker, logged: map[contract.StateKind]string{}}, nil
+}
+
+func realTicker(d time.Duration) (<-chan time.Time, func()) {
+	t := time.NewTicker(d)
+	return t.C, t.Stop
+}
+
+// Run collects at once and then every Interval until ctx ends, and returns ctx.Err(). A cycle never overlaps the
+// next: a slow one (gvmd slow, every read up to its timeout) delays it, and the ticks missed meanwhile are dropped.
+func (c *Collector) Run(ctx context.Context) error {
+	c.Collect(ctx)
+	tick, stop := c.newTicker(c.interval)
+	defer stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-tick:
+			c.Collect(ctx)
+		}
+	}
 }
 
 // cycle is what one collection shares between its kinds: the tenant listing, read once.
