@@ -162,7 +162,7 @@ func TestDescendenteComOStdoutNaoPrendeORun(t *testing.T) {
 		}
 	})
 	r := fakeRunner(t, "grandchild", pidfile)
-	r.Timeout = 500 * time.Millisecond
+	r.Timeout = 2 * time.Second // tempo de sobra para o filho subir o neto antes do timeout, mesmo num runner lento
 	start := time.Now()
 	_, err := r.Run(context.Background(), stateRequest(), testUser, testPassword)
 	wantCode(t, err, contract.ErrorTimeout)
