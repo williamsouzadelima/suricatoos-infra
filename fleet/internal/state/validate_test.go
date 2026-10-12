@@ -101,6 +101,27 @@ func TestTetosDeItensConferemComOSchema(t *testing.T) {
 	}
 }
 
+// Cada kind de lista corta no teto de itens do seu próprio data_<kind> (os tetos conferem com o schema acima).
+func TestCadaListaUsaOTetoDoSeuKind(t *testing.T) {
+	for kind, c := range map[contract.StateKind][2]int{
+		contract.KindTasks:        {taskSpec.max, maxTasks},
+		contract.KindTargets:      {targetSpec.max, maxTargets},
+		contract.KindSchedules:    {scheduleSpec.max, maxSchedules},
+		contract.KindReports:      {reportSpec.max, maxReports},
+		contract.KindAgents:       {agentSpec.max, maxAgents},
+		contract.KindTokens:       {tokenSpec.max, maxTokens},
+		contract.KindSensors:      {sensorSpec.max, maxSensors},
+		contract.KindScanRequests: {scanRequestSpec.max, maxScanRequests},
+		contract.KindRemediation:  {remediationSpec.max, maxRemediation},
+		contract.KindScope:        {scopeSpec.max, maxScopeItems},
+	} {
+		ref := "fleet-state.schema.json#/$defs/data_" + string(kind) + "/properties/items"
+		if got, ok := schemaAt(t, ref)["maxItems"].(float64); !ok || c[0] != c[1] || int(got) != c[0] {
+			t.Errorf("%s: spec %d, constante %d, schema %v", kind, c[0], c[1], schemaAt(t, ref)["maxItems"])
+		}
+	}
+}
+
 // O teto de 16 MiB é do corpo inteiro do PUT: o data fica abaixo dele com folga para o envelope.
 func TestTetoDoDataCabeNoCorpo(t *testing.T) {
 	if maxDataBytes+bodyReserve != contract.MaxStateBytes || bodyReserve < 512 {

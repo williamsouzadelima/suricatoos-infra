@@ -210,6 +210,12 @@ func TestTetoDeItensMarcaTruncated(t *testing.T) {
 	if len(got.Items) != maxTasks || !got.Truncated || got.Items[0].TaskID != uuidN(0) || got.Items[maxTasks-1].TaskID != uuidN(maxTasks-1) {
 		t.Fatalf("%d itens, truncated %v", len(got.Items), got.Truncated)
 	}
+	// exatamente no teto: nada cortado, nada marcado
+	f.gvm.tasks.Items = f.gvm.tasks.Items[1:]
+	got = current(t, collectOnce(t, f, contract.NodeStandalone), contract.KindTasks).(*contract.DataTasks)
+	if len(got.Items) != maxTasks || got.Truncated {
+		t.Fatalf("no teto: %d itens, truncated %v", len(got.Items), got.Truncated)
+	}
 }
 
 // A fonte já cortou ou já contou: o estado soma ao que ele mesmo descarta e mantém o truncated.
