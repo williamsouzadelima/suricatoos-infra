@@ -180,9 +180,10 @@ jobs:
       # em pt_BR e em es, com valor não vazio, e está em inglês (o padrão do
       # GSA). Em todas as chaves dos dois catálogos o valor tem os mesmos
       # {{x}} e {{- x}} da chave. E nenhum catálogo guarda tradução sem uso:
-      # chave fora do gsa-en.json do upstream que nenhum _() de src/ chama.
-      # Numa atualização do GSA, as traduções das chaves que o upstream
-      # removeu aparecem aqui e devem ser apagadas dos catálogos.
+      # chave fora do gsa-en.json da tag (lido do clone, sem o patch) que
+      # nenhum _() de src/ chama. Numa atualização do GSA, as traduções das
+      # chaves que o upstream removeu aparecem aqui e devem ser apagadas
+      # dos catálogos.
       - name: Chaves das telas da Suricatoos nos catálogos (pt_BR e es)
         id: keys
         if: ${{ !cancelled() && steps.gsa.outcome == 'success' }}
@@ -195,6 +196,7 @@ jobs:
           import json
           import os
           import re
+          import subprocess
           import sys
 
           SRC = ('.ts', '.tsx', '.js', '.jsx')
@@ -404,7 +406,17 @@ jobs:
                   if info['new'] or info['added'].intersection(range(first, last + 1)):
                       used.setdefault(key, (path, first))
 
-          upstream = json.load(open('public/locales/gsa-en.json', encoding='utf-8'))
+          # O gsa-en.json do upstream é o da TAG, lido do clone (o patch só é aplicado
+          # na árvore de trabalho): um patch que editar o gsa-en.json não esconde
+          # tradução sem uso.
+          tag_en = subprocess.run(['git', 'show', 'HEAD:public/locales/gsa-en.json'],
+                                  capture_output=True)
+          if tag_en.returncode != 0:
+              print('::error::não foi possível ler o gsa-en.json da tag '
+                    '(git show HEAD:public/locales/gsa-en.json): '
+                    + tag_en.stderr.decode('utf-8', 'replace').strip())
+              sys.exit(1)
+          upstream = json.loads(tag_en.stdout.decode('utf-8'))
           cats = {lang: json.load(open(f'public/locales/gsa-{lang}.json',
                                        encoding='utf-8'))
                   for lang in ('pt_BR', 'es')}
@@ -430,8 +442,8 @@ jobs:
                                      f'{json.dumps(key, ensure_ascii=False)} -> '
                                      f'{json.dumps(value, ensure_ascii=False)}'))
 
-          # Tradução sem uso: chave dos catálogos que não está no gsa-en.json do
-          # upstream e que nenhum _() de src/ chama. Numa atualização do GSA, as
+          # Tradução sem uso: chave dos catálogos que não está no gsa-en.json da
+          # tag e que nenhum _() de src/ chama. Numa atualização do GSA, as
           # traduções das chaves que o upstream removeu aparecem aqui e devem ser
           # apagadas dos catálogos.
           in_src = set()
@@ -447,7 +459,7 @@ jobs:
                       shown = json.dumps(key, ensure_ascii=False)
                       errors.append((f'public/locales/gsa-{lang}.json', 1,
                                      f'tradução sem uso: {shown} (fora do gsa-en.json '
-                                     f'do upstream e nenhum _() de src/ a chama; '
+                                     f'da tag e nenhum _() de src/ a chama; '
                                      f'apague a chave deste catálogo)'))
 
           for path, line, msg in errors:

@@ -18,7 +18,8 @@ O passo "Chaves das telas da Suricatoos nos catálogos (pt_BR e es)" do
   placeholders da chave: cada `{{x}}` e `{{- x}}`, nem mais nem menos
   (`{{- x}}` e `{{x}}` são diferentes);
 - um catálogo guarda **tradução sem uso**: chave que não está no `gsa-en.json`
-  do upstream e que nenhum `_()` de `src/` chama. Numa atualização do GSA, as
+  da tag (lido do clone, sem o patch) e que nenhum `_()` de `src/` chama.
+  Numa atualização do GSA, as
   traduções das chaves que o upstream removeu aparecem aqui e devem ser
   apagadas dos catálogos: a lista do CI é o roteiro dessa limpeza.
 
