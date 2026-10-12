@@ -10,7 +10,7 @@ build-feed-xml.py         gera os 9 objetos de feed, o manifest.json e o descrit
 manifest.json             (versionado) format/lang/variant -> UUID: o conector da frota lê
 Dockerfile                a imagem de feed (copia os 9 XMLs para cada diretório de release)
 ci/                       portões e scripts do CI (compile.sh, gates.sh, check-*.py, lib.sh)
-tests/                    fixtures, test_feed.py (roda no CI), mutantes-*.py (ferramentas de dev)
+tests/                    fixtures, test_*.py (rodam no CI), mutantes-*.py (ferramentas de dev)
 sample/sample-report.xml  a entrada de amostra (só dado inventado)
 ```
 
@@ -49,10 +49,13 @@ ID da imagem — nenhum dos dois lê a VERSION. Prova: `tests/test_feed.py`
 ## CI e publish
 
 - **`report-formats-ci`** (PR e push na `main`): `feed-sync` (gera, confere manifesto, bytes do
-  bundle e VERSION em cada objeto, roda `test_feed.py`), `compile` (9 jobs, todas as fixtures,
-  na imagem do gvmd), `previas` e `measure` (os dois não bloqueiam).
-- **`report-formats-publish`** roda **depois** dele: só quando o CI de um push na `main`
-  termina com `success` (`workflow_run`), e constrói a imagem do commit que o CI aprovou. O
+  bundle e VERSION em cada objeto, roda `test_feed.py`, `test_stable_gate.py` e
+  `test_gvmd_drift.py`), `compile` (9 jobs, todas as fixtures, na imagem do gvmd), `previas` e
+  `measure` (os dois não bloqueiam). O CI da `main` não cancela o de outro commit; só PR cancela.
+- **`report-formats-gvmd-stable`** (toda segunda-feira, e a mão depois do merge): vigia a deriva
+  entre o gvmd fixado e a `stable` (abaixo). Não bloqueia nada.
+- **`report-formats-publish`** roda **depois do `report-formats-ci`**: só quando o CI de um push na
+  `main` termina com `success` (`workflow_run`), e constrói a imagem do commit que o CI aprovou. O
   disparo manual (`workflow_dispatch`) continua e não espera o CI (o log avisa).
 - **A tag `stable` só anda para o commit mais novo do relatório na `main`**
   (`ci/stable-gate.sh`, decidido na hora do push): o commit tem de ser ancestral da `main` e nenhum
@@ -76,6 +79,14 @@ O CI e a medição rodam na imagem de produção do gvmd **fixada por digest em 
 em `ci/lib.sh` (e a data/versão no comentário) e leia uma reprovação como "a imagem nova mudou
 algo". O comentário de `ci/lib.sh` tem os comandos, com e sem docker. `GVMD_IMAGE` no ambiente
 vence o padrão (para experimentar a `stable` de hoje).
+
+A produção puxa a `stable` (`compose/compose.yaml`), então fixar o CI tem um custo: quando a
+`stable` anda, o CI deixa de testar o gvmd da produção. Por isso **toda segunda-feira**
+`report-formats-gvmd-stable.yml` (`ci/gvmd-drift.sh`) resolve a `stable` de hoje e compara com o
+pin: digest igual, "sem deriva"; diferente, **avisa no resumo** (com a versão do gvmd) e compila
+uma combinação (`en/technical`, todas as fixtures e portões) nela, dizendo se passou ou
+reprovou. Não bloqueia nada: sai 0 sempre e o veredito fica no resumo do job. O workflow só roda
+(agendado ou manual) depois do merge na `main`.
 
 ## Prévias visuais (para revisão humana)
 

@@ -73,7 +73,9 @@ concurrency:
 # report-formats/ci/lib.sh (GVMD_IMAGE), e so' la': a tag `stable' muda sozinha
 # (12/10/2026: dois digests em dois runs do mesmo dia). Trocar de imagem e' um PR
 # proprio; o comentario de lib.sh diz como resolver o digest novo. O digest usado
-# aparece no log de cada job ("digest: ...") e no resumo do measure.
+# aparece no log de cada job ("digest: ...") e no resumo do measure. A deriva em
+# relacao a `stable' (a que a producao puxa) e' vigiada toda semana, sem bloquear
+# nada, por report-formats-gvmd-stable.yml.
 
 jobs:
   feed-sync:

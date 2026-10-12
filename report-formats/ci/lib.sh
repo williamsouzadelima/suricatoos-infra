@@ -32,6 +32,10 @@
 #      adie a troca -- nao fixe de novo sem entender.
 # Para experimentar a `stable' de hoje sem mexer na fixacao, defina GVMD_IMAGE no
 # ambiente (ele vence o valor padrao daqui).
+# A deriva em relacao a `stable' -- a que a producao puxa (compose/compose.yaml) -- e'
+# vigiada toda semana por .github/workflows/report-formats-gvmd-stable.yml
+# (ci/gvmd-drift.sh): avisa no resumo quando o digest da `stable' difere deste e compila
+# uma combinacao nela, dizendo se passou. Nao bloqueia nada.
 : "${GVMD_IMAGE:=registry.community.greenbone.net/community/gvmd@sha256:94f00ed57c93163756f5c84bd79db5e3de96706be8c051ae201e5c35ffddcfd3}"
 # O gvmd chama o `generate` como o usuario gvmd, uid 1001, NAO root.
 GVMD_UID=1001
