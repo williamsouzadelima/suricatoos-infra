@@ -62,7 +62,15 @@ func TestParidadeComOFixtureDoControlPlane(t *testing.T) {
 		if st.Scope != wantScope {
 			t.Errorf("%s: escopo %q, esperava %q", want.Name, st.Scope, wantScope)
 		}
-		// o usuário gvmd: com ele (e uma senha) a escrita passa; sem ele, não
+		// o usuário gvmd do registro sai no Standing do tenant habilitado (a paridade do gmp_user pela API)
+		wantUser := want.GmpUser
+		if !want.Enabled {
+			wantUser = ""
+		}
+		if st.GVMUser != wantUser {
+			t.Errorf("%s: GVMUser %q, esperava %q", want.Name, st.GVMUser, wantUser)
+		}
+		// com o usuário (e uma senha) a escrita passa; sem ele, não
 		w := resolve(t, src, want.Name, contract.TypeTaskCreate)
 		switch {
 		case !want.Enabled:

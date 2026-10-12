@@ -64,6 +64,12 @@ type Standing struct {
 	// the missing gvmd user or password. It is not interpreted here: the scope gate (F2.4a) does that. An unknown
 	// or disabled tenant has no scope ("" = deny all).
 	Scope string
+	// GVMUser is the name of the tenant's gvmd user (the registry's gmp_user, or FLEET_TENANT_GMP_USER), set under
+	// the same rule as Scope: whenever the tenant is known and enabled, whether or not it has a password. The
+	// executor needs it for the types that run as the node's current gvmd user ("atual"): it checks that the
+	// object belongs to the tenant's user before acting on it, and Credentials cannot tell it the name when the
+	// tenant has no password. Empty when the tenant has no gvmd user. The password is never here.
+	GVMUser string
 }
 
 // Credentials are the gvmd user of a tenant and its password.
@@ -145,7 +151,7 @@ func admit(e entry, typ contract.CommandType, secret func() (string, error)) (St
 	case !e.enabled:
 		return Standing{Why: WhyDisabled}, nil
 	}
-	st := Standing{Scope: e.scope}
+	st := Standing{Scope: e.scope, GVMUser: e.gvmUser}
 	if RunsAs(typ) == UserTenant {
 		if e.gvmUser == "" {
 			st.Why = WhyNoGVMUser

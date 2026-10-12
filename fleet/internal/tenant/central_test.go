@@ -3,6 +3,7 @@ package tenant
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -73,29 +74,45 @@ func TestCentralCaminhosDaLinha6(t *testing.T) {
 		ok     bool
 		why    Why
 		scope  string
+		user   string // o usuário gvmd do tenant, sempre que ele é conhecido e habilitado
 	}{
-		{"conhecido e habilitado, operação de leitura", "acme", contract.TypeTaskStart, true, "", "192.0.2.0/24, 198.51.100.0/24"},
-		{"conhecido e habilitado, escrita com usuário e segredo", "acme", contract.TypeTaskCreate, true, "", "192.0.2.0/24, 198.51.100.0/24"},
-		{"desconhecido", "nope", contract.TypeTaskStart, false, WhyUnknown, ""},
-		{"desconhecido também na escrita", "nope", contract.TypeTargetCreate, false, WhyUnknown, ""},
-		{"caixa diferente é outro tenant", "ACME", contract.TypeTaskStart, false, WhyUnknown, ""},
-		{"desabilitado, leitura", "initech", contract.TypeStateResync, false, WhyDisabled, ""},
-		{"desabilitado, escrita (tem usuário e segredo)", "initech", contract.TypeTaskCreate, false, WhyDisabled, ""},
-		{"sem usuário gvmd: leitura passa", "globex", contract.TypeTaskStop, true, "", "203.0.113.0/24"},
-		{"sem usuário gvmd: escrita não", "globex", contract.TypeTargetModify, false, WhyNoGVMUser, "203.0.113.0/24"},
-		{"com usuário e sem segredo: leitura passa", "umbrella", contract.TypeReportExport, true, "", ""},
-		{"com usuário e sem segredo: escrita não", "umbrella", contract.TypeScheduleCreate, false, WhyNoSecret, ""},
-		{"tipo sem usuário gvmd (API do control-plane) só pede tenant conhecido", "globex", contract.TypeSensorJobEnqueue, true, "", "203.0.113.0/24"},
-		{"tipo sem usuário gvmd, tenant desconhecido", "nope", contract.TypeAgentScanNow, false, WhyUnknown, ""},
-		{"tipo fora do catálogo não exige escrita: o veredito é da linha 7", "globex", "task.explode", true, "", "203.0.113.0/24"},
+		{"conhecido e habilitado, operação de leitura", "acme", contract.TypeTaskStart, true, "", "192.0.2.0/24, 198.51.100.0/24", "tenant-acme"},
+		{"conhecido e habilitado, escrita com usuário e segredo", "acme", contract.TypeTaskCreate, true, "", "192.0.2.0/24, 198.51.100.0/24", "tenant-acme"},
+		{"desconhecido", "nope", contract.TypeTaskStart, false, WhyUnknown, "", ""},
+		{"desconhecido também na escrita", "nope", contract.TypeTargetCreate, false, WhyUnknown, "", ""},
+		{"caixa diferente é outro tenant", "ACME", contract.TypeTaskStart, false, WhyUnknown, "", ""},
+		{"desabilitado, leitura", "initech", contract.TypeStateResync, false, WhyDisabled, "", ""},
+		{"desabilitado, escrita (tem usuário e segredo)", "initech", contract.TypeTaskCreate, false, WhyDisabled, "", ""},
+		{"sem usuário gvmd: leitura passa", "globex", contract.TypeTaskStop, true, "", "203.0.113.0/24", ""},
+		{"sem usuário gvmd: escrita não", "globex", contract.TypeTargetModify, false, WhyNoGVMUser, "203.0.113.0/24", ""},
+		// o executor precisa do nome do dono dos objetos nos tipos "atual", mesmo sem a senha do tenant
+		{"com usuário e sem segredo: leitura passa", "umbrella", contract.TypeReportExport, true, "", "", "tenant-umbrella"},
+		{"com usuário e sem segredo: escrita não", "umbrella", contract.TypeScheduleCreate, false, WhyNoSecret, "", "tenant-umbrella"},
+		{"tipo sem usuário gvmd (API do control-plane) só pede tenant conhecido", "globex", contract.TypeSensorJobEnqueue, true, "", "203.0.113.0/24", ""},
+		{"tipo sem usuário gvmd, tenant desconhecido", "nope", contract.TypeAgentScanNow, false, WhyUnknown, "", ""},
+		{"tipo fora do catálogo não exige escrita: o veredito é da linha 7", "globex", "task.explode", true, "", "203.0.113.0/24", ""},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			st := resolve(t, src, c.tenant, c.typ)
-			if st.OK != c.ok || st.Why != c.why || st.Scope != c.scope {
-				t.Fatalf("Resolve(%q, %s) = %+v, esperava ok=%v why=%q scope=%q", c.tenant, c.typ, st, c.ok, c.why, c.scope)
+			if st.OK != c.ok || st.Why != c.why || st.Scope != c.scope || st.GVMUser != c.user {
+				t.Fatalf("Resolve(%q, %s) = %+v, esperava ok=%v why=%q scope=%q gvm_user=%q", c.tenant, c.typ, st, c.ok, c.why, c.scope, c.user)
 			}
 		})
+	}
+}
+
+// O Standing leva o nome do usuário gvmd e nunca a senha, em nenhum campo nem na impressão.
+func TestStandingNaoCarregaASenha(t *testing.T) {
+	e := newCentralEnv(t)
+	st := resolve(t, e.open(t), "acme", contract.TypeTaskCreate) // tem usuário e senha, e a escrita passa
+	if !st.OK || st.GVMUser != "tenant-acme" {
+		t.Fatalf("%+v", st)
+	}
+	for _, verb := range []string{"%v", "%+v", "%#v"} {
+		if out := fmt.Sprintf(verb, st); strings.Contains(out, pwAcme) {
+			t.Errorf("%s do Standing vazou a senha: %s", verb, out)
+		}
 	}
 }
 

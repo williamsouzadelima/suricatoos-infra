@@ -59,19 +59,20 @@ func TestLocalCaminhosDaLinha6(t *testing.T) {
 				ok     bool
 				why    Why
 				scope  string
+				user   string
 			}{
-				{"o único tenant, leitura", "acme", contract.TypeTaskStart, true, "", scope},
-				{"o único tenant, escrita com usuário e senha", "acme", contract.TypeTaskCreate, true, "", scope},
-				{"outro tenant, leitura", "globex", contract.TypeTaskStart, false, WhyUnknown, ""},
-				{"outro tenant, escrita", "globex", contract.TypeTaskCreate, false, WhyUnknown, ""},
-				{"caixa diferente é outro tenant", "Acme", contract.TypeTaskStart, false, WhyUnknown, ""},
-				{"prefixo não basta", "acme2", contract.TypeTaskStart, false, WhyUnknown, ""},
-				{"vazio", "", contract.TypeTaskStart, false, WhyUnknown, ""},
+				{"o único tenant, leitura", "acme", contract.TypeTaskStart, true, "", scope, "tenant-acme"},
+				{"o único tenant, escrita com usuário e senha", "acme", contract.TypeTaskCreate, true, "", scope, "tenant-acme"},
+				{"outro tenant, leitura", "globex", contract.TypeTaskStart, false, WhyUnknown, "", ""},
+				{"outro tenant, escrita", "globex", contract.TypeTaskCreate, false, WhyUnknown, "", ""},
+				{"caixa diferente é outro tenant", "Acme", contract.TypeTaskStart, false, WhyUnknown, "", ""},
+				{"prefixo não basta", "acme2", contract.TypeTaskStart, false, WhyUnknown, "", ""},
+				{"vazio", "", contract.TypeTaskStart, false, WhyUnknown, "", ""},
 			}
 			for _, c := range cases {
 				st := resolve(t, src, c.tenant, c.typ)
-				if st.OK != c.ok || st.Why != c.why || st.Scope != c.scope {
-					t.Errorf("%s: Resolve(%q, %s) = %+v, esperava ok=%v why=%q scope=%q", c.name, c.tenant, c.typ, st, c.ok, c.why, c.scope)
+				if st.OK != c.ok || st.Why != c.why || st.Scope != c.scope || st.GVMUser != c.user {
+					t.Errorf("%s: Resolve(%q, %s) = %+v, esperava ok=%v why=%q scope=%q gvm_user=%q", c.name, c.tenant, c.typ, st, c.ok, c.why, c.scope, c.user)
 				}
 			}
 		})
@@ -102,6 +103,12 @@ func TestLocalEscritaExigeUsuarioEArquivoDeSenhaLegivel(t *testing.T) {
 			for _, typ := range []contract.CommandType{contract.TypeTaskStart, contract.TypeStateResync, contract.TypeFeedSyncNow} {
 				if st := resolve(t, src, "acme", typ); !st.OK {
 					t.Errorf("%s: %+v", typ, st)
+				}
+			}
+			// o usuário configurado continua exposto (o executor confere o dono dos objetos "atual"), com ou sem senha
+			if want := e.cfg.GVMUser; want != "" {
+				if st := resolve(t, src, "acme", contract.TypeTaskStart); st.GVMUser != want {
+					t.Errorf("GVMUser = %q, esperava %q", st.GVMUser, want)
 				}
 			}
 			if _, err := src.Credentials("acme"); !errors.Is(err, ErrNoCredentials) {
