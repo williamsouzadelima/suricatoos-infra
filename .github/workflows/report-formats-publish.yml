@@ -1,14 +1,27 @@
 name: report-formats-publish
 
 # Builda a imagem de feed report-formats da Suricatoos (fork da upstream greenbone
-# report-formats + o report format "Suricatoos Premium PDF") e publica no GHCR.
-# Dispara quando o bundle/feed XML/Dockerfile mudam, ou manualmente.
+# report-formats + os nove report formats "Suricatoos PDF") e publica no GHCR.
+#
+# SO' DEPOIS DO CI. O publish roda quando o `report-formats-ci` de um PUSH na main
+# termina com `success` (workflow_run) e constroi a imagem do commit que o CI
+# APROVOU (head_sha), nao da ponta da main naquele instante. Antes ele disparava no
+# proprio push, em paralelo ao CI, e publicava mesmo com o compile reprovando: so'
+# conferia os feed XMLs e nunca rodou xsltproc/pdflatex.
+#   - PR, fork, CI reprovado ou cancelado: o publish nao roda (o filtro de branch
+#     do workflow_run deixa so' a main; o `if` do job exige conclusao success e
+#     evento push deste repositorio -- um PR de fork cujo branch se chame `main`
+#     nao passa).
+#   - Disparo manual (workflow_dispatch): continua, e NAO espera o CI -- e' a saida
+#     de emergencia, e a decisao e' de quem aperta o botao (o log avisa).
+#   - Mudar so' ESTE arquivo nao republica (o CI nao roda por ele): dispare a mao.
+#
+# Os nove feed XMLs nao estao no git: o build os gera aqui, antes do docker build.
 on:
-  push:
+  workflow_run:
+    workflows: [report-formats-ci]
+    types: [completed]
     branches: [main]
-    paths:
-      - 'report-formats/**'
-      - '.github/workflows/report-formats-publish.yml'
   workflow_dispatch:
 
 env:
@@ -16,15 +29,46 @@ env:
   OWNER: williamsouzadelima
   IMAGE: suricatoos-report-formats
 
+# Um publish por vez: dois commits seguidos na main nao correm entre si pela tag
+# `stable`. Se ja' houver um esperando, o mais novo toma o lugar (a imagem dele tem
+# tudo do anterior).
+concurrency:
+  group: report-formats-publish
+  cancel-in-progress: false
+
 jobs:
   build-publish:
+    # workflow_run dispara em TODA conclusao do CI da main: so' publica o que passou
+    # e veio de um push neste repositorio.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
     steps:
-      - name: Checkout
+      - name: Checkout (o commit que o CI aprovou)
         uses: actions/checkout@v4
+        with:
+          # workflow_run: o head_sha do run do CI; disparo manual: o commit do ref escolhido.
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Origem do que vai ser publicado
+        env:
+          EVENT: ${{ github.event_name }}
+          CI_RUN_URL: ${{ github.event.workflow_run.html_url }}
+        run: |
+          set -eu
+          SRC_SHA=$(git rev-parse HEAD)
+          echo "SRC_SHA=$SRC_SHA" >> "$GITHUB_ENV"
+          if [ "$EVENT" = workflow_dispatch ]; then
+            echo "::warning::Disparo manual: o report-formats-ci de $SRC_SHA NAO foi consultado."
+          else
+            echo "Commit $SRC_SHA, aprovado por $CI_RUN_URL"
+          fi
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -58,19 +102,29 @@ jobs:
           set -eux
           IMG="$REGISTRY/$OWNER/$IMAGE"
           docker build \
-            -t "$IMG:stable" -t "$IMG:${GITHUB_SHA::12}" \
+            -t "$IMG:stable" -t "$IMG:${SRC_SHA::12}" \
             report-formats
           docker push --all-tags "$IMG"
 
       - name: Resumo
         if: always()
+        env:
+          CI_RUN_URL: ${{ github.event.workflow_run.html_url }}
         run: |
+          SHA="${SRC_SHA:-?}"
           {
             echo "### Suricatoos — report-formats publicado 🐾"
             echo ""
             echo "| Imagem | Tags |"
             echo "|---|---|"
-            echo "| \`$REGISTRY/$OWNER/$IMAGE\` | stable, ${GITHUB_SHA::12} |"
+            echo "| \`$REGISTRY/$OWNER/$IMAGE\` | stable, ${SHA::12} |"
+            echo ""
+            echo "Commit: \`$SHA\`. VERSION dos nove objetos (derivada do conteúdo): \`$(python3 report-formats/build-feed-xml.py --print-version 2>/dev/null || echo '?')\`."
+            if [ -n "$CI_RUN_URL" ]; then
+              echo "report-formats-ci aprovado: $CI_RUN_URL"
+            else
+              echo "Disparo manual: o report-formats-ci NÃO foi consultado."
+            fi
             echo ""
             echo "Report formats (3 edições x 3 idiomas no dropdown Download report; fonte: report-formats/manifest.json):"
             python3 -c 'import json; m = json.load(open("report-formats/manifest.json", encoding="utf-8")); print("\n".join("- **%s** — `%s` (%s/%s)" % (e["name"], e["uuid"], e["lang"], e["variant"]) for e in m["report_formats"]))'

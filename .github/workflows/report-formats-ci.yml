@@ -1,9 +1,11 @@
 name: report-formats-ci
 
 # Compila o "Suricatoos Premium PDF" na imagem de PRODUCAO do gvmd em todo PR
-# que toca report-formats/. O report-formats-publish so' roda no push da main e
-# so' confere os feed XMLs; nunca rodou xsltproc/pdflatex, entao um PR que
-# quebrava o LaTeX so' aparecia em producao.
+# que toca report-formats/ e em todo push na main. O report-formats-publish roda
+# DEPOIS deste workflow (workflow_run): so' publica a imagem do commit da main em
+# que este CI terminou com sucesso. Antes ele disparava no proprio push, em
+# paralelo, e so' conferia os feed XMLs -- nunca rodou xsltproc/pdflatex, entao um
+# commit que quebrava o LaTeX era publicado mesmo assim.
 #
 # Jobs:
 #   feed-sync  os 9 feed XMLs (3 edicoes x 3 idiomas) sao GERADOS aqui pelo
