@@ -94,11 +94,16 @@ type Ledger struct {
 }
 
 // Open reads the ledger in stateDir/budget.json (FLEET_STATE_DIR). boot is the verification clock at start: it
-// dates the block that follows an unusable state. The only error is a programming one (an empty stateDir); see the
-// package comment for what an unreadable or corrupt file does.
+// dates the block that follows an unusable state, so it must be a real instant: a zero or out-of-range boot is
+// refused, because the end of the block would wrap around and the "full" window would end in the past. The only
+// errors are programming ones (an empty stateDir, an invalid boot); see the package comment for what an
+// unreadable or corrupt file does.
 func Open(stateDir string, boot time.Time) (*Ledger, error) {
 	if stateDir == "" {
 		return nil, errors.New("budget: FLEET_STATE_DIR vazio")
+	}
+	if !validInstant(boot) {
+		return nil, errors.New("budget: boot não é um instante válido (valor zero?): precisa ser o relógio de verificação")
 	}
 	path := filepath.Join(stateDir, FileName)
 	l := &Ledger{path: path}
@@ -116,6 +121,10 @@ func Open(stateDir string, boot time.Time) (*Ledger, error) {
 	}
 	return l, nil
 }
+
+// validInstant reports whether t can be held as Unix nanoseconds, which is how the ledger stores time (years 1678
+// to 2262). The zero time cannot: its nanoseconds overflow int64, and so would the end of the block it dates.
+func validInstant(t time.Time) bool { return t.Equal(time.Unix(0, t.UnixNano())) }
 
 func (l *Ledger) load(data []byte) error {
 	var st state

@@ -339,6 +339,41 @@ func TestOpenStateDirVazioEErro(t *testing.T) {
 	}
 }
 
+// A sonda da revisão: budget.json corrompido e boot zero. O boot+1h estoura o int64 de nanossegundos, o fim do
+// bloqueio cai em 1754 e o orçamento "perdido" voltava vazio, isto é, abria a porta. O valor zero é o mais comum
+// em Go (um campo que ninguém preencheu); Open recusa, simétrico ao stateDir vazio.
+func TestOpenRecusaBootQueNaoERelogioDeVerificacao(t *testing.T) {
+	cases := map[string]time.Time{
+		"valor zero":                        {},
+		"antes do que cabe em int64 de ns":  time.Date(1600, 1, 1, 0, 0, 0, 0, time.UTC),
+		"depois do que cabe em int64 de ns": time.Date(3000, 1, 1, 0, 0, 0, 0, time.UTC),
+	}
+	for name, boot := range cases {
+		t.Run(name, func(t *testing.T) {
+			dir := seedDir(t, "lixo") // estado corrompido: o caso em que o bloqueio é o que protege
+			l, err := Open(dir, boot)
+			if err == nil {
+				t.Fatalf("Open aceitou boot %v; Lost=%v BlockedUntil=%v e Fits(2026-10-11)=%v (Fits=true é porta aberta)",
+					boot, l.Lost() != nil, l.BlockedUntil(), l.Fits(t0, false, wide))
+			}
+			if l != nil {
+				t.Fatalf("com erro, nenhum ledger: veio %+v", l)
+			}
+			// sem arquivo nenhum também: o boot é inválido, não importa o que haja no disco
+			if _, err := Open(t.TempDir(), boot); err == nil {
+				t.Fatal("boot inválido sem arquivo também tinha de ser erro")
+			}
+		})
+	}
+	// o que um relógio de verificação de verdade produz continua valendo, inclusive com o relógio monotônico
+	if _, err := Open(t.TempDir(), time.Now()); err != nil {
+		t.Fatalf("time.Now() deveria ser aceito: %v", err)
+	}
+	if _, err := Open(t.TempDir(), t0); err != nil {
+		t.Fatalf("%v", err)
+	}
+}
+
 // Ruling: state that cannot be used at boot counts as a FULL window from boot for one hour; losing the budget
 // must never open the door.
 func TestEstadoIlegivelOuCorrompidoTrataJanelaComoCheiaPorUmaHora(t *testing.T) {
