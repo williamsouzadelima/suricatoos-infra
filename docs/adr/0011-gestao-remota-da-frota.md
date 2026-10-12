@@ -504,7 +504,7 @@ destino do comando (ack em `fleet-result.schema.json#/$defs/ack`).
 | 8 | payload válido para o tipo (schema estrito + regras semânticas, como o filtro explícito do `report.export`) | `bad_payload` | `rejected`, final |
 | 8 | `report.export`: a combinação (`format`, `lang`, `variant`) está em `capabilities.report_formats` do estado `node` | `unsupported_report_variant` | `rejected`, final |
 | 9 | escopo: os hosts de `target.create` e os resultantes de `target.modify` (os atuais, lidos no gvmd, se o payload não traz `hosts`); os alvos de `sensor_job.enqueue`; os hosts do target de `task.start/resume` e de `task.create/modify` com `target_id`; e os dos targets das tarefas que o comando liga a uma agenda ou cuja agenda ele altera (`schedule.create` com `task_ids`, `task.modify` com `schedule_id` não vazio, `task.clone` de tarefa com agenda, `schedule.modify`). Tudo lido no gvmd antes da decisão; tem de ser IP/CIDR literal ⊆ escopo do tenant, fora do espaço degenerado e **sem conter** IP próprio nem do hub | `scope_denied` | `rejected`, final |
-| — | o store anti-replay/journal não pôde ser gravado, a configuração local (política, registro de tenants, segredos) não pôde ser relida, ou a leitura no gvmd da linha 9 falhou | `unavailable` | `deferred` |
+| — | o store anti-replay/journal não pôde ser gravado, a configuração local (política, registro de tenants, segredos) não pôde ser relida, a marca d'água do relógio de verificação não pôde ser gravada (inclusive numa decisão da linha 3), ou a leitura no gvmd da linha 9 falhou | `unavailable` | `deferred` |
 
 Na linha 0, `type` só precisa casar `^[a-z][a-z_]*\.[a-z][a-z_]*$` (`command_type_any`, como em
 `fleet-command.schema.json#/$defs/envelope`): um tipo fora do catálogo é `unsupported` (linha 7), não
@@ -573,7 +573,8 @@ Na linha 0, `type` só precisa casar `^[a-z][a-z_]*\.[a-z][a-z_]*$` (`command_ty
   **só** para relatar `clock_offset_s` e alertar: o nó nunca ajusta `t` pelo relógio do hub.
 - **Store ilegível — ou ausente com o certificado do nó presente — no boot, e em todo (re)enroll** ⇒ o nó grava
   um **piso de replay** = `t` e rejeita (`replay`, detalhe `cache reiniciado`) todo comando com
-  `issued_at < piso + skew`; depois de 24 h + skew o piso deixa de importar (janela máxima). Sem store
+  `issued_at < piso + skew`; depois de 24 h + 2·skew o piso deixa de importar (o comando mais antigo que ele
+  ainda barra, emitido logo antes de piso + skew, vale no máximo até piso + skew + 24 h + skew). Sem store
   gravável, nenhum comando é aceito (`deferred` com `unavailable`).
   - O nó publica o piso como `replay_floor` (UTC) no heartbeat e no estado `node`, **arredondado para cima** ao
     segundo inteiro, e compara em segundos inteiros. A referência é o **heartbeat**; como o estado `node` pode
@@ -862,13 +863,14 @@ Regras transversais:
   | `format` | `lang` | `variant` | `report_format_id` | Fonte |
   |---|---|---|---|---|
   | `suricatoos-pdf` | `en` / `pt_BR` / `es` | `technical` | `c6482c1b-57bb-406b-a501-c97eed86ad05` / `e43a4f20-d845-4916-83f0-851ac6dc5e57` / `91afce49-21fd-4ea0-ba16-7ba2bc51a03a` | `report-formats/build-feed-xml.py` |
-  | `suricatoos-pdf` | `en` / `pt_BR` / `es` | `client`, `executive` | objetos novos da fatia R5 (ainda não existem) | R5 |
+  | `suricatoos-pdf` | `en` / `pt_BR` / `es` | `client`, `executive` | seis objetos da fatia R5; as nove combinações com o UUID de cada uma ficam em `report-formats/manifest.json` | `report-formats/build-feed-xml.py` (manifesto) |
   | `gvm-xml` | `en` | `technical` | `a994b278-1f62-11e1-96ac-406186ea4fc5` | python-gvm `ReportFormatType.XML` |
   | `gvm-csv-results` | `en` | `technical` | `c1645568-627a-11e3-a660-406186ea4fc5` | `ReportFormatType.CSV_RESULTS` |
   | `gvm-pdf` | `en` | `technical` | `c402cc3e-b531-11e1-9163-406186ea4fc5` | `ReportFormatType.PDF` |
 
   O nó anuncia em `capabilities.report_formats` do estado `node` (`[{format, lang, variants:[…]}]`) só as
-  combinações cujos objetos estão presentes e confiáveis no seu gvmd; até a R5 entrar, anuncia só `technical`.
+  combinações cujos objetos estão presentes e confiáveis no seu gvmd (o conector lê `report-formats/manifest.json`
+  para o mapeamento); até a R5 entrar, anuncia só `technical`.
   Um pedido válido no schema mas para combinação não anunciada é rejeitado (ack) com
   `unsupported_report_variant` — nunca cai em silêncio para outra edição.
 
