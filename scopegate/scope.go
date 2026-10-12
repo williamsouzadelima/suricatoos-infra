@@ -57,7 +57,7 @@ func LogSelfDenyCIDR(warn func(cidr, reason string)) Option {
 }
 
 // New builds a Scope from an allow spec (comma/space CIDRs or bare IPs; the
-// tenant's authorized internal ranges) and a self-deny spec (the sensor's own
+// tenant's authorized internal ranges) and a self-deny spec (the node's own
 // addresses + the cloud endpoints — never scan targets). Both may be empty; an
 // empty allow spec denies everything (deny-all). A self-deny token that is not a
 // bare IP is ignored.
@@ -106,9 +106,9 @@ func (s *Scope) WithSelfDeny(ips ...netip.Addr) (*Scope, error) {
 func (s *Scope) Empty() bool { return len(s.allow) == 0 }
 
 // CheckHost validates one target (an IP or CIDR literal) and returns its canonical
-// form, or an error. A hostname, a self/cloud address, a degenerate address, an
+// form, or an error. A hostname, a self-deny address, a degenerate address, an
 // off-scope IP, or a CIDR not fully within the allow-set all fail, and so does a
-// CIDR that contains a self/cloud address unless LogSelfDenyCIDR is set.
+// CIDR that contains a self-deny address unless LogSelfDenyCIDR is set.
 func (s *Scope) CheckHost(host string) (string, error) {
 	canonical, containsSelf, err := s.gate(host)
 	if err != nil {
