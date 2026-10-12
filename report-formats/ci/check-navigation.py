@@ -51,8 +51,14 @@ de nomes (/Dests) e /Outlines. O texto das paginas vem do pdftotext
 Os textos (titulos das secoes, das tarjas e do sumario) e o teto
 $bookmark-max sao LIDOS do proprio latex.xsl, como no check-veracity.py.
 
+A edicao (--variant) troca o contrato: a executiva tem tres secoes (o resumo,
+as prioridades e o escopo, 1..3) e nenhum marcador de nivel 1; a do cliente,
+as oito do tecnico, com os cards e as tarjas que ELA mostra (o modelo do
+relatorio e' o sem falso positivo do check-veracity.py).
+
 Uso:
     check-navigation.py --lang <en|pt_BR|es> --xml <fixture.xml> --tex <report.tex>
+                        [--variant <technical|client|executive>]
                         [--pdf <generate.pdf>] [--aux <report.aux>]
                         [--pdftotext <pdftotext>]
                         [--bundle <suricatoos-premium-pdf/>] [--only <checagem>...]
@@ -94,12 +100,26 @@ norm_space, TexError, StylesheetError = V.norm_space, V.TexError, V.StylesheetEr
 # si mesma. A 2 (prioridades e proximos passos) entrou logo depois do resumo
 # executivo, e as seguintes desceram um numero: a 7 (escopo, metodologia e
 # limitacoes) fica antes do apendice, que e' a 8.
-SECTIONS = [(1, "sec_exec"), (2, "sec_prio"), (3, "sec_hexmap"), (4, "sec_hosts_ports"),
-            (5, "sec_findings_summary"), (6, "sec_detailed"), (7, "sec_scope"),
-            (8, "sec_hexmap_host")]
+# A edicao executiva tem tres: o resumo, as prioridades e o escopo, numerados
+# 1..3, e nenhum marcador de nivel 1 (nao tem hosts nem cards); a do cliente
+# tem as oito do tecnico. use_variant() troca o contrato.
+SECTIONS_ALL = [(1, "sec_exec"), (2, "sec_prio"), (3, "sec_hexmap"), (4, "sec_hosts_ports"),
+                (5, "sec_findings_summary"), (6, "sec_detailed"), (7, "sec_scope"),
+                (8, "sec_hexmap_host")]
+SECTIONS_EXEC = [(1, "sec_exec"), (2, "sec_prio"), (3, "sec_scope")]
+SECTIONS = SECTIONS_ALL
 # As secoes com marcadores de nivel 1: os hosts e os cards de achado.
 SEC_HOSTS, SEC_CARDS = 4, 6
 BOXES = ("hostcard", "findingcard", "consolidatedcard", "suriSummaryHead")
+
+
+def use_variant(variant):
+    global SECTIONS, SEC_HOSTS, SEC_CARDS
+    V.use_variant(variant)
+    if variant == "executive":
+        SECTIONS, SEC_HOSTS, SEC_CARDS = SECTIONS_EXEC, None, None
+    else:
+        SECTIONS, SEC_HOSTS, SEC_CARDS = SECTIONS_ALL, 4, 6
 
 
 def nfc(s):
@@ -246,6 +266,10 @@ def check_marcadores(m, tex, nav, sheet, lang):
     fails = []
     s = tex.s
     budget = sheet.num("bookmark-max")
+    # A edicao executiva nao tem hosts nem cards: nenhum marcador de nivel 1.
+    if SEC_HOSTS is None:
+        return (["%d \\suriBookmark na edicao executiva, que nao tem hosts nem cards"
+                 % len(nav.bookmarks)] if nav.bookmarks else [])
     names = [b[2] for b in nav.bookmarks]
     dup = sorted({x for x in names if names.count(x) > 1})
     if dup:
@@ -946,11 +970,14 @@ def main():
     ap.add_argument("--pdftotext", default="pdftotext",
                     help="o pdftotext do poppler (padrao: o do PATH; no runner, poppler-utils)")
     ap.add_argument("--bundle", default=os.path.join(os.path.dirname(HERE), "suricatoos-premium-pdf"))
+    ap.add_argument("--variant", default="technical", choices=V.VARIANTS,
+                    help="a edicao do relatorio (o `variant' do contrato da frota)")
     ap.add_argument("--only", action="append", default=[])
     args = ap.parse_args()
+    use_variant(args.variant)
     try:
         sheet = V.Stylesheet(os.path.join(args.bundle, "latex.xsl"))
-        model = V.Model(args.xml, sheet)
+        model = V.Model(args.xml, sheet, args.variant)
         tex = V.Tex(args.tex)
         with open(args.tex, encoding="utf-8") as fh:
             tex.whole = fh.read()

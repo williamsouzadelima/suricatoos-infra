@@ -6,8 +6,14 @@ name: report-formats-ci
 # quebrava o LaTeX so' aparecia em producao.
 #
 # Jobs:
-#   feed-sync  os 3 feed XMLs versionados batem com o bundle (build-feed-xml.py);
-#   compile    por idioma: `sh ./generate` ponta a ponta + compilacao de
+#   feed-sync  os 9 feed XMLs versionados (3 edicoes x 3 idiomas) e o
+#              manifest.json batem com o bundle (build-feed-xml.py), nenhum
+#              objeto gerado fica fora do repositorio, e o manifesto descreve
+#              exatamente os objetos (ci/check-manifest.py: UUID, nome, idioma
+#              e edicao do generate embutido);
+#   compile    por idioma x edicao (technical, client, executive -- os nomes
+#              do contrato da frota, ADR-0011): `sh ./generate` ponta a ponta
+#              + compilacao de
 #              diagnostico de cada fixture -- sample, tortura e as de
 #              veracidade (report-formats/tests/fixtures/, uma por defeito ja'
 #              corrigido) -- com os portoes de log/fontes/links/destinos, o de
@@ -54,24 +60,35 @@ jobs:
         with:
           python-version: '3.x'
 
-      - name: Regenerar os feed XMLs a partir do bundle e comparar
+      - name: Regenerar os feed XMLs e o manifesto a partir do bundle e comparar
         run: |
           set -eux
           python3 report-formats/build-feed-xml.py
-          # Falha se o XML versionado divergir do bundle: regenere e commite.
-          git diff --exit-code report-formats/pdf-suricatoos-*.xml
+          # Falha se o XML ou o manifesto versionado divergir do bundle:
+          # regenere e commite.
+          git diff --exit-code report-formats/pdf-suricatoos-*.xml report-formats/manifest.json
+          # O git diff nao ve arquivo NOVO: um objeto que o build escreve e o
+          # commit esqueceu passaria. Nada sob report-formats/ pode ficar fora.
+          test -z "$(git status --porcelain --untracked-files=all -- report-formats)"
+
+      - name: Manifesto = objetos de feed (UUID, nome, idioma e edicao)
+        run: python3 report-formats/ci/check-manifest.py
 
   compile:
-    name: compila no gvmd:stable (${{ matrix.lang }})
+    name: compila no gvmd:stable (${{ matrix.lang }}, ${{ matrix.variant }})
     # pdf-texto le o `pdftotext -layout` do poppler 24.02 desta imagem (outro poppler/xpdf quebra a regex do sumario e o portao reprova); ubuntu-latest esta migrando, entao trocar e' deliberado.
     runs-on: ubuntu-24.04
     timeout-minutes: 40
+    # Idioma x edicao: cada objeto de feed tem o seu job, com TODAS as fixtures
+    # (nenhuma cobertura cortada por edicao). Os 9 jobs rodam em paralelo.
     strategy:
       fail-fast: false
       matrix:
         lang: [en, pt_BR, es]
+        variant: [technical, client, executive]
     env:
       REPORT_LANG: ${{ matrix.lang }}
+      REPORT_VARIANT: ${{ matrix.variant }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -84,17 +101,17 @@ jobs:
           pdftotext -v 2>&1 | head -n 1
 
       - name: Compilar (sample + tortura) e aplicar os portoes
-        run: report-formats/ci/compile.sh "$REPORT_LANG" "$RUNNER_TEMP/artefatos"
+        run: report-formats/ci/compile.sh "$REPORT_LANG" "$REPORT_VARIANT" "$RUNNER_TEMP/artefatos"
 
       - name: Controle negativo (o generate tem de falhar alto)
         if: ${{ !cancelled() }}
-        run: report-formats/ci/negative-control.sh "$REPORT_LANG" "$RUNNER_TEMP/artefatos"
+        run: report-formats/ci/negative-control.sh "$REPORT_LANG" "$REPORT_VARIANT" "$RUNNER_TEMP/artefatos"
 
       - name: Publicar PDFs, logs e previews
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
-          name: report-formats-${{ matrix.lang }}
+          name: report-formats-${{ matrix.lang }}-${{ matrix.variant }}
           path: ${{ runner.temp }}/artefatos/
           if-no-files-found: warn
           retention-days: 14

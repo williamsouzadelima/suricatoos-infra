@@ -18,15 +18,22 @@
 #                 existe) e reporta;
 #   xml-quebrado  XML malformado: o xsltproc falha;
 #   xml-vazio     invólucro <report extension="xml"> sem relatorio dentro: o
-#                 xsltproc sai 0 com saida VAZIA.
+#                 xsltproc sai 0 com saida VAZIA;
+#   edicao-invalida  o par `stringparam variant' do generate com uma edicao
+#                 fora do contrato (technical | client | executive): o latex.xsl
+#                 para a transformacao, e nada cai em silencio em outra edicao.
 #
-# Uso: report-formats/ci/negative-control.sh <lang> <dir-de-artefatos>
+# Uso: report-formats/ci/negative-control.sh <lang> <variant> <dir-de-artefatos>
+#
+# Roda com o bundle do objeto de feed da matriz (idioma x edicao): os quatro
+# casos valem para toda edicao, e cada uma tem o seu generate.
 set -euo pipefail
 
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
-lang=${1:?uso: negative-control.sh <lang> <dir-de-artefatos>}
-art="${2:?uso: negative-control.sh <lang> <dir-de-artefatos>}/$lang/controle-negativo"
+lang=${1:?uso: negative-control.sh <lang> <variant> <dir-de-artefatos>}
+variant=${2:?uso: negative-control.sh <lang> <variant> <dir-de-artefatos>}
+art="${3:?uso: negative-control.sh <lang> <variant> <dir-de-artefatos>}/$lang/$variant/controle-negativo"
 mkdir -p "$art"
 
 gvmd_pull
@@ -40,8 +47,8 @@ printf '<report id="00000000-0000-0000-0000-000000000000"><results>' \
 printf '<report extension="xml" id="00000000-0000-0000-0000-000000000000"/>\n' \
   > "$work/fixtures/vazio.xml"
 
-stage_bundle "$lang" "$work/sem-blocks" --omit suricatoos-blocks.sty
-stage_bundle "$lang" "$work/erro-tex"
+stage_bundle "$lang" "$variant" "$work/sem-blocks" --omit suricatoos-blocks.sty
+stage_bundle "$lang" "$variant" "$work/erro-tex"
 # No INICIO do .sty: todos terminam em \endinput, e o que vier depois dele nao
 # e' lido. O \AtBeginDocument dispara no \begin{document}: erro "Undefined
 # control sequence", recuperavel em batchmode -- o documento sai inteiro.
@@ -50,7 +57,16 @@ stage_bundle "$lang" "$work/erro-tex"
   cat "$work/erro-tex/suricatoos-report.sty"
 } > "$work/erro-tex/suricatoos-report.sty.new"
 mv "$work/erro-tex/suricatoos-report.sty.new" "$work/erro-tex/suricatoos-report.sty"
-stage_bundle "$lang" "$work/integro"
+stage_bundle "$lang" "$variant" "$work/integro"
+# A mesma linha do xsltproc, com uma edicao que o contrato nao tem.
+stage_bundle "$lang" "$variant" "$work/edicao-invalida"
+sed 's/--stringparam variant [a-z]*/--stringparam variant desconhecida/' \
+  "$work/edicao-invalida/generate" > "$work/edicao-invalida/generate.new"
+mv "$work/edicao-invalida/generate.new" "$work/edicao-invalida/generate"
+if ! grep -q -e '--stringparam variant desconhecida' "$work/edicao-invalida/generate"; then
+  log "ERRO: nao consegui trocar a edicao do generate do caso edicao-invalida"
+  exit 1
+fi
 open_perms "$work"
 
 failures=0
@@ -74,9 +90,9 @@ caso() {
     verdict="FALHA: ${why#; }"
     failures=$((failures + 1))
   fi
-  log "[$lang/controle-negativo/$name] exit $rc, stdout $size bytes, %PDF no stdout: ${n_pdf:-0} -> $verdict"
+  log "[$lang/$variant/controle-negativo/$name] exit $rc, stdout $size bytes, %PDF no stdout: ${n_pdf:-0} -> $verdict"
   sed -n '1,25p' "$err" | sed 's/^/           | /'
-  rows+=("| $lang | $name | $rc | $size | $verdict |")
+  rows+=("| $lang | $variant | $name | $rc | $size | $verdict |")
 }
 
 caso sem-blocks   sem-blocks sample.xml   'suricatoos-blocks\.sty'
@@ -90,24 +106,27 @@ caso xml-quebrado integro    quebrado.xml 'xsltproc exited [1-9]'
 # Qualquer uma das tres causas serve; um "generate: ERROR" por OUTRO motivo
 # (bundle incompleto, catalogo, permissao) nao prova este caso e reprova.
 caso xml-vazio    integro    vazio.xml    'empty \.tex|TeX errors|report\.pdf missing'
+# A mensagem do proprio latex.xsl (xsl:message terminate), que o generate
+# repete no stderr junto com o exit do xsltproc.
+caso edicao-invalida edicao-invalida sample.xml 'edicao desconhecida'
 
 # Premissa do erro-tex: sem o generate no meio, o pdflatex entrega mesmo um PDF
 # com o erro no log? (Informativo -- e' o que torna o caso significativo.)
 gvmd_run "$work" /work/erro-tex /work/ci/diag-compile.sh /work/fixtures/sample.xml /work/diag-erro-tex \
-  || log "[$lang/controle-negativo] diag-compile.sh do erro-tex saiu $?"
+  || log "[$lang/$variant/controle-negativo] diag-compile.sh do erro-tex saiu $?"
 d="$work/diag-erro-tex"
 if [ -s "$d/report.pdf" ]; then
-  log "[$lang/controle-negativo] premissa CONFIRMADA: o pdflatex escreveu report.pdf ($(wc -c < "$d/report.pdf" | tr -d ' ') bytes, exit $(cat "$d/pdflatex.rc" 2>/dev/null)) com $({ grep -a -c '^!' "$d/report.log" 2>/dev/null || true; } | tr -d ' ') erro(s) TeX no log; o generate recusou entrega-lo"
+  log "[$lang/$variant/controle-negativo] premissa CONFIRMADA: o pdflatex escreveu report.pdf ($(wc -c < "$d/report.pdf" | tr -d ' ') bytes, exit $(cat "$d/pdflatex.rc" 2>/dev/null)) com $({ grep -a -c '^!' "$d/report.log" 2>/dev/null || true; } | tr -d ' ') erro(s) TeX no log; o generate recusou entrega-lo"
 else
-  log "[$lang/controle-negativo] premissa NAO reproduzida: o pdflatex nao escreveu PDF com o erro injetado (o caso continua provando a recusa, mas nao o PDF mutilado)"
+  log "[$lang/$variant/controle-negativo] premissa NAO reproduzida: o pdflatex nao escreveu PDF com o erro injetado (o caso continua provando a recusa, mas nao o PDF mutilado)"
 fi
 
 if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
   {
-    echo "### Controle negativo do generate — $lang"
+    echo "### Controle negativo do generate — $lang / $variant"
     echo
-    echo "| idioma | caso | exit | bytes no stdout | veredito |"
-    echo "|---|---|---|---|---|"
+    echo "| idioma | edição | caso | exit | bytes no stdout | veredito |"
+    echo "|---|---|---|---|---|---|"
     printf '%s\n' "${rows[@]}"
     echo
   } >> "$GITHUB_STEP_SUMMARY"
@@ -117,4 +136,4 @@ if [ "$failures" -ne 0 ]; then
   log "REPROVADO: $failures caso(s) do controle negativo nao falharam alto"
   exit 1
 fi
-log "controle negativo OK: o generate falhou alto nos 4 casos"
+log "controle negativo OK: o generate falhou alto nos 5 casos"

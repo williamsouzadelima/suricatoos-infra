@@ -72,19 +72,47 @@ porque sao invariantes do documento, nao casos especiais.
   alerta         o resumo executivo abre com o alerta de "nada medido" se e
                  somente se o relatorio nao tem host, e o alerta da' a causa
                  que o dado sustenta: tarefa que nunca iniciou (a mesma regra
-                 da secao 7) ou scan que iniciou e nao achou host (alive test).
+                 da secao 7) ou scan que iniciou e nao achou host (alive test);
+  afetados       cada card de achado diz quantas instancias o NVT tem e lista
+                 os host:porta distintos delas (teto 40, o resto declarado); o
+                 card consolidado, os hosts das instancias dos membros;
+  hosts          a secao 4 (hosts e portas abertas): um card por host, as
+                 linhas de porta (o inventario <ports> do host, senao as portas
+                 dos resultados, mais a linha `geral'), cada uma com o numero
+                 de resultados, a chave da maior severidade e o CVSS, e a nota
+                 que decompoe a linha `geral' por classe;
+  edicao         a capa diz a edicao (o kicker) e o .tex so' usa os blocos da
+                 edicao pedida (\\findinglog so' na do cliente, a tabela de
+                 prioridades sem coluna de card so' na executiva).
+
+EDICOES (--variant, o `variant' do contrato da frota, ADR-0011):
+  technical  o relatorio completo; todas as checagens acima;
+  client     o relatorio SEM os resultados falso positivo -- como o gvmd o
+             exportaria sem eles: nenhum resultado de severidade -1 (a faixa do
+             sev-class), nenhuma porta que so' eles sustentavam, o total do
+             scan sem eles -- e o Log so' como contagem: o NVT cuja severidade
+             maxima fica abaixo de 0.1 nao tem linha nem card, e cada bloco
+             (confirmados, indicadores) diz quantos ha. O oraculo aplica essa
+             regra ao XML (client_view) e roda as mesmas checagens, mais a
+             `cliente': nenhuma palavra, chave, linha, card, ancora ou porta de
+             falso positivo, e as contagens de Log batendo com o XML;
+  executive  so' o resumo executivo, as prioridades (sem coluna de card) e o
+             escopo, numeradas 1..3: as checagens dessas secoes, mais a
+             `executiva' (nenhuma outra secao, card, host, ancora de card ou
+             mencao a secao que a edicao nao tem).
 
 Os limiares (qod-min, group-min, adv-max, cortes do nome, scope-rows-max e os
 tetos de texto da secao 7, prio-rows-max e prio-action-max da secao 2), as
 listas de meses e dias e as frases do i18n sao LIDOS do proprio latex.xsl, para
 a regua nunca divergir do relatorio; um nome lido que esteja definido mais de
 uma vez la' e' erro (exit 2). As regras de estado do scan (ScanState), os dois
-sinais do inventario do agente e a ordem e as regras da secao 2 (PrioOracle)
-sao as do latex.xsl, escritas de novo aqui -- regua independente, como as
-outras.
+sinais do inventario do agente, a ordem e as regras da secao 2 (PrioOracle) e a
+regra da edicao do cliente (client_view) sao as do latex.xsl, escritas de novo
+aqui -- regua independente, como as outras.
 
 Uso:
     check-veracity.py --lang <en|pt_BR|es> --xml <fixture.xml> --tex <report.tex>
+                      [--variant <technical|client|executive>]
                       [--bundle <suricatoos-premium-pdf/>] [--only <checagem>...]
 
 Sai 0 se tudo passa, 1 se alguma checagem reprova, 2 em erro de uso/leitura.
@@ -106,9 +134,25 @@ WS = " \t\r\n"                       # espaco em branco do XPath
 # As secoes que as checagens leem, pelo numero que o \suriSection carrega (a
 # tabela $sections do latex.xsl; o contrato inteiro, com os titulos, e' o
 # SECTIONS do check-navigation.py). A 2 (prioridades) entrou depois do resumo
-# executivo, e as seguintes desceram um numero.
-SEC_EXEC, SEC_PRIO, SEC_HEXMAP = 1, 2, 3
-SEC_SUMMARY, SEC_DETAIL, SEC_SCOPE = 5, 6, 7
+# executivo, e as seguintes desceram um numero. A edicao executiva so' tem o
+# resumo, as prioridades e o escopo, renumerados 1..3: use_variant() troca os
+# numeros (None = a secao nao existe nessa edicao).
+VARIANTS = ("technical", "client", "executive")
+VARIANT = "technical"
+SEC_EXEC, SEC_PRIO, SEC_HEXMAP, SEC_HOSTS = 1, 2, 3, 4
+SEC_SUMMARY, SEC_DETAIL, SEC_SCOPE, SEC_APPENDIX = 5, 6, 7, 8
+
+
+def use_variant(variant):
+    """Os numeros de secao da edicao: a executiva so' tem 1 (resumo), 2
+    (prioridades) e 3 (escopo)."""
+    global VARIANT, SEC_HEXMAP, SEC_HOSTS, SEC_SUMMARY, SEC_DETAIL, SEC_SCOPE, SEC_APPENDIX
+    VARIANT = variant
+    if variant == "executive":
+        SEC_HEXMAP = SEC_HOSTS = SEC_SUMMARY = SEC_DETAIL = SEC_APPENDIX = None
+        SEC_SCOPE = 3
+    else:
+        SEC_HEXMAP, SEC_HOSTS, SEC_SUMMARY, SEC_DETAIL, SEC_SCOPE, SEC_APPENDIX = 3, 4, 5, 6, 7, 8
 
 
 # ---------------------------------------------------------------------------
@@ -166,6 +210,12 @@ class Stylesheet:
             raise StylesheetError("%s nao e' uma string literal no latex.xsl: select=%r"
                                   % (name, sels[0]))
         return mt.group(1).split()
+
+    def upper(self, s):
+        """gvm:hx-upper: o translate com as listas $hx-lc / $hx-uc do latex.xsl
+        (caixa alta dos chips, acentuadas inclusive)."""
+        lc, uc = (self.words(n)[0] for n in ("hx-lc", "hx-uc"))
+        return s.translate(str.maketrans(lc, uc))
 
 
 def bucket(lang):
@@ -248,6 +298,10 @@ class Result:
         # CVE do NVT de maior EPSS; gmp.c, results_xml_append_epss).
         self.host = norm_space(xp_first_text(el.find("host")))
         self.epss = [xp_text(s) for s in el.findall("nvt/epss/max_epss/score")]
+        # host/text() e a porta como o latex.xsl os le e imprime (sem
+        # normalizar): os sistemas afetados do card e as linhas da secao 4.
+        self.host_raw = xp_first_text(el.find("host"))
+        self.port_raw = xp_text(el.find("port"))
 
     def low(self, floor):
         """Instancia abaixo do piso: tem QoD e ela e' < piso (sem QoD = nao)."""
@@ -282,12 +336,74 @@ class Nvt:
         self.group = grp_key(self.rep.name)
 
 
+def is_fp(sev):
+    """Falso positivo: o codigo -1 do gvmd, na faixa fechada do sev-class do
+    latex.xsl (-2 debug e -3 erro de scan sao outros codigos)."""
+    return isnum(sev) and -1.5 < sev < 0
+
+
+def xpath_number_str(x):
+    """string() de um numero do XPath: inteiro sem ponto decimal."""
+    return str(int(x)) if x == int(x) else repr(x)
+
+
+def client_view(rep):
+    """A edicao do cliente le o relatorio SEM os resultados falso positivo, como
+    o gvmd o exportaria sem eles (levels sem f), aplicado aqui ao XML, IN PLACE:
+      - sai todo results/result de severidade falso positivo;
+      - sai toda ports/port que so' eles sustentavam: a de severidade propria
+        falso positivo (o gvmd poe na <port> a MAIOR severidade dos resultados
+        daquele host e porta) ou, sem severidade propria, a que tem resultado
+        no mesmo host e porta e so' falso positivo;
+      - o total do scan (o texto do <result_count>) perde os falso positivo:
+        os do scan (false_positive/full) quando o gvmd os conta, senao os que o
+        export carrega; o false_positive sai."""
+    els = rep.findall("results/result")
+    fps = [el for el in els if is_fp(xnum(el.findtext("severity")))]
+    by_hp = {}
+    for el in els:
+        by_hp.setdefault((norm_space(xp_first_text(el.find("host"))),
+                          norm_space(xp_text(el.find("port")))), []).append(el)
+    ports = rep.find("ports")
+    if ports is not None:
+        for p in list(ports.findall("port")):
+            own = xnum(p.findtext("severity"))
+            if isnum(own):
+                drop = is_fp(own)
+            else:
+                rs = by_hp.get((norm_space(xp_text(p.find("host"))), norm_space(xp_first_text(p))), [])
+                drop = bool(rs) and all(is_fp(xnum(r.findtext("severity"))) for r in rs)
+            if drop:
+                ports.remove(p)
+    results = rep.find("results")
+    for el in fps:
+        results.remove(el)
+    rc = rep.find("result_count")
+    if rc is not None:
+        t = norm_space(xp_first_text(rc))
+        tn = xnum(t)
+        fpf = xnum(rc.findtext("false_positive/full"))
+        n_fp = fpf if isnum(fpf) else len(fps)
+        first = xp_first_text(rc)
+        rc.text = (xpath_number_str(tn - n_fp) if t and isnum(tn) and math.floor(tn) == tn
+                   else (first or None))
+        for c in rc:
+            c.tail = None
+        fpe = rc.find("false_positive")
+        if fpe is not None:
+            rc.remove(fpe)
+
+
 class Model:
-    def __init__(self, xml_path, sheet):
+    def __init__(self, xml_path, sheet, variant="technical"):
         root = ET.parse(xml_path).getroot()
         # gvm:report(): o <report> interno quando ha um, senao a raiz.
         inner = root.find("report")
         rep = inner if inner is not None else root
+        self.path = xml_path
+        self.variant = variant
+        if variant == "client":
+            client_view(rep)
         self.root = root
         self.report = rep
         self.floor = sheet.num("qod-min")
@@ -298,14 +414,35 @@ class Model:
             by.setdefault(r.oid, []).append(r)
         self.nvts = [Nvt(oid, inst, self.floor) for oid, inst in by.items()]
         self.by_anchor = {fnd(n.oid): n for n in self.nvts}
-        # Grupos consolidados: so' NVT VendorFix CONFIRMADO conta e entra.
+        # Grupos consolidados: so' NVT VendorFix CONFIRMADO conta e entra. Na
+        # edicao do cliente, tambem so' o que e' achado (severidade maxima >=
+        # 0.1): o advisory so' Log nao e' membro, e' um registro informativo
+        # como outro qualquer (contado, nunca listado).
         groups = {}
         for n in self.nvts:
-            if n.vendorfix and not n.low:
+            if n.vendorfix and not n.low and (variant != "client" or self.hit(n)):
                 groups.setdefault(n.group, []).append(n)
         self.groups = {g: ms for g, ms in groups.items() if len(ms) >= self.group_min}
         self.absorbed = {n.oid for ms in self.groups.values() for n in ms}
         self.hosts = len(rep.findall("host"))
+
+    @staticmethod
+    def hit(n):
+        """O NVT e' achado: severidade maxima >= 0.1 (nem Log nem falso positivo)."""
+        return isnum(n.maxsev) and n.maxsev >= 0.1
+
+    def shown(self, n):
+        """O NVT tem linha e card nesta edicao? Na do cliente, o Log nao tem."""
+        return self.variant != "client" or self.hit(n)
+
+    def log_units(self, low):
+        """Os registros informativos (Log) de um bloco da edicao do cliente: os
+        NVTs do bloco (confirmados ou indicadores) que nenhum card consolidado
+        absorveu e que nao sao achado. Fora da edicao do cliente, nenhum."""
+        if self.variant != "client":
+            return []
+        return [n for n in self.nvts
+                if n.low == low and n.oid not in self.absorbed and not self.hit(n)]
 
     def project(self):
         t = self.report.find("task")
@@ -628,9 +765,16 @@ def check_secoes(m, tex, sheet, lang):
             # bloco anunciado que pudesse ficar vazio.
             if items == 0 and not slabs and not m.nvts:
                 continue
-            if items == 0 and not (mode == "confirmados" and none_conf in block):
+            # Na edicao do cliente um bloco pode ter so' a contagem de Log (o
+            # Log nao tem linha nem card): a tarja anuncia esses registros.
+            if items == 0 and not (mode == "confirmados" and none_conf in block) \
+                    and not (m.variant == "client" and "\\findinglog{" in block):
                 fails.append("secao %d: tarja '%s' sem nenhuma %s" %
                              (sec, mode, "linha" if sec == SEC_SUMMARY else "card"))
+            # Uma tabela de sumario sem linha nenhuma (so' o cabecalho) se le
+            # como defeito: o bloco sem linha diz por texto o que nao tem.
+            if sec == SEC_SUMMARY and items == 0 and "\\begin{findingsummary}" in block:
+                fails.append("secao %d: tabela '%s' sem nenhuma linha" % (sec, mode))
         has_ind = "indicadores" in modes
         if has_ind != (n_low > 0):
             fails.append("secao %d: tarja de indicadores %s, mas o relatorio tem %d NVT(s) de baixa"
@@ -671,6 +815,10 @@ def check_consolidado(m, tex, sheet, lang):
         if n.oid in m.absorbed:
             if a in where:
                 fails.append("NVT %s absorvido no grupo '%s' e ainda com card proprio" % (n.oid, n.group))
+        elif not m.shown(n):
+            # Edicao do cliente: o Log nao tem card, so' a contagem do bloco.
+            if a in where:
+                fails.append("NVT %s (Log) com card na edicao do cliente" % n.oid)
         else:
             want = "indicadores" if n.low else "confirmados"
             if a not in where:
@@ -933,7 +1081,8 @@ def check_ancoras(m, tex, sheet, lang):
         fails.append("alvo(s) repetido(s): %s" % ", ".join(dup[:5]))
     glinks = [a for a in links if a.startswith("grp-")]
     gtargets = [a for a in targets if a.startswith("grp-")]
-    ng = len(m.groups)
+    # A edicao executiva nao tem card nenhum: nenhuma ancora de grupo.
+    ng = 0 if m.variant == "executive" else len(m.groups)
     if not (len(glinks) == len(gtargets) == ng):
         fails.append("grupos consolidados: %d \\hyperlink, %d \\hypertarget, esperado %d de cada"
                      % (len(glinks), len(gtargets), ng))
@@ -1185,6 +1334,10 @@ class ScopeOracle:
         # 2. filtro do export
         term = xp_text(rep.find("filters/term"))
         mq, lv, ov = (term_value(term, k) for k in ("min_qod", "levels", "apply_overrides"))
+        # A edicao do cliente nao fala de falso positivo: a letra f sai da
+        # lista de niveis (o termo do filtro continua como o gvmd o ecoou).
+        if m.variant == "client":
+            lv = lv.replace("f", "")
         mq_known = mq != "" and isnum(xnum(mq))
         total = len(m.results)
         rcs = norm_space(xp_first_text(rep.find("result_count")))
@@ -1668,10 +1821,14 @@ class PrioOracle:
             self.summary = "%s%d%s%d%s%d%s" % (t("prio_sum_n_a"), N, t("prio_sum_n_b"), X,
                                                t("prio_sum_of"), Y, t("prio_sum_tail"))
         self.paras = [t("prio_intro_a") + str(m.floor) + t("prio_intro_b")]
+        # A frase da ordem da edicao do cliente nao fala de falso positivo.
         if acts:
-            self.paras.append(t("prio_order"))
-        self.trunc = (["\\suriEllip\\ + " + gvm_num(len(acts) - self.cap, lang)
-                       + t("prio_trunc_a") + t("sec_detailed") + t("prio_trunc_b")]
+            self.paras.append(t("prio_order_client" if m.variant == "client" else "prio_order"))
+        # O corte da executiva nao manda o leitor a uma secao de achados
+        # detalhados que ela nao tem.
+        tail = (t("prio_trunc_exec") if m.variant == "executive"
+                else t("prio_trunc_a") + t("sec_detailed") + t("prio_trunc_b"))
+        self.trunc = (["\\suriEllip\\ + " + gvm_num(len(acts) - self.cap, lang) + tail]
                       if len(acts) > self.cap else [])
         notes = []
         if not acts and m.hosts > 0:
@@ -1707,13 +1864,19 @@ def check_prioridades(m, tex, sheet, lang, bundle):
     hosts distintos, a severidade, o EPSS e o link para o card do achado com o
     numero que esse card tem; o "+ N" so' acima do teto; a frase calculada; as
     notas (EPSS, indicadores fora do plano, export parcial); e os blocos na
-    ordem introducao, frase, tabela, corte, notas."""
+    ordem introducao, frase, tabela, corte, notas.
+    Na edicao executiva a tabela nao tem a coluna de card (os cards nao
+    existem nela): \\priorowsemcard, oito argumentos, nenhum link; e o corte
+    nao cita a secao de achados detalhados."""
     if SEC_PRIO not in tex.sections:
         return ["secao %d ausente" % SEC_PRIO]
     text, _ = tex.section(SEC_PRIO)
     want = PrioOracle(m, sheet, lang, bundle, tex)
     where = "secao %d" % SEC_PRIO
     fails = []
+    exe = m.variant == "executive"
+    rowmac, nargs, env = (("priorowsemcard", 8, "prioritytablesemcard") if exe
+                          else ("priorow", 9, "prioritytable"))
     paras = macros(text, "suriPara", 1)
     if [a[0] for _, a in paras] != want.paras:
         fails.append("%s: introducao %s, esperado %s"
@@ -1722,11 +1885,14 @@ def check_prioridades(m, tex, sheet, lang, bundle):
     if [a[0] for _, a in sums] != [want.summary]:
         fails.append("%s: frase %s, esperado '%s' (N=%d, X=%d, Y=%d)"
                      % (where, [a[0] for _, a in sums], want.summary, want.N, want.X, want.Y))
-    rows = macros(text, "priorow", 9)
+    rows = macros(text, rowmac, nargs)
     if len(rows) != len(want.rows):
-        fails.append("%s: %d \\priorow, esperado %d (%d acao(oes), teto %d)"
-                     % (where, len(rows), len(want.rows), len(want.acts), want.cap))
-    if ("\\begin{prioritytable}" in text) != bool(want.rows):
+        fails.append("%s: %d \\%s, esperado %d (%d acao(oes), teto %d)"
+                     % (where, len(rows), rowmac, len(want.rows), len(want.acts), want.cap))
+    other = "priorow" if exe else "priorowsemcard"
+    if re.search(r"\\%s(?![A-Za-z@])" % other, text):
+        fails.append("%s: \\%s na edicao %s" % (where, other, m.variant))
+    if ("\\begin{%s}" % env in text) != bool(want.rows):
         fails.append("%s: tabela %s, e o plano tem %d acao(oes)"
                      % (where, "presente" if want.rows == [] else "ausente", len(want.acts)))
     for (_, a), w in zip(rows, want.rows):
@@ -1753,6 +1919,8 @@ def check_prioridades(m, tex, sheet, lang, bundle):
                                (6, "cvss", "CVSS"), (7, "epss", "EPSS")):
             if a[k].strip() != w[label]:
                 fails.append("%s: %s '%s', esperado '%s'" % (cell, what, a[k].strip(), w[label]))
+        if exe:
+            continue
         links = macros(a[8], "priolink", 2)
         if len(links) != 1:
             fails.append("%s: %d \\priolink na celula do achado, esperado 1" % (cell, len(links)))
@@ -1786,16 +1954,403 @@ def check_prioridades(m, tex, sheet, lang, bundle):
     # exata alvos == links + cortes do gates.sh, que e' a do sumario de achados.
     if ANCHOR_LINK.search(text):
         fails.append("%s: \\hyperlink na secao; o link da tabela e' \\priolink" % where)
+    # Na executiva nenhum link: o card que ele abriria nao existe.
+    if exe and PRIO_LINK.search(text):
+        fails.append("%s: \\priolink na edicao executiva, que nao tem cards" % where)
+    return fails
+
+
+# ---------------------------------------------------------------------------
+# Cards: instancias e sistemas afetados
+# ---------------------------------------------------------------------------
+def port_max_sev(rs):
+    """port-max-sev do latex.xsl: o texto da severidade do 1o resultado na
+    ordem numerica decrescente (estavel; sem numero, por ultimo); '' sem
+    resultado."""
+    if not rs:
+        return ""
+    return sorted(rs, key=lambda r: (0, -r.sev) if isnum(r.sev) else (1, 0))[0].sev_raw
+
+
+def check_afetados(m, tex, sheet, lang):
+    """Cada card de achado diz quantas instancias o NVT tem (o chip N
+    INSTANCIA(S)) e lista, como \\chiphost, os host:porta DISTINTOS delas, em
+    ordem de host (o 1o de cada par na ordem do documento), ate' 40, com o resto
+    declarado num chip "+N"; o card consolidado, o chip HOST <ip> (um host) ou
+    N HOSTS e os hosts, em ordem, das instancias dos membros. Na edicao do
+    cliente as instancias sao as do relatorio sem falso positivo: o host que so'
+    um falso positivo alcancava nao aparece."""
+    fails = []
+    inst_lbl = sheet.upper(sheet.t("lbl_instances", lang))
+    more = sheet.upper(sheet.t("more_word", lang))
+    for mode, block in tex.blocks(SEC_DETAIL):
+        for (c, seg), (_, a) in zip(card_segments(block), macros(block, "findingcard", 4)):
+            n = m.by_anchor.get(c["anchor"])
+            if n is None:
+                continue        # a checagem `instancias' ja' reprova o OID desconhecido
+            got = [plain(x) for x in (b[0] for _, b in macros(a[3], "chip", 1))
+                   if plain(x).endswith(" " + inst_lbl)]
+            want = "%d %s" % (len(n.inst), inst_lbl)
+            if got != [want]:
+                fails.append("card %s: chip de instancias %s, esperado '%s'" % (n.oid, got, want))
+            pairs, seen = [], set()
+            for r in n.inst:
+                if (r.host_raw, r.port_raw) not in seen:
+                    seen.add((r.host_raw, r.port_raw))
+                    pairs.append((r.host_raw, r.port_raw))
+            pairs.sort(key=lambda hp: hp[0])
+            want = [h + (":" + p if p else "") for h, p in pairs[:40]]
+            if len(pairs) > 40:
+                want.append("+%d %s" % (len(pairs) - 40, more))
+            got = [plain(b[0]) for _, b in macros(seg, "chiphost", 1)]
+            if got != want:
+                fails.append("card %s: sistemas afetados %s, esperado %s"
+                             % (n.oid, got[:6], want[:6]))
+        for _, a in macros(block, "consolidatedcard", 7):
+            mt = re.match(r"\\hypertarget\{[^}]*\}\{\}", a[1])
+            g = card_group({"title": a[1][mt.end():] if mt else a[1]}, sheet, lang)
+            if g not in m.groups:
+                continue        # a checagem `consolidado' ja' reprova
+            hosts = sorted({r.host_raw for n in m.groups[g] for r in n.inst})
+            if len(hosts) == 1:
+                want = ["%s %s" % (sheet.t("chip_host", lang), hosts[0])]
+            else:
+                want = ["%d %s" % (len(hosts), sheet.t("chip_hosts", lang))] + hosts[:40]
+                if len(hosts) > 40:
+                    want.append("+%d %s" % (len(hosts) - 40, more))
+            got = [plain(b[0]) for _, b in macros(a[3], "chip", 1)][1:]
+            if got != want:
+                fails.append("card consolidado '%s': hosts %s, esperado %s" % (g, got[:6], want[:6]))
+    return fails
+
+
+# ---------------------------------------------------------------------------
+# Secao 4: hosts e portas abertas
+# ---------------------------------------------------------------------------
+def hp_sev_key(s):
+    """hp-sev-key do latex.xsl: a chave da maior severidade de uma linha."""
+    if s == "":
+        return "neutro"
+    x = xnum(s)
+    if isnum(x):
+        if x >= 9.0:
+            return "critico"
+        if x >= 7.0:
+            return "alto"
+        if x >= 4.0:
+            return "medio"
+        if x >= 0.1:
+            return "baixo"
+        if -1.5 < x < 0:
+            return "neutro"
+    return "logsev"
+
+
+def port_number(s):
+    """number(substring-before(s, '/')): NaN sem barra ou sem numero."""
+    return xnum(s.split("/", 1)[0]) if "/" in s else float("nan")
+
+
+def check_hosts(m, tex, sheet, lang):
+    """A secao 4 diz a verdade sobre o XML, host a host (na ordem do ip, como
+    o xsl:sort de hosts-ports): o card com o ip, o hostname e o numero de
+    portas reais; as linhas de porta -- o inventario <ports> do host (sem as
+    general/*) em ordem numerica, ou, sem inventario, as portas distintas dos
+    resultados dele, mais a linha `geral' quando ha achado ou inventario
+    general/* --, cada uma com o numero de resultados daquele host e porta, a
+    chave da maior severidade (`neutro' sem resultado ou com falso positivo no
+    topo, `logsev' para Log) e o CVSS; e a nota que decompoe a linha `geral'
+    por classe, com a maior pontuacao. Na edicao do cliente o modelo e' o
+    relatorio sem os falso positivo: nenhuma porta que so' eles sustentavam,
+    nenhuma contagem com eles, nenhuma classe "falso positivo" na nota."""
+    if SEC_HOSTS not in tex.sections:
+        return ["secao %d ausente" % SEC_HOSTS]
+    text, _ = tex.section(SEC_HOSTS)
+    rep = m.report
+
+    def t(k):
+        return sheet.t(k, lang)
+
+    results = m.results
+    geral = t("hp_general").translate(ASCII_LOWER)
+    want_hosts = []
+    for h in sorted(rep.findall("host"), key=lambda h: xp_text(h.find("ip"))):
+        ip = xp_text(h.find("ip"))
+        dets = h.findall("detail")
+        hostname = next((xp_text(d.find("value")) for d in detail_named(dets, "hostname")), "")
+        os_txt = next((xp_text(d.find("value")) for d in detail_named(dets, "best_os_txt")), "")
+        os_cpe = next((xp_text(d.find("value")) for d in detail_named(dets, "best_os_cpe")), "")
+        os_name = os_txt or os_cpe
+        fromports = [p for p in rep.findall("ports/port")
+                     if any(xp_text(x) == ip for x in p.findall("host"))]
+        mine = [r for r in results if r.host_raw == ip]
+        if fromports:
+            ports = [xp_first_text(p) for p in fromports if not xp_first_text(p).startswith("general")]
+            realcount = len(ports)
+        else:
+            ports, seen = [], set()
+            for r in mine:
+                if not r.port_raw.startswith("general") and r.port_raw not in seen:
+                    seen.add(r.port_raw)
+                    ports.append(r.port_raw)
+            realcount = len(ports)
+        ports.sort(key=lambda p: (0, 0) if not isnum(port_number(p)) else (1, port_number(p)))
+        genres = [r for r in mine if r.port_raw.startswith("general")]
+        hasgen = bool(genres) or any(xp_first_text(p).startswith("general") for p in fromports)
+        rows = []
+        for p in ports:
+            rs = [r for r in mine if r.port_raw == p]
+            top = port_max_sev(rs)
+            key = hp_sev_key(top)
+            rows.append((p, str(len(rs)), key, top if key not in ("logsev", "neutro") else ""))
+        if hasgen:
+            top = port_max_sev(genres)
+            key = hp_sev_key(top)
+            rows.append((geral, str(len(genres)), key, top if key not in ("logsev", "neutro") else ""))
+        note = None
+        if genres:
+            cnt = {"c": 0, "h": 0, "m": 0, "l": 0, "f": 0}
+            for r in genres:
+                if isnum(r.sev):
+                    if r.sev >= 9.0:
+                        cnt["c"] += 1
+                    elif r.sev >= 7.0:
+                        cnt["h"] += 1
+                    elif r.sev >= 4.0:
+                        cnt["m"] += 1
+                    elif r.sev >= 0.1:
+                        cnt["l"] += 1
+                    elif is_fp(r.sev):
+                        cnt["f"] += 1
+            nlog = len(genres) - sum(cnt.values())
+            parts = ["%d %s" % (c, t(k)) for c, k in
+                     ((cnt["c"], "sev_critical"), (cnt["h"], "sev_high"), (cnt["m"], "sev_medium"),
+                      (cnt["l"], "sev_low"), (nlog, "sev_log"), (cnt["f"], "sev_falsepos")) if c > 0]
+            tail = ", ".join(parts)
+            top = port_max_sev(genres)
+            if isnum(xnum(top)) and xnum(top) >= 0.1:
+                tail += " \\textperiodcentered\\ " + t("hx_th_cvss") + " " + top
+            if not tail.endswith("."):
+                tail += "."
+            note = (t("hp_gen_note_a") + str(len(genres)) + " " + t("hx_findings_n")
+                    + t("hp_gen_note_b") + "\\dat{" + geral + "}: " + tail)
+        want_hosts.append((ip, hostname, os_name, str(realcount), rows, note))
+
+    # O .tex: um trecho por host, aberto pelo marcador dele (bm-host-N).
+    marks = [mt.start() for mt in re.finditer(r"\\suriBookmark\{1\}\{bm-host-", text)]
+    segs = [text[p:(marks[i + 1] if i + 1 < len(marks) else len(text))] for i, p in enumerate(marks)]
+    fails = []
+    if len(segs) != len(want_hosts):
+        return ["secao %d: %d host(s), esperado %d" % (SEC_HOSTS, len(segs), len(want_hosts))]
+    for seg, (ip, hostname, os_name, realcount, rows, note) in zip(segs, want_hosts):
+        cards = macros(seg, "hostcard", 5)
+        if not cards:
+            fails.append("host %s: sem \\hostcard" % ip)
+            continue
+        a = cards[0][1]
+        # O selo de SO: o do host, cortado em 37 + "..." acima de 40, ou a
+        # forma curta de "nao identificado".
+        os_chip = (sheet.t("hp_os_unknown_chip", lang) if not os_name
+                   else os_name[:37] + "..." if len(os_name) > 40 else os_name)
+        if (plain(a[0]), plain(a[1]), plain(a[2]), a[3].strip()) != (ip, hostname, os_chip, realcount):
+            fails.append("host %s: card %s/%s/%s/%s, esperado %s/%s/%s/%s portas"
+                         % (ip, plain(a[0]), plain(a[1]), plain(a[2]), a[3].strip(),
+                            ip, hostname, os_chip, realcount))
+        got = [(plain(b[0]), b[1].strip(), b[2].strip(), b[3].strip())
+               for _, c in cards for _, b in macros(c[4], "hostrow", 4)]
+        if got != rows:
+            diff = next((i for i, (x, y) in enumerate(zip(got, rows)) if x != y), min(len(got), len(rows)))
+            fails.append("host %s: %d linha(s), esperado %d; 1a diferenca na #%d: %s x %s"
+                         % (ip, len(got), len(rows), diff + 1,
+                            got[diff] if diff < len(got) else None, rows[diff] if diff < len(rows) else None))
+        if not rows and not any(b[0].strip() == t("hp_no_ports") for _, b in macros(a[4], "blocknote", 1)):
+            fails.append("host %s: card sem porta e sem a nota de host sem porta" % ip)
+        notes = [b[0].strip() for _, b in macros(seg, "blocknote", 1)
+                 if b[0].startswith(t("hp_gen_note_a"))]
+        if notes != ([note] if note else []):
+            fails.append("host %s: nota da linha geral %s, esperado %s"
+                         % (ip, [x[-70:] for x in notes], [note[-70:]] if note else []))
+    return fails
+
+
+# ---------------------------------------------------------------------------
+# Edicoes
+# ---------------------------------------------------------------------------
+def log_line(n, sheet, lang):
+    """A contagem de Log de um bloco da edicao do cliente (\\findinglog)."""
+    return ("\\suriEllip\\ + " + gvm_num(n, lang)
+            + sheet.t("client_log_1" if n == 1 else "client_log_n", lang))
+
+
+def port_key(s):
+    """(numero, transporte) de uma porta "443/tcp", como a chave do mapa de
+    portas (transporte em minuscula); None para general/* e porta malformada."""
+    num, _, proto = norm_space(s).partition("/")
+    return (num, proto.translate(ASCII_LOWER)) if num.isdigit() and proto else None
+
+
+def port_observations(rep):
+    """As portas que o mapa de portas observa (o inventario <ports> e a porta de
+    cada resultado): (conjunto global, {ip: conjunto do host})."""
+    glob, per = set(), {}
+    for p in rep.findall("ports/port"):
+        k = port_key(xp_first_text(p))
+        if k:
+            glob.add(k)
+            per.setdefault(norm_space(xp_text(p.find("host"))).split(" ")[0], set()).add(k)
+    for r in rep.findall("results/result"):
+        k = port_key(xp_text(r.find("port")))
+        if k:
+            glob.add(k)
+            per.setdefault(norm_space(xp_first_text(r.find("host"))).split(" ")[0], set()).add(k)
+    return glob, per
+
+
+def check_cliente(m, tex, sheet, lang):
+    """A edicao do cliente nao tem falso positivo em lugar nenhum e so' tem o
+    Log como contagem:
+      - nenhuma palavra de falso positivo do relatorio (sev_falsepos,
+        lvl_falsepos, nas tres linguas) e nenhuma linha, card, advisory ou chip
+        com a chave de Log ou de falso positivo;
+      - em cada bloco das secoes 5 e 6 (confirmados, indicadores), a contagem
+        de Log (\\findinglog) diz quantos registros informativos o bloco tem no
+        XML -- os NVTs que nenhum card consolidado absorveu e que nao sao achado
+        --, fecha o bloco, e nao aparece em nenhum outro lugar;
+      - o NVT so' com falso positivo nao deixa ancora, link nem marcador;
+      - a porta que so' falso positivo sustentava nao aparece no mapa de portas
+        (celula e tabela da secao 3) nem no tabuleiro do host no apendice.
+    As contagens (total do scan, linhas da secao 4, instancias e hosts dos
+    cards, plano da secao 2) sao conferidas pelas outras checagens sobre o
+    MESMO modelo sem falso positivo."""
+    fails = []
+    s = tex.s
+    for k in ("sev_falsepos", "lvl_falsepos"):
+        for b in ("en", "pt", "es"):
+            w = sheet.i18n[k][0].get(b)
+            if w and w in s:
+                fails.append("a palavra '%s' (%s) no documento" % (w, k))
+    for mac, nargs, idx in (("findingrow", 5, 3), ("findingcard", 4, 0),
+                            ("consolidatedcard", 7, 0), ("advisoryrow", 3, 1), ("chipsev", 2, 0)):
+        bad = ("logsev", "neutro") if mac == "findingrow" else ("logsev", "falsepos")
+        for _, a in macros(s, mac, nargs):
+            if a[idx].strip() in bad:
+                fails.append("\\%s com a chave '%s' (Log ou falso positivo)" % (mac, a[idx].strip()))
+    total = 0
+    for sec in (SEC_SUMMARY, SEC_DETAIL):
+        for mode, block in tex.blocks(sec):
+            units = m.log_units(mode == "indicadores")
+            want = [log_line(len(units), sheet, lang)] if units else []
+            got = macros(block, "findinglog", 1)
+            if [a[0].strip() for _, a in got] != want:
+                fails.append("secao %d / %s: contagem de Log %s, esperado %s (%s)"
+                             % (sec, mode, [a[0][:60] for _, a in got], want,
+                                ", ".join(n.oid.rsplit(".", 1)[-1] for n in units) or "nenhum"))
+            total += len(want)
+            if got and re.search(r"\\(findingrow|findingcard|consolidatedcard)(?![A-Za-z@])",
+                                 block[got[-1][0]:]):
+                fails.append("secao %d / %s: linha ou card depois da contagem de Log" % (sec, mode))
+    if len(macros(s, "findinglog", 1)) != total:
+        fails.append("%d \\findinglog no documento, esperado %d (um por bloco com Log)"
+                     % (len(macros(s, "findinglog", 1)), total))
+    tech = Model(m.path, sheet)
+    for n in tech.nvts:
+        if all(is_fp(r.sev) for r in n.inst) and re.search(r"\{(?:bm-)?%s\}" % re.escape(fnd(n.oid)), s):
+            fails.append("NVT %s, so' com falso positivo, deixa ancora ou marcador" % n.oid)
+    tg, tp = port_observations(tech.report)
+    cg, cp = port_observations(m.report)
+    hexmap, _ = tex.section(SEC_HEXMAP)
+    for num, proto in sorted(tg - cg):
+        if any(plain(a[0]).strip() == num and plain(a[2]).strip() == proto
+               for _, a in macros(hexmap, "portrow", 8)):
+            fails.append("secao %d: linha da porta %s/%s, que so' falso positivo sustentava"
+                         % (SEC_HEXMAP, num, proto))
+        if any(plain(a[1]).strip() == "%s/%s" % (num, proto.upper()) for _, a in macros(hexmap, "hexport", 4)):
+            fails.append("secao %d: celula da porta %s/%s, que so' falso positivo sustentava"
+                         % (SEC_HEXMAP, num, proto))
+    appendix, _ = tex.section(SEC_APPENDIX)
+    for _, a in macros(appendix, "hexcard", 3):
+        ip = plain(a[0]).strip()
+        for num, proto in sorted(tp.get(ip, set()) - cp.get(ip, set())):
+            if any(plain(b[1]).strip() == "%s/%s" % (num, proto.upper()) for _, b in macros(a[2], "hexport", 4)):
+                fails.append("secao %d / %s: celula da porta %s/%s, que so' falso positivo sustentava"
+                             % (SEC_APPENDIX, ip, num, proto))
+    return fails
+
+
+def check_executiva(m, tex, sheet, lang):
+    """A edicao executiva tem SO' o resumo executivo, as prioridades e o escopo,
+    numerados 1..3 com os mesmos titulos; nenhum card, host, porta, sumario de
+    achados, marcador de nivel 1, ancora que nao seja de secao, link de
+    prioridade, nem mencao a uma secao que ela nao tem (os titulos do mapa de
+    portas, de hosts e portas, do sumario de achados, dos achados detalhados,
+    do apendice e do bloco de indicadores)."""
+    fails = []
+    s = tex.s
+
+    def t(k):
+        return sheet.t(k, lang)
+
+    secs = [(a[0].strip(), plain(a[1])) for _, a in macros(s, "suriSection", 2)]
+    want = [("1", t("sec_exec")), ("2", t("sec_prio")), ("3", t("sec_scope"))]
+    if secs != want:
+        fails.append("secoes %s, esperado %s" % (secs, want))
+    for mac in ("findingrow", "findingcard", "consolidatedcard", "advisoryrow", "hostcard",
+                "hostrow", "hexcard", "hexport", "portrow", "findingtrunc", "findinglog",
+                "suriBookmark", "suriSummaryHead", "priorow", "priolink"):
+        n = len(re.findall(r"\\%s(?![A-Za-z@])" % mac, s))
+        if n:
+            fails.append("%d \\%s na edicao executiva" % (n, mac))
+    extra = sorted(set(ANCHOR_LINK.findall(s) + ANCHOR_TARGET.findall(s)) - {"sec-1", "sec-2", "sec-3"})
+    if extra:
+        fails.append("ancora(s) fora das secoes: %s" % ", ".join(extra[:5]))
+    for k in ("sec_hexmap", "sec_hosts_ports", "sec_findings_summary", "sec_detailed",
+              "sec_hexmap_host", "sub_indicators"):
+        if t(k) in s:
+            fails.append("cita '%s', que a edicao executiva nao tem" % t(k))
+    return fails
+
+
+def check_edicao(m, tex, sheet, lang):
+    """A capa diz a edicao (o kicker: o de sempre no tecnico, o da edicao do
+    cliente e o da executiva) e a contagem de Log (\\findinglog) so' existe na
+    edicao do cliente."""
+    key = {"technical": "cover_kicker", "client": "kicker_client",
+           "executive": "kicker_executive"}[m.variant]
+    cov = macros(tex.s, "suriCover", 1)
+    if not cov:
+        return ["sem \\suriCover"]
+    body = cov[0][1][0]
+    k = body.find("kicker=")
+    try:
+        val = plain(group_at(body, skip_blank(body, k + len("kicker=")))[0]) if k >= 0 else None
+    except TexError:
+        val = None
+    fails = []
+    if val != sheet.t(key, lang):
+        fails.append("kicker da capa %r, esperado %r (edicao %s)" % (val, sheet.t(key, lang), m.variant))
+    if m.variant != "client" and "\\findinglog{" in tex.s:
+        fails.append("\\findinglog (contagem de Log da edicao do cliente) na edicao %s" % m.variant)
     return fails
 
 
 CHECKS = [
     ("numeracao", check_numeracao), ("secoes", check_secoes),
     ("consolidado", check_consolidado), ("instancias", check_instancias),
+    ("afetados", check_afetados),
     ("acao", None), ("vulns-unicas", check_vulns_unicas), ("faixas", check_faixas),
     ("ancoras", check_ancoras), ("nome", check_nome), ("prioridades", None),
-    ("escopo", check_escopo), ("alerta", check_alerta),
+    ("hosts", check_hosts), ("escopo", check_escopo), ("alerta", check_alerta),
+    ("edicao", check_edicao), ("cliente", check_cliente), ("executiva", check_executiva),
 ]
+# As checagens de cada edicao. A executiva so' tem as secoes 1 (resumo), 2
+# (prioridades) e 3 (escopo): as checagens das outras secoes nao rodam nela, e
+# a `executiva' confere que elas nao existem.
+BY_VARIANT = {
+    "technical": [n for n, _ in CHECKS if n not in ("cliente", "executiva")],
+    "client": [n for n, _ in CHECKS if n != "executiva"],
+    "executive": ["vulns-unicas", "faixas", "ancoras", "nome", "prioridades", "escopo",
+                  "alerta", "edicao", "executiva"],
+}
 
 
 def main():
@@ -1803,18 +2358,22 @@ def main():
     ap.add_argument("--lang", required=True)
     ap.add_argument("--xml", required=True)
     ap.add_argument("--tex", required=True)
+    ap.add_argument("--variant", default="technical", choices=VARIANTS)
     ap.add_argument("--bundle", default=os.path.join(os.path.dirname(HERE), "suricatoos-premium-pdf"))
     ap.add_argument("--only", action="append", default=[])
     args = ap.parse_args()
+    use_variant(args.variant)
     try:
         sheet = Stylesheet(os.path.join(args.bundle, "latex.xsl"))
-        model = Model(args.xml, sheet)
+        model = Model(args.xml, sheet, args.variant)
         tex = Tex(args.tex)
     except (OSError, ET.ParseError, TexError, StylesheetError) as e:
         print("check-veracity: ERRO de leitura: %s" % e)
         return 2
     failed = 0
     for name, fn in CHECKS:
+        if name not in BY_VARIANT[args.variant]:
+            continue
         if args.only and name not in args.only:
             continue
         try:

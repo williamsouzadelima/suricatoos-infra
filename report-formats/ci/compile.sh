@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
-# Compila o Suricatoos Premium PDF de UM idioma na imagem de PRODUCAO do gvmd,
-# como uid 1001, e aplica os portoes (gates.sh) a cada fixture.
+# Compila o Suricatoos Premium PDF de UM objeto de feed (idioma x edicao) na
+# imagem de PRODUCAO do gvmd, como uid 1001, e aplica os portoes (gates.sh) a
+# cada fixture. Edicoes: technical (o relatorio completo), client (sem falso
+# positivo, o Log so' como contagem) e executive (resumo, prioridades e escopo).
 #
-# Uso: report-formats/ci/compile.sh <lang> <dir-de-artefatos>
+# Uso: report-formats/ci/compile.sh <lang> <variant> <dir-de-artefatos>
 #
 # Fixtures (sinteticas):
 #   sample   report-formats/sample/sample-report.xml
@@ -24,9 +26,14 @@
 #            empate em cada nivel e EPSS, grupos consolidados e os textos da
 #            coluna de acao, sem critico nem alto e sem EPSS, exatamente 20
 #            acoes, uma acao so', mais de 20 acoes por card com cards
-#            consolidados dentro e fora das 20); o cabecalho de cada uma diz
-#            qual. A v20a..v20i e' a TABELA DE ESTADOS: um relatorio sem host por
-#            scan_run_status, para que cada estado das listas de
+#            consolidados dentro e fora das 20), mais as v27..v28 das
+#            edicoes (v27 falso positivo em toda parte: card misto, porta e
+#            NVT so' de falso positivo, grupo que encolhe e grupo que se
+#            desfaz, confirmacao so' por falso positivo, Log e nota da linha
+#            geral; v28 so' Log, com o bloco de indicadores so' de Log); o
+#            cabecalho de cada uma diz qual. Toda fixture roda nas tres
+#            edicoes. A v20a..v20i e' a TABELA DE ESTADOS: um relatorio sem
+#            host por scan_run_status, para que cada estado das listas de
 #            $scan-never-started e $scan-unfinished do latex.xsl tenha a sua
 #            fixture (o alerta da secao 1 e a nota da secao 7 mudam):
 #              iniciou e nao terminou (alerta "nao terminou"): v20a Running,
@@ -46,13 +53,14 @@
 #   3. previews (pdftoppm -r 60, 3 primeiras paginas) e gates.sh -- que tambem
 #      roda o check-veracity.py sobre o .tex do diagnostico, contra o XML, e o
 #      check-navigation.py (sumario e arvore de marcadores, no PDF entregue).
-# Artefatos em <dir-de-artefatos>/<lang>/<fixture>/.
+# Artefatos em <dir-de-artefatos>/<lang>/<variant>/<fixture>/.
 set -euo pipefail
 
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
-lang=${1:?uso: compile.sh <lang> <dir-de-artefatos>}
-art="${2:?uso: compile.sh <lang> <dir-de-artefatos>}/$lang"
+lang=${1:?uso: compile.sh <lang> <variant> <dir-de-artefatos>}
+variant=${2:?uso: compile.sh <lang> <variant> <dir-de-artefatos>}
+art="${3:?uso: compile.sh <lang> <variant> <dir-de-artefatos>}/$lang/$variant"
 mkdir -p "$art"
 
 gvmd_pull
@@ -60,7 +68,7 @@ gvmd_pull
 work=$(new_workdir)
 log "diretorio de trabalho: $work"
 mkdir -p "$work/fixtures" "$work/ci" "$work/diag"
-stage_bundle "$lang" "$work/bundle"
+stage_bundle "$lang" "$variant" "$work/bundle"
 cp "$CI_DIR/diag-compile.sh" "$work/ci/"
 
 cp "$RF_DIR/sample/sample-report.xml" "$work/fixtures/sample.xml"
@@ -92,40 +100,40 @@ for fx in $fixtures; do
   d="$art/$fx"
   mkdir -p "$d"
 
-  log "[$lang/$fx] ponta a ponta: sh ./generate (uid $GVMD_UID, cwd = bundle)"
+  log "[$lang/$variant/$fx] ponta a ponta: sh ./generate (uid $GVMD_UID, cwd = bundle)"
   e2e_rc=0
   t0=$SECONDS
   gvmd_run "$work" /work/bundle ./generate "/work/fixtures/$fx.xml" \
     > "$d/generate.pdf" 2> "$d/generate.stderr.txt" || e2e_rc=$?
-  log "[$lang/$fx] generate: exit $e2e_rc, $(wc -c < "$d/generate.pdf" | tr -d ' ') bytes no stdout, $((SECONDS - t0)) s"
+  log "[$lang/$variant/$fx] generate: exit $e2e_rc, $(wc -c < "$d/generate.pdf" | tr -d ' ') bytes no stdout, $((SECONDS - t0)) s"
 
-  log "[$lang/$fx] diagnostico: xsltproc + 2x pdflatex (mesmos parametros do generate)"
+  log "[$lang/$variant/$fx] diagnostico: xsltproc + 2x pdflatex (mesmos parametros do generate)"
   t0=$SECONDS
   diag_rc=0
   gvmd_run "$work" /work/bundle /work/ci/diag-compile.sh "/work/fixtures/$fx.xml" "/work/diag/$fx" || diag_rc=$?
-  log "[$lang/$fx] diagnostico: exit $diag_rc, $((SECONDS - t0)) s"
+  log "[$lang/$variant/$fx] diagnostico: exit $diag_rc, $((SECONDS - t0)) s"
   # report.aux (rotulos de pagina do sumario) e report.out (a arvore de
   # marcadores que o hyperref escreveu) vao junto: sao o que se le quando o
   # portao de navegacao reprova.
-  for f in report.tex report.log report.pass1.log xsltproc.stderr report.aux report.out; do
+  for f in report.tex report.log report.pass1.log xsltproc.stderr report.aux report.out variant; do
     if [ -f "$work/diag/$fx/$f" ]; then cp "$work/diag/$fx/$f" "$d/"; fi
   done
 
   if [ "$(head -c 4 "$d/generate.pdf" | tr -d '\0')" = "%PDF" ]; then
-    pdftoppm -r 60 -f 1 -l 3 -png "$d/generate.pdf" "$d/pagina" || log "[$lang/$fx] pdftoppm falhou"
+    pdftoppm -r 60 -f 1 -l 3 -png "$d/generate.pdf" "$d/pagina" || log "[$lang/$variant/$fx] pdftoppm falhou"
   fi
 
-  if ! "$CI_DIR/gates.sh" "$lang" "$fx" "$d" "$work/diag/$fx" "$e2e_rc" "$work/fixtures/$fx.xml"; then
+  if ! "$CI_DIR/gates.sh" "$lang" "$variant" "$fx" "$d" "$work/diag/$fx" "$e2e_rc" "$work/fixtures/$fx.xml"; then
     overall=1
   fi
 done
 
 if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
   {
-    echo "### Suricatoos Premium PDF no gvmd:stable — $lang"
+    echo "### Suricatoos Premium PDF no gvmd:stable — $lang / $variant"
     echo
-    echo "| idioma | fixture | veredito | páginas | erros TeX | Font shape undefined | Type 3 | links / alvos (+corte) | Overfull \\hbox (base) | veracidade | navegação |"
-    echo "|---|---|---|---|---|---|---|---|---|---|---|"
+    echo "| idioma | edição | fixture | veredito | páginas | erros TeX | Font shape undefined | Type 3 | links / alvos (+corte) | Overfull \\hbox (base) | veracidade | navegação |"
+    echo "|---|---|---|---|---|---|---|---|---|---|---|---|"
     cat "$art"/*/summary.row 2>/dev/null || true
     echo
     sed 's/^/    /' "$art/ambiente.txt"
@@ -133,6 +141,6 @@ if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
 fi
 
 if [ "$overall" -ne 0 ]; then
-  log "REPROVADO: ao menos um portao falhou em $lang (detalhes acima e em gates.txt no artefato)"
+  log "REPROVADO: ao menos um portao falhou em $lang/$variant (detalhes acima e em gates.txt no artefato)"
 fi
 exit "$overall"

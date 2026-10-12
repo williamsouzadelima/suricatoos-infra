@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
-"""Monta, num diretorio gravavel, o bundle de UM idioma exatamente como o objeto
-de feed o instala no gvmd: o mesmo `generate` sintetizado (token
-`--stringparam lang` trocado pelo idioma), o mesmo report_format.xml e os mesmos
-membros compartilhados (so' o catalogo de NVT do proprio idioma).
+"""Monta, num diretorio gravavel, o bundle de UM objeto de feed (idioma x
+edicao) exatamente como o objeto o instala no gvmd: o mesmo `generate`
+sintetizado (os pares `--stringparam lang` e `--stringparam variant` trocados
+pelo idioma e pela edicao), o mesmo report_format.xml e os mesmos membros
+compartilhados (so' o catalogo de NVT do proprio idioma).
 
 Reusa as funcoes do build-feed-xml.py em vez de repetir a regra: se a montagem
 do feed mudar, o CI compila a montagem nova sem ninguem lembrar de atualizar
 este arquivo.
 
 Uso:
-    python3 report-formats/ci/stage-bundle.py <lang> <destino> [--omit ARQ]...
+    python3 report-formats/ci/stage-bundle.py <lang> <variant> <destino> [--omit ARQ]...
 
 --omit deixa um membro de fora (controle negativo: bundle sem um .sty).
 """
@@ -34,22 +35,23 @@ def load_builder():
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("lang")
+    ap.add_argument("variant")
     ap.add_argument("dest")
     ap.add_argument("--omit", action="append", default=[], metavar="ARQ")
     args = ap.parse_args()
 
     b = load_builder()
-    langs = {code: (fmt_id, name) for code, fmt_id, name in b.LANGS}
-    if args.lang not in langs:
-        print("stage-bundle: idioma desconhecido %r (validos: %s)"
-              % (args.lang, ", ".join(langs)), file=sys.stderr)
+    objs = {(lang, variant): (fmt_id, name) for lang, variant, fmt_id, name in b.FORMATS}
+    if (args.lang, args.variant) not in objs:
+        print("stage-bundle: combinacao desconhecida %s/%s (validas: %s)"
+              % (args.lang, args.variant, ", ".join("%s/%s" % k for k in objs)), file=sys.stderr)
         return 2
-    fmt_id, name = langs[args.lang]
+    fmt_id, name = objs[(args.lang, args.variant)]
 
     # Mesma ordem do objeto de feed: scripts sintetizados, depois os membros.
     members = [
-        ("generate", b.generate_for(args.lang)),
-        ("report_format.xml", b.report_format_xml_for(fmt_id, name, args.lang)),
+        ("generate", b.generate_for(args.lang, args.variant)),
+        ("report_format.xml", b.report_format_xml_for(fmt_id, name, args.lang, args.variant)),
     ]
     for n in b.shared_files(args.lang):
         with open(os.path.join(b.BUNDLE, n), "rb") as fh:
@@ -69,8 +71,8 @@ def main() -> int:
         with open(os.path.join(args.dest, n), "wb") as fh:
             fh.write(data)
     kept = [n for n in names if n not in args.omit]
-    print("stage-bundle: %s -> %s (%d arquivos%s)"
-          % (args.lang, args.dest, len(kept),
+    print("stage-bundle: %s/%s (%s) -> %s (%d arquivos%s)"
+          % (args.lang, args.variant, fmt_id, args.dest, len(kept),
              "; omitidos: " + ", ".join(args.omit) if args.omit else ""))
     return 0
 

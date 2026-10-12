@@ -31,12 +31,16 @@ jobs:
         with:
           python-version: '3.x'
 
-      - name: Regenerar o feed XML a partir do bundle (mantem em sincronia)
+      - name: Regenerar os feed XMLs e o manifesto a partir do bundle (mantem em sincronia)
         run: |
           set -eux
           python3 report-formats/build-feed-xml.py
-          # Falha se o XML versionado divergir do bundle (forca regeneracao no commit).
-          git diff --exit-code report-formats/pdf-suricatoos-*.xml
+          # Falha se o XML ou o manifesto versionado divergir do bundle (forca
+          # regeneracao no commit), ou se o build escrever objeto que o commit
+          # nao tem (o git diff nao ve arquivo novo).
+          git diff --exit-code report-formats/pdf-suricatoos-*.xml report-formats/manifest.json
+          test -z "$(git status --porcelain --untracked-files=all -- report-formats)"
+          python3 report-formats/ci/check-manifest.py
 
       - name: Login no GHCR
         uses: docker/login-action@v3
@@ -64,8 +68,6 @@ jobs:
             echo "|---|---|"
             echo "| \`$REGISTRY/$OWNER/$IMAGE\` | stable, ${GITHUB_SHA::12} |"
             echo ""
-            echo "Report formats (i18n, um por idioma no dropdown Download report):"
-            echo "- **Suricatoos Premium PDF (EN)** — \`c6482c1b-57bb-406b-a501-c97eed86ad05\`"
-            echo "- **Suricatoos Premium PDF (PT-BR)** — \`e43a4f20-d845-4916-83f0-851ac6dc5e57\`"
-            echo "- **Suricatoos Premium PDF (ES)** — \`91afce49-21fd-4ea0-ba16-7ba2bc51a03a\`"
+            echo "Report formats (3 edições x 3 idiomas no dropdown Download report; fonte: report-formats/manifest.json):"
+            python3 -c 'import json; m = json.load(open("report-formats/manifest.json", encoding="utf-8")); print("\n".join("- **%s** — `%s` (%s/%s)" % (e["name"], e["uuid"], e["lang"], e["variant"]) for e in m["report_formats"]))'
           } >> "$GITHUB_STEP_SUMMARY"
