@@ -1,0 +1,68 @@
+{
+  "version": "20261012g",
+  "report_formats": [
+    {
+      "format": "suricatoos-pdf",
+      "lang": "en",
+      "variant": "technical",
+      "uuid": "c6482c1b-57bb-406b-a501-c97eed86ad05",
+      "name": "Suricatoos PDF — Technical (EN)"
+    },
+    {
+      "format": "suricatoos-pdf",
+      "lang": "pt_BR",
+      "variant": "technical",
+      "uuid": "e43a4f20-d845-4916-83f0-851ac6dc5e57",
+      "name": "Suricatoos PDF — Técnico (PT-BR)"
+    },
+    {
+      "format": "suricatoos-pdf",
+      "lang": "es",
+      "variant": "technical",
+      "uuid": "91afce49-21fd-4ea0-ba16-7ba2bc51a03a",
+      "name": "Suricatoos PDF — Técnico (ES)"
+    },
+    {
+      "format": "suricatoos-pdf",
+      "lang": "en",
+      "variant": "client",
+      "uuid": "97ce15ea-69b9-4b0e-8799-ca0938b11bd6",
+      "name": "Suricatoos PDF — Client (EN)"
+    },
+    {
+      "format": "suricatoos-pdf",
+      "lang": "pt_BR",
+      "variant": "client",
+      "uuid": "6b746183-2d7d-4a90-89f7-b082a4775cb9",
+      "name": "Suricatoos PDF — Cliente (PT-BR)"
+    },
+    {
+      "format": "suricatoos-pdf",
+      "lang": "es",
+      "variant": "client",
+      "uuid": "9ebc0c90-4f1c-49cb-a62f-598d59b473a6",
+      "name": "Suricatoos PDF — Cliente (ES)"
+    },
+    {
+      "format": "suricatoos-pdf",
+      "lang": "en",
+      "variant": "executive",
+      "uuid": "15195ce6-6093-4c4e-8f71-84205ea5a37b",
+      "name": "Suricatoos PDF — Executive (EN)"
+    },
+    {
+      "format": "suricatoos-pdf",
+      "lang": "pt_BR",
+      "variant": "executive",
+      "uuid": "94e96b4b-2584-46b0-afcb-5852ab8c24c9",
+      "name": "Suricatoos PDF — Executivo (PT-BR)"
+    },
+    {
+      "format": "suricatoos-pdf",
+      "lang": "es",
+      "variant": "executive",
+      "uuid": "330072bd-3941-40fd-8114-38ab9cbbf396",
+      "name": "Suricatoos PDF — Ejecutivo (ES)"
+    }
+  ]
+}

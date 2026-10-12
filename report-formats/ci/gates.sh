@@ -1,7 +1,14 @@
 #!/usr/bin/env bash
-# Portoes do Suricatoos Premium PDF para UMA combinacao (idioma x fixture).
+# Portoes do Suricatoos Premium PDF para UMA combinacao (idioma x edicao x
+# fixture).
 #
-# Uso: gates.sh <lang> <fixture> <dir-artefatos> <dir-diag> <exit-do-generate> [<fixture.xml>]
+# Uso: gates.sh <lang> <variant> <fixture> <dir-artefatos> <dir-diag> <exit-do-generate> [<fixture.xml>]
+#
+#   <variant>        a edicao que o objeto de feed compilado TEM de ser
+#                    (technical | client | executive): o portao "edicao do
+#                    generate" a confere com a que o generate montado pede, e os
+#                    portoes de links, veracidade e navegacao medem o .tex
+#                    contra o contrato DESSA edicao;
 #
 #   <dir-artefatos>  tem generate.pdf e generate.stderr.txt (o `sh ./generate`
 #                    ponta a ponta); recebe gates.txt e summary.row;
@@ -25,6 +32,10 @@
 #                do sumario) e a arvore de marcadores que a 1a escreveu;
 #   Type 3       zero fonte Type 3 no PDF do generate (pdffonts): Type 3 e'
 #                bitmap -- a face de verdade sumiu e o pdftex desenhou pixels;
+#   edicao       o generate montado pede a edicao da matriz (o arquivo
+#                `variant' que o diag-compile.sh tira do PROPRIO generate):
+#                um objeto de feed com o par `stringparam variant' errado
+#                compilaria outra edicao com todos os portoes verdes;
 #   links/alvos  zero \hyperlink (e zero \priolink, o link da tabela de
 #                prioridades) para alvo inexistente e
 #                #\hypertarget == #\hyperlink + soma dos cortes declarados
@@ -33,19 +44,29 @@
 #                passaria em vazio justamente quando o sumario de achados ou
 #                os cards sumissem -- e os 8 links da pagina de sumario
 #                (sec-N), que existem em todo relatorio, NAO contam para esse
-#                piso; e exatamente esses 8, sec-1..sec-8, um de cada;
+#                piso; e exatamente esses 8, sec-1..sec-8, um de cada. Na
+#                edicao do cliente o piso so' vale com resultado de
+#                severidade >= 0.1 (o Log e o falso positivo nao tem linha);
+#                na executiva, que nao tem cards, sao 3 links de sumario
+#                (sec-1..sec-3) e NENHUM link, alvo ou \priolink de achado;
 #   overfull     #`Overfull \hbox` <= linha de base de (idioma, fixture);
 #   paridade     paginas do PDF do generate == paginas do diagnostico, ou seja,
 #                os portoes de log mediram o MESMO documento que o generate
 #                entrega;
-#   veracidade   check-veracity.py: o .tex diz a verdade sobre o XML
-#                (numeracao, secoes, consolidado, instancias, acao, VULNS
-#                UNICAS, faixas, ancoras, nome do projeto, a secao 2 de
-#                prioridades e proximos passos e a secao 7 de escopo,
-#                metodologia e limitacoes);
-#   navegacao    check-navigation.py: a pagina de sumario lista as 8 secoes
+#   veracidade   check-veracity.py --variant: o .tex diz a verdade sobre o XML
+#                (numeracao, secoes, consolidado, instancias, sistemas
+#                afetados, acao, VULNS UNICAS, faixas, ancoras, nome do
+#                projeto, a secao 2 de prioridades e proximos passos, a secao 4
+#                de hosts e portas, a secao 7 de escopo, metodologia e
+#                limitacoes e a edicao na capa); na edicao do cliente sobre o
+#                relatorio SEM falso positivo, mais a checagem `cliente'
+#                (nenhum falso positivo em lugar nenhum, o Log so' como
+#                contagem); na executiva, so' as checagens das secoes que ela
+#                tem, mais a `executiva';
+#   navegacao    check-navigation.py --variant: a pagina de sumario lista as 8
+#                secoes (3 na executiva)
 #                e cada linha leva ao alto da sua; o PDF do generate TEM a
-#                arvore de marcadores (8 secoes no nivel 0; hosts da secao 4 e
+#                arvore de marcadores (as secoes no nivel 0; hosts da secao 4 e
 #                cards da secao 6 no nivel 1, com o numero e o titulo do card),
 #                todo marcador aponta para um destino que existe, dentro da
 #                secao do pai, e a pagina que o sumario imprime (rotulo do
@@ -82,32 +103,39 @@
 set -euo pipefail
 export LC_ALL=C
 
-lang=${1:?uso: gates.sh <lang> <fixture> <dir-artefatos> <dir-diag> <exit-do-generate> [<fixture.xml>]}
-fx=${2:?}
-art=${3:?}
-diag=${4:?}
-e2e_rc=${5:?}
-xml=${6:-}
+lang=${1:?uso: gates.sh <lang> <variant> <fixture> <dir-artefatos> <dir-diag> <exit-do-generate> [<fixture.xml>]}
+variant=${2:?}
+fx=${3:?}
+art=${4:?}
+diag=${5:?}
+e2e_rc=${6:?}
+xml=${7:-}
 ci_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+case "$variant" in
+  technical|client|executive) ;;
+  *) echo "gates.sh: edicao desconhecida '$variant' (technical | client | executive)" >&2; exit 2 ;;
+esac
 
 # ---------------------------------------------------------------------------
-# Linha de base de `Overfull \hbox` por (idioma, fixture): o portao reprova
-# ACIMA dela.
+# Linha de base de `Overfull \hbox` por (idioma, edicao, fixture): o portao
+# reprova ACIMA dela.
 #
 # PROVISORIA: 0 em tudo, que e' o que o tools/build-torture-fixture.py declara
 # como portao da tortura. A primeira execucao deste CI mede o valor real no
 # gvmd:stable; se for outro, ele e' fixado AQUI com a data e o run que o mediu.
 # Depois disso e' catraca: baixou, abaixe junto; subiu, e' regressao de layout
 # a corrigir no XSLT/.sty -- nao na linha de base, salvo decisao registrada.
+# As tres edicoes nascem com a mesma regua (o `*' do meio): uma base propria
+# de uma edicao entra como linha de cima, mais especifica.
 # ---------------------------------------------------------------------------
 overfull_baseline() {
-  case "$1/$2" in
-    en/sample)     echo 0 ;;
-    pt_BR/sample)  echo 0 ;;
-    es/sample)     echo 0 ;;
-    en/tortura)    echo 0 ;;
-    pt_BR/tortura) echo 0 ;;
-    es/tortura)    echo 0 ;;
+  case "$1/$2/$3" in
+    en/*/sample)     echo 0 ;;
+    pt_BR/*/sample)  echo 0 ;;
+    es/*/sample)     echo 0 ;;
+    en/*/tortura)    echo 0 ;;
+    pt_BR/*/tortura) echo 0 ;;
+    es/*/tortura)    echo 0 ;;
     # Fixtures de veracidade (report-formats/tests/fixtures/), nos 3 idiomas:
     # nascem com 0, a mesma regua das outras. v10-navegacao (secao 4 em varias
     # paginas, host em dois cards, marcador acima do teto) tambem, as da
@@ -118,22 +146,24 @@ overfull_baseline() {
     # tabela de estados) e as da secao 2 (v21 a ordem do plano com EPSS; v22
     # grupos consolidados, textos de solucao e cortes; v23 sem critico nem alto
     # e sem EPSS; v24 exatamente 20 acoes e um so' alto; v25 uma acao so'; v26
-    # mais de 20 acoes por card, com cards consolidados dentro e fora das 20).
-    */v1-numeracao | */v2-indicadores-vazios | */v3-consolidado-qod | \
-    */v4-instancias | */v5-acao-traduzida | */v6-vulns-unicas | \
-    */v7a-faixas | */v7b-lowconf | */v7c-todos-lowconf | \
-    */v8-ancora | */v9-nome-capa | */v10-navegacao | \
-    */v11-escopo-autenticado | */v12-escopo-nao-iniciado | */v13-escopo-cortes | \
-    */v14-escopo-interrompido | */v15-escopo-agente | */v16-escopo-agente-limpo | \
-    */v17-escopo-concluido-vazio | */v18-escopo-sensor | \
-    */v19a-escopo-comentario-do-agente-auth | */v19b-escopo-comentario-do-agente-feed | \
-    */v20a-estado-em-execucao | */v20b-estado-parada-solicitada | */v20c-estado-parado | \
-    */v20d-estado-novo | */v20e-estado-solicitado | */v20f-estado-na-fila | \
-    */v20g-estado-parada-solicitada-sem-inicio | */v20h-estado-parado-sem-inicio | \
-    */v20i-estado-interrompido-sem-inicio | \
-    */v21-prioridades-ordem | */v22-prioridades-cortes | */v23-prioridades-sem-criticos | \
-    */v24-prioridades-vinte-acoes | */v25-prioridades-acao-unica | \
-    */v26-prioridades-cards) echo 0 ;;
+    # mais de 20 acoes por card, com cards consolidados dentro e fora das 20)
+    # e as das edicoes (v27 falso positivo em toda parte; v28 so' Log).
+    */*/v1-numeracao | */*/v2-indicadores-vazios | */*/v3-consolidado-qod | \
+    */*/v4-instancias | */*/v5-acao-traduzida | */*/v6-vulns-unicas | \
+    */*/v7a-faixas | */*/v7b-lowconf | */*/v7c-todos-lowconf | \
+    */*/v8-ancora | */*/v9-nome-capa | */*/v10-navegacao | \
+    */*/v11-escopo-autenticado | */*/v12-escopo-nao-iniciado | */*/v13-escopo-cortes | \
+    */*/v14-escopo-interrompido | */*/v15-escopo-agente | */*/v16-escopo-agente-limpo | \
+    */*/v17-escopo-concluido-vazio | */*/v18-escopo-sensor | \
+    */*/v19a-escopo-comentario-do-agente-auth | */*/v19b-escopo-comentario-do-agente-feed | \
+    */*/v20a-estado-em-execucao | */*/v20b-estado-parada-solicitada | */*/v20c-estado-parado | \
+    */*/v20d-estado-novo | */*/v20e-estado-solicitado | */*/v20f-estado-na-fila | \
+    */*/v20g-estado-parada-solicitada-sem-inicio | */*/v20h-estado-parado-sem-inicio | \
+    */*/v20i-estado-interrompido-sem-inicio | \
+    */*/v21-prioridades-ordem | */*/v22-prioridades-cortes | */*/v23-prioridades-sem-criticos | \
+    */*/v24-prioridades-vinte-acoes | */*/v25-prioridades-acao-unica | \
+    */*/v26-prioridades-cards | \
+    */*/v27-cliente-falso-positivo | */*/v28-cliente-so-log) echo 0 ;;
     *) return 1 ;;
   esac
 }
@@ -180,7 +210,18 @@ size_of() {
   if [ -f "$1" ]; then wc -c < "$1" | tr -d ' '; else echo 0; fi
 }
 
-say "== portoes: $lang / $fx"
+say "== portoes: $lang / $variant / $fx"
+
+# --- a edicao que o generate montado pede ---------------------------------------
+# O diag-compile.sh le o par `stringparam variant' do PROPRIO generate (o que o
+# objeto de feed instala) e o grava em `variant'. Edicao errada ali compilaria
+# outra edicao, e os portoes abaixo a mediriam contra o contrato errado.
+got_variant=$(cat "$diag/variant" 2>/dev/null || echo '?')
+if [ "$got_variant" = "$variant" ]; then
+  gate ok "edicao do generate" "$got_variant"
+else
+  gate falha "edicao do generate" "o generate pede '$got_variant', a matriz e' '$variant'"
+fi
 
 # --- ponta a ponta: o que o gvmd recebe ---------------------------------------
 if [ "$e2e_rc" -eq 0 ]; then
@@ -279,7 +320,7 @@ if [ -f "$logf" ]; then
 
   n_over=$(count_lines '^Overfull \\hbox' "$logf")
   n_vbox=$(count_lines '^Overfull \\vbox' "$logf")
-  if base=$(overfull_baseline "$lang" "$fx"); then
+  if base=$(overfull_baseline "$lang" "$variant" "$fx"); then
     over_cell="$n_over ($base)"
     if [ "$n_over" -le "$base" ]; then
       gate ok "Overfull \\hbox" "$n_over (linha de base $base)"
@@ -294,7 +335,7 @@ if [ -f "$logf" ]; then
     fi
   else
     over_cell="$n_over (sem base)"
-    gate falha "Overfull \\hbox" "$n_over, e nao ha linha de base para $lang/$fx no gates.sh"
+    gate falha "Overfull \\hbox" "$n_over, e nao ha linha de base para $lang/$variant/$fx no gates.sh"
   fi
   say "         (info) Overfull \\vbox: $n_vbox"
 else
@@ -330,15 +371,35 @@ if [ -s "$tex" ]; then
   # A conta acima fecha com 0 = 0: sem este piso, um sumario de achados que
   # sumisse inteiro passaria. Fixture com <result> tem de ter ao menos um link
   # de ACHADO -- os 8 da pagina de sumario existem em qualquer relatorio e nao
-  # podem segurar o piso no lugar deles.
+  # podem segurar o piso no lugar deles. Na edicao do cliente so' o resultado
+  # de severidade >= 0.1 tem linha (o Log e' contagem, o falso positivo nao
+  # existe), entao o piso conta so' esses. A executiva nao tem card: nenhuma
+  # ancora de achado, nenhum \priolink, e o sumario tem 3 secoes.
   n_results=0
   if [ -n "$xml" ] && [ -f "$xml" ]; then
-    n_results=$(count_matches '<result[ >]' "$xml")
+    if [ "$variant" = client ]; then
+      n_results=$(python3 -X utf8 - "$xml" <<'PY'
+import re, sys, xml.etree.ElementTree as ET
+root = ET.parse(sys.argv[1]).getroot()
+rep = root.find("report") if root.find("report") is not None else root
+num = re.compile(r"[ \t\r\n]*-?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)[ \t\r\n]*")
+print(sum(1 for r in rep.findall("results/result")
+          if num.fullmatch(r.findtext("severity") or "") and float(r.findtext("severity")) >= 0.1))
+PY
+)
+    else
+      n_results=$(count_matches '<result[ >]' "$xml")
+    fi
   fi
-  if [ "$n_results" -gt 0 ] && [ "$n_find_links" -eq 0 ]; then
-    gate falha "links/alvos" "$detail -- e o XML tem $n_results <result>: sumario de achados sem nenhum link"
-  elif [ "$toc_got" != "sec-1 sec-2 sec-3 sec-4 sec-5 sec-6 sec-7 sec-8 " ]; then
-    gate falha "links/alvos" "$detail -- a pagina de sumario tem de ter os 8 links sec-1..sec-8, um de cada; tem: ${toc_got:-nenhum}"
+  want_toc="sec-1 sec-2 sec-3 sec-4 sec-5 sec-6 sec-7 sec-8 "
+  if [ "$variant" = executive ]; then want_toc="sec-1 sec-2 sec-3 "; fi
+  n_card_anchors=$(( $(count_matches '{fnd-' "$tex") + $(count_matches '{grp-' "$tex") ))
+  if [ "$variant" != executive ] && [ "$n_results" -gt 0 ] && [ "$n_find_links" -eq 0 ]; then
+    gate falha "links/alvos" "$detail -- e o XML tem $n_results <result> que a edicao $variant lista: sumario de achados sem nenhum link"
+  elif [ "$variant" = executive ] && { [ "$n_card_anchors" -gt 0 ] || [ "$n_prio" -gt 0 ]; }; then
+    gate falha "links/alvos" "$detail -- a edicao executiva nao tem cards, e o .tex tem $n_card_anchors ancora(s) de achado e $n_prio \\priolink"
+  elif [ "$toc_got" != "$want_toc" ]; then
+    gate falha "links/alvos" "$detail -- a pagina de sumario tem de ter os links ${want_toc% }, um de cada; tem: ${toc_got:-nenhum}"
   elif [ "$n_dangling" -eq 0 ] && [ "$n_targets" -eq $((n_links + trunc)) ]; then
     gate ok "links/alvos" "$detail"
   else
@@ -383,13 +444,13 @@ fi
 # Roda no runner (python3 da imagem do Ubuntu, so' biblioteca padrao) sobre o
 # MESMO .tex que o xsltproc do gvmd:stable gerou no diagnostico.
 if [ -z "$xml" ]; then
-  gate falha "veracidade" "sem o XML da fixture (6o argumento do gates.sh)"
+  gate falha "veracidade" "sem o XML da fixture (7o argumento do gates.sh)"
 elif [ ! -s "$tex" ]; then
   gate falha "veracidade" "sem .tex para checar"
 else
   v_rc=0
-  python3 -X utf8 "$ci_dir/check-veracity.py" --lang "$lang" --xml "$xml" --tex "$tex" \
-    > "$tmpd/veracity" 2>&1 || v_rc=$?
+  python3 -X utf8 "$ci_dir/check-veracity.py" --lang "$lang" --variant "$variant" --xml "$xml" \
+    --tex "$tex" > "$tmpd/veracity" 2>&1 || v_rc=$?
   n_vfail=$(count_lines '^  FALHA ' "$tmpd/veracity")
   if [ "$v_rc" -eq 0 ]; then
     ver_cell=OK
@@ -408,7 +469,7 @@ fi
 # (a arvore de marcadores tem de estar nele) e o report.aux do diagnostico (a
 # pagina que o sumario imprime e' o rotulo suri-sec-N de la').
 if [ -z "$xml" ]; then
-  gate falha "navegacao" "sem o XML da fixture (6o argumento do gates.sh)"
+  gate falha "navegacao" "sem o XML da fixture (7o argumento do gates.sh)"
 elif [ ! -s "$tex" ]; then
   gate falha "navegacao" "sem .tex para checar"
 elif [ ! -s "$pdf" ]; then
@@ -417,8 +478,8 @@ else
   nav_aux=()
   if [ -s "$diag/report.aux" ]; then nav_aux=(--aux "$diag/report.aux"); fi
   nv_rc=0
-  python3 -X utf8 "$ci_dir/check-navigation.py" --lang "$lang" --xml "$xml" --tex "$tex" \
-    --pdf "$pdf" "${nav_aux[@]}" > "$tmpd/navigation" 2>&1 || nv_rc=$?
+  python3 -X utf8 "$ci_dir/check-navigation.py" --lang "$lang" --variant "$variant" --xml "$xml" \
+    --tex "$tex" --pdf "$pdf" "${nav_aux[@]}" > "$tmpd/navigation" 2>&1 || nv_rc=$?
   n_nfail=$(count_lines '^  FALHA ' "$tmpd/navigation")
   if [ "$nv_rc" -eq 0 ] && [ "${#nav_aux[@]}" -gt 0 ]; then
     nav_cell=OK
@@ -437,8 +498,8 @@ else
 fi
 
 if [ "$failures" -eq 0 ]; then verdict=OK; else verdict="FALHA ($failures)"; fi
-printf '| %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s |\n' \
-  "$lang" "$fx" "$verdict" "$pages" "$n_err" "$n_font" "$n_t3" "$links_cell" "$over_cell" "$ver_cell" "$nav_cell" \
+printf '| %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s |\n' \
+  "$lang" "$variant" "$fx" "$verdict" "$pages" "$n_err" "$n_font" "$n_t3" "$links_cell" "$over_cell" "$ver_cell" "$nav_cell" \
   > "$art/summary.row"
-say "VEREDITO $lang/$fx: $verdict"
+say "VEREDITO $lang/$variant/$fx: $verdict"
 [ "$failures" -eq 0 ]

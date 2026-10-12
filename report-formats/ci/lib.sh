@@ -47,7 +47,7 @@ gvmd_run() {
     --entrypoint /bin/sh "$GVMD_IMAGE" "$@"
 }
 
-# stage_bundle <lang> <destino> [--omit ARQ]...  (ver stage-bundle.py)
+# stage_bundle <lang> <variant> <destino> [--omit ARQ]...  (ver stage-bundle.py)
 stage_bundle() {
   python3 -X utf8 "$CI_DIR/stage-bundle.py" "$@"
 }

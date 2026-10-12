@@ -13,12 +13,14 @@
 # the format installs regardless of the configured FEED_RELEASE.  All stock
 # formats are left untouched (this image is purely additive).
 #
-# The report ships as THREE per-language objects (EN / PT-BR / ES), one feed XML
-# each (pdf-suricatoos-<uuid>.xml), so all three appear in the GSA "Download
-# report" dropdown and the user picks the language there.
+# The report ships as NINE objects -- three editions (technical, client,
+# executive) in three languages (EN / PT-BR / ES) --, one feed XML each
+# (pdf-suricatoos-<uuid>.xml), so all nine appear in the GSA "Download report"
+# dropdown and the user picks edition and language there. manifest.json maps
+# (format, lang, variant) to each UUID for the fleet connector.
 #
 # Build:
-#   python3 build-feed-xml.py   # regenerate the three embedded XMLs from the bundle
+#   python3 build-feed-xml.py   # regenerate the nine embedded XMLs and manifest.json
 #   docker build -t ghcr.io/williamsouzadelima/suricatoos-report-formats:stable \
 #       report-formats
 FROM registry.community.greenbone.net/community/report-formats

@@ -1,26 +1,29 @@
 #!/bin/sh
 # Compilacao de DIAGNOSTICO do Suricatoos Premium PDF, DENTRO da imagem do gvmd.
 #
-# Os mesmos passos e parametros do `generate` (xsltproc com o idioma lido do
-# PROPRIO generate; duas passadas do pdflatex em batchmode, em foreground; os
-# mesmos TEXINPUTS/TEXMFHOME/TEXMFVAR/HOME), mas SEM julgar nada e guardando
-# .tex, .log e .pdf para os portoes (gates.sh) -- o generate apaga o temporario
-# e, de proposito, nao entrega nada quando falha.
+# Os mesmos passos e parametros do `generate` (xsltproc com o idioma e a
+# edicao lidos do PROPRIO generate; duas passadas do pdflatex em batchmode, em
+# foreground; os mesmos TEXINPUTS/TEXMFHOME/TEXMFVAR/HOME), mas SEM julgar nada
+# e guardando .tex, .log e .pdf para os portoes (gates.sh) -- o generate apaga
+# o temporario e, de proposito, nao entrega nada quando falha.
 #
 # Uso (cwd = bundle montado pelo stage-bundle.py; sh POSIX, uid 1001):
 #   sh diag-compile.sh <report.xml> <dir-de-saida>
 #
 # Grava em <dir-de-saida>: report.tex, report.log (2a passada),
 # report.pass1.log, report.pdf, xsltproc.stderr, xsltproc.rc, pdflatex.rc
-# ("<exit 1a> <exit 2a>") e lang.
+# ("<exit 1a> <exit 2a>"), lang e variant (a edicao que o generate pede: o
+# gates.sh a confere com a da matriz).
 set -eu
 
 xml=$1
 out=$2
 
-lang=$(sed -n 's/^xsltproc --stringparam lang \([A-Za-z_]*\) .*/\1/p' ./generate)
-if [ -z "${lang}" ]; then
-  echo "diag-compile: linha do xsltproc com o idioma nao encontrada no ./generate" >&2
+line='^xsltproc --stringparam lang \([A-Za-z_]*\) --stringparam variant \([a-z]*\) .*'
+lang=$(sed -n "s/${line}/\\1/p" ./generate)
+variant=$(sed -n "s/${line}/\\2/p" ./generate)
+if [ -z "${lang}" ] || [ -z "${variant}" ]; then
+  echo "diag-compile: linha do xsltproc com o idioma e a edicao nao encontrada no ./generate" >&2
   exit 2
 fi
 
@@ -39,8 +42,10 @@ TEXMFVAR="${work}/tv"; export TEXMFVAR
 HOME="${work}"; export HOME
 
 echo "${lang}" > "${out}/lang"
+echo "${variant}" > "${out}/variant"
 rc=0
-xsltproc --stringparam lang "${lang}" ./latex.xsl "${xml}" > "${out}/report.tex" 2> "${out}/xsltproc.stderr" || rc=$?
+xsltproc --stringparam lang "${lang}" --stringparam variant "${variant}" ./latex.xsl "${xml}" \
+  > "${out}/report.tex" 2> "${out}/xsltproc.stderr" || rc=$?
 echo "${rc}" > "${out}/xsltproc.rc"
 if [ "${rc}" -ne 0 ]; then
   # Sem .tex completo nao ha o que compilar; o gates.sh reporta o xsltproc.

@@ -1,0 +1,372 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+Fixture SINTETICA do CI de veracidade do Suricatoos Premium PDF
+(report-formats/ci/check-veracity.py roda sobre o .tex desta fixture nos 3
+idiomas e nas 3 edicoes). Enderecos RFC 5737, nomes genericos sob .example,
+OIDs da faixa sintetica 1.3.6.1.4.1.25623.1.0.99xxxx (nao existem no feed),
+CVE do ano 2099 e EPSS inventado no formato do gvmd 26; nenhum dado de scan
+real. As <ports> vem na forma do gvmd 26 (print_report_port_xml: host, porta,
+a severidade MAXIMA dos resultados daquele host e porta e a ameaca).
+
+Edicao do cliente (fatia R5): o relatorio SEM os resultados falso positivo
+(severidade -1, a faixa do sev-class), como o gvmd o exportaria sem eles; o
+Log so' como contagem. 29 resultados, 11 falso positivo: o TOTAL DE ACHADOS
+da edicao do cliente e' 18, sem a nota de export parcial.
+- Example Mail Relay Open Relay: uma instancia Alta (H1) e duas falso positivo
+  (H2 443/tcp, .85 25/tcp): o card do cliente tem 1 instancia e so' H1 nos
+  sistemas afetados, e a 443/tcp de H2 e a 25/tcp de .85 (so' esses falso
+  positivo) somem;
+- Example Debug Endpoint Exposed: so' falso positivo, na 8443/tcp de H2 e de
+  .85, que so' ele alcanca: nenhuma linha, card, porta ou celula do mapa no
+  cliente;
+- 198.51.100.85 (mail85): host SO' com falso positivo. No cliente ele
+  continua como host varrido e limpo: conta nos 5 hosts avaliados, tem o card
+  da secao 4 sem porta nenhuma e, no apendice, a nota de host sem servico com
+  achado;
+- Example Weak SSH Key Exchange: confirmado no tecnico SO' pela instancia
+  falso positivo (QoD 80; a outra e' QoD 30): no cliente vira indicador, sai
+  do plano e entra na nota de indicadores; a 22/tcp de H3 some;
+- Example Webmail (VendorFix): 7 membros no tecnico (o WM-06 so' falso
+  positivo, o "Banner Detection" so' Log); no cliente o falso positivo nao
+  existe e o Log nao e' membro: 5 advisories, so' H1 (a instancia falso
+  positivo do WM-02 em H4 some), e o "Banner Detection" vira registro
+  informativo contado; a 443/tcp de H4 (so' falso positivo) some;
+- Example Fileshare (VendorFix): 5 membros no tecnico, um so' falso positivo:
+  no cliente sobram 4, abaixo do minimo de 5, e viram 4 cards avulsos;
+- Log: "Example OS Fingerprint" (confirmado), "Example HTTP Server Banner"
+  (Log e um falso positivo na 80/tcp de H2, que some) e o "Banner Detection"
+  do Webmail: "+ 3 registros informativos (Log)" no bloco de confirmados;
+  "Example SNMP Community Probe" (QoD 30): "+ 1 registro informativo" no de
+  indicadores; o "Example SNMP Default Community" (falso positivo, QoD 30) e
+  a 161/udp de H3 somem;
+- a linha `geral' de H1 tem Baixo, Log e falso positivo: a nota do cliente
+  conta 2 achados, "1 Baixo, 1 Log", sem a palavra falso positivo;
+- filtro com levels=chmlgf: a linha de niveis do cliente nao cita falso
+  positivo.
+-->
+<report extension="pdf" content_type="application/pdf" id="00000000-0000-4000-8000-000000000271">
+  <task id="00000000-0000-4000-8000-000000000001">
+    <name>Example Client Edition False Positives</name>
+  </task>
+  <scan_run_status>Done</scan_run_status>
+  <timezone>Coordinated Universal Time</timezone>
+  <timezone_abbrev>UTC</timezone_abbrev>
+  <scan_start>2026-09-01T09:00:00Z</scan_start>
+  <scan_end>2026-09-01T10:05:00Z</scan_end>
+  <hosts><count>5</count></hosts>
+  <result_count>29<full>29</full><filtered>29</filtered><critical><full>2</full><filtered>2</filtered></critical><high><full>4</full><filtered>4</filtered></high><medium><full>7</full><filtered>7</filtered></medium><low><full>1</full><filtered>1</filtered></low><log><full>4</full><filtered>4</filtered></log><false_positive><full>11</full><filtered>11</filtered></false_positive></result_count>
+  <filters id="00000000-0000-4000-8000-000000000002">
+    <term>apply_overrides=1 levels=chmlgf rows=-1 min_qod=1 first=1 sort-reverse=severity</term>
+  </filters>
+  <ports start="1" max="-1">
+    <port><host>192.0.2.81</host>443/tcp<severity>9.1</severity><threat>Critical</threat></port>
+    <port><host>192.0.2.81</host>22/tcp<severity>5.0</severity><threat>Medium</threat></port>
+    <port><host>192.0.2.81</host>80/tcp<severity>0.0</severity><threat>Log</threat></port>
+    <port><host>192.0.2.81</host>general/tcp<severity>2.6</severity><threat>Low</threat></port>
+    <port><host>192.0.2.82</host>443/tcp<severity>-1.0</severity><threat>False Positive</threat></port>
+    <port><host>192.0.2.82</host>8443/tcp<severity>-1.0</severity><threat>False Positive</threat></port>
+    <port><host>192.0.2.82</host>445/tcp<severity>7.8</severity><threat>High</threat></port>
+    <port><host>192.0.2.82</host>80/tcp<severity>-1.0</severity><threat>False Positive</threat></port>
+    <port><host>192.0.2.83</host>22/tcp<severity>-1.0</severity><threat>False Positive</threat></port>
+    <port><host>192.0.2.83</host>5432/tcp<severity>6.8</severity><threat>Medium</threat></port>
+    <port><host>192.0.2.83</host>161/udp<severity>-1.0</severity><threat>False Positive</threat></port>
+    <port><host>192.0.2.83</host>general/tcp<severity>0.0</severity><threat>Log</threat></port>
+    <port><host>198.51.100.84</host>443/tcp<severity>-1.0</severity><threat>False Positive</threat></port>
+    <port><host>198.51.100.84</host>3306/tcp<severity>9.8</severity><threat>Critical</threat></port>
+    <port><host>198.51.100.85</host>25/tcp<severity>-1.0</severity><threat>False Positive</threat></port>
+    <port><host>198.51.100.85</host>8443/tcp<severity>-1.0</severity><threat>False Positive</threat></port>
+  </ports>
+  <host>
+    <ip>192.0.2.81</ip>
+    <start>2026-09-01T09:00:00Z</start>
+    <end>2026-09-01T10:05:00Z</end>
+    <detail><name>hostname</name><value>web81.example.com</value></detail>
+  </host>
+  <host>
+    <ip>192.0.2.82</ip>
+    <start>2026-09-01T09:00:00Z</start>
+    <end>2026-09-01T10:05:00Z</end>
+    <detail><name>hostname</name><value>app82.example.com</value></detail>
+  </host>
+  <host>
+    <ip>192.0.2.83</ip>
+    <start>2026-09-01T09:00:00Z</start>
+    <end>2026-09-01T10:05:00Z</end>
+    <detail><name>hostname</name><value>db83.example.com</value></detail>
+  </host>
+  <host>
+    <ip>198.51.100.84</ip>
+    <start>2026-09-01T09:00:00Z</start>
+    <end>2026-09-01T10:05:00Z</end>
+    <detail><name>hostname</name><value>edge84.example.com</value></detail>
+  </host>
+  <host>
+    <ip>198.51.100.85</ip>
+    <start>2026-09-01T09:00:00Z</start>
+    <end>2026-09-01T10:05:00Z</end>
+    <detail><name>hostname</name><value>mail85.example.com</value></detail>
+  </host>
+  <results start="1" max="-1">
+    <result id="c27-0001">
+      <host>192.0.2.81<hostname>web81.example.com</hostname></host>
+      <port>443/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992701"><type>nvt</type><name>Example Mail Relay Open Relay</name><family>Synthetic</family><cvss_base>7.5</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">Restrict relaying to authenticated users.</solution><refs></refs></nvt>
+      <threat>High</threat>
+      <severity>7.5</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Mail Relay Open Relay.</description>
+    </result>
+    <result id="c27-0002">
+      <host>192.0.2.82<hostname>app82.example.com</hostname></host>
+      <port>443/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992701"><type>nvt</type><name>Example Mail Relay Open Relay</name><family>Synthetic</family><cvss_base></cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">Restrict relaying to authenticated users.</solution><refs></refs></nvt>
+      <threat>False Positive</threat>
+      <severity>-1.0</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Mail Relay Open Relay.</description>
+    </result>
+    <result id="c27-0003">
+      <host>192.0.2.82<hostname>app82.example.com</hostname></host>
+      <port>8443/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992702"><type>nvt</type><name>Example Debug Endpoint Exposed</name><family>Synthetic</family><cvss_base></cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Workaround</tags><solution type="Workaround">Disable the debug endpoint.</solution><refs></refs></nvt>
+      <threat>False Positive</threat>
+      <severity>-1.0</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Debug Endpoint Exposed.</description>
+    </result>
+    <result id="c27-0004">
+      <host>192.0.2.83<hostname>db83.example.com</hostname></host>
+      <port>22/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992703"><type>nvt</type><name>Example Weak SSH Key Exchange</name><family>Synthetic</family><cvss_base></cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">Disable the weak key exchange algorithms.</solution><refs></refs></nvt>
+      <threat>False Positive</threat>
+      <severity>-1.0</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Weak SSH Key Exchange.</description>
+    </result>
+    <result id="c27-0005">
+      <host>192.0.2.81<hostname>web81.example.com</hostname></host>
+      <port>22/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992703"><type>nvt</type><name>Example Weak SSH Key Exchange</name><family>Synthetic</family><cvss_base>5.0</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">Disable the weak key exchange algorithms.</solution><refs></refs></nvt>
+      <threat>Medium</threat>
+      <severity>5.0</severity>
+      <qod><value>30</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Weak SSH Key Exchange.</description>
+    </result>
+    <result id="c27-0006">
+      <host>192.0.2.81<hostname>web81.example.com</hostname></host>
+      <port>443/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992711"><type>nvt</type><name>Example Webmail Advisory (WM-01)</name><family>Synthetic</family><cvss_base>8.1</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=VendorFix</tags><solution type="VendorFix">Upgrade Example Webmail to version 5.1 or later.</solution><refs></refs></nvt>
+      <threat>High</threat>
+      <severity>8.1</severity>
+      <qod><value>97</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Webmail Advisory (WM-01).</description>
+    </result>
+    <result id="c27-0007">
+      <host>192.0.2.81<hostname>web81.example.com</hostname></host>
+      <port>443/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992712"><type>nvt</type><name>Example Webmail Advisory (WM-02)</name><family>Synthetic</family><cvss_base>6.5</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=VendorFix</tags><solution type="VendorFix">Upgrade Example Webmail to version 5.2 or later.</solution><refs></refs></nvt>
+      <threat>Medium</threat>
+      <severity>6.5</severity>
+      <qod><value>97</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Webmail Advisory (WM-02).</description>
+    </result>
+    <result id="c27-0008">
+      <host>198.51.100.84<hostname>edge84.example.com</hostname></host>
+      <port>443/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992712"><type>nvt</type><name>Example Webmail Advisory (WM-02)</name><family>Synthetic</family><cvss_base></cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=VendorFix</tags><solution type="VendorFix">Upgrade Example Webmail to version 5.2 or later.</solution><refs></refs></nvt>
+      <threat>False Positive</threat>
+      <severity>-1.0</severity>
+      <qod><value>97</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Webmail Advisory (WM-02).</description>
+    </result>
+    <result id="c27-0009">
+      <host>192.0.2.81<hostname>web81.example.com</hostname></host>
+      <port>443/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992713"><type>nvt</type><name>Example Webmail Advisory (WM-03)</name><family>Synthetic</family><cvss_base>7.2</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=VendorFix</tags><solution type="VendorFix">Upgrade Example Webmail to version 5.3 or later.</solution><refs></refs></nvt>
+      <threat>High</threat>
+      <severity>7.2</severity>
+      <qod><value>97</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Webmail Advisory (WM-03).</description>
+    </result>
+    <result id="c27-0010">
+      <host>192.0.2.81<hostname>web81.example.com</hostname></host>
+      <port>443/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992714"><type>nvt</type><name>Example Webmail Advisory (WM-04)</name><family>Synthetic</family><cvss_base>5.9</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=VendorFix</tags><solution type="VendorFix">Upgrade Example Webmail to version 5.4 or later.</solution><refs></refs></nvt>
+      <threat>Medium</threat>
+      <severity>5.9</severity>
+      <qod><value>97</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Webmail Advisory (WM-04).</description>
+    </result>
+    <result id="c27-0011">
+      <host>192.0.2.81<hostname>web81.example.com</hostname></host>
+      <port>443/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992715"><type>nvt</type><name>Example Webmail Advisory (WM-05)</name><family>Synthetic</family><cvss_base>9.1</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=VendorFix</tags><solution type="VendorFix">Upgrade Example Webmail to version 5.5 or later.</solution><refs></refs></nvt>
+      <threat>Critical</threat>
+      <severity>9.1</severity>
+      <qod><value>97</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Webmail Advisory (WM-05).</description>
+    </result>
+    <result id="c27-0012">
+      <host>198.51.100.84<hostname>edge84.example.com</hostname></host>
+      <port>443/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992716"><type>nvt</type><name>Example Webmail Advisory (WM-06)</name><family>Synthetic</family><cvss_base></cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=VendorFix</tags><solution type="VendorFix">Upgrade Example Webmail to version 5.6 or later.</solution><refs></refs></nvt>
+      <threat>False Positive</threat>
+      <severity>-1.0</severity>
+      <qod><value>97</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Webmail Advisory (WM-06).</description>
+    </result>
+    <result id="c27-0013">
+      <host>192.0.2.81<hostname>web81.example.com</hostname></host>
+      <port>443/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992717"><type>nvt</type><name>Example Webmail Banner Detection</name><family>Synthetic</family><cvss_base></cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=VendorFix</tags><solution type="VendorFix">Upgrade Example Webmail to a supported version.</solution><refs></refs></nvt>
+      <threat>Log</threat>
+      <severity>0.0</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Webmail Banner Detection.</description>
+    </result>
+    <result id="c27-0014">
+      <host>192.0.2.82<hostname>app82.example.com</hostname></host>
+      <port>445/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992721"><type>nvt</type><name>Example Fileshare Advisory (FS-01)</name><family>Synthetic</family><cvss_base>7.8</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=VendorFix</tags><solution type="VendorFix">Upgrade Example Fileshare to version 3.1 or later.</solution><refs></refs></nvt>
+      <threat>High</threat>
+      <severity>7.8</severity>
+      <qod><value>97</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Fileshare Advisory (FS-01).</description>
+    </result>
+    <result id="c27-0015">
+      <host>192.0.2.82<hostname>app82.example.com</hostname></host>
+      <port>445/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992722"><type>nvt</type><name>Example Fileshare Advisory (FS-02)</name><family>Synthetic</family><cvss_base>6.1</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=VendorFix</tags><solution type="VendorFix">Upgrade Example Fileshare to version 3.2 or later.</solution><refs></refs></nvt>
+      <threat>Medium</threat>
+      <severity>6.1</severity>
+      <qod><value>97</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Fileshare Advisory (FS-02).</description>
+    </result>
+    <result id="c27-0016">
+      <host>192.0.2.82<hostname>app82.example.com</hostname></host>
+      <port>445/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992723"><type>nvt</type><name>Example Fileshare Advisory (FS-03)</name><family>Synthetic</family><cvss_base>5.4</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=VendorFix</tags><solution type="VendorFix">Upgrade Example Fileshare to version 3.3 or later.</solution><refs></refs></nvt>
+      <threat>Medium</threat>
+      <severity>5.4</severity>
+      <qod><value>97</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Fileshare Advisory (FS-03).</description>
+    </result>
+    <result id="c27-0017">
+      <host>192.0.2.82<hostname>app82.example.com</hostname></host>
+      <port>445/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992724"><type>nvt</type><name>Example Fileshare Advisory (FS-04)</name><family>Synthetic</family><cvss_base>4.3</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=VendorFix</tags><solution type="VendorFix">Upgrade Example Fileshare to version 3.4 or later.</solution><refs></refs></nvt>
+      <threat>Medium</threat>
+      <severity>4.3</severity>
+      <qod><value>97</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Fileshare Advisory (FS-04).</description>
+    </result>
+    <result id="c27-0018">
+      <host>192.0.2.82<hostname>app82.example.com</hostname></host>
+      <port>445/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992725"><type>nvt</type><name>Example Fileshare Advisory (FS-05)</name><family>Synthetic</family><cvss_base></cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=VendorFix</tags><solution type="VendorFix">Upgrade Example Fileshare to version 3.5 or later.</solution><refs></refs></nvt>
+      <threat>False Positive</threat>
+      <severity>-1.0</severity>
+      <qod><value>97</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Fileshare Advisory (FS-05).</description>
+    </result>
+    <result id="c27-0019">
+      <host>192.0.2.81<hostname>web81.example.com</hostname></host>
+      <port>general/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992731"><type>nvt</type><name>Example OS Fingerprint</name><family>Synthetic</family><cvss_base></cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">No action is required.</solution><refs></refs></nvt>
+      <threat>Log</threat>
+      <severity>0.0</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example OS Fingerprint.</description>
+    </result>
+    <result id="c27-0020">
+      <host>192.0.2.81<hostname>web81.example.com</hostname></host>
+      <port>80/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992732"><type>nvt</type><name>Example HTTP Server Banner</name><family>Synthetic</family><cvss_base></cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">No action is required.</solution><refs></refs></nvt>
+      <threat>Log</threat>
+      <severity>0.0</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example HTTP Server Banner.</description>
+    </result>
+    <result id="c27-0021">
+      <host>192.0.2.82<hostname>app82.example.com</hostname></host>
+      <port>80/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992732"><type>nvt</type><name>Example HTTP Server Banner</name><family>Synthetic</family><cvss_base></cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">No action is required.</solution><refs></refs></nvt>
+      <threat>False Positive</threat>
+      <severity>-1.0</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example HTTP Server Banner.</description>
+    </result>
+    <result id="c27-0022">
+      <host>192.0.2.83<hostname>db83.example.com</hostname></host>
+      <port>general/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992733"><type>nvt</type><name>Example SNMP Community Probe</name><family>Synthetic</family><cvss_base></cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">No action is required.</solution><refs></refs></nvt>
+      <threat>Log</threat>
+      <severity>0.0</severity>
+      <qod><value>30</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example SNMP Community Probe.</description>
+    </result>
+    <result id="c27-0023">
+      <host>192.0.2.83<hostname>db83.example.com</hostname></host>
+      <port>161/udp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992741"><type>nvt</type><name>Example SNMP Default Community</name><family>Synthetic</family><cvss_base></cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">Change the default community string.</solution><refs></refs></nvt>
+      <threat>False Positive</threat>
+      <severity>-1.0</severity>
+      <qod><value>30</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example SNMP Default Community.</description>
+    </result>
+    <result id="c27-0024">
+      <host>192.0.2.81<hostname>web81.example.com</hostname></host>
+      <port>general/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992742"><type>nvt</type><name>Example ICMP Timestamp Reply</name><family>Synthetic</family><cvss_base></cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">Filter ICMP timestamp requests.</solution><refs></refs></nvt>
+      <threat>False Positive</threat>
+      <severity>-1.0</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example ICMP Timestamp Reply.</description>
+    </result>
+    <result id="c27-0025">
+      <host>192.0.2.81<hostname>web81.example.com</hostname></host>
+      <port>general/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992743"><type>nvt</type><name>Example TCP Timestamps</name><family>Synthetic</family><cvss_base>2.6</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">Disable TCP timestamps.</solution><refs></refs></nvt>
+      <threat>Low</threat>
+      <severity>2.6</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example TCP Timestamps.</description>
+    </result>
+    <result id="c27-0026">
+      <host>198.51.100.84<hostname>edge84.example.com</hostname></host>
+      <port>3306/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992751"><type>nvt</type><name>Example Database Remote Code Execution</name><family>Synthetic</family><cvss_base>9.8</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=VendorFix</tags><solution type="VendorFix">Upgrade the database server to version 8.4.2 or later.</solution><epss><max_severity><score>0.35000</score><percentile>0.50000</percentile><cve id="CVE-2099-2751"><severity>9.8</severity></cve></max_severity><max_epss><score>0.35000</score><percentile>0.50000</percentile><cve id="CVE-2099-2751"><severity>9.8</severity></cve></max_epss></epss><refs><ref type="cve" id="CVE-2099-2751"/></refs></nvt>
+      <threat>Critical</threat>
+      <severity>9.8</severity>
+      <qod><value>97</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Database Remote Code Execution.</description>
+    </result>
+    <result id="c27-0027">
+      <host>192.0.2.83<hostname>db83.example.com</hostname></host>
+      <port>5432/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992752"><type>nvt</type><name>Example Database Weak Password Policy</name><family>Synthetic</family><cvss_base>6.8</cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">Enforce a strong password policy.</solution><refs></refs></nvt>
+      <threat>Medium</threat>
+      <severity>6.8</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Database Weak Password Policy.</description>
+    </result>
+    <result id="c27-0028">
+      <host>198.51.100.85<hostname>mail85.example.com</hostname></host>
+      <port>25/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992701"><type>nvt</type><name>Example Mail Relay Open Relay</name><family>Synthetic</family><cvss_base></cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">Restrict relaying to authenticated users.</solution><refs></refs></nvt>
+      <threat>False Positive</threat>
+      <severity>-1.0</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Mail Relay Open Relay.</description>
+    </result>
+    <result id="c27-0029">
+      <host>198.51.100.85<hostname>mail85.example.com</hostname></host>
+      <port>8443/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992702"><type>nvt</type><name>Example Debug Endpoint Exposed</name><family>Synthetic</family><cvss_base></cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Workaround</tags><solution type="Workaround">Disable the debug endpoint.</solution><refs></refs></nvt>
+      <threat>False Positive</threat>
+      <severity>-1.0</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Debug Endpoint Exposed.</description>
+    </result>
+  </results>
+</report>
