@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"sort"
 	"strconv"
 	"strings"
@@ -40,6 +41,8 @@ func TestMain(m *testing.M) {
 //	leak        erro cuja mensagem repete a senha e traz caracteres de controle
 //	artifact    ok com output e artifact
 //	raw TEXTO   escreve TEXTO como está, saída 0
+//	grandchild ARQ  sobe um neto (este binário no modo sleep) que herda o stdout, grava o PID dele em ARQ e dorme
+//	            um minuto sem responder: depois que o filho morre, o neto ainda segura o stdout
 func fake(mode string, args []string) int {
 	in, _ := io.ReadAll(os.Stdin)
 	out := os.Stdout
@@ -90,6 +93,18 @@ func fake(mode string, args []string) int {
 		out.WriteString(`{"ok":true,"output":{"report_id":"x"},"artifact":{"original_size":3}}` + "\n")
 	case "raw":
 		out.WriteString(args[0])
+	case "grandchild":
+		exe, err := os.Executable()
+		if err != nil {
+			return 3
+		}
+		neto := exec.Command(exe, fakeArg, "sleep")
+		neto.Stdout = os.Stdout // herda o pipe do stdout
+		if err := neto.Start(); err != nil {
+			return 3
+		}
+		os.WriteFile(args[0], []byte(strconv.Itoa(neto.Process.Pid)), 0o600)
+		time.Sleep(time.Minute)
 	default:
 		fmt.Fprintln(os.Stderr, "modo desconhecido:", mode)
 		return 2

@@ -148,6 +148,32 @@ func TestTimeoutMataOProcessoEDevolveTimeout(t *testing.T) {
 	}
 }
 
+// Um descendente que herdou o stdout (um Command que é um lançador, um subprocesso futuro do fleet_ops) não segura o
+// Run além de Timeout + waitDelay: o filho morre no timeout e o pipe é fechado depois do waitDelay.
+func TestDescendenteComOStdoutNaoPrendeORun(t *testing.T) {
+	pidfile := filepath.Join(t.TempDir(), "neto.pid")
+	t.Cleanup(func() {
+		if b, err := os.ReadFile(pidfile); err == nil {
+			if pid, err := strconv.Atoi(string(b)); err == nil {
+				if p, err := os.FindProcess(pid); err == nil {
+					p.Kill()
+				}
+			}
+		}
+	})
+	r := fakeRunner(t, "grandchild", pidfile)
+	r.Timeout = 500 * time.Millisecond
+	start := time.Now()
+	_, err := r.Run(context.Background(), stateRequest(), testUser, testPassword)
+	wantCode(t, err, contract.ErrorTimeout)
+	if d, bound := time.Since(start), r.Timeout+waitDelay+5*time.Second; d > bound {
+		t.Fatalf("o Run levou %s, acima de Timeout + waitDelay (+5 s de folga) = %s", d, bound)
+	}
+	if _, err := os.Stat(pidfile); err != nil {
+		t.Fatalf("o neto não subiu: %v", err)
+	}
+}
+
 func TestCancelamentoDoChamadorEInterrupted(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	time.AfterFunc(300*time.Millisecond, cancel)

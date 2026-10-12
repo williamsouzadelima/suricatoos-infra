@@ -36,7 +36,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"os/exec"
 	"strings"
 	"time"
@@ -61,7 +60,9 @@ const (
 	// MaxMessageRunes is the schema's cap on error.message (fleet-result.schema.json#/$defs/error).
 	MaxMessageRunes = 512
 
-	// waitDelay bounds how long Wait waits for the I/O of a child that was killed.
+	// waitDelay bounds how long Wait waits, once the child has exited or been killed, for its pipes to close: after it,
+	// os/exec closes them itself. A descendant that inherited stdout (a launcher in Command, a subprocess of the
+	// script) therefore cannot hold Run past Timeout + waitDelay.
 	waitDelay = 2 * time.Second
 )
 
@@ -156,32 +157,48 @@ func (r *Runner) Run(ctx context.Context, request any, user, password string) (R
 		cmd.Env = append(cmd.Env, "GVMD_SOCKET="+r.Socket)
 	}
 	cmd.Stdin = bytes.NewReader(req)
+	// The copy of stdout belongs to os/exec (Wait waits for it, WaitDelay bounds it); the writer keeps at most limit
+	// bytes and, past them, kills the child at once.
+	out := &cappedWriter{limit: limit, cancel: cancel}
+	cmd.Stdout = out
 	cmd.Stderr = nil // the null device: never read, never logged
 	cmd.WaitDelay = waitDelay
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		return Result{}, fail(contract.ErrorInternal, "pipe do fleet_ops: %v", err)
-	}
 	if err := cmd.Start(); err != nil {
 		return Result{}, fail(contract.ErrorUnavailable, "não foi possível executar o fleet_ops: %v", err)
-	}
-	out, readErr := io.ReadAll(io.LimitReader(stdout, limit+1))
-	if int64(len(out)) > limit {
-		cancel() // kills the child: nobody reads the rest
-		_ = cmd.Wait()
-		return Result{}, fail(contract.ErrorInternal, "saída do fleet_ops acima do teto de %d bytes", limit)
 	}
 	waitErr := cmd.Wait()
 
 	switch {
+	case out.over:
+		return Result{}, fail(contract.ErrorInternal, "saída do fleet_ops acima do teto de %d bytes", limit)
 	case ctx.Err() != nil:
 		return Result{}, fail(contract.ErrorInterrupted, "execução do fleet_ops interrompida")
 	case errors.Is(run.Err(), context.DeadlineExceeded):
 		return Result{}, fail(contract.ErrorTimeout, "o fleet_ops não respondeu em %s", timeout)
-	case readErr != nil && waitErr == nil:
-		return Result{}, fail(contract.ErrorInternal, "leitura da saída do fleet_ops falhou")
 	}
-	return decode(out, waitErr, password)
+	return decode(out.buf.Bytes(), waitErr, password)
+}
+
+// errOutputTooLarge stops the copy of a stdout over the cap.
+var errOutputTooLarge = errors.New("fleetops: saída acima do teto")
+
+// cappedWriter is the child's stdout: it keeps at most limit bytes; the first write past them cancels the run (the
+// child is killed) and fails, which ends the copy. Only the copying goroutine of os/exec writes, and Run reads buf
+// only after Wait, which waits for that goroutine.
+type cappedWriter struct {
+	buf    bytes.Buffer
+	limit  int64
+	over   bool
+	cancel context.CancelFunc
+}
+
+func (w *cappedWriter) Write(p []byte) (int, error) {
+	if w.over || int64(w.buf.Len())+int64(len(p)) > w.limit {
+		w.over = true
+		w.cancel()
+		return 0, errOutputTooLarge
+	}
+	return w.buf.Write(p)
 }
 
 // decode reads the one JSON object of the child's stdout. waitErr is how the process ended.
