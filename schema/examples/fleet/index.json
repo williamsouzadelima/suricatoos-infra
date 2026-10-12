@@ -266,6 +266,15 @@
       }
     },
     {
+      "file": "invalid/command/report-export-filter-bare-key-repeats-levels.json",
+      "target": "fleet-command.schema.json",
+      "description": "a bare key is a token of that key even next to its pair: the trailing 'levels' repeats levels (a check that only counts 'levels=' would let gvmd read it as a search term and narrow the export)",
+      "expect": {
+        "check": "export_filter",
+        "path": "/payload/filter"
+      }
+    },
+    {
       "file": "invalid/command/report-export-filter-bare-key.json",
       "target": "fleet-command.schema.json",
       "description": "a bare key belongs to the key (it would be a search term for gvmd): min_qod without '=' is refused",
