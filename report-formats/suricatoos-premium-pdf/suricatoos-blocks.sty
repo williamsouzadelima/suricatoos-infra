@@ -28,6 +28,8 @@
 %              \prionosol, \priotrunc
 %   secao 7    scopefacts env, \scopefact, \scopena, authtable env, \authrow,
 %              errortable env, \errorrow, \scopetrunc
+%   edicoes    prioritytablesemcard env, \priorowsemcard (executiva),
+%              \findinglog (cliente)
 %   strings    \suriLbl... (every fixed word the blocks print, overridable)
 %
 % Copyright (C) 2026 Suricatoos.  SPDX-License-Identifier: GPL-2.0-or-later
@@ -1262,6 +1264,57 @@
   {\dat{\suriFS{9.5}{13}\color{ink}#8}}\suri@rowfill{26}&
   {\dat{\suriFS{10}{13}\bfseries\color{ink}#9}}\suri@rowfill{26}\\
   \suri@rowhair}
+
+% ===========================================================================
+% Edicoes do relatorio (parametro variant do latex.xsl).
+%
+% prioritytablesemcard / \priorowsemcard{n}{acao}{nome}{tipo}{hosts}{sev}{cvss}{epss}
+% -- a tabela da secao 2 na edicao EXECUTIVA, que nao tem cards: a mesma
+% prioritytable sem a coluna do card (nenhum link a pendurar). A largura dela
+% (0.08) e o vao que a precedia (0.01) vao para a coluna da acao, a que mais
+% quebra linha: 0.04+0.50+0.13+0.06+0.14+0.08 + 5 vaos de 0.01 = 1.00. As
+% mesmas faces da prioritytable, menos a Mono bold do link (FONTS.md).
+%
+% \findinglog{texto} -- a contagem que fecha um bloco das secoes 5 e 6 na
+% edicao do CLIENTE, no lugar das linhas e dos cards de Log ("+ N registros
+% informativos (Log), nao detalhados nesta edicao"): o desenho do
+% \findingtrunc, com outro nome pela razao do \scopetrunc e do \priotrunc -- o
+% portao de links do CI soma os "\findingtrunc{\suriEllip\ + N" contra os alvos
+% de card, e o Log da edicao do cliente nao tem card nem alvo.
+% ===========================================================================
+\newcommand{\suri@prheadsc}{%
+  \suri@hlbl{\#}&\suri@hlbl{\suriLblAction}&\suri@hlbl{\suriLblSolType}&
+  \suri@hlblr{\suriLblHostsCol}&\suri@hlbl{\suriLblSev}&
+  \suri@hlblr{\suriLblEpss}\suri@rowfill{27}\\
+  \suri@rowthick}
+\newenvironment{prioritytablesemcard}{%
+  \setlength{\suri@prw}{\linewidth}%
+  \suri@rowbase{16}%
+  \setlength{\tabcolsep}{0pt}%
+  \setlength{\LTpre}{0pt}\setlength{\LTpost}{0pt}%
+  \setlength{\LTleft}{0pt}\setlength{\LTright}{0pt}%
+  \longtable{@{}%
+    >{\raggedright\arraybackslash}p{0.04\suri@prw}@{\hspace{0.01\suri@prw}}%
+    >{\raggedright\arraybackslash}p{0.50\suri@prw}@{\hspace{0.01\suri@prw}}%
+    >{\raggedright\arraybackslash}p{0.13\suri@prw}@{\hspace{0.01\suri@prw}}%
+    >{\raggedleft\arraybackslash}p{0.06\suri@prw}@{\hspace{0.01\suri@prw}}%
+    >{\raggedright\arraybackslash}p{0.14\suri@prw}@{\hspace{0.01\suri@prw}}%
+    >{\raggedleft\arraybackslash}p{0.08\suri@prw}@{}}
+  \suri@prheadsc\endfirsthead
+  \suri@prheadsc\endhead
+  \suri@rowclose\endlastfoot
+}{\endlongtable}
+\newcommand{\priorowsemcard}[8]{%
+  {\dat{\suriFS{10}{13}\color{muted}#1}}\suri@rowfill{26}&
+  {\suriFS{10}{13}\color{ink}#2\par
+   \nointerlineskip\vskip\suripx{3}%
+   {\suriFS{9}{12}\color{muted}#3\suri@rowfill{26}\par}}&
+  {\suriFS{9.5}{12}\color{body}#4}\suri@rowfill{26}&
+  {\dat{\suriFS{10}{13}\color{ink}#5}}\suri@rowfill{26}&
+  {\sevbadges{#6}{#7}}\suri@rowfill{26}&
+  {\dat{\suriFS{9.5}{13}\color{ink}#8}}\suri@rowfill{26}\\
+  \suri@rowhair}
+\newcommand{\findinglog}[1]{\findingtrunc{#1}}
 
 \makeatother
 \endinput

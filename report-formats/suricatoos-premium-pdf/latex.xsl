@@ -43,6 +43,23 @@ SPDX-License-Identifier: GPL-2.0-or-later
 
   <!-- Report language, passed by the generate script (en | pt_BR | es). -->
   <xsl:param name="lang" select="'en'"/>
+  <!-- EDICAO do relatorio, passada pelo generate como o idioma (o par
+       "stringparam variant technical" da linha do xsltproc, que o
+       build-feed-xml.py troca por objeto de feed): os nomes sao os do contrato
+       da frota (ADR-0011, report.export.variant e
+       capabilities.report_formats).
+         technical  o relatorio completo, o de sempre (o padrao).
+         client     a edicao da equipe de TI do cliente: o relatorio SEM os
+                    resultados falso positivo (como o gvmd o exportaria sem
+                    eles, veja $client-rtf) e com o Log so' como contagem (o NVT
+                    sem severidade de achado nao tem linha nem card; cada bloco
+                    diz quantos ha). A baixa confianca continua no bloco "a
+                    validar", como no tecnico.
+         executive  so' o resumo executivo, as prioridades (sem a coluna de
+                    card) e o escopo, numerados 1..3.
+       Outro valor e' ERRO (o template da raiz para a transformacao): uma
+       edicao desconhecida nunca cai em silencio no tecnico. -->
+  <xsl:param name="variant" select="'technical'"/>
   <!-- Normalised two-letter language bucket used for all lookups. -->
   <xsl:variable name="L">
     <xsl:choose>
@@ -214,9 +231,14 @@ SPDX-License-Identifier: GPL-2.0-or-later
        NUNCA chamar de dentro de um laco sobre um node-set de RTF
        (exsl:node-set: $ghosts, $ints200, $hx-ints...): ali o documento e' o
        RTF, key() devolve vazio e o grupo some sem erro nenhum. -->
+  <!-- Na edicao do cliente, membro e' tambem so' o que e' ACHADO (severidade
+       maxima >= 0.1): o advisory so' Log nao entra no card consolidado (la'
+       ele seria uma linha de Log), e vira um registro informativo como outro
+       qualquer (contado no bloco, nunca listado). A mesma regra esta' por
+       extenso em $grp-reps e em $rows-conf. -->
   <func:function name="gvm:grp-confreps">
     <xsl:param name="g"/>
-    <func:result select="key('by-updgrp', $g)[generate-id() = generate-id(key('by-nvt', nvt/@oid)[1])][key('by-nvt', nvt/@oid)[not(qod/value and number(qod/value) &lt; number($qod-min))]]"/>
+    <func:result select="key('by-updgrp', $g)[generate-id() = generate-id(key('by-nvt', nvt/@oid)[1])][key('by-nvt', nvt/@oid)[not(qod/value and number(qod/value) &lt; number($qod-min))]][$variant != 'client' or gvm:sev-max(key('by-nvt', nvt/@oid)) &gt;= 0.1]"/>
   </func:function>
 
   <!-- As instancias que um grupo consolidado DESCREVE: todas as dos NVTs
@@ -238,11 +260,22 @@ SPDX-License-Identifier: GPL-2.0-or-later
   <xsl:variable name="nvt-low"
     select="$nvt-reps[not(key('by-nvt', nvt/@oid)[not(qod/value and number(qod/value) &lt; number($qod-min))])]"/>
   <!-- Um representante por grupo consolidado (o primeiro NVT confirmado do
-       grupo), so' para os grupos com $group-min NVTs confirmados distintos. -->
+       grupo), so' para os grupos com $group-min NVTs confirmados distintos.
+       Os dois predicados sao gvm:grp-confreps por extenso, e nao uma chamada a
+       ela: numa variavel global o corpo de uma func:function roda com o
+       documento de ORIGEM como no' corrente, e o key() dela nao acharia os nos
+       da copia da edicao do cliente (veja $client-rtf). Aqui o key() esta' num
+       predicado, e usa o no' do predicado. -->
   <xsl:variable name="grp-reps"
     select="$nvt-conf[nvt/solution/@type='VendorFix']
-                     [generate-id() = generate-id(gvm:grp-confreps(gvm:grp(nvt/name))[1])]
-                     [count(gvm:grp-confreps(gvm:grp(nvt/name))) &gt;= $group-min]"/>
+                     [generate-id() = generate-id(key('by-updgrp', gvm:grp(nvt/name))
+                         [generate-id() = generate-id(key('by-nvt', nvt/@oid)[1])]
+                         [key('by-nvt', nvt/@oid)[not(qod/value and number(qod/value) &lt; number($qod-min))]]
+                         [$variant != 'client' or gvm:sev-max(key('by-nvt', nvt/@oid)) &gt;= 0.1][1])]
+                     [count(key('by-updgrp', gvm:grp(nvt/name))
+                         [generate-id() = generate-id(key('by-nvt', nvt/@oid)[1])]
+                         [key('by-nvt', nvt/@oid)[not(qod/value and number(qod/value) &lt; number($qod-min))]]
+                         [$variant != 'client' or gvm:sev-max(key('by-nvt', nvt/@oid)) &gt;= 0.1]) &gt;= $group-min]"/>
   <xsl:variable name="grp-keys-rtf">
     <xsl:for-each select="$grp-reps"><k><xsl:value-of select="gvm:grp(nvt/name)"/></k></xsl:for-each>
   </xsl:variable>
@@ -252,7 +285,20 @@ SPDX-License-Identifier: GPL-2.0-or-later
        e a lista desses grupos e' a propria $grp-keys: o sumario e os cards nao
        tem como discordar sobre quem foi absorvido. -->
   <xsl:variable name="rows-conf"
-    select="$nvt-conf[not(nvt/solution/@type='VendorFix' and gvm:grp(nvt/name) = $grp-keys)]"/>
+    select="$nvt-conf[not(nvt/solution/@type='VendorFix' and gvm:grp(nvt/name) = $grp-keys
+                          and ($variant != 'client' or gvm:sev-max(key('by-nvt', nvt/@oid)) &gt;= 0.1))]"/>
+  <!-- O que tem linha e card nesta edicao. Na do cliente, o Log (severidade
+       maxima abaixo de 0.1; o falso positivo ja' nao existe na copia) nao tem:
+       cada bloco o declara numa contagem (\findinglog, veja client-log-line).
+       Os numeros das linhas e dos cards nao mudam: ordenados por severidade
+       maxima decrescente, os sem achado vem sempre por ultimo. Grupo nao
+       precisa de filtro: na edicao do cliente so' achado e' membro, entao
+       todo grupo e' achado ($grp-reps vale inteiro). Nas outras edicoes os
+       dois conjuntos sao os completos. -->
+  <xsl:variable name="rows-show"
+    select="$rows-conf[$variant != 'client' or gvm:sev-max(key('by-nvt', nvt/@oid)) &gt;= 0.1]"/>
+  <xsl:variable name="low-show"
+    select="$nvt-low[$variant != 'client' or gvm:sev-max(key('by-nvt', nvt/@oid)) &gt;= 0.1]"/>
 
   <!-- Teto de LINHAS de cada tabela do sumario de achados (secao 5).
        O sumario existe para ser lido de uma olhada; um scan real produz dezenas
@@ -757,6 +803,24 @@ SPDX-License-Identifier: GPL-2.0-or-later
     <s k="th_soltype" en="Type" pt="Tipo" es="Tipo"/>
     <s k="th_epss" en="EPSS" pt="EPSS" es="EPSS"/>
     <s k="th_card" en="Finding" pt="Achado" es="Hallazgo"/>
+    <!-- EDICOES (parametro variant). A capa e o titulo do PDF dizem a edicao
+         (o tecnico continua com o kicker e o titulo de sempre). -->
+    <s k="kicker_client" en="CLIENT EDITION" pt="EDIÇÃO DO CLIENTE" es="EDICIÓN PARA EL CLIENTE"/>
+    <s k="kicker_executive" en="EXECUTIVE EDITION" pt="EDIÇÃO EXECUTIVA" es="EDICIÓN EJECUTIVA"/>
+    <s k="pdftitle_client" en="Suricatoos Vulnerability Assessment Report (Client Edition)" pt="Relatório de Avaliação de Vulnerabilidades Suricatoos (Edição do Cliente)" es="Informe de Evaluación de Vulnerabilidades Suricatoos (Edición para el Cliente)"/>
+    <s k="pdftitle_executive" en="Suricatoos Vulnerability Assessment Report (Executive Edition)" pt="Relatório de Avaliação de Vulnerabilidades Suricatoos (Edição Executiva)" es="Informe de Evaluación de Vulnerabilidades Suricatoos (Edición Ejecutiva)"/>
+    <!-- Edicao do cliente: a contagem de Log que fecha um bloco das secoes 5 e
+         6 no lugar das linhas e dos cards de Log (o numero vem antes, do XSLT;
+         singular e plural). -->
+    <s k="client_log_1" en=" informational record (Log), not detailed in this edition." pt=" registro informativo (Log), não detalhado nesta edição." es=" registro informativo (Log), no detallado en esta edición."/>
+    <s k="client_log_n" en=" informational records (Log), not detailed in this edition." pt=" registros informativos (Log), não detalhados nesta edição." es=" registros informativos (Log), no detallados en esta edición."/>
+    <!-- A frase da ordem da secao 2 na edicao do cliente: a mesma de
+         prio_order, sem falar de falso positivo (que nao existe nela). -->
+    <s k="prio_order_client" en="Order: severity class (Critical, High, Medium, Low); more affected hosts first; higher EPSS first, no EPSS last; higher CVSS first; name and OID ascending. Affected hosts and EPSS only take into account instances of Low severity or higher (Log does not count): the affected hosts are those with one of them, and the EPSS is the highest among them. For an outstanding update, those instances are the ones of all its advisories (each host counts once), and its severity and CVSS are the highest among them; the name is the NVT name as in the feed, and for an outstanding update it is the product, with the OID of its first advisory in the order of the export results." pt="Ordem: classe de severidade (Crítico, Alto, Médio, Baixo); mais hosts afetados primeiro; EPSS maior primeiro, sem EPSS por último; CVSS maior primeiro; nome e OID em ordem crescente. Hosts afetados e EPSS só levam em conta as instâncias de severidade Baixa ou maior (Log não conta): os hosts afetados são os que têm uma delas, e o EPSS é o maior entre elas. Numa atualização pendente, essas instâncias são as de todos os advisories dela (cada host conta uma vez), e a severidade e o CVSS dela são os maiores deles; o nome é o do NVT como no feed, e o de uma atualização pendente é o produto, com o OID do primeiro advisory dela na ordem dos resultados do export." es="Orden: clase de severidad (Crítico, Alto, Medio, Bajo); más hosts afectados primero; EPSS mayor primero, sin EPSS al final; CVSS mayor primero; nombre y OID en orden ascendente. Los hosts afectados y el EPSS solo tienen en cuenta las instancias de severidad Baja o mayor (Log no cuenta): los hosts afectados son los que tienen una de ellas, y el EPSS es el mayor entre ellas. En una actualización pendiente, esas instancias son las de todos sus advisories (cada host cuenta una vez), y su severidad y su CVSS son los mayores de ellos; el nombre es el del NVT como en el feed, y el de una actualización pendiente es el producto, con el OID de su primer advisory en el orden de los resultados de la exportación."/>
+    <!-- Edicao executiva: os textos que, no tecnico, mandam o leitor a uma
+         secao que ela nao tem (os achados detalhados, os indicadores). -->
+    <s k="prio_trunc_exec" en=" more action(s), not listed in this table." pt=" ação(ões) a mais, não listada(s) nesta tabela." es=" acción(es) más, no listada(s) en esta tabla."/>
+    <s k="sample_qod_b_exec" en="\% or higher, so low-confidence findings were dropped before this document was written." pt="\% ou mais, então achados de baixa confiança foram descartados antes deste documento ser escrito." es="\% o más, así que los hallazgos de baja confianza se descartaron antes de escribir este documento."/>
   </xsl:variable>
   <xsl:variable name="i18n" select="exsl:node-set($i18n-rtf)/s"/>
 
@@ -853,9 +917,15 @@ SPDX-License-Identifier: GPL-2.0-or-later
     </xsl:choose>
   </func:function>
 
-  <!-- Return the inner report element regardless of XML nesting. -->
+  <!-- Return the inner report element regardless of XML nesting. Na edicao do
+       cliente, a COPIA do relatorio sem os falso positivo ($client-report):
+       todo o documento le o relatorio por esta funcao, entao nenhuma secao ve
+       o falso positivo. -->
   <func:function name="gvm:report">
     <xsl:choose>
+      <xsl:when test="$variant = 'client'">
+        <func:result select="$client-report"/>
+      </xsl:when>
       <xsl:when test="count(/report/report) &gt; 0">
         <func:result select="/report/report"/>
       </xsl:when>
@@ -864,6 +934,93 @@ SPDX-License-Identifier: GPL-2.0-or-later
       </xsl:otherwise>
     </xsl:choose>
   </func:function>
+
+  <!-- ===================================================================
+       A EDICAO DO CLIENTE: o relatorio sem os resultados falso positivo.
+
+       Falso positivo e' o codigo -1 do gvmd (com ou sem override), na faixa
+       fechada do sev-class (-1.5, 0): -2 debug e -3 erro de scan sao outros
+       codigos. A edicao do cliente le uma COPIA do relatorio (exsl:node-set),
+       que e' o que o gvmd exportaria sem eles (levels sem f):
+         - sai todo results/result falso positivo;
+         - sai toda ports/port que so' eles sustentavam: o gvmd monta o <ports>
+           a partir dos resultados do filtro (manage_sql_report_ports.c,
+           print_report_port_xml: um <port> por host e porta, com a MAIOR
+           severidade deles), entao a porta de severidade propria falso
+           positivo so' existe por eles; sem severidade propria (export de
+           outra forma), a que tem resultado no mesmo host e porta e so' falso
+           positivo;
+         - o total do scan (o texto do <result_count>) perde os falso positivo
+           do scan (false_positive/full) quando o gvmd os conta, senao os que o
+           export carrega; o false_positive sai.
+       Tudo o mais e' identico: hosts, filtro, erros, detalhes. Dai' em diante
+       o relatorio inteiro e' composto sobre a copia (gvm:report() a devolve, e
+       o template da raiz roda real-report DENTRO dela), e nenhuma secao, card,
+       contagem, porta ou total conta um falso positivo, nem a classe dele
+       aparece numa nota. Um advisory com todas as instancias falso positivo
+       deixa de existir, e um grupo consolidado ou a confirmacao de um NVT que
+       dependia dele mudam com ele.
+
+       ATENCAO, libxslt (1.1.35 do gvmd:stable e 1.1.45): o corpo de uma
+       func:function roda com o no' CORRENTE do XSLT (exsltFuncFunctionFunction
+       aplica o corpo a tctxt->node), e as variaveis globais sao avaliadas com o
+       documento de ORIGEM como no' corrente. Uma func:function que chame key()
+       (gvm:grp-confreps, gvm:grp-members), chamada de uma variavel global
+       sobre nos da copia, procuraria no documento de origem e devolveria nos
+       dele: por isso $grp-reps escreve a regra de gvm:grp-confreps por extenso
+       (key() num predicado usa o no' do predicado, que e' da copia), e o
+       template da raiz roda real-report com a copia como no' corrente. -->
+  <xsl:variable name="src-report"
+    select="/report[not(@extension = 'xml')] | /report[@extension = 'xml']/report"/>
+  <xsl:key name="by-hostport-res" match="report/results/result"
+           use="concat(normalize-space(host/text()), '|', normalize-space(port))"/>
+  <xsl:variable name="client-rtf">
+    <xsl:if test="$variant = 'client'">
+      <xsl:apply-templates select="$src-report" mode="client-view"/>
+    </xsl:if>
+  </xsl:variable>
+  <xsl:variable name="client-report" select="exsl:node-set($client-rtf)/report"/>
+
+  <xsl:template match="@*|node()" mode="client-view">
+    <xsl:copy><xsl:apply-templates select="@*|node()" mode="client-view"/></xsl:copy>
+  </xsl:template>
+  <xsl:template match="report/results/result[number(severity) &lt; 0 and number(severity) &gt; -1.5]"
+                mode="client-view"/>
+  <xsl:template match="report/ports/port" mode="client-view">
+    <xsl:variable name="own" select="number(severity)"/>
+    <xsl:variable name="rs"
+      select="key('by-hostport-res', concat(normalize-space(host), '|', normalize-space(text())))"/>
+    <xsl:choose>
+      <xsl:when test="$own = $own and $own &lt; 0 and $own &gt; -1.5"/>
+      <xsl:when test="not($own = $own) and count($rs) &gt; 0
+                      and not($rs[not(number(severity) &lt; 0 and number(severity) &gt; -1.5)])"/>
+      <xsl:otherwise>
+        <xsl:copy><xsl:apply-templates select="@*|node()" mode="client-view"/></xsl:copy>
+      </xsl:otherwise>
+    </xsl:choose>
+  </xsl:template>
+  <xsl:template match="report/result_count" mode="client-view">
+    <xsl:variable name="t" select="normalize-space(text())"/>
+    <xsl:variable name="fpf" select="number(false_positive/full)"/>
+    <xsl:variable name="nfp">
+      <xsl:choose>
+        <xsl:when test="$fpf = $fpf"><xsl:value-of select="$fpf"/></xsl:when>
+        <xsl:otherwise>
+          <xsl:value-of select="count(../results/result[number(severity) &lt; 0 and number(severity) &gt; -1.5])"/>
+        </xsl:otherwise>
+      </xsl:choose>
+    </xsl:variable>
+    <xsl:copy>
+      <xsl:apply-templates select="@*" mode="client-view"/>
+      <xsl:choose>
+        <xsl:when test="string-length($t) &gt; 0 and floor(number($t)) = number($t)">
+          <xsl:value-of select="number($t) - number($nfp)"/>
+        </xsl:when>
+        <xsl:otherwise><xsl:value-of select="text()"/></xsl:otherwise>
+      </xsl:choose>
+      <xsl:apply-templates select="*[not(self::false_positive)]" mode="client-view"/>
+    </xsl:copy>
+  </xsl:template>
 
   <!-- NOME DO PROJETO.
        O relatorio nomeia o projeto em quatro lugares (capa, narrativa do resumo
@@ -1877,7 +2034,12 @@ SPDX-License-Identifier: GPL-2.0-or-later
 \usepackage[unicode=true,hidelinks,bookmarksopen=true,bookmarksopenlevel=0]{hyperref}
 % Só metadado aqui.
 \hypersetup{pdftitle={</xsl:text>
-    <xsl:value-of select="gvm:t('pdftitle')"/>
+    <!-- O titulo do PDF diz a edicao; o tecnico fica com o de sempre. -->
+    <xsl:choose>
+      <xsl:when test="$variant = 'client'"><xsl:value-of select="gvm:t('pdftitle_client')"/></xsl:when>
+      <xsl:when test="$variant = 'executive'"><xsl:value-of select="gvm:t('pdftitle_executive')"/></xsl:when>
+      <xsl:otherwise><xsl:value-of select="gvm:t('pdftitle')"/></xsl:otherwise>
+    </xsl:choose>
     <xsl:text>},pdfauthor={Suricatoos Security Platform}}
 % A URL de referencia sai do feed com 120+ caracteres. Em \ttfamily (o padrao
 % do hyperref) ela ocupa ~40%% mais medida e estourava 138pt para fora da
@@ -1937,9 +2099,16 @@ SPDX-License-Identifier: GPL-2.0-or-later
          pt/es sai "qua, 14 jan 2026 13:00 UTC" e o nome de tarefa e' texto livre
          que o operador escreve como quiser. Sem as chaves, "qua" viraria uma
          chave desconhecida de keyval e o run morreria com "undefined key". -->
+    <!-- O kicker (a linha carmim acima do titulo) diz a EDICAO: o tecnico
+         continua com o de sempre; o cliente e a executiva dizem a sua, entao
+         nenhuma das tres se passa pela outra na primeira folha. -->
     <xsl:text>\suriCover{
   kicker={</xsl:text>
-    <xsl:value-of select="gvm:t('cover_kicker')"/>
+    <xsl:choose>
+      <xsl:when test="$variant = 'client'"><xsl:value-of select="gvm:t('kicker_client')"/></xsl:when>
+      <xsl:when test="$variant = 'executive'"><xsl:value-of select="gvm:t('kicker_executive')"/></xsl:when>
+      <xsl:otherwise><xsl:value-of select="gvm:t('cover_kicker')"/></xsl:otherwise>
+    </xsl:choose>
     <xsl:text>},
   title={</xsl:text>
     <xsl:value-of select="gvm:t('cover_title')"/>
@@ -2411,7 +2580,11 @@ SPDX-License-Identifier: GPL-2.0-or-later
       <xsl:if test="number($filter-min-qod) &gt; 1">
         <xsl:value-of select="gvm:t('sample_qod_a')"/>
         <xsl:text>\textbf{</xsl:text><xsl:value-of select="$filter-min-qod"/><xsl:text>}</xsl:text>
-        <xsl:value-of select="gvm:t('sample_qod_b')"/>
+        <!-- A executiva nao tem o bloco de indicadores que a frase cita. -->
+        <xsl:choose>
+          <xsl:when test="$variant = 'executive'"><xsl:value-of select="gvm:t('sample_qod_b_exec')"/></xsl:when>
+          <xsl:otherwise><xsl:value-of select="gvm:t('sample_qod_b')"/></xsl:otherwise>
+        </xsl:choose>
       </xsl:if>
       <xsl:text>}
 
@@ -2613,7 +2786,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
     <!-- O numero que cada card normal mostra, pela MESMA chave de ordenacao e
          o mesmo node-set de finding-cards: a posicao + os cards consolidados. -->
     <xsl:variable name="cardnum-rtf">
-      <xsl:for-each select="$rows-conf">
+      <xsl:for-each select="$rows-show">
         <xsl:sort select="gvm:sev-max(key('by-nvt', nvt/@oid))" data-type="number" order="descending"/>
         <c o="{nvt/@oid}" n="{position() + count($grp-reps)}"/>
       </xsl:for-each>
@@ -2625,7 +2798,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
          <sol> e' a solucao (ja' traduzida) e <nm> o nome traduzido do NVT. -->
     <xsl:variable name="acts-rtf">
       <!-- O card de um NVT. -->
-      <xsl:for-each select="$rows-conf">
+      <xsl:for-each select="$rows-show">
         <xsl:variable name="o" select="string(nvt/@oid)"/>
         <xsl:variable name="inst" select="key('by-nvt', nvt/@oid)"/>
         <xsl:variable name="smax" select="gvm:sev-max($inst)"/>
@@ -2744,7 +2917,13 @@ SPDX-License-Identifier: GPL-2.0-or-later
     <xsl:value-of select="gvm:t('prio_intro_b')"/><xsl:text>}
 </xsl:text>
     <xsl:if test="$nact &gt; 0">
-      <xsl:text>\suriPara{</xsl:text><xsl:value-of select="gvm:t('prio_order')"/><xsl:text>}
+      <xsl:text>\suriPara{</xsl:text>
+      <!-- A edicao do cliente nao fala de falso positivo. -->
+      <xsl:choose>
+        <xsl:when test="$variant = 'client'"><xsl:value-of select="gvm:t('prio_order_client')"/></xsl:when>
+        <xsl:otherwise><xsl:value-of select="gvm:t('prio_order')"/></xsl:otherwise>
+      </xsl:choose>
+      <xsl:text>}
 </xsl:text>
     </xsl:if>
     <xsl:text>\priosummary{</xsl:text>
@@ -2768,9 +2947,17 @@ SPDX-License-Identifier: GPL-2.0-or-later
 </xsl:text>
 
     <!-- 3. A tabela: so' formata o que o passo 1 calculou (contexto no RTF,
-         nenhum key() daqui para baixo). -->
+         nenhum key() daqui para baixo). Na edicao executiva os cards nao
+         existem: a tabela e' a prioritytablesemcard, sem a coluna do card, e a
+         linha (\priorowsemcard) nao leva link nenhum. -->
+    <xsl:variable name="ptab">
+      <xsl:choose>
+        <xsl:when test="$variant = 'executive'">prioritytablesemcard</xsl:when>
+        <xsl:otherwise>prioritytable</xsl:otherwise>
+      </xsl:choose>
+    </xsl:variable>
     <xsl:if test="$nact &gt; 0">
-      <xsl:text>\begin{prioritytable}
+      <xsl:text>\begin{</xsl:text><xsl:value-of select="$ptab"/><xsl:text>}
 </xsl:text>
       <xsl:for-each select="$acts[position() &lt;= $nshow]">
         <xsl:variable name="S" select="normalize-space(sol)"/>
@@ -2784,7 +2971,11 @@ SPDX-License-Identifier: GPL-2.0-or-later
             <xsl:otherwise>baixo</xsl:otherwise>
           </xsl:choose>
         </xsl:variable>
-        <xsl:text>\priorow{</xsl:text><xsl:value-of select="position()"/><xsl:text>}{</xsl:text>
+        <xsl:choose>
+          <xsl:when test="$variant = 'executive'"><xsl:text>\priorowsemcard{</xsl:text></xsl:when>
+          <xsl:otherwise><xsl:text>\priorow{</xsl:text></xsl:otherwise>
+        </xsl:choose>
+        <xsl:value-of select="position()"/><xsl:text>}{</xsl:text>
         <xsl:choose>
           <xsl:when test="string-length($S) = 0"><xsl:text>\prionosol</xsl:text></xsl:when>
           <xsl:otherwise>
@@ -2836,19 +3027,33 @@ SPDX-License-Identifier: GPL-2.0-or-later
             <xsl:value-of select="format-number(number($e) * 100, '0,0##', 'ptes')"/><xsl:text>\%</xsl:text>
           </xsl:otherwise>
         </xsl:choose>
-        <xsl:text>}{\priolink{</xsl:text><xsl:value-of select="@lk"/>
-        <xsl:text>}{\#</xsl:text><xsl:value-of select="@ln"/>
-        <xsl:text>}}
+        <xsl:choose>
+          <xsl:when test="$variant = 'executive'">
+            <xsl:text>}
 </xsl:text>
+          </xsl:when>
+          <xsl:otherwise>
+            <xsl:text>}{\priolink{</xsl:text><xsl:value-of select="@lk"/>
+            <xsl:text>}{\#</xsl:text><xsl:value-of select="@ln"/>
+            <xsl:text>}}
+</xsl:text>
+          </xsl:otherwise>
+        </xsl:choose>
       </xsl:for-each>
-      <xsl:text>\end{prioritytable}
+      <xsl:text>\end{</xsl:text><xsl:value-of select="$ptab"/><xsl:text>}
 </xsl:text>
       <xsl:if test="$nact &gt; number($prio-rows-max)">
         <xsl:text>\priotrunc{\suriEllip\ + </xsl:text>
         <xsl:value-of select="gvm:num($nact - number($prio-rows-max))"/>
-        <xsl:value-of select="gvm:t('prio_trunc_a')"/>
-        <xsl:value-of select="gvm:t('sec_detailed')"/>
-        <xsl:value-of select="gvm:t('prio_trunc_b')"/>
+        <!-- A executiva nao tem a secao de achados detalhados. -->
+        <xsl:choose>
+          <xsl:when test="$variant = 'executive'"><xsl:value-of select="gvm:t('prio_trunc_exec')"/></xsl:when>
+          <xsl:otherwise>
+            <xsl:value-of select="gvm:t('prio_trunc_a')"/>
+            <xsl:value-of select="gvm:t('sec_detailed')"/>
+            <xsl:value-of select="gvm:t('prio_trunc_b')"/>
+          </xsl:otherwise>
+        </xsl:choose>
         <xsl:text>}
 </xsl:text>
       </xsl:if>
@@ -3341,11 +3546,30 @@ SPDX-License-Identifier: GPL-2.0-or-later
   <!-- Findings summary table (grouped by NVT)                           -->
   <!-- ================================================================= -->
 
+  <!-- Edicao do cliente: a contagem que fecha um bloco das secoes 5 e 6 no
+       lugar das linhas e dos cards de Log ("+ N registros informativos (Log),
+       nao detalhados nesta edicao"). \findinglog e nao \findingtrunc: o portao
+       de links do CI soma os cortes \findingtrunc contra os alvos de card, e o
+       Log da edicao do cliente nao tem card nem alvo. Nas outras edicoes, nada. -->
+  <xsl:template name="client-log-line">
+    <xsl:param name="n"/>
+    <xsl:if test="$variant = 'client' and $n &gt; 0">
+      <xsl:text>\findinglog{\suriEllip\ + </xsl:text>
+      <xsl:value-of select="gvm:num($n)"/>
+      <xsl:choose>
+        <xsl:when test="$n = 1"><xsl:value-of select="gvm:t('client_log_1')"/></xsl:when>
+        <xsl:otherwise><xsl:value-of select="gvm:t('client_log_n')"/></xsl:otherwise>
+      </xsl:choose>
+      <xsl:text>}
+</xsl:text>
+    </xsl:if>
+  </xsl:template>
+
   <xsl:template name="findings-summary">
     <!-- As contagens que decidem se cada tabela existe sao count() dos MESMOS
          node-sets que a tabela itera (veja "O CONJUNTO DE ACHADOS"). -->
     <xsl:variable name="n-low" select="count($nvt-low)"/>
-    <xsl:variable name="n-ok" select="count($rows-conf) + count($grp-reps)"/>
+    <xsl:variable name="n-ok" select="count($rows-show) + count($grp-reps)"/>
     <xsl:call-template name="section-open"><xsl:with-param name="n" select="5"/></xsl:call-template>
     <xsl:text>
 </xsl:text>
@@ -3367,11 +3591,16 @@ SPDX-License-Identifier: GPL-2.0-or-later
         </xsl:call-template>
       </xsl:otherwise>
     </xsl:choose>
+    <xsl:call-template name="client-log-line">
+      <xsl:with-param name="n" select="count($rows-conf) - count($rows-show)"/>
+    </xsl:call-template>
 
     <!-- Indicators to validate: what the scanner is not confident about.  The
          caveat is a \warnbox now instead of a grey paragraph, and it still says
          the threshold out loud, because $qod-min is a parameter and the caption
-         macros of the design system carry only the default. -->
+         macros of the design system carry only the default.
+         Na edicao do cliente o bloco pode ter so' Log: entao nao ha tabela
+         (vazia ela pareceria defeito), so' a contagem. -->
     <xsl:if test="$n-low &gt; 0">
       <xsl:text>\clearpage
 \suriSummaryHead{indicadores}
@@ -3383,8 +3612,13 @@ SPDX-License-Identifier: GPL-2.0-or-later
       <xsl:value-of select="gvm:t('ind_intro_d')"/>
       <xsl:text>}
 </xsl:text>
-      <xsl:call-template name="findings-summary-table">
-        <xsl:with-param name="low" select="1"/>
+      <xsl:if test="count($low-show) &gt; 0">
+        <xsl:call-template name="findings-summary-table">
+          <xsl:with-param name="low" select="1"/>
+        </xsl:call-template>
+      </xsl:if>
+      <xsl:call-template name="client-log-line">
+        <xsl:with-param name="n" select="$n-low - count($low-show)"/>
       </xsl:call-template>
     </xsl:if>
   </xsl:template>
@@ -3411,8 +3645,10 @@ SPDX-License-Identifier: GPL-2.0-or-later
     </xsl:variable>
 
     <!-- The rows this table is entitled to: the SAME node-set the cards of the
-         same block iterate (finding-cards), so a row always has its card. -->
-    <xsl:variable name="sel" select="$rows-conf[$low = 0] | $nvt-low[$low = 1]"/>
+         same block iterate (finding-cards), so a row always has its card. Na
+         edicao do cliente, sem o Log ($rows-show / $low-show): todas as linhas
+         sao entao de achado, e o corte abaixo nunca dispara. -->
+    <xsl:variable name="sel" select="$rows-show[$low = 0] | $low-show[$low = 1]"/>
     <!-- Truncation budget.  `keep' is how many rows of $sel are printed; it is
          never less than the number of ACIONAVEIS (severity >= 0.1), so what the
          cut can reach is only the informational tail — the rows sort by severity
@@ -3820,7 +4056,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
 </xsl:text>
       <!-- A tarja anuncia um bloco; sem nenhum confirmado ele ficava vazio,
            colado na tarja de indicadores. Diz o que a tabela da secao 5 diz. -->
-      <xsl:if test="count($rows-conf) + count($grp-reps) = 0">
+      <xsl:if test="count($rows-show) + count($grp-reps) = 0">
         <xsl:text>\suriPara{</xsl:text><xsl:value-of select="gvm:t('none_confirmed')"/><xsl:text>}
 </xsl:text>
       </xsl:if>
@@ -3828,6 +4064,9 @@ SPDX-License-Identifier: GPL-2.0-or-later
     <xsl:call-template name="consolidated-update-cards"/>
     <xsl:call-template name="finding-cards">
       <xsl:with-param name="low" select="0"/>
+    </xsl:call-template>
+    <xsl:call-template name="client-log-line">
+      <xsl:with-param name="n" select="count($rows-conf) - count($rows-show)"/>
     </xsl:call-template>
     <xsl:if test="$n-low &gt; 0">
       <xsl:text>\clearpage
@@ -3848,6 +4087,9 @@ SPDX-License-Identifier: GPL-2.0-or-later
       <xsl:call-template name="finding-cards">
         <xsl:with-param name="low" select="1"/>
       </xsl:call-template>
+      <xsl:call-template name="client-log-line">
+        <xsl:with-param name="n" select="$n-low - count($low-show)"/>
+      </xsl:call-template>
     </xsl:if>
   </xsl:template>
 
@@ -3859,7 +4101,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
          sumario (findings-summary-table). Advisories already described by a
          consolidated update card are not in $rows-conf, so the same
          vulnerability is not told twice. -->
-    <xsl:for-each select="$rows-conf[$low = 0] | $nvt-low[$low = 1]">
+    <xsl:for-each select="$rows-show[$low = 0] | $low-show[$low = 1]">
       <xsl:sort select="gvm:sev-max(key('by-nvt', nvt/@oid))" data-type="number" order="descending"/>
       <xsl:variable name="oid" select="nvt/@oid"/>
       <xsl:variable name="anchor" select="concat('fnd-', translate($oid, '.', '-'))"/>
@@ -6057,9 +6299,11 @@ SPDX-License-Identifier: GPL-2.0-or-later
     <xsl:variable name="scanners"
       select="$rep/host/detail[name='scanned_with_scanner'][string-length(normalize-space(value)) &gt; 0]
                               [generate-id() = generate-id(key('by-scanner', normalize-space(value))[1])]"/>
-    <xsl:call-template name="section-open"><xsl:with-param name="n" select="7"/></xsl:call-template>
+    <!-- Secao 7; na edicao executiva, a 3 (resumo, prioridades, escopo). -->
+    <xsl:variable name="n-scope" select="$sections[@key = 'sec_scope']/@n"/>
+    <xsl:call-template name="section-open"><xsl:with-param name="n" select="$n-scope"/></xsl:call-template>
     <xsl:text>
-\setsectionrunner{7}{</xsl:text><xsl:value-of select="gvm:t('sec_scope_run')"/><xsl:text>}
+\setsectionrunner{</xsl:text><xsl:value-of select="$n-scope"/><xsl:text>}{</xsl:text><xsl:value-of select="gvm:t('sec_scope_run')"/><xsl:text>}
 \suriPara{</xsl:text><xsl:value-of select="gvm:t('scope_intro')"/><xsl:text>}
 </xsl:text>
 
@@ -6188,12 +6432,21 @@ SPDX-License-Identifier: GPL-2.0-or-later
         </xsl:choose>
       </xsl:with-param>
     </xsl:call-template>
+    <!-- A edicao do cliente nao fala de falso positivo: a letra f sai da lista
+         de niveis (o termo do filtro, logo acima, continua como o gvmd o
+         ecoou). -->
+    <xsl:variable name="levels-shown">
+      <xsl:choose>
+        <xsl:when test="$variant = 'client'"><xsl:value-of select="translate($filter-levels, 'f', '')"/></xsl:when>
+        <xsl:otherwise><xsl:value-of select="$filter-levels"/></xsl:otherwise>
+      </xsl:choose>
+    </xsl:variable>
     <xsl:call-template name="scope-fact">
       <xsl:with-param name="key" select="'scope_levels'"/>
       <xsl:with-param name="value">
         <xsl:choose>
-          <xsl:when test="string-length($filter-levels) &gt; 0">
-            <xsl:call-template name="scope-levels"><xsl:with-param name="lv" select="$filter-levels"/></xsl:call-template>
+          <xsl:when test="string-length($levels-shown) &gt; 0">
+            <xsl:call-template name="scope-levels"><xsl:with-param name="lv" select="string($levels-shown)"/></xsl:call-template>
           </xsl:when>
           <xsl:otherwise><xsl:text>\scopena</xsl:text></xsl:otherwise>
         </xsl:choose>
@@ -6446,20 +6699,32 @@ SPDX-License-Identifier: GPL-2.0-or-later
   <!-- Navegacao: secoes, sumario e marcadores do PDF                    -->
   <!-- ================================================================= -->
 
-  <!-- AS OITO SECOES, numero e titulo, num lugar so'. Cada abertura de secao
+  <!-- AS SECOES, numero e titulo, num lugar so'. Cada abertura de secao
        (section-open) e cada linha do sumario (contents-page) le daqui, entao o
        sumario nao tem como listar um titulo que a secao nao mostra. Elemento
        <sec>/@key e nao <s>/@k: <s k> e' a tabela de i18n, e a regua do CI
-       (check-veracity.py) recusa chave de i18n definida duas vezes. -->
+       (check-veracity.py) recusa chave de i18n definida duas vezes.
+       Oito no tecnico e na edicao do cliente; tres na executiva (o resumo,
+       as prioridades e o escopo, renumerados 1..3): o sumario, os marcadores e
+       os cabecalhos corridos so' conhecem as secoes que a edicao tem. -->
   <xsl:variable name="sections-rtf">
-    <sec n="1" key="sec_exec"/>
-    <sec n="2" key="sec_prio"/>
-    <sec n="3" key="sec_hexmap"/>
-    <sec n="4" key="sec_hosts_ports"/>
-    <sec n="5" key="sec_findings_summary"/>
-    <sec n="6" key="sec_detailed"/>
-    <sec n="7" key="sec_scope"/>
-    <sec n="8" key="sec_hexmap_host"/>
+    <xsl:choose>
+      <xsl:when test="$variant = 'executive'">
+        <sec n="1" key="sec_exec"/>
+        <sec n="2" key="sec_prio"/>
+        <sec n="3" key="sec_scope"/>
+      </xsl:when>
+      <xsl:otherwise>
+        <sec n="1" key="sec_exec"/>
+        <sec n="2" key="sec_prio"/>
+        <sec n="3" key="sec_hexmap"/>
+        <sec n="4" key="sec_hosts_ports"/>
+        <sec n="5" key="sec_findings_summary"/>
+        <sec n="6" key="sec_detailed"/>
+        <sec n="7" key="sec_scope"/>
+        <sec n="8" key="sec_hexmap_host"/>
+      </xsl:otherwise>
+    </xsl:choose>
   </xsl:variable>
   <xsl:variable name="sections" select="exsl:node-set($sections-rtf)/sec"/>
 
@@ -6630,7 +6895,10 @@ SPDX-License-Identifier: GPL-2.0-or-later
        prioridades, numa folha propria: o resumo continua sendo a primeira
        pagina depois da capa, e o sumario nao e' secao (sem numero). As
        prioridades vem logo depois dele: e' o "por onde comecar" de quem acabou
-       de ler o resumo. -->
+       de ler o resumo.
+       A edicao executiva so' monta o resumo, o sumario, as prioridades e o
+       escopo (a sua secao 3): nem mapa de portas, nem hosts, nem sumario de
+       achados, nem cards, nem apendice. -->
   <xsl:template name="real-report">
     <xsl:call-template name="header"/>
     <xsl:call-template name="newline"/>
@@ -6647,22 +6915,26 @@ SPDX-License-Identifier: GPL-2.0-or-later
     <xsl:call-template name="priorities-section"/>
     <xsl:text>\clearpage
 </xsl:text>
-    <xsl:call-template name="hexmap-section"/>
-    <xsl:text>\clearpage
+    <xsl:if test="$variant != 'executive'">
+      <xsl:call-template name="hexmap-section"/>
+      <xsl:text>\clearpage
 </xsl:text>
-    <xsl:call-template name="hosts-ports"/>
-    <xsl:text>\clearpage
+      <xsl:call-template name="hosts-ports"/>
+      <xsl:text>\clearpage
 </xsl:text>
-    <xsl:call-template name="findings-summary"/>
-    <xsl:text>\clearpage
+      <xsl:call-template name="findings-summary"/>
+      <xsl:text>\clearpage
 </xsl:text>
-    <xsl:call-template name="detailed-findings"/>
-    <xsl:text>\clearpage
+      <xsl:call-template name="detailed-findings"/>
+      <xsl:text>\clearpage
 </xsl:text>
+    </xsl:if>
     <xsl:call-template name="scope-section"/>
-    <xsl:text>\clearpage
+    <xsl:if test="$variant != 'executive'">
+      <xsl:text>\clearpage
 </xsl:text>
-    <xsl:call-template name="hexmap-hosts-section"/>
+      <xsl:call-template name="hexmap-hosts-section"/>
+    </xsl:if>
     <!-- \suriBackCover abre com \clearpage por conta propria. -->
     <xsl:call-template name="branded-footer"/>
     <xsl:text>\end{document}
@@ -6680,8 +6952,27 @@ SPDX-License-Identifier: GPL-2.0-or-later
     </xsl:choose>
   </xsl:template>
 
+  <!-- A raiz. Edicao fora do contrato e' erro (xsltproc sai com erro, o
+       generate falha alto): nunca cai em silencio em outra edicao. A edicao do
+       cliente compoe o relatorio sobre a copia sem falso positivo, com ELA como
+       no' corrente (veja $client-rtf); as outras, sobre o documento de origem. -->
   <xsl:template match="/">
-    <xsl:apply-templates/>
+    <xsl:if test="not($variant = 'technical' or $variant = 'client' or $variant = 'executive')">
+      <xsl:message terminate="yes">
+        <xsl:text>latex.xsl: edicao desconhecida '</xsl:text><xsl:value-of select="$variant"/>
+        <xsl:text>' (validas: technical, client, executive)</xsl:text>
+      </xsl:message>
+    </xsl:if>
+    <xsl:choose>
+      <xsl:when test="$variant = 'client'">
+        <xsl:for-each select="$client-report">
+          <xsl:call-template name="real-report"/>
+        </xsl:for-each>
+      </xsl:when>
+      <xsl:otherwise>
+        <xsl:apply-templates/>
+      </xsl:otherwise>
+    </xsl:choose>
   </xsl:template>
 
 </xsl:stylesheet>

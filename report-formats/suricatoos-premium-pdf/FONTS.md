@@ -71,6 +71,14 @@ de `$task-name-max`), e os dois últimos fixam a série como o `\suriTruncMark`
 (`\suriSans\mdseries\itshape`). A frase calculada das prioridades
 (`\priosummary`) é Sans `sb/n` e não leva itálico nenhum.
 
+As edições do relatório (cliente e executiva, parâmetro `variant`) não
+acrescentam face nem itálico: a tabela de prioridades da executiva
+(`prioritytablesemcard`, `\priorowsemcard`) usa as faces da `prioritytable`,
+`\prionosol` inclusive, menos a Mono bold do link de card que ela não tem; a
+contagem de Log da edição do cliente (`\findinglog`) é a linha Mono regular do
+`\findingtrunc`; e o kicker da capa de cada edição é a mesma Mono do kicker
+técnico, com letras do T1 que o documento já compõe.
+
 ## Proveniência e licença
 
 - Fonte: pacote **`plex`** do CTAN (`https://mirrors.ctan.org/install/fonts/plex.tds.zip`),
