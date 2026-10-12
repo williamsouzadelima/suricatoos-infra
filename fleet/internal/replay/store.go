@@ -43,6 +43,12 @@
 // contract.FormatReplayFloor). A store the boot could not rewrite records nothing — every decision is unavailable —
 // until a rewrite succeeds.
 //
+// What the boot read is trusted only once it is durable: after a crash of the process the page cache can still hold
+// an append whose fsync never returned, and the read sees it. A log kept as it is is confirmed first (fsutil.SyncFile
+// of the very file read, then its directory); one that cannot be is rewritten from memory, which confirms it. If
+// neither works, nothing read is served — Lookup answers Unconfirmed (the pipeline: unavailable, not even a
+// redelivery gets the recorded ack) and Result fails — until a later attempt confirms it.
+//
 // # No secret
 //
 // The only secret of the contract is the output of enroll_token.create. RecordResult never writes that output: for
@@ -105,6 +111,8 @@ var (
 	ErrJobState = errors.New("replay: passo do journal fora de ordem")
 
 	errChanged = errors.New("o arquivo do store mudou por fora (outro arquivo ou outro tamanho)")
+	// errUnconfirmed: the boot could not confirm on disk what it read; nothing of it is trusted before a rewrite.
+	errUnconfirmed = errors.New("replay: o que o boot leu ainda não foi confirmado no disco")
 )
 
 // Options are what only the caller knows.
@@ -143,6 +151,10 @@ type Lookup struct {
 	Recorded []string
 	// Same is the live entry with the envelope's very canonical form (line 2a: resend its ack and result), or nil.
 	Same *Entry
+	// Unconfirmed is non-nil when the store holds what the boot read but could not yet confirm on disk (its fsync and
+	// a rewrite both failed). Then Recorded and Same are empty — nothing read may be acked before it is durable — and
+	// the pipeline answers unavailable. Each Lookup tries again to confirm it (a rewrite from memory).
+	Unconfirmed error
 }
 
 // Corruption locates the first refused record of the log.
@@ -213,6 +225,7 @@ type Store struct {
 	ident            fs.FileInfo // the file this store last wrote (or read at boot); nil = unknown
 	needRewrite      error       // non-nil: rewrite the file from memory before any append
 	needDirSync      bool        // a rewrite is in place but its directory entry is not confirmed durable
+	unconfirmed      bool        // the boot could not confirm on disk what it read: nothing of it is served yet
 	recovery         Recovery    // set by Open
 	closed           bool
 }
@@ -327,11 +340,21 @@ func (s *Store) bootLocked(t time.Time, sc scan, opts Options) {
 			s.size = sc.end
 		}
 	}
+	if !rewrite {
+		// the log stays as it is: confirm on disk what was read before anything of it is trusted
+		if err := s.confirmFileLocked(); err != nil {
+			s.log.Warn("anti-replay: o store lido não pôde ser confirmado no disco; reescrito a partir da memória", "erro", err.Error())
+			rewrite = true
+		}
+	}
 	if rewrite {
-		if err := s.rewriteLocked(t); err != nil && !errors.Is(err, fsutil.ErrNotDurable) {
-			s.needRewrite, rec.RewriteErr = err, err
-			s.log.Error("anti-replay: o store não pôde ser reescrito no boot; nada se grava (unavailable) até uma reescrita dar certo",
-				"erro", err.Error())
+		if err := s.rewriteLocked(t); err != nil {
+			s.unconfirmed = true // neither this file nor what was read from it is confirmed on disk
+			if !errors.Is(err, fsutil.ErrNotDurable) {
+				s.needRewrite, rec.RewriteErr = err, err
+				s.log.Error("anti-replay: o store não pôde ser reescrito no boot; nada se grava nem se serve (unavailable) até uma reescrita dar certo",
+					"erro", err.Error())
+			}
 		}
 	} else if !s.floorDurable {
 		if err := s.writeFloorLocked(); err != nil {
@@ -444,6 +467,11 @@ func (s *Store) Lookup(v *contract.Verified, t time.Time) Lookup {
 	canon, nonce, cmd := canonKey(v.CanonicalSHA256()), canonKey(c.Nonce), cmdKey(c.CommandID)
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.unconfirmed { // nothing the boot read is served before it is durable: try to confirm it now
+		if err := s.readyLocked(t); err != nil {
+			return Lookup{Unconfirmed: err}
+		}
+	}
 	var out Lookup
 	// linear in the chains: an entry is in both only when it carries the nonce AND the command_id, so the walk of the
 	// command_id chain skips the entries of the nonce just walked — no entry is added twice and nothing is searched
@@ -677,13 +705,17 @@ func (s *Store) Stats() Stats {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	n, b := len(s.entries), s.size
+	writable := s.needRewrite
+	if writable == nil && s.unconfirmed {
+		writable = errUnconfirmed
+	}
 	return Stats{
 		Entries:        n,
 		Bytes:          b,
 		Alert:          n*100 >= s.cfg.maxEntries*AlertPercent || b*100 >= s.cfg.maxBytes*AlertPercent,
 		Full:           n >= s.cfg.maxEntries || b+entryLineMax > s.cfg.maxBytes,
 		PendingResults: s.pending,
-		Writable:       s.needRewrite,
+		Writable:       writable,
 	}
 }
 

@@ -364,3 +364,82 @@ func TestStoreSemRegistroCompletoContaComoAusente(t *testing.T) {
 		})
 	}
 }
+
+// O boot confirma no disco o log que mantém como está (um fsync do arquivo e um do diretório) antes de confiar nele:
+// depois de uma queda do PROCESSO, o page cache ainda pode ter um acréscimo cujo fsync nunca voltou. Um boot que
+// reescreve o arquivo não precisa disso (a reescrita já confirma).
+func TestBootConfirmaNoDiscoOLogQueMantem(t *testing.T) {
+	dir := enrolled(t)
+	s := openAt(t, dir, t0)
+	mustRecord(t, s.Store, env(t, "a"), accepted, t0)
+	s.Close()
+	fl := &faults{}
+	s2 := openWith(t, dir, t0, Options{IdentityExists: true}, fl.config())
+	if fl.syncFiles != 1 || fl.syncDirs < 1 || fl.rewrites != 0 {
+		t.Fatalf("syncs do arquivo %d, do diretório %d, reescritas %d", fl.syncFiles, fl.syncDirs, fl.rewrites)
+	}
+	if l := s2.Lookup(env(t, "a"), t0); l.Same == nil || l.Unconfirmed != nil {
+		t.Fatalf("lookup %+v", l)
+	}
+	fl2 := &faults{}
+	openWith(t, t.TempDir(), t0, Options{}, fl2.config()) // ausente: a reescrita confirma
+	if fl2.syncFiles != 0 || fl2.rewrites != 1 {
+		t.Fatalf("store novo: syncs do arquivo %d, reescritas %d", fl2.syncFiles, fl2.rewrites)
+	}
+}
+
+// Se o fsync do log lido falha, o boot o reescreve a partir da memória (temp + rename, que confirma) e segue.
+func TestBootQueNaoConfirmaOLogReescreveDaMemoria(t *testing.T) {
+	dir := enrolled(t)
+	s := openAt(t, dir, t0)
+	mustRecord(t, s.Store, env(t, "a"), rejected(contract.ReasonScopeDenied), t0)
+	s.Close()
+	fl := &faults{failSyncFile: errors.New("EIO simulado")}
+	s2 := openWith(t, dir, t0, Options{IdentityExists: true}, fl.config())
+	if fl.rewrites != 1 || s2.Recovery().RewriteErr != nil {
+		t.Fatalf("reescritas %d, recovery %+v", fl.rewrites, s2.Recovery())
+	}
+	if l := s2.Lookup(env(t, "a"), t0); l.Same == nil || l.Unconfirmed != nil {
+		t.Fatalf("lookup %+v", l)
+	}
+}
+
+// Se nem o fsync nem a reescrita confirmam o que o boot leu, nada disso é confiável ainda: o Lookup não devolve
+// entrada nenhuma (Unconfirmed — o pipeline responde unavailable, nem a reentrega leva o ack gravado), o resultado
+// gravado não se relê e nada se grava. Quando o disco volta, a próxima consulta confirma (reescreve) e tudo volta.
+func TestBootSemConfirmacaoNaoConfiaNoQueLeu(t *testing.T) {
+	dir := enrolled(t)
+	s := openAt(t, dir, t0)
+	j := acceptedJob(t, s.Store, "a", contract.TypeTaskStart, taskPayload)
+	if err := s.RecordResult(j, succeeded(`{"task_id":"2d5b8f0e-1c4a-4e6b-9a3d-7f0c5e1b2a49","status":"Requested"}`), t0); err != nil {
+		t.Fatal(err)
+	}
+	s.Close()
+	boom := errors.New("EIO simulado")
+	fl := &faults{failSyncFile: boom, failRewrite: boom}
+	s2 := openWith(t, dir, t0, Options{IdentityExists: true}, fl.config())
+	if s2.Recovery().RewriteErr == nil || s2.Stats().Writable == nil {
+		t.Fatalf("recovery %+v, stats %+v", s2.Recovery(), s2.Stats())
+	}
+	v := env(t, "a")
+	if l := s2.Lookup(v, t0); l.Same != nil || len(l.Recorded) != 0 || l.Unconfirmed == nil {
+		t.Fatalf("o que o boot não confirmou foi servido: %+v", l)
+	}
+	if _, ok, err := s2.Result(j, t0); ok || err == nil {
+		t.Fatalf("resultado não confirmado relido: ok=%v err=%v", ok, err)
+	}
+	if _, err := s2.Record(env(t, "b"), accepted, t0); err == nil {
+		t.Fatal("gravou num store não confirmado")
+	}
+	fl.failSyncFile, fl.failRewrite = nil, nil
+	l := s2.Lookup(v, t0)
+	if l.Unconfirmed != nil || l.Same == nil {
+		t.Fatalf("depois de o disco voltar: %+v", l)
+	}
+	if _, ok, err := s2.Result(j, t0); !ok || err != nil {
+		t.Fatalf("resultado depois de confirmar: ok=%v err=%v", ok, err)
+	}
+	if s2.Stats().Writable != nil {
+		t.Fatalf("stats %+v", s2.Stats())
+	}
+}

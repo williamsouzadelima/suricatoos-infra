@@ -241,3 +241,31 @@ func TestBudgetAusenteComCertificadoEJanelaCheia(t *testing.T) {
 	c2.IssuedAt, c2.NotAfter = contract.FormatUTCTime(boot.Add(55*time.Minute)), contract.FormatUTCTime(boot.Add(115*time.Minute))
 	expectAck(t, n.process(signed(c2, payloads[contract.TypeTaskStart]), boot.Add(time.Hour+time.Minute)), Ack, contract.DecisionAccepted, "")
 }
+
+// unconfirmedStore is a store whose boot could not confirm on disk what it read.
+type unconfirmedStore struct {
+	Store
+	err error
+}
+
+func (s unconfirmedStore) Lookup(*contract.Verified, time.Time) replay.Lookup {
+	return replay.Lookup{Unconfirmed: s.err}
+}
+
+// Um store que ainda não confirmou no disco o que o boot leu não serve nada dele: nem a reentrega leva o ack gravado
+// — a resposta é unavailable (adiado), com a linha deferred —, e um envelope novo também espera.
+func TestStoreNaoConfirmadoEUnavailableAteNaReentrega(t *testing.T) {
+	n := newNode(t)
+	raw := env("a", contract.TypeTaskStart)
+	expectAck(t, n.process(raw, tv), Ack, contract.DecisionAccepted, "")
+	n.d.store = unconfirmedStore{Store: n.d.store, err: errors.New("o boot não confirmou o store (simulado)")}
+	n.build()
+	expectAck(t, n.process(raw, tv.Add(time.Minute)), Ack, contract.DecisionDeferred, contract.ReasonUnavailable)
+	expectAck(t, n.process(env("b", contract.TypeTaskStart), tv.Add(time.Minute)), Ack, contract.DecisionDeferred, contract.ReasonUnavailable)
+	if got := events(n.auditEntries(contract.StreamReject)); !slices.Equal(got, []string{"deferred:unavailable", "deferred:unavailable"}) {
+		t.Fatalf("auditoria %v", got)
+	}
+	if _, r := n.v.Counters(); r != 0 {
+		t.Fatal("não houve reentrega servida")
+	}
+}

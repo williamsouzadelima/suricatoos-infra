@@ -30,6 +30,7 @@ type fileOps struct {
 	openRead    func(path string) (*os.File, error)
 	truncate    func(path string, size int64) error
 	syncDir     func(dir string) error
+	syncFile    func(path string) (fs.FileInfo, error)
 	writeStream func(path string, fill func(io.Writer) error) error
 }
 
@@ -55,6 +56,7 @@ func defaultConfig() config {
 			openRead:    fsutil.OpenRegularNoFollow,
 			truncate:    fsutil.TruncateDurable,
 			syncDir:     fsutil.SyncDir,
+			syncFile:    fsutil.SyncFile,
 			writeStream: fsutil.WriteAtomicStream,
 		},
 	}
@@ -250,6 +252,9 @@ func (s *Store) readyLocked(t time.Time) error {
 	if s.closed {
 		return errors.New("replay: store fechado (a trava do FLEET_STATE_DIR foi solta)")
 	}
+	if s.unconfirmed && s.needRewrite == nil && !s.needDirSync {
+		s.needRewrite = errUnconfirmed // what the boot read is confirmed only by a durable rewrite of it
+	}
 	if s.needRewrite != nil {
 		if err := s.rewriteLocked(t); err != nil && !errors.Is(err, fsutil.ErrNotDurable) {
 			s.needRewrite = err
@@ -262,6 +267,7 @@ func (s *Store) readyLocked(t time.Time) error {
 		}
 		s.needDirSync = false
 	}
+	s.unconfirmed = false // the file on disk holds, durably, what the memory holds
 	if s.floor != 0 && !s.floorDurable {
 		return s.writeFloorLocked()
 	}
@@ -311,6 +317,21 @@ func (s *Store) appendLocked(line []byte, journal bool, t time.Time) (int64, err
 		off, err = s.writeLocked(line)
 	}
 	return off, err
+}
+
+// confirmFileLocked makes durable the log the boot read and keeps as it is: one fsync of the file — the one that was
+// read (os.SameFile) — and one of its directory. After a crash of the process the page cache can still hold an
+// append whose fsync never returned (or a rewrite whose directory sync did not), and the read sees it: nothing read
+// is trusted before this.
+func (s *Store) confirmFileLocked() error {
+	fi, err := s.cfg.ops.syncFile(s.path)
+	if err != nil {
+		return err
+	}
+	if s.ident != nil && !os.SameFile(s.ident, fi) {
+		return errChanged
+	}
+	return s.cfg.ops.syncDir(s.dir)
 }
 
 // writeLocked appends line to the log with O_APPEND and fsyncs it. The file must be the one this store left (same

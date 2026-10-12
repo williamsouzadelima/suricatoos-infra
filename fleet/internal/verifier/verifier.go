@@ -269,8 +269,12 @@ func (v *Verifier) Process(raw []byte, now time.Time) Outcome {
 	}
 	c := &check{v: v, ver: ver, cmd: ver.Command(), t: t}
 
-	// line 2a
+	// line 2a — from a store that confirmed on disk what it holds: what the boot read and could not confirm is never
+	// acked, not even again
 	look := v.d.store.Lookup(ver, t)
+	if look.Unconfirmed != nil {
+		return c.unavailable(detailStore, look.Unconfirmed)
+	}
 	if contract.ClassifyReplay(ver.CanonicalSHA256(), look.Recorded) == contract.ReplayRedelivery {
 		if look.Same == nil {
 			return c.unavailable(detailStore, errors.New("o store achou a forma canônica sem a entrada"))

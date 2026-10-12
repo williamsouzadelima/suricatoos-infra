@@ -349,6 +349,11 @@ func (s *Store) MarkDelivered(j Job, t time.Time) error {
 func (s *Store) Result(j Job, t time.Time) (Result, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.unconfirmed { // like Lookup: nothing the boot read is given back before it is durable
+		if err := s.readyLocked(t); err != nil {
+			return Result{}, false, err
+		}
+	}
 	e, err := s.findJobLocked(j, t)
 	if err != nil {
 		return Result{}, false, err

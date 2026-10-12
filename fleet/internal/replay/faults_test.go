@@ -2,6 +2,7 @@ package replay
 
 import (
 	"io"
+	"io/fs"
 	"os"
 )
 
@@ -27,10 +28,10 @@ func (f *faultyFile) Sync() error {
 	return f.File.Sync()
 }
 
-// faults makes the next file operations of a store fail as configured, and counts the directory syncs.
+// faults makes the next file operations of a store fail as configured, and counts the syncs and the rewrites.
 type faults struct {
-	failWrite, failSync, failTruncate, failSyncDir, failRewrite, failRewriteAfter error
-	syncDirs                                                                      int
+	failWrite, failSync, failTruncate, failSyncDir, failRewrite, failRewriteAfter, failSyncFile error
+	syncDirs, syncFiles, rewrites                                                               int
 }
 
 // config is the default config with the file operations wrapped.
@@ -57,7 +58,15 @@ func (fl *faults) config() config {
 		}
 		return real.syncDir(dir)
 	}
+	c.ops.syncFile = func(path string) (fs.FileInfo, error) {
+		fl.syncFiles++
+		if fl.failSyncFile != nil {
+			return nil, fl.failSyncFile
+		}
+		return real.syncFile(path)
+	}
 	c.ops.writeStream = func(path string, fill func(io.Writer) error) error {
+		fl.rewrites++
 		if fl.failRewrite != nil {
 			return fl.failRewrite
 		}
