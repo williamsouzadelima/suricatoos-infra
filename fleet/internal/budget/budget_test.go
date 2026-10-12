@@ -619,7 +619,7 @@ func TestOpenRecusaBootQueNaoERelogioDeVerificacao(t *testing.T) {
 	}
 }
 
-// Ruling: state that cannot be used at boot counts as a FULL window from boot for one hour; losing the budget
+// Rule: state that cannot be used at boot counts as a FULL window from boot for one hour; losing the budget
 // must never open the door.
 func TestEstadoIlegivelOuCorrompidoTrataJanelaComoCheiaPorUmaHora(t *testing.T) {
 	bigTotal := nsRun(t0.UnixNano()-int64(time.Minute), MaxTotal+1)

@@ -26,6 +26,21 @@ func (l *local) Credentials(name string) (Credentials, error) {
 	return credentials(l.lookup(name), l.password)
 }
 
+func (l *local) List() ([]Listing, error) {
+	return []Listing{{Name: l.tenant, Enabled: true, Scope: l.scope, GVMUser: l.gvmUser}}, nil
+}
+
+func (l *local) WithPassword() (map[string]bool, error) {
+	pw, err := l.password()
+	if err != nil {
+		return nil, err
+	}
+	if pw == "" {
+		return map[string]bool{}, nil
+	}
+	return map[string]bool{l.tenant: true}, nil
+}
+
 func (l *local) lookup(name string) entry {
 	if name == "" || name != l.tenant {
 		return entry{}
