@@ -5349,10 +5349,10 @@ index eaff647..d6e39ef 100644
 \ No newline at end of file
 diff --git a/public/locales/gsa-es.json b/public/locales/gsa-es.json
 new file mode 100644
-index 0000000..ea0404a
+index 0000000..727b14a
 --- /dev/null
 +++ b/public/locales/gsa-es.json
-@@ -0,0 +1,2488 @@
+@@ -0,0 +1,2492 @@
 +{
 +  "AI Providers": "Proveedores de IA",
 +  "Configure LLM providers (OpenRouter, UnoRouter and others) used to draft remediation plans. Keys are stored encrypted and never shown.": "Configure los proveedores de LLM (OpenRouter, UnoRouter y otros) usados para redactar planes de remediación. Las claves se guardan cifradas y nunca se muestran.",
@@ -7839,14 +7839,18 @@ index 0000000..ea0404a
 +  "View findings": "Ver hallazgos",
 +  "Scan now": "Escanear ahora",
 +  "Scan requested for {{- host}} — new collection in ~60 s.": "Escaneo solicitado para {{- host}}: nueva recolección en ~60 s.",
-+  "EU": "UE"
++  "EU": "UE",
++  "Scan now: {{- host}}": "Escanear ahora: {{- host}}",
++  "View findings: {{- host}}": "Ver hallazgos: {{- host}}",
++  "Edit: {{- name}}": "Editar: {{- name}}",
++  "Delete: {{- name}}": "Eliminar: {{- name}}"
 +}
 \ No newline at end of file
 diff --git a/public/locales/gsa-pt_BR.json b/public/locales/gsa-pt_BR.json
-index 10e592f..761694c 100644
+index 10e592f..df45fc3 100644
 --- a/public/locales/gsa-pt_BR.json
 +++ b/public/locales/gsa-pt_BR.json
-@@ -1,216 +1,2488 @@
+@@ -1,216 +1,2492 @@
  {
 -  "# of OVAL Definitions": "OVAL defini\u00e7\u00e3o",
 -  "# of Operating Systems": "Sistema Operacional",
@@ -10533,15 +10537,19 @@ index 10e592f..761694c 100644
 +  "View findings": "Ver achados",
 +  "Scan now": "Varrer agora",
 +  "Scan requested for {{- host}} — new collection in ~60 s.": "Varredura solicitada para {{- host}} — nova coleta em ~60 s.",
-+  "EU": "UE"
++  "EU": "UE",
++  "Scan now: {{- host}}": "Varrer agora: {{- host}}",
++  "View findings: {{- host}}": "Ver achados: {{- host}}",
++  "Edit: {{- name}}": "Editar: {{- name}}",
++  "Delete: {{- name}}": "Excluir: {{- name}}"
 +}
 \ No newline at end of file
 diff --git a/public/suricatoos-theme.css b/public/suricatoos-theme.css
 new file mode 100644
-index 0000000..75d0ca9
+index 0000000..74b3d5d
 --- /dev/null
 +++ b/public/suricatoos-theme.css
-@@ -0,0 +1,307 @@
+@@ -0,0 +1,312 @@
 +/* ============================================================
 +   SURICATOOS — Tema Premium v2 (claro + escuro) — GSA / Mantine v7
 +   Carregado por ULTIMO. Foco: profundidade, cards, tabelas, nav,
@@ -10705,8 +10713,13 @@ index 0000000..75d0ca9
 +
 +/* ============================================================
 +   9. INPUTS — foco com anel do acento
++   Campos de texto, textarea e select: a borda vira o acento (>= 3:1 sobre a
++   superfície nos dois temas) e ganha o halo; o contorno do navegador sai porque
++   isto o substitui. Checkbox e radio ficam de fora: marcados, a borda já é a cor
++   do acento e o halo quase não aparece, então neles vale o anel de foco do
++   Mantine (:focus-visible, contorno de 2px no acento).
 +   ============================================================ */
-+input:focus, textarea:focus, select:focus, [class*="Input-input"]:focus {
++input:not([type='checkbox']):not([type='radio']):focus, textarea:focus, select:focus, [class*="Input-input"]:focus {
 +  border-color:var(--sur-accent)!important; box-shadow:0 0 0 3px var(--sur-accent-soft)!important; outline:none!important;
 +}
 +.mantine-Input-input, input, textarea { border-radius:9px!important; }
@@ -11097,7 +11110,7 @@ index ab34daa..5fe67cd 100644
            endAngle: currentArc.endAngle,
            padAngle: currentArc.padAngle,
 diff --git a/src/web/components/dashboard/display/DataDisplayIcons.tsx b/src/web/components/dashboard/display/DataDisplayIcons.tsx
-index 966a360..d354c38 100644
+index 966a360..2e69ebb 100644
 --- a/src/web/components/dashboard/display/DataDisplayIcons.tsx
 +++ b/src/web/components/dashboard/display/DataDisplayIcons.tsx
 @@ -6,11 +6,9 @@
@@ -11113,7 +11126,7 @@ index 966a360..d354c38 100644
  } from 'web/components/icon';
  interface DataDisplayIconsState {
    showLegend?: boolean;
-@@ -37,24 +35,14 @@ export const renderDonutChartIcons = <S extends DonutChartState>({
+@@ -37,39 +35,35 @@ export const renderDonutChartIcons = <S extends DonutChartState>({
    setState,
    ...iconsProps
  }: DataDisplayIconsProps<S>): React.ReactNode => (
@@ -11139,18 +11152,32 @@ index 966a360..d354c38 100644
    onDownloadSvgClick,
    onSelectFilterClick,
  }: DataDisplayIconsProps<S>) => (
-@@ -63,10 +51,7 @@ const DataDisplayIcons = <S extends DataDisplayIconsState>({
-       <FilterIcon title={_('Select Filter')} onClick={onSelectFilterClick} />
+   <React.Fragment>
+     {showFilterSelection && (
+-      <FilterIcon title={_('Select Filter')} onClick={onSelectFilterClick} />
++      <FilterIcon
++        aria-label={_('Select Filter')}
++        title={_('Select Filter')}
++        onClick={onSelectFilterClick}
++      />
      )}
      {showSvgDownload && (
 -      <DownloadSvgIcon title={_('Download SVG')} onClick={onDownloadSvgClick} />
 -    )}
 -    {showCsvDownload && (
 -      <DownloadCsvIcon title={_('Download CSV')} onClick={onDownloadCsvClick} />
-+      <DownloadIcon title={_('Download SVG')} onClick={onDownloadSvgClick} />
++      <DownloadIcon
++        aria-label={_('Download SVG')}
++        title={_('Download SVG')}
++        onClick={onDownloadSvgClick}
++      />
      )}
      {showToggleLegend && (
        <LegendIcon
++        aria-label={_('Toggle Legend')}
+         title={_('Toggle Legend')}
+         onClick={() => {
+           setState(({showLegend}: S) => ({showLegend: !showLegend}) as S);
 diff --git a/src/web/components/dashboard/display/Display.tsx b/src/web/components/dashboard/display/Display.tsx
 index 4895369..dd97938 100644
 --- a/src/web/components/dashboard/display/Display.tsx
@@ -11365,7 +11392,7 @@ index 44eb460..d6e39ef 100644
 +</svg>
 \ No newline at end of file
 diff --git a/src/web/components/img/LoginLogo.tsx b/src/web/components/img/LoginLogo.tsx
-index d68da89..2bbd0cb 100644
+index d68da89..cb5495a 100644
 --- a/src/web/components/img/LoginLogo.tsx
 +++ b/src/web/components/img/LoginLogo.tsx
 @@ -3,12 +3,14 @@
@@ -11383,7 +11410,7 @@ index d68da89..2bbd0cb 100644
  
  const StyledImage = styled(Image)`
    display: flex;
-@@ -17,9 +19,13 @@ const StyledImage = styled(Image)`
+@@ -17,17 +19,21 @@ const StyledImage = styled(Image)`
  
  const LoginLogo = () => {
    const gmp = useGmp();
@@ -11398,8 +11425,23 @@ index d68da89..2bbd0cb 100644
 +        ? OPENVAS_SCAN_LOGO
 +        : OPENVAS_LOGO;
  
-   return (
-     <StyledImage
+-  return (
+-    <StyledImage
+-      alt={gmp.settings.vendorLabel ? 'OPENVAS SCAN' : 'OPENVAS'}
+-      data-testid="login-logo"
+-      src={loginTopLogo}
+-    />
+-  );
++  // The wordmark is the product's own (GSA_VENDOR_TITLE, as in the page title);
++  // without a configured title the text stays what the upstream shows.
++  const alt =
++    gmp.settings.vendorTitle ??
++    (gmp.settings.vendorLabel ? 'OPENVAS SCAN' : 'OPENVAS');
++
++  return <StyledImage alt={alt} data-testid="login-logo" src={loginTopLogo} />;
+ };
+ 
+ export default LoginLogo;
 diff --git a/src/web/components/menu/Menu.tsx b/src/web/components/menu/Menu.tsx
 index 13fca0c..8166998 100644
 --- a/src/web/components/menu/Menu.tsx
@@ -11464,23 +11506,58 @@ index 9775497..5c7d152 100644
    );
  };
 diff --git a/src/web/components/structure/Header.tsx b/src/web/components/structure/Header.tsx
-index 6958f21..d703dc1 100644
+index 6958f21..bca13b5 100644
 --- a/src/web/components/structure/Header.tsx
 +++ b/src/web/components/structure/Header.tsx
-@@ -63,7 +63,7 @@ const Header = () => {
+@@ -16,7 +16,7 @@ import useTranslation from 'web/hooks/useTranslation';
+ import useUserIsLoggedIn from 'web/hooks/useUserIsLoggedIn';
+ import useUserName from 'web/hooks/useUserName';
+ import useUserTimezone from 'web/hooks/useUserTimezone';
+-import {type ApplianceLogo} from 'web/utils/appliance-data';
++import {applianceTitle, type ApplianceLogo} from 'web/utils/appliance-data';
+ import {saveLastVisitedPage} from 'web/utils/user-last-visited-page';
+ 
+ const Header = () => {
+@@ -28,6 +28,12 @@ const Header = () => {
+   const navigate = useNavigate();
+   const location = useLocation();
+   const logoComponent = getLogo(gmp?.settings?.vendorLabel as ApplianceLogo);
++  // The logo is the only content of the link to the start page, so it names the
++  // link: the title of the product, the same as in the title of the page.
++  const productName =
++    gmp?.settings?.vendorTitle ??
++    applianceTitle[gmp?.settings?.vendorLabel ?? 'defaultVendorLabel'] ??
++    applianceTitle.defaultVendorLabel;
+   const [timezone] = useUserTimezone();
+   const manualURL = useManualURL();
+ 
+@@ -63,9 +69,19 @@ const Header = () => {
      <AppHeader
        ianaTimeZone={timezone}
        isLoggedIn={isLoggedIn}
 -      isThemeSwitchVisible={false}
 +      isThemeSwitchVisible={true}
        languageSwitch={<LanguageSwitch />}
-       logo={logoComponent}
+-      logo={logoComponent}
++      logo={
++        logoComponent ? (
++          <span
++            aria-label={productName}
++            role="img"
++            style={{display: 'inline-flex'}}
++          >
++            {logoComponent}
++          </span>
++        ) : undefined
++      }
        logoLink="/dashboards"
+       manualLink={manualURL}
+       menuPoints={menuPoints}
 diff --git a/src/web/components/structure/LanguageSwitch.tsx b/src/web/components/structure/LanguageSwitch.tsx
-index 7f74728..b7c8165 100644
+index 7f74728..de42221 100644
 --- a/src/web/components/structure/LanguageSwitch.tsx
 +++ b/src/web/components/structure/LanguageSwitch.tsx
-@@ -3,64 +3,116 @@
+@@ -3,64 +3,135 @@
   * SPDX-License-Identifier: AGPL-3.0-or-later
   */
  
@@ -11505,29 +11582,36 @@ index 7f74728..b7c8165 100644
 -  EN: LanguageCode;
 -  DE: LanguageCode;
 -}
-+const FlagBR: React.FC = () => (
-+  <svg style={flagStyle} viewBox="0 0 28 20">
-+    <rect fill="#009b3a" height="20" width="28" />
-+    <polygon fill="#fedf00" points="14,2.5 25.5,10 14,17.5 2.5,10" />
-+    <circle cx="14" cy="10" fill="#002776" r="4.2" />
-+  </svg>
-+);
++// The flags are decorative: the language is named by the text next to them (or
++// by the label of the button), so assistive technology skips the drawing.
++const flagProps = {
++  'aria-hidden': true,
++  focusable: 'false',
++  style: flagStyle,
++  viewBox: '0 0 28 20',
++} as const;
  
 -const LANGUAGES: Languages = {
 -  EN: DEFAULT_LANGUAGE as LanguageCode,
 -  DE: 'de',
 -};
++const FlagBR: React.FC = () => (
++  <svg {...flagProps}>
++    <rect fill="#009b3a" height="20" width="28" />
++    <polygon fill="#fedf00" points="14,2.5 25.5,10 14,17.5 2.5,10" />
++    <circle cx="14" cy="10" fill="#002776" r="4.2" />
++  </svg>
++);
++
 +const FlagES: React.FC = () => (
-+  <svg style={flagStyle} viewBox="0 0 28 20">
++  <svg {...flagProps}>
 +    <rect fill="#aa151b" height="20" width="28" />
 +    <rect fill="#f1bf00" height="10" width="28" y="5" />
 +  </svg>
 +);
- 
--const getNextLanguage = (language: LanguageCode): LanguageCode =>
--  language === LANGUAGES.EN ? LANGUAGES.DE : LANGUAGES.EN;
++
 +const FlagUS: React.FC = () => (
-+  <svg style={flagStyle} viewBox="0 0 28 20">
++  <svg {...flagProps}>
 +    <rect fill="#b22234" height="20" width="28" />
 +    <rect fill="#fff" height="1.54" width="28" y="1.54" />
 +    <rect fill="#fff" height="1.54" width="28" y="4.62" />
@@ -11558,30 +11642,34 @@ index 7f74728..b7c8165 100644
 +    </g>
 +  </svg>
 +);
-+
+ 
+-const getNextLanguage = (language: LanguageCode): LanguageCode =>
+-  language === LANGUAGES.EN ? LANGUAGES.DE : LANGUAGES.EN;
 +interface LangDef {
 +  code: string;
++  // BCP 47 tag of the label: each name is written in its own language
++  htmlLang: string;
 +  label: string;
 +  Flag: React.FC;
 +}
 +
 +const LANGS: LangDef[] = [
-+  {code: 'pt_BR', label: 'Português (Brasil)', Flag: FlagBR},
-+  {code: 'es', label: 'Español', Flag: FlagES},
-+  {code: 'en', label: 'English', Flag: FlagUS},
++  {code: 'pt_BR', htmlLang: 'pt-BR', label: 'Português (Brasil)', Flag: FlagBR},
++  {code: 'es', htmlLang: 'es', label: 'Español', Flag: FlagES},
++  {code: 'en', htmlLang: 'en', label: 'English', Flag: FlagUS},
 +];
  
  const LanguageSwitch: React.FC = () => {
    const [language, setLanguage] = useLanguage();
    const [_] = useTranslation();
 -  const [isChangingLanguage, setIsChangingLanguage] = useState<boolean>(false);
--
+ 
 -  const nextLanguage: LanguageCode = getNextLanguage(language as LanguageCode);
 -  const titles: Record<LanguageCode, string> = {
 -    en: _('Switch language to English'),
 -    de: _('Switch language to German'),
 -  };
- 
+-
 -  const handleLanguageChange = async (): Promise<void> => {
 -    if (isChangingLanguage) {
 -      return;
@@ -11615,6 +11703,7 @@ index 7f74728..b7c8165 100644
 +    <Menu position="bottom-end" shadow="md" width={210}>
 +      <Menu.Target>
 +        <ActionIcon
++          aria-label={_('Select language')}
 +          color="neutral.0"
 +          title={_('Select language')}
 +          variant="transparent"
@@ -11624,11 +11713,18 @@ index 7f74728..b7c8165 100644
 +      </Menu.Target>
 +      <Menu.Dropdown>
 +        <Menu.Label>{_('Language')}</Menu.Label>
-+        {LANGS.map(({code, label, Flag}) => (
-+          <Menu.Item key={code} onClick={() => handleSelect(code)}>
++        {LANGS.map(({code, htmlLang, label, Flag}) => (
++          <Menu.Item
++            key={code}
++            aria-current={code === language ? 'true' : undefined}
++            onClick={() => handleSelect(code)}
++          >
 +            <div style={{alignItems: 'center', display: 'flex', gap: 10}}>
 +              <Flag />
-+              <span style={{fontWeight: code === language ? 700 : 400}}>
++              <span
++                lang={htmlLang}
++                style={{fontWeight: code === language ? 700 : 400}}
++              >
 +                {label}
 +              </span>
 +            </div>
@@ -11659,10 +11755,10 @@ index a057cf9..409c93b 100644
    },
 diff --git a/src/web/pages/downloads/DownloadsPage.tsx b/src/web/pages/downloads/DownloadsPage.tsx
 new file mode 100644
-index 0000000..92c84e8
+index 0000000..1ce1163
 --- /dev/null
 +++ b/src/web/pages/downloads/DownloadsPage.tsx
-@@ -0,0 +1,245 @@
+@@ -0,0 +1,258 @@
 +/* SPDX-FileCopyrightText: 2024 Greenbone AG
 + *
 + * SPDX-License-Identifier: AGPL-3.0-or-later
@@ -11675,7 +11771,8 @@ index 0000000..92c84e8
 + * per-tenant token and returns a ready-to-run command with the token
 + * already embedded — the dynamic per-tenant token. Renders inside the GSA shell. */
 +
-+import React, {useState, useCallback, useEffect} from 'react';
++import React, {useState, useCallback, useEffect, useId} from 'react';
++import {VisuallyHidden} from '@mantine/core';
 +import Button from 'web/components/form/Button';
 +import Layout from 'web/components/layout/Layout';
 +import PageTitle from 'web/components/layout/PageTitle';
@@ -11752,6 +11849,9 @@ index 0000000..92c84e8
 +  const [loading, setLoading] = useState<boolean>(false);
 +  const [error, setError] = useState<Error | null>(null);
 +  const [copied, setCopied] = useState<boolean>(false);
++  // ids that tie the label and the error message to the select
++  const tenantId = useId();
++  const errorId = useId();
 +
 +  // Load the tenant list on mount (behind the nginx session gate: cookie +
 +  // token, which the shared client adds). Aborted on unmount.
@@ -11823,10 +11923,15 @@ index 0000000..92c84e8
 +            )}
 +          </p>
 +          <Layout>
-+            <label style={{marginRight: '10px', alignSelf: 'center'}}>
++            <label
++              htmlFor={tenantId}
++              style={{marginRight: '10px', alignSelf: 'center'}}
++            >
 +              {_('Tenant')}:
 +            </label>
 +            <select
++              aria-describedby={error ? errorId : undefined}
++              id={tenantId}
 +              value={tenant}
 +              onChange={e => {
 +                setTenant(e.target.value);
@@ -11853,9 +11958,9 @@ index 0000000..92c84e8
 +            ))}
 +          </Layout>
 +
-+          {loading ? <p>{_('Generating command…')}</p> : null}
++          {loading ? <p role="status">{_('Generating command…')}</p> : null}
 +          {error ? (
-+            <p style={{color: Theme.errorRed}}>
++            <p id={errorId} role="alert" style={{color: Theme.errorRed}}>
 +              {isSessionExpired(error)
 +                ? _('Session expired. Sign in again to activate agents.')
 +                : _('Error generating the command: {{- error}}', {
@@ -11885,6 +11990,10 @@ index 0000000..92c84e8
 +                <Button title={_('Copy')} onClick={copy}>
 +                  {copied ? _('Copied ✓') : _('Copy')}
 +                </Button>
++                {/* the result of the copy, said aloud without moving the focus */}
++                <VisuallyHidden role="status">
++                  {copied ? _('Copied ✓') : ''}
++                </VisuallyHidden>
 +              </Layout>
 +              <p style={{color: Theme.mediumGray, fontSize: '12px'}}>
 +                {resp.max_uses > 1
@@ -11910,10 +12019,10 @@ index 0000000..92c84e8
 +export default DownloadsPage;
 diff --git a/src/web/pages/endpoint-agents/EndpointAgentsPage.tsx b/src/web/pages/endpoint-agents/EndpointAgentsPage.tsx
 new file mode 100644
-index 0000000..92e75a5
+index 0000000..7a50a2a
 --- /dev/null
 +++ b/src/web/pages/endpoint-agents/EndpointAgentsPage.tsx
-@@ -0,0 +1,333 @@
+@@ -0,0 +1,341 @@
 +/* SPDX-FileCopyrightText: 2024 Greenbone AG
 + *
 + * SPDX-License-Identifier: AGPL-3.0-or-later
@@ -12135,7 +12244,7 @@ index 0000000..92e75a5
 +            </Button>
 +          </div>
 +            {error ? (
-+              <p style={{color: Theme.errorRed}}>
++              <p role="alert" style={{color: Theme.errorRed}}>
 +                {isSessionExpired(error)
 +                  ? _(
 +                      'Session expired. Sign in again to see the endpoint agents.',
@@ -12146,7 +12255,7 @@ index 0000000..92e75a5
 +              </p>
 +            ) : null}
 +            {loading ? (
-+              <p>{_('Loading...')}</p>
++              <p role="status">{_('Loading...')}</p>
 +            ) : agents.length === 0 ? (
 +              <p>
 +                {_('No agents yet. Install one from the Activate Agent page.')}
@@ -12223,11 +12332,19 @@ index 0000000..92e75a5
 +                          }}
 +                        >
 +                          {agent.report_id ? (
-+                            <Link to={`report/${agent.report_id}`}>
++                            <Link
++                              aria-label={_('View findings: {{- host}}', {
++                                host: agent.host,
++                              })}
++                              to={`report/${agent.report_id}`}
++                            >
 +                              {_('View findings')}
 +                            </Link>
 +                          ) : null}
 +                          <Button
++                            aria-label={_('Scan now: {{- host}}', {
++                              host: agent.host,
++                            })}
 +                            title={_('Scan now')}
 +                            onClick={() => scanNow(agent.host)}
 +                          >
@@ -12269,16 +12386,16 @@ index b995df4..be67f0d 100644
              <TableRow>
 diff --git a/src/web/pages/extras/FeedUpdateSection.tsx b/src/web/pages/extras/FeedUpdateSection.tsx
 new file mode 100644
-index 0000000..d3a69b9
+index 0000000..7448748
 --- /dev/null
 +++ b/src/web/pages/extras/FeedUpdateSection.tsx
-@@ -0,0 +1,318 @@
+@@ -0,0 +1,327 @@
 +/* SPDX-FileCopyrightText: 2026 Suricatoos
 + *
 + * SPDX-License-Identifier: AGPL-3.0-or-later
 + */
 +
-+import React, {useCallback, useEffect, useRef, useState} from 'react';
++import React, {useCallback, useEffect, useId, useRef, useState} from 'react';
 +import {Button, Group, Loader, Select, Stack, Switch, Text} from '@mantine/core';
 +import useGmp from 'web/hooks/useGmp';
 +import useTranslation from 'web/hooks/useTranslation';
@@ -12333,6 +12450,8 @@ index 0000000..d3a69b9
 +  const [sch, setSch] = useState<Schedule>(DEFAULT_SCHEDULE);
 +  const [busy, setBusy] = useState(false);
 +  const [saved, setSaved] = useState(false);
++  // ties the label to the time field
++  const timeId = useId();
 +  // o agendamento eh carregado no form UMA vez; o polling depois so atualiza o
 +  // status do sync, sem clobberar o que o usuario esta editando (senao o toggle
 +  // "desabilita sozinho" quando o poll traz o estado antigo do servidor).
@@ -12472,6 +12591,7 @@ index 0000000..d3a69b9
 +      }}
 +    >
 +      <Text
++        component="h3"
 +        fw={700}
 +        mb="md"
 +        size="lg"
@@ -12505,7 +12625,7 @@ index 0000000..d3a69b9
 +        </div>
 +        <Button
 +          disabled={busy || running || semPermissao}
-+          leftSection={running ? <Loader size="xs" /> : undefined}
++          leftSection={running ? <Loader aria-hidden size="xs" /> : undefined}
 +          onClick={syncNow}
 +        >
 +          {running ? _('Updating...') : _('Update now')}
@@ -12552,11 +12672,19 @@ index 0000000..d3a69b9
 +            />
 +          )}
 +          <div>
-+            <Text fw={500} mb={4} size="sm">
++            <Text
++              component="label"
++              display="block"
++              fw={500}
++              htmlFor={timeId}
++              mb={4}
++              size="sm"
++            >
 +              {_('Time')}
 +            </Text>
 +            <input
 +              disabled={!sch.enabled || semPermissao}
++              id={timeId}
 +              style={{
 +                padding: '7px 10px',
 +                borderRadius: 9,
@@ -12579,11 +12707,9 @@ index 0000000..d3a69b9
 +          >
 +            {_('Save schedule')}
 +          </Button>
-+          {saved && (
-+            <Text c="green" size="sm">
-+              {_('Saved')}
-+            </Text>
-+          )}
++          <Text c="green" role="status" size="sm">
++            {saved ? _('Saved') : ''}
++          </Text>
 +        </Group>
 +      </div>
 +    </div>
@@ -12592,7 +12718,7 @@ index 0000000..d3a69b9
 +
 +export default FeedUpdateSection;
 diff --git a/src/web/pages/login/LoginForm.tsx b/src/web/pages/login/LoginForm.tsx
-index 4c667ec..434d0dd 100644
+index 4c667ec..4885889 100644
 --- a/src/web/pages/login/LoginForm.tsx
 +++ b/src/web/pages/login/LoginForm.tsx
 @@ -29,9 +29,13 @@ interface LoginFormProps {
@@ -12612,6 +12738,15 @@ index 4c667ec..434d0dd 100644
    padding: 4rem;
    width: 30rem;
    z-index: ${Theme.Layers.higher};
+@@ -128,7 +132,7 @@ const LoginForm = ({
+ 
+         <>
+           {isDefined(error) && (
+-            <StyledErrorContainer data-testid="error">
++            <StyledErrorContainer data-testid="error" role="alert">
+               {error}
+             </StyledErrorContainer>
+           )}
 @@ -172,9 +176,6 @@ const LoginForm = ({
            </FormGroup>
          )}
@@ -12837,16 +12972,16 @@ index dd0b390..9316ed8 100644
    Layers: {
 diff --git a/src/web/pages/ai-providers/AiProvidersPage.tsx b/src/web/pages/ai-providers/AiProvidersPage.tsx
 new file mode 100644
-index 0000000..7bc97f5
+index 0000000..0638e1b
 --- /dev/null
 +++ b/src/web/pages/ai-providers/AiProvidersPage.tsx
-@@ -0,0 +1,1073 @@
+@@ -0,0 +1,1124 @@
 +/* SPDX-FileCopyrightText: 2026 Suricatoos
 + *
 + * SPDX-License-Identifier: AGPL-3.0-or-later
 + */
 +
-+import React, {useCallback, useEffect, useRef, useState} from 'react';
++import React, {useCallback, useEffect, useId, useRef, useState} from 'react';
 +import {
 +  Alert,
 +  Anchor,
@@ -12861,6 +12996,7 @@ index 0000000..7bc97f5
 +  Switch,
 +  Text,
 +  TextInput,
++  VisuallyHidden,
 +} from '@mantine/core';
 +import useGmp from 'web/hooks/useGmp';
 +import useTranslation, {type TranslateFunc} from 'web/hooks/useTranslation';
@@ -13119,9 +13255,15 @@ index 0000000..7bc97f5
 +  return options;
 +};
 +
++// The result of a save or a delete shows up away from the button that was
++// pressed: an error is read at once, a success in turn.
 +const NoticeText = ({notice}: NoticeTextProps) =>
 +  notice === null ? null : (
-+    <Text c={notice.error ? 'red' : 'green'} size="sm">
++    <Text
++      c={notice.error ? 'red' : 'green'}
++      role={notice.error ? 'alert' : 'status'}
++      size="sm"
++    >
 +      {notice.text}
 +    </Text>
 +  );
@@ -13169,10 +13311,29 @@ index 0000000..7bc97f5
 +const DeleteAction = ({name, busy, onConfirm}: DeleteActionProps) => {
 +  const [_] = useTranslation();
 +  const [asking, setAsking] = useState<boolean>(false);
++  const questionId = useId();
++  const deleteButton = useRef<HTMLButtonElement>(null);
++  const cancelButton = useRef<HTMLButtonElement>(null);
++  const wasAsking = useRef<boolean>(false);
++
++  // The button that was pressed leaves the page when the question shows up (and
++  // the other way round), which would drop the keyboard focus on the page: it
++  // goes to "Cancel", the safe answer, and back to "Delete" if the question is
++  // dropped. Nothing is focused when the page opens.
++  useEffect(() => {
++    if (asking) {
++      cancelButton.current?.focus();
++    } else if (wasAsking.current) {
++      deleteButton.current?.focus();
++    }
++    wasAsking.current = asking;
++  }, [asking]);
 +
 +  if (!asking) {
 +    return (
 +      <Button
++        ref={deleteButton}
++        aria-label={_('Delete: {{- name}}', {name})}
 +        color="red"
 +        size="xs"
 +        variant="outline"
@@ -13183,14 +13344,20 @@ index 0000000..7bc97f5
 +    );
 +  }
 +  return (
-+    <Group gap="xs" justify="flex-end">
-+      <Text size="xs">
++    <Group
++      aria-labelledby={questionId}
++      gap="xs"
++      justify="flex-end"
++      role="group"
++    >
++      <Text id={questionId} size="xs">
 +        {_('Delete the provider {{- name}}? This cannot be undone.', {name})}
 +      </Text>
 +      <Button color="red" loading={busy} size="xs" onClick={onConfirm}>
 +        {_('Delete')}
 +      </Button>
 +      <Button
++        ref={cancelButton}
 +        disabled={busy}
 +        size="xs"
 +        variant="default"
@@ -13211,6 +13378,7 @@ index 0000000..7bc97f5
 +  const [notice, setNotice] = useState<Notice | null>(null);
 +  const mounted = useMounted();
 +  const listRequest = useLatestRequest();
++  const titleId = useId();
 +
 +  // OpenRouter's catalog is public; UnoRouter lists only with a stored key (the
 +  // server answers 409 without one, so do not even ask).
@@ -13365,11 +13533,13 @@ index 0000000..7bc97f5
 +  );
 +
 +  return (
-+    <Paper withBorder p="md" radius="md">
++    <Paper withBorder aria-labelledby={titleId} p="md" radius="md" role="group">
 +      <Stack gap="sm">
 +        <Group align="flex-start" justify="space-between" wrap="nowrap">
 +          <div>
-+            <Text fw={700}>{p.name}</Text>
++            <Text fw={700} id={titleId}>
++              {p.name}
++            </Text>
 +            <Text c="dimmed" size="xs">
 +              {p.base_url}
 +            </Text>
@@ -13417,7 +13587,11 @@ index 0000000..7bc97f5
 +          allowDeselect={false}
 +          data={options}
 +          description={modelHint}
-+          error={list.state === 'failed' ? list.message : undefined}
++          error={
++            list.state === 'failed' ? (
++              <span role="alert">{list.message}</span>
++            ) : undefined
++          }
 +          label={_('Model')}
 +          nothingFoundMessage={
 +            list.state === 'loading'
@@ -13426,7 +13600,9 @@ index 0000000..7bc97f5
 +          }
 +          placeholder={_('Choose a free model')}
 +          rightSection={
-+            list.state === 'loading' ? <Loader size="xs" /> : undefined
++            list.state === 'loading' ? (
++              <Loader aria-hidden size="xs" />
++            ) : undefined
 +          }
 +          value={form.model === '' ? null : form.model}
 +          onChange={v => setForm(f => ({...f, model: v ?? f.model}))}
@@ -13656,7 +13832,12 @@ index 0000000..7bc97f5
 +            <Group key={p.id} justify="space-between" wrap="nowrap">
 +              <ProviderSummary provider={p} />
 +              <Group gap="xs" wrap="nowrap">
-+                <Button size="xs" variant="default" onClick={() => edit(p)}>
++                <Button
++                  aria-label={_('Edit: {{- name}}', {name: p.name})}
++                  size="xs"
++                  variant="default"
++                  onClick={() => edit(p)}
++                >
 +                  {_('Edit')}
 +                </Button>
 +                <DeleteAction
@@ -13859,7 +14040,12 @@ index 0000000..7bc97f5
 +
 +  let body: React.ReactNode;
 +  if (loading) {
-+    body = <Loader />;
++    body = (
++      <div role="status">
++        <Loader />
++        <VisuallyHidden>{_('Loading...')}</VisuallyHidden>
++      </div>
++    );
 +  } else if (loadError !== '') {
 +    body = (
 +      <Alert color="red" variant="light">
@@ -13894,7 +14080,7 @@ index 0000000..7bc97f5
 +
 +  return (
 +    <Stack gap="md" p="md">
-+      <Text fw={700} size="lg">
++      <Text component="h2" fw={700} size="lg">
 +        {_('AI Providers')}
 +      </Text>
 +      {policy !== null && (
@@ -16784,6 +16970,963 @@ index 0000000..79d2216
 +DAMAGES, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 +FROM, OUT OF THE USE OR INABILITY TO USE THE FONT SOFTWARE OR FROM
 +OTHER DEALINGS IN THE FONT SOFTWARE.
+diff --git a/src/web/utils/__tests__/suricatoosA11y.test.tsx b/src/web/utils/__tests__/suricatoosA11y.test.tsx
+new file mode 100644
+index 0000000..12c9e5e
+--- /dev/null
++++ b/src/web/utils/__tests__/suricatoosA11y.test.tsx
+@@ -0,0 +1,951 @@
++/* SPDX-FileCopyrightText: 2026 Suricatoos
++ *
++ * SPDX-License-Identifier: AGPL-3.0-or-later
++ */
++
++// Accessibility of the screens the Suricatoos patch creates or alters: every
++// control has a name and a label tied to it, what happens is announced, and
++// what is clickable works from the keyboard. Queries go by role and name, the
++// way assistive technology sees the page.
++
++/// <reference types="node" />
++
++/* eslint-disable @typescript-eslint/naming-convention --
++   the keys of the fixtures and of the routes mirror the JSON and the paths of the API */
++
++import {
++  afterEach,
++  beforeEach,
++  describe,
++  expect,
++  test,
++  testing,
++} from '@gsa/testing';
++import {notifications} from '@mantine/notifications';
++import {
++  rendererWith,
++  screen,
++  type userEvent,
++  waitFor,
++  within,
++} from 'web/testing';
++import fs from 'node:fs';
++import path from 'node:path';
++import postcss from 'postcss';
++import {createSession} from 'gmp/testing';
++import {DEFAULT_SEVERITY_RATING} from 'gmp/utils/severity';
++import DataDisplayIcons from 'web/components/dashboard/display/DataDisplayIcons';
++import LoginLogo from 'web/components/img/LoginLogo';
++import Header from 'web/components/structure/Header';
++import LanguageSwitch from 'web/components/structure/LanguageSwitch';
++import AiProvidersPage from 'web/pages/ai-providers/AiProvidersPage';
++import DownloadsPage from 'web/pages/downloads/DownloadsPage';
++import EndpointAgentsPage from 'web/pages/endpoint-agents/EndpointAgentsPage';
++import FeedUpdateSection from 'web/pages/extras/FeedUpdateSection';
++import LoginForm from 'web/pages/login/LoginForm';
++
++type Handler = (url: URL, init?: RequestInit) => Response | Promise<Response>;
++
++type User = ReturnType<typeof userEvent.setup>;
++
++const fetchMock = testing.fn<typeof fetch>();
++
++const json = (status: number, body: unknown) =>
++  new Response(body === null ? null : JSON.stringify(body), {
++    status,
++    headers: {'Content-Type': 'application/json'},
++  });
++
++// Answers by path; whatever has no route is a 404 that names the path.
++const serve = (routes: Record<string, Handler>) => {
++  fetchMock.mockImplementation(async (input, init) => {
++    const url = new URL(String(input), 'http://localhost');
++    const handler = routes[url.pathname];
++    return handler
++      ? handler(url, init)
++      : json(404, {error: `no route for ${url.pathname}`});
++  });
++};
++
++const never = () => new Promise<Response>(() => {});
++
++const calls = (path: string) =>
++  fetchMock.mock.calls.filter(
++    ([input]) => new URL(String(input), 'http://localhost').pathname === path,
++  );
++
++const createGmp = (settings: Record<string, unknown> = {}) => ({
++  settings: {severityRating: DEFAULT_SEVERITY_RATING, ...settings},
++  session: createSession({token: 'tok', timezone: 'UTC', username: 'ana'}),
++  doLogout: testing.fn().mockResolvedValue(undefined),
++});
++
++// Tab until the element has the focus: proves it can be reached by keyboard.
++const tabTo = async (user: User, element: HTMLElement, limit = 60) => {
++  for (let i = 0; i < limit && document.activeElement !== element; i++) {
++    await user.tab();
++  }
++  expect(element).toHaveFocus();
++};
++
++beforeEach(() => {
++  fetchMock.mockReset();
++  testing.stubGlobal('fetch', fetchMock);
++});
++
++afterEach(() => {
++  testing.unstubAllGlobals();
++  // the toasts live in a store of their own, which outlives each render
++  notifications.clean();
++});
++
++const AGENTS = [
++  {
++    host: 'srv-web-01',
++    task: 'Agent srv-web-01',
++    task_id: 't1',
++    severity: 9.1,
++    threat: 'Critical',
++    findings: 4,
++    critical: 1,
++    high: 2,
++    medium: 1,
++    low: 0,
++    last_report: '2026-10-10T10:00:00Z',
++    report_id: 'r1',
++    reports: 3,
++    last_seen: '2026-10-11T10:00:00Z',
++    online: true,
++    status: 'online',
++  },
++  {
++    host: 'srv-db-02',
++    task: 'Agent srv-db-02',
++    task_id: 't2',
++    severity: 0,
++    threat: 'Log',
++    findings: 0,
++    critical: 0,
++    high: 0,
++    medium: 0,
++    low: 0,
++    last_report: '',
++    report_id: '',
++    reports: 0,
++    last_seen: '',
++    online: false,
++    status: 'offline',
++  },
++];
++
++describe('Endpoint Agents', () => {
++  test('the actions of a row name the host and keep the visible text in the name', async () => {
++    serve({'/agents/data.json': () => json(200, AGENTS)});
++    const {render} = rendererWith({gmp: createGmp()});
++    render(<EndpointAgentsPage />);
++
++    const scan = await screen.findByRole('button', {
++      name: 'Scan now: srv-web-01',
++    });
++    expect(scan).toHaveTextContent('Scan now');
++    const findings = screen.getByRole('link', {
++      name: 'View findings: srv-web-01',
++    });
++    expect(findings).toHaveTextContent('View findings');
++    expect(findings).toHaveAttribute('href', '/report/r1');
++
++    // the host without a report has no link, but its action has a name too
++    expect(
++      screen.getByRole('button', {name: 'Scan now: srv-db-02'}),
++    ).toBeInTheDocument();
++    expect(
++      screen.queryByRole('link', {name: /srv-db-02/}),
++    ).not.toBeInTheDocument();
++  });
++
++  test('Scan now is reached with Tab and works with Enter and Space', async () => {
++    serve({
++      '/agents/data.json': () => json(200, AGENTS),
++      '/agents/scan': () => json(200, {}),
++    });
++    const {render} = rendererWith({gmp: createGmp()});
++    const {userEvent} = render(<EndpointAgentsPage />);
++
++    const scan = await screen.findByRole('button', {
++      name: 'Scan now: srv-web-01',
++    });
++    await tabTo(userEvent, scan);
++    await userEvent.keyboard('{Enter}');
++    await waitFor(() => expect(calls('/agents/scan')).toHaveLength(1));
++    expect(String(calls('/agents/scan')[0][0])).toBe(
++      '/agents/scan?id=srv-web-01&token=tok',
++    );
++    expect(calls('/agents/scan')[0][1]?.method).toBe('POST');
++
++    await userEvent.keyboard(' ');
++    await waitFor(() => expect(calls('/agents/scan')).toHaveLength(2));
++  });
++
++  test('the columns sort from the keyboard', async () => {
++    serve({'/agents/data.json': () => json(200, AGENTS)});
++    const {render} = rendererWith({gmp: createGmp()});
++    const {userEvent} = render(<EndpointAgentsPage />);
++
++    await screen.findByText('srv-web-01');
++    const hostsInOrder = () =>
++      screen
++        .getAllByRole('row')
++        .slice(1)
++        .map(row => within(row).getAllByRole('cell')[0].textContent);
++    // by severity, the highest first
++    expect(hostsInOrder()[0]).toContain('srv-web-01');
++
++    const host = screen.getByTestId('table-header-sort-by-host');
++    expect(host.tagName).toBe('BUTTON');
++    await tabTo(userEvent, host);
++    await userEvent.keyboard('{Enter}');
++    await waitFor(() => expect(hostsInOrder()[0]).toContain('srv-db-02'));
++  });
++
++  test('says aloud that it is loading', () => {
++    serve({'/agents/data.json': never});
++    const {render} = rendererWith({gmp: createGmp()});
++    render(<EndpointAgentsPage />);
++    expect(screen.getByRole('status')).toHaveTextContent('Loading...');
++  });
++
++  test('says aloud what went wrong', async () => {
++    serve({'/agents/data.json': () => json(500, {error: 'boom'})});
++    const {render} = rendererWith({gmp: createGmp()});
++    render(<EndpointAgentsPage />);
++    expect(await screen.findByRole('alert')).toHaveTextContent(
++      'Error loading the agents',
++    );
++  });
++
++  test('an expired session is announced as an alert', async () => {
++    serve({'/agents/data.json': () => json(401, {error: 'no session'})});
++    const {render} = rendererWith({gmp: createGmp()});
++    render(<EndpointAgentsPage />);
++    expect(await screen.findByRole('alert')).toHaveTextContent(
++      'Session expired',
++    );
++  });
++});
++
++describe('Activate Agent', () => {
++  const ENROLL = {
++    tenant: 'acme',
++    target: 'windows',
++    command: 'iwr https://x.example/install.ps1 | iex',
++    server: 's',
++    ca_pin: 'p',
++    token_id: 'k',
++    max_uses: 5,
++    expires_at: '2026-10-20T12:00:00Z',
++  };
++
++  test('the tenant select has the label tied to it', async () => {
++    serve({
++      '/agent/provision/tenants': () => json(200, {tenants: ['acme', 'beta']}),
++    });
++    const {render} = rendererWith({gmp: createGmp()});
++    render(<DownloadsPage />);
++
++    const select = screen.getByRole('combobox', {name: 'Tenant:'});
++    expect(screen.getByLabelText('Tenant:')).toBe(select);
++    await waitFor(() =>
++      expect(within(select).getAllByRole('option')).toHaveLength(3),
++    );
++  });
++
++  test('the whole flow works from the keyboard', async () => {
++    serve({
++      '/agent/provision/tenants': () => json(200, {tenants: ['acme', 'beta']}),
++      '/agent/provision/enroll-command': () => json(200, ENROLL),
++    });
++    const {render} = rendererWith({gmp: createGmp()});
++    const {userEvent} = render(<DownloadsPage />);
++
++    const select = screen.getByRole('combobox', {name: 'Tenant:'});
++    await waitFor(() =>
++      expect(within(select).getAllByRole('option')).toHaveLength(3),
++    );
++    const docker = screen.getByRole('button', {name: 'Docker'});
++    expect(docker).toBeDisabled();
++
++    await tabTo(userEvent, select);
++    await userEvent.selectOptions(select, 'acme');
++    expect(docker).toBeEnabled();
++
++    await tabTo(userEvent, docker);
++    await userEvent.keyboard('{Enter}');
++    await screen.findByText(ENROLL.command);
++    expect(String(calls('/agent/provision/enroll-command')[0][0])).toBe(
++      '/agent/provision/enroll-command?tenant=acme&target=docker&token=tok',
++    );
++  });
++
++  test('says aloud that it is generating the command', async () => {
++    serve({
++      '/agent/provision/tenants': () => json(200, {tenants: ['acme']}),
++      '/agent/provision/enroll-command': never,
++    });
++    const {render} = rendererWith({gmp: createGmp()});
++    const {userEvent} = render(<DownloadsPage />);
++    const docker = await screen.findByRole('button', {name: 'Docker'});
++    await waitFor(() => expect(docker).toBeEnabled());
++    await userEvent.click(docker);
++    expect(screen.getByRole('status')).toHaveTextContent('Generating command…');
++  });
++
++  test('the error is an alert and describes the select', async () => {
++    serve({
++      '/agent/provision/tenants': () => json(200, {tenants: ['acme']}),
++      '/agent/provision/enroll-command': () => json(500, {error: 'boom'}),
++    });
++    const {render} = rendererWith({gmp: createGmp()});
++    const {userEvent} = render(<DownloadsPage />);
++    const select = screen.getByRole('combobox', {name: 'Tenant:'});
++    expect(select).not.toHaveAttribute('aria-describedby');
++
++    const docker = await screen.findByRole('button', {name: 'Docker'});
++    await waitFor(() => expect(docker).toBeEnabled());
++    await userEvent.click(docker);
++
++    const alert = await screen.findByRole('alert');
++    expect(alert).toHaveTextContent('Error generating the command');
++    expect(select).toHaveAccessibleDescription(alert.textContent as string);
++  });
++
++  test('a tenant list that fails to load is announced too', async () => {
++    serve({'/agent/provision/tenants': () => json(500, {error: 'boom'})});
++    const {render} = rendererWith({gmp: createGmp()});
++    render(<DownloadsPage />);
++    const alert = await screen.findByRole('alert');
++    expect(
++      screen.getByRole('combobox', {name: 'Tenant:'}),
++    ).toHaveAccessibleDescription(alert.textContent as string);
++  });
++
++  test('says aloud that the command was copied', async () => {
++    serve({
++      '/agent/provision/tenants': () => json(200, {tenants: ['acme']}),
++      '/agent/provision/enroll-command': () => json(200, ENROLL),
++    });
++    const {render} = rendererWith({gmp: createGmp()});
++    const {userEvent} = render(<DownloadsPage />);
++    const windows = await screen.findByRole('button', {name: 'Windows'});
++    await waitFor(() => expect(windows).toBeEnabled());
++    await userEvent.click(windows);
++    await screen.findByText(ENROLL.command);
++
++    // the region is already on the page, empty, when the button is pressed
++    const status = screen.getByRole('status');
++    expect(status).toHaveTextContent('');
++    await tabTo(userEvent, screen.getByRole('button', {name: 'Copy'}));
++    await userEvent.keyboard('{Enter}');
++    await waitFor(() => expect(status).toHaveTextContent('Copied ✓'));
++    expect(await navigator.clipboard.readText()).toBe(ENROLL.command);
++  });
++});
++
++describe('Feed update', () => {
++  const STATUS = {
++    state: 'idle',
++    last_run: '2026-10-11 10:00:00',
++    last_result: 'success',
++    updated: ['nvt'],
++    schedule: {enabled: true, frequency: 'weekly', weekday: 2, time: '03:00'},
++  };
++
++  test('the time field has its label, and the title is a heading', async () => {
++    serve({'/feed-sync/status': () => json(200, STATUS)});
++    const {render} = rendererWith({gmp: createGmp()});
++    render(<FeedUpdateSection />);
++
++    const time = await screen.findByLabelText('Time');
++    expect(time.tagName).toBe('INPUT');
++    expect(time).toHaveAttribute('type', 'time');
++    await waitFor(() => expect(time).toHaveValue('03:00'));
++    expect(
++      screen.getByRole('heading', {level: 3, name: 'Feed update'}),
++    ).toBeInTheDocument();
++    // every field of the form is named
++    expect(
++      screen.getByRole('switch', {name: 'Enable automatic update'}),
++    ).toBeInTheDocument();
++    expect(
++      screen.getByRole('textbox', {name: 'Frequency'}),
++    ).toBeInTheDocument();
++    expect(
++      screen.getByRole('textbox', {name: 'Day of week'}),
++    ).toBeInTheDocument();
++  });
++
++  test('says aloud that the schedule was saved', async () => {
++    serve({
++      '/feed-sync/status': () => json(200, STATUS),
++      '/feed-sync/schedule': () => json(200, STATUS.schedule),
++    });
++    const {render} = rendererWith({gmp: createGmp()});
++    const {userEvent} = render(<FeedUpdateSection />);
++    await screen.findByLabelText('Time');
++
++    // the region is on the page before the save, so the change is announced
++    const status = screen.getByRole('status');
++    expect(status).toHaveTextContent('');
++    await tabTo(userEvent, screen.getByRole('button', {name: 'Save schedule'}));
++    await userEvent.keyboard('{Enter}');
++    await waitFor(() => expect(status).toHaveTextContent('Saved'));
++  });
++
++  test('the error is an alert', async () => {
++    serve({'/feed-sync/status': () => json(403, {error: 'forbidden'})});
++    const {render} = rendererWith({gmp: createGmp()});
++    render(<FeedUpdateSection />);
++    expect(await screen.findByRole('alert')).toHaveTextContent(
++      'No permission from this network',
++    );
++  });
++});
++
++describe('AI Providers', () => {
++  const PROVIDERS = [
++    {
++      id: 'openrouter',
++      name: 'OpenRouter',
++      kind: 'openrouter',
++      base_url: 'https://openrouter.ai/api/v1',
++      model: 'x/free-model:free',
++      eu_region: false,
++      zdr: false,
++      enabled: true,
++      has_key: true,
++      key_last4: 'abcd',
++      data_policy_ack: true,
++      data_policy_ack_by: 'ana',
++      data_policy_ack_at: '2026-10-01T12:00:00Z',
++    },
++    {
++      id: 'unorouter',
++      name: 'UnoRouter',
++      kind: 'unorouter',
++      base_url: 'https://api.unorouter.com/v1',
++      model: '',
++      eu_region: false,
++      zdr: false,
++      enabled: false,
++      has_key: false,
++      data_policy_ack: false,
++    },
++    {
++      id: 'legacy',
++      name: 'Legacy',
++      kind: 'openai_compatible',
++      base_url: 'https://llm.example.com/v1',
++      model: 'gpt-x',
++      eu_region: true,
++      zdr: true,
++      enabled: false,
++      has_key: true,
++      key_last4: '1234',
++    },
++  ];
++
++  const FREE_ONLY = {
++    free_models_only: true,
++    presets: ['openrouter', 'unorouter'],
++  };
++  const OPEN = {free_models_only: false, presets: []};
++
++  const serveProviders = (
++    policy: unknown,
++    extra: Record<string, Handler> = {},
++  ) =>
++    serve({
++      '/ai-providers/api/policy': () => json(200, policy),
++      '/ai-providers/api/providers': () => json(200, {providers: PROVIDERS}),
++      ...extra,
++    });
++
++  test('the page title is a heading and the loading is said aloud', async () => {
++    serve({
++      '/ai-providers/api/policy': never,
++      '/ai-providers/api/providers': never,
++    });
++    const {render} = rendererWith({gmp: createGmp()});
++    render(<AiProvidersPage />);
++    expect(
++      screen.getByRole('heading', {level: 2, name: 'AI Providers'}),
++    ).toBeInTheDocument();
++    expect(screen.getByRole('status')).toHaveTextContent('Loading...');
++  });
++
++  test('each preset is a group named by its provider, with its fields labelled', async () => {
++    serveProviders(FREE_ONLY);
++    const {render} = rendererWith({gmp: createGmp()});
++    render(<AiProvidersPage />);
++
++    for (const name of ['OpenRouter', 'UnoRouter']) {
++      const card = await screen.findByRole('group', {name});
++      const inside = within(card);
++      expect(inside.getByLabelText('API key')).toHaveAttribute(
++        'type',
++        'password',
++      );
++      expect(inside.getByRole('textbox', {name: 'Model'})).toBeInTheDocument();
++      expect(
++        inside.getByRole('checkbox', {name: /Free models may log/}),
++      ).toBeInTheDocument();
++      expect(inside.getByRole('switch', {name: /^Enable/})).toBeInTheDocument();
++      expect(inside.getByRole('button', {name: 'Save'})).toBeInTheDocument();
++    }
++  });
++
++  test('the form of the open policy has every field labelled', async () => {
++    serveProviders(OPEN);
++    const {render} = rendererWith({gmp: createGmp()});
++    render(<AiProvidersPage />);
++    await screen.findByText('Add provider');
++
++    for (const label of ['Name', 'Base URL', 'Model']) {
++      expect(screen.getByRole('textbox', {name: label})).toBeInTheDocument();
++    }
++    expect(
++      screen.getByLabelText('API key (leave blank to keep the current one)'),
++    ).toHaveAttribute('type', 'password');
++    expect(screen.getByRole('textbox', {name: 'Type'})).toBeInTheDocument();
++    for (const label of ['EU region', 'Zero data retention (ZDR)', 'Enabled']) {
++      expect(screen.getByRole('switch', {name: label})).toBeInTheDocument();
++    }
++    expect(
++      screen.getByRole('checkbox', {name: /Free models may log/}),
++    ).toBeInTheDocument();
++  });
++
++  test('a saved preset is announced as a status, a failed one as an alert', async () => {
++    let answer = 200;
++    serveProviders(FREE_ONLY, {
++      '/ai-providers/api/providers': (_url, init) =>
++        init?.method === 'POST'
++          ? answer === 200
++            ? json(200, {provider: PROVIDERS[1]})
++            : json(422, {error: 'ack required'})
++          : json(200, {providers: PROVIDERS}),
++    });
++    const {render} = rendererWith({gmp: createGmp()});
++    const {userEvent} = render(<AiProvidersPage />);
++    const card = within(await screen.findByRole('group', {name: 'UnoRouter'}));
++    const save = card.getByRole('button', {name: 'Save'});
++
++    await tabTo(userEvent, save);
++    await userEvent.keyboard('{Enter}');
++    expect(await card.findByRole('status')).toHaveTextContent(
++      'Provider saved.',
++    );
++    expect(card.queryByRole('alert')).not.toBeInTheDocument();
++
++    answer = 422;
++    await userEvent.click(save);
++    expect(await card.findByRole('alert')).toBeInTheDocument();
++    expect(card.queryByRole('status')).not.toBeInTheDocument();
++  });
++
++  test('the failure to list the models is an alert tied to the field', async () => {
++    serveProviders(FREE_ONLY, {
++      '/ai-providers/api/providers/openrouter/models': () =>
++        json(500, {error: 'boom'}),
++    });
++    const {render} = rendererWith({gmp: createGmp()});
++    const {userEvent} = render(<AiProvidersPage />);
++    const card = within(await screen.findByRole('group', {name: 'OpenRouter'}));
++    const model = card.getByRole('textbox', {name: 'Model'});
++
++    await userEvent.click(model);
++    const alert = await card.findByRole('alert');
++    expect(model).toHaveAttribute('aria-invalid', 'true');
++    expect(model).toHaveAccessibleDescription(
++      new RegExp(
++        (alert.textContent as string).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
++      ),
++    );
++  });
++
++  test('the rows of the providers name the provider in Edit and Delete', async () => {
++    serveProviders(OPEN);
++    const {render} = rendererWith({gmp: createGmp()});
++    render(<AiProvidersPage />);
++    await screen.findByText('Add provider');
++
++    for (const name of ['OpenRouter', 'UnoRouter', 'Legacy']) {
++      const edit = screen.getByRole('button', {name: `Edit: ${name}`});
++      expect(edit).toHaveTextContent('Edit');
++      const del = screen.getByRole('button', {name: `Delete: ${name}`});
++      expect(del).toHaveTextContent('Delete');
++    }
++  });
++
++  test('the focus follows the delete question and goes back when it is dropped', async () => {
++    serveProviders(OPEN, {
++      '/ai-providers/api/providers/legacy': () => json(204, null),
++    });
++    const {render} = rendererWith({gmp: createGmp()});
++    const {userEvent} = render(<AiProvidersPage />);
++    await screen.findByText('Add provider');
++    // nothing takes the focus when the page opens
++    expect(document.body).toHaveFocus();
++
++    const remove = screen.getByRole('button', {name: 'Delete: Legacy'});
++    await tabTo(userEvent, remove);
++    await userEvent.keyboard('{Enter}');
++
++    const question = await screen.findByRole('group', {
++      name: /Delete the provider Legacy\? This cannot be undone\./,
++    });
++    const cancel = within(question).getByRole('button', {name: 'Cancel'});
++    expect(cancel).toHaveFocus();
++
++    // Cancel drops the question and the focus is back on the button that asked
++    await userEvent.keyboard('{Enter}');
++    await waitFor(() =>
++      expect(
++        screen.getByRole('button', {name: 'Delete: Legacy'}),
++      ).toHaveFocus(),
++    );
++    expect(
++      screen.queryByRole('group', {name: /Delete the provider/}),
++    ).toBeNull();
++
++    // asked again, the answer "Delete" is reached with Tab and sends the DELETE
++    await userEvent.keyboard('{Enter}');
++    const asked = await screen.findByRole('group', {
++      name: /Delete the provider/,
++    });
++    await userEvent.tab({shift: true});
++    const confirm = within(asked).getAllByRole('button', {name: 'Delete'})[0];
++    expect(confirm).toHaveFocus();
++    await userEvent.keyboard('{Enter}');
++    await waitFor(() =>
++      expect(calls('/ai-providers/api/providers/legacy')).toHaveLength(1),
++    );
++    expect(calls('/ai-providers/api/providers/legacy')[0][1]?.method).toBe(
++      'DELETE',
++    );
++    expect(await screen.findByRole('status')).toHaveTextContent(
++      'Provider deleted.',
++    );
++  });
++
++  test('a failed delete is announced as an alert', async () => {
++    serveProviders(OPEN, {
++      '/ai-providers/api/providers/legacy': () => json(500, {error: 'boom'}),
++    });
++    const {render} = rendererWith({gmp: createGmp()});
++    const {userEvent} = render(<AiProvidersPage />);
++    await screen.findByText('Add provider');
++    await userEvent.click(screen.getByRole('button', {name: 'Delete: Legacy'}));
++    const asked = await screen.findByRole('group', {
++      name: /Delete the provider/,
++    });
++    await userEvent.click(
++      within(asked).getAllByRole('button', {name: 'Delete'})[0],
++    );
++    expect(await screen.findByRole('alert')).toBeInTheDocument();
++  });
++
++  test('the load error is an alert', async () => {
++    serve({
++      '/ai-providers/api/policy': () => json(500, {error: 'boom'}),
++      '/ai-providers/api/providers': () => json(500, {error: 'boom'}),
++    });
++    const {render} = rendererWith({gmp: createGmp()});
++    render(<AiProvidersPage />);
++    expect(await screen.findByRole('alert')).toBeInTheDocument();
++  });
++});
++
++describe('Language switch', () => {
++  // jsdom has no layout, so Mantine never gets the position of the dropdown and
++  // keeps it display:none: the menu is queried with { hidden: true } here.
++  const hidden = {hidden: true};
++
++  const renderSwitch = (language = 'pt_BR') => {
++    const setLanguage = testing.fn().mockResolvedValue(undefined);
++    const {render} = rendererWith({language: {language, setLanguage}});
++    return {...render(<LanguageSwitch />), setLanguage};
++  };
++
++  test('the button has a name of its own, not only a tooltip', () => {
++    renderSwitch();
++    const button = screen.getByRole('button', {name: 'Select language'});
++    expect(button).toHaveAttribute('aria-label', 'Select language');
++    expect(button).toHaveAttribute('aria-haspopup', 'menu');
++    expect(button).toHaveAttribute('aria-expanded', 'false');
++    // the flag is a drawing: it has no name and assistive technology skips it
++    for (const flag of button.querySelectorAll('svg')) {
++      expect(flag).toHaveAttribute('aria-hidden', 'true');
++    }
++  });
++
++  test('opens from the keyboard and tells the languages and the current one', async () => {
++    const {userEvent} = renderSwitch('es');
++    const button = screen.getByRole('button', {name: 'Select language'});
++    await tabTo(userEvent, button);
++    await userEvent.keyboard('{Enter}');
++
++    // the menu is named by the button that opened it (the name of a display:none
++    // element is empty for the DOM, so the link is what is asserted)
++    const menu = await screen.findByRole('menu', hidden);
++    expect(menu).toHaveAttribute('aria-labelledby', button.id);
++    expect(button.id).not.toBe('');
++    const items = within(menu).getAllByRole('menuitem', hidden);
++    expect(items.map(i => i.textContent)).toEqual([
++      'Português (Brasil)',
++      'Español',
++      'English',
++    ]);
++    // each name is in its own language
++    expect(
++      items.map(i => i.querySelector('[lang]')?.getAttribute('lang')),
++    ).toEqual(['pt-BR', 'es', 'en']);
++    // the current one is told, not only shown in bold
++    expect(items.map(i => i.getAttribute('aria-current'))).toEqual([
++      null,
++      'true',
++      null,
++    ]);
++    for (const flag of menu.querySelectorAll('svg')) {
++      expect(flag).toHaveAttribute('aria-hidden', 'true');
++    }
++  });
++
++  test('picks a language with the arrow keys and Enter', async () => {
++    const {userEvent, setLanguage} = renderSwitch('pt_BR');
++    await tabTo(
++      userEvent,
++      screen.getByRole('button', {name: 'Select language'}),
++    );
++    await userEvent.keyboard('{Enter}');
++    await screen.findByRole('menu', hidden);
++
++    // the first arrow lands on the first item: pt-BR, es, en
++    await userEvent.keyboard('{ArrowDown}{ArrowDown}{ArrowDown}');
++    expect(
++      screen.getByRole('menuitem', {name: 'English', ...hidden}),
++    ).toHaveFocus();
++    await userEvent.keyboard('{Enter}');
++    expect(setLanguage).toHaveBeenCalledWith('en');
++  });
++
++  test('Escape closes the menu and the focus returns to the button', async () => {
++    const {userEvent} = renderSwitch();
++    const button = screen.getByRole('button', {name: 'Select language'});
++    await tabTo(userEvent, button);
++    await userEvent.keyboard('{Enter}');
++    await screen.findByRole('menu', hidden);
++    expect(button).toHaveAttribute('aria-expanded', 'true');
++    await userEvent.keyboard('{Escape}');
++    await waitFor(() => expect(screen.queryByRole('menu', hidden)).toBeNull());
++    expect(button).toHaveAttribute('aria-expanded', 'false');
++    expect(button).toHaveFocus();
++  });
++});
++
++describe('Login', () => {
++  const submit = testing.fn();
++
++  test('the fields are labelled and the error is an alert', async () => {
++    const {render} = rendererWith({gmp: createGmp()});
++    const {userEvent} = render(
++      <LoginForm
++        error="Login Failed. Invalid password or username."
++        onGuestLoginClick={testing.fn()}
++        onSubmit={submit}
++      />,
++    );
++
++    const user = screen.getByLabelText('Username');
++    const password = screen.getByLabelText('Password');
++    expect(user).toHaveAttribute('name', 'username');
++    expect(password).toHaveAttribute('name', 'password');
++    expect(screen.getByRole('alert')).toHaveTextContent(
++      'Login Failed. Invalid password or username.',
++    );
++
++    // Tab order: username, password, Sign in; Enter on the button submits
++    expect(user).toHaveFocus();
++    await userEvent.type(user, 'ana');
++    await userEvent.tab();
++    expect(password).toHaveFocus();
++    await userEvent.type(password, 'secret');
++    await userEvent.tab();
++    expect(screen.getByRole('button', {name: 'Sign in'})).toHaveFocus();
++    await userEvent.keyboard('{Enter}');
++    expect(submit).toHaveBeenCalledWith('ana', 'secret');
++  });
++
++  test('without an error there is no alert', () => {
++    const {render} = rendererWith({gmp: createGmp()});
++    render(<LoginForm onGuestLoginClick={testing.fn()} onSubmit={submit} />);
++    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
++  });
++
++  test('the logo is named after the product it shows', () => {
++    const {render} = rendererWith({
++      gmp: createGmp({vendorTitle: 'Suricatoos'}),
++    });
++    render(<LoginLogo />);
++    expect(screen.getByRole('img', {name: 'Suricatoos'})).toBeInTheDocument();
++  });
++
++  test('without a configured title the logo keeps the upstream text', () => {
++    const {render} = rendererWith({gmp: createGmp()});
++    render(<LoginLogo />);
++    expect(screen.getByRole('img', {name: 'OPENVAS'})).toBeInTheDocument();
++  });
++});
++
++describe('Header', () => {
++  test('the logo names the link to the start page', async () => {
++    const {render} = rendererWith({
++      gmp: createGmp({vendorTitle: 'Suricatoos'}),
++      router: true,
++    });
++    render(<Header />);
++
++    const link = screen.getByRole('link', {name: 'Suricatoos'});
++    expect(link).toHaveAttribute('href', '/dashboards');
++    // the logo is still drawn inside the named image
++    await waitFor(() =>
++      expect(screen.getByTestId('GreenboneWhiteLogo')).toBeVisible(),
++    );
++    expect(link).toContainElement(screen.getByTestId('GreenboneWhiteLogo'));
++  });
++
++  test('without a configured title the name is the one of the page title', () => {
++    const {render} = rendererWith({gmp: createGmp(), router: true});
++    render(<Header />);
++    expect(screen.getByRole('link', {name: 'OPENVAS'})).toHaveAttribute(
++      'href',
++      '/dashboards',
++    );
++  });
++
++  test('a label the appliance table does not know still names the logo', () => {
++    const {render} = rendererWith({
++      gmp: createGmp({vendorLabel: 'not-in-the-table.svg'}),
++      router: true,
++    });
++    render(<Header />);
++    expect(screen.getByRole('link', {name: 'OPENVAS'})).toBeInTheDocument();
++  });
++});
++
++describe('Dashboard icons', () => {
++  test('the buttons that have only an icon are named in the language of the page', async () => {
++    const {render} = rendererWith({gmp: createGmp()});
++    const onFilter = testing.fn();
++    const onDownload = testing.fn();
++    const setState = testing.fn();
++    const {userEvent} = render(
++      <DataDisplayIcons
++        setState={setState}
++        onDownloadSvgClick={onDownload}
++        onSelectFilterClick={onFilter}
++      />,
++    );
++
++    // the name comes from aria-label: the generic one the icon brings
++    // ("Filter Icon") is English and says nothing about what the button does
++    const filter = screen.getByRole('button', {name: 'Select Filter'});
++    const download = screen.getByRole('button', {name: 'Download SVG'});
++    const legend = screen.getByRole('button', {name: 'Toggle Legend'});
++    expect(filter).toHaveAttribute('aria-label', 'Select Filter');
++    expect(download).toHaveAttribute('aria-label', 'Download SVG');
++    expect(legend).toHaveAttribute('aria-label', 'Toggle Legend');
++
++    await tabTo(userEvent, filter);
++    await userEvent.keyboard('{Enter}');
++    expect(onFilter).toHaveBeenCalledTimes(1);
++    await userEvent.tab();
++    expect(download).toHaveFocus();
++    await userEvent.keyboard(' ');
++    expect(onDownload).toHaveBeenCalledTimes(1);
++    await userEvent.tab();
++    expect(legend).toHaveFocus();
++    await userEvent.keyboard('{Enter}');
++    expect(setState).toHaveBeenCalledTimes(1);
++  });
++});
++
++describe('Theme CSS', () => {
++  const theme = fs.readFileSync(
++    path.join(process.cwd(), 'public/suricatoos-theme.css'),
++    'utf8',
++  );
++
++  // An outline taken off needs a visible substitute, and checkboxes and radios
++  // (whose border does not change when they are checked) keep their ring.
++  describe('focus', () => {
++    const outlineOff: Array<{selector: string; props: string[]}> = [];
++    postcss.parse(theme).walkRules(rule => {
++      const decls = rule.nodes.filter(
++        (n): n is postcss.Declaration => n.type === 'decl',
++      );
++      const off = decls.some(
++        d =>
++          d.prop === 'outline' &&
++          /^(none|0|0px)$/i.test(d.value.replace(/!important/i, '').trim()),
++      );
++      if (off) {
++        outlineOff.push({
++          selector: rule.selector,
++          props: decls.map(d => d.prop),
++        });
++      }
++    });
++
++    test('there is a rule that takes the outline off the text fields', () => {
++      expect(outlineOff.length).toBeGreaterThan(0);
++    });
++
++    test('a rule that takes the outline off draws the border and a halo instead', () => {
++      for (const {selector, props} of outlineOff) {
++        expect(props, selector).toContain('border-color');
++        expect(props, selector).toContain('box-shadow');
++      }
++    });
++
++    const focused = (html: string) => {
++      document.body.innerHTML = html;
++      const element = document.body.firstElementChild as HTMLElement;
++      element.focus();
++      expect(element).toHaveFocus();
++      return element;
++    };
++    const outlineTakenOff = (element: Element) =>
++      outlineOff.some(({selector}) => element.matches(selector));
++
++    test.each([
++      '<input type="text">',
++      '<input type="password">',
++      '<input type="time">',
++      '<textarea></textarea>',
++      '<select><option>a</option></select>',
++      '<input class="mantine-Input-input mantine-Select-input" readonly>',
++    ])('the outline of %s is replaced by the ring of the accent', html => {
++      expect(outlineTakenOff(focused(html))).toBe(true);
++    });
++
++    test.each([
++      '<input type="checkbox">',
++      '<input type="radio">',
++      '<button>ok</button>',
++      '<a href="/x">ok</a>',
++      '<div tabindex="0"></div>',
++    ])('%s keeps its focus ring', html => {
++      expect(outlineTakenOff(focused(html))).toBe(false);
++    });
++  });
++});
 diff --git a/src/web/utils/__tests__/suricatoosFonts.test.ts b/src/web/utils/__tests__/suricatoosFonts.test.ts
 new file mode 100644
 index 0000000..a0af34e
