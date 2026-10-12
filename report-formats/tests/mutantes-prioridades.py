@@ -71,7 +71,8 @@ GRUPOS = [V3, V4, V8, V22, V26]
 # ---------------------------------------------------------------------------
 SORT = '<xsl:sort select="@%s" data-type="%s" order="%s"/>'
 # O card de um NVT (1o passo, acts-rtf)
-N_LOOP = '<!-- O card de um NVT. -->\n      <xsl:for-each select="$rows-conf">'
+# ($rows-show: o $rows-conf sem o Log na edicao do cliente; no tecnico, o mesmo.)
+N_LOOP = '<!-- O card de um NVT. -->\n      <xsl:for-each select="$rows-show">'
 N_EPSS = 'math:max($inst[number(severity) &gt;= 0.1]/nvt/epss/max_epss/score[number(.) = number(.)])'
 N_IF = ('<xsl:if test="$smax &gt;= 0.1">\n          <xsl:variable name="emax" '
         'select="' + N_EPSS + '"/>')
@@ -165,7 +166,7 @@ MUTANTES = [
     ("epss-do-nvt-com-falso-positivo", "EPSS de um NVT: o maior de TODA instancia, falso positivo e Log inclusive",
      [(N_EPSS, N_EPSS.replace("$inst[number(severity) &gt;= 0.1]", "$inst"))], NOVAS),
     ("indicador-no-plano", "o indicador (QoD abaixo do piso) entra no plano",
-     [(N_LOOP, N_LOOP.replace('"$rows-conf"', '"$rows-conf | $nvt-low"'))], NOVAS + ANTIGAS),
+     [(N_LOOP, N_LOOP.replace('"$rows-show"', '"$rows-show | $nvt-low"'))], NOVAS + ANTIGAS),
     ("log-no-plano", "Log e falso positivo entram no plano",
      [(N_IF, N_IF.replace("$smax &gt;= 0.1", "$smax = $smax"))], NOVAS + ANTIGAS),
     ("x-de-todas", "X conta as instancias de todas as acoes, nao so' das N primeiras",
@@ -176,7 +177,7 @@ MUTANTES = [
      NOVAS),
     # --- o card consolidado: UMA acao ------------------------------------------
     ("grupo-partido", "o card consolidado volta a ser uma acao por advisory",
-     [(N_LOOP, N_LOOP.replace('"$rows-conf"', '"$nvt-conf"')),
+     [(N_LOOP, N_LOOP.replace('"$rows-show"', '"$nvt-conf"')),
       (G_IF, G_IF.replace("$smax &gt;= 0.1", "false()"))], GRUPOS),
     ("hosts-do-grupo-somados", "hosts do grupo: a SOMA dos hosts de cada membro, nao a uniao",
      [(G_A, '          <xsl:variable name="gs-rtf">\n'
@@ -309,10 +310,10 @@ MUTANTES = [
     ("sem-nota-nenhuma-acao", "tira a nota de nenhuma acao",
      [('<xsl:if test="$nact = 0 and $nhosts &gt; 0">', '<xsl:if test="false()">')], NOVAS + ANTIGAS),
     ("ordem-sem-acoes", "imprime a frase da ordem mesmo sem acao",
-     [('<xsl:if test="$nact &gt; 0">\n      <xsl:text>\\suriPara{</xsl:text><xsl:value-of '
-       'select="gvm:t(\'prio_order\')"/>',
-       '<xsl:if test="true()">\n      <xsl:text>\\suriPara{</xsl:text><xsl:value-of '
-       'select="gvm:t(\'prio_order\')"/>')], NOVAS + ANTIGAS),
+     [('<xsl:if test="$nact &gt; 0">\n      <xsl:text>\\suriPara{</xsl:text>\n'
+       '      <!-- A edicao do cliente nao fala de falso positivo. -->',
+       '<xsl:if test="true()">\n      <xsl:text>\\suriPara{</xsl:text>\n'
+       '      <!-- A edicao do cliente nao fala de falso positivo. -->')], NOVAS + ANTIGAS),
 ]
 # Traducao: a v5 (um grupo de OIDs publicos do catalogo com nome e solucao do
 # fornecedor sinteticos, que a traducao troca), a v22 (um NVT avulso no mesmo

@@ -1,0 +1,280 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+Fixture SINTETICA do CI de veracidade do Suricatoos Premium PDF
+(report-formats/ci/check-veracity.py roda sobre o .tex desta fixture nos 3
+idiomas e nas 3 edicoes). Enderecos RFC 5737, nomes genericos sob .example,
+OIDs da faixa sintetica 1.3.6.1.4.1.25623.1.0.99xxxx (nao existem no feed);
+nenhum dado de scan real. Sem <ports>: as portas saem dos resultados.
+
+Edicao do cliente (fatia R5), so' Log e falso positivo, nenhum achado de
+severidade Baixa ou maior:
+- 22 NVTs Log confirmados: o tecnico lista 20 linhas no sumario e corta o
+  resto ("+ 3", o falso positivo confirmado entra no corte); o cliente nao
+  tem linha nenhuma: "nenhum achado confirmado" e "+ 22 registros
+  informativos (Log)", no sumario e nos achados detalhados;
+- indicadores: um Log (QoD 30) e um falso positivo (QoD 30): o bloco "a
+  validar" do cliente existe so' com "+ 1 registro informativo (Log)", no
+  singular;
+- os dois falso positivo do export (9000/tcp de .91 e 9001/tcp de .92, cada
+  um a unica observacao da porta) somem do cliente;
+- o scan tem 27 resultados, 4 deles falso positivo (result_count), e o export
+  carrega 25 (2 falso positivo ficaram fora da janela): o tecnico declara
+  export parcial, 25 de 27; a edicao do cliente tira do total os 4 falso
+  positivo do SCAN (false_positive/full), e nao os 2 do export: 23 de 23,
+  TOTAL DE ACHADOS 23, sem export parcial;
+- prioridades: nenhuma acao nas tres edicoes.
+-->
+<report extension="pdf" content_type="application/pdf" id="00000000-0000-4000-8000-000000000281">
+  <task id="00000000-0000-4000-8000-000000000001">
+    <name>Example Client Edition Log Only</name>
+  </task>
+  <scan_run_status>Done</scan_run_status>
+  <timezone>Coordinated Universal Time</timezone>
+  <timezone_abbrev>UTC</timezone_abbrev>
+  <scan_start>2026-09-01T09:00:00Z</scan_start>
+  <scan_end>2026-09-01T09:40:00Z</scan_end>
+  <hosts><count>2</count></hosts>
+  <result_count>27<full>27</full><filtered>27</filtered><critical><full>0</full><filtered>0</filtered></critical><high><full>0</full><filtered>0</filtered></high><medium><full>0</full><filtered>0</filtered></medium><low><full>0</full><filtered>0</filtered></low><log><full>23</full><filtered>23</filtered></log><false_positive><full>4</full><filtered>4</filtered></false_positive></result_count>
+  <filters id="00000000-0000-4000-8000-000000000002">
+    <term>apply_overrides=1 levels=chmlgf rows=-1 min_qod=1 first=1 sort-reverse=severity</term>
+  </filters>
+  <host>
+    <ip>192.0.2.91</ip>
+    <start>2026-09-01T09:00:00Z</start>
+    <end>2026-09-01T09:40:00Z</end>
+    <detail><name>hostname</name><value>files91.example.com</value></detail>
+  </host>
+  <host>
+    <ip>192.0.2.92</ip>
+    <start>2026-09-01T09:00:00Z</start>
+    <end>2026-09-01T09:40:00Z</end>
+    <detail><name>hostname</name><value>files92.example.com</value></detail>
+  </host>
+  <results start="1" max="-1">
+    <result id="c28-0001">
+      <host>192.0.2.91<hostname>files91.example.com</hostname></host>
+      <port>general/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992801"><type>nvt</type><name>Example Informational Check 01</name><family>Synthetic</family><cvss_base></cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">No action is required.</solution><refs></refs></nvt>
+      <threat>Log</threat>
+      <severity>0.0</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Informational Check 01.</description>
+    </result>
+    <result id="c28-0002">
+      <host>192.0.2.92<hostname>files92.example.com</hostname></host>
+      <port>8001/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992802"><type>nvt</type><name>Example Informational Check 02</name><family>Synthetic</family><cvss_base></cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">No action is required.</solution><refs></refs></nvt>
+      <threat>Log</threat>
+      <severity>0.0</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Informational Check 02.</description>
+    </result>
+    <result id="c28-0003">
+      <host>192.0.2.91<hostname>files91.example.com</hostname></host>
+      <port>8002/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992803"><type>nvt</type><name>Example Informational Check 03</name><family>Synthetic</family><cvss_base></cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">No action is required.</solution><refs></refs></nvt>
+      <threat>Log</threat>
+      <severity>0.0</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Informational Check 03.</description>
+    </result>
+    <result id="c28-0004">
+      <host>192.0.2.92<hostname>files92.example.com</hostname></host>
+      <port>general/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992804"><type>nvt</type><name>Example Informational Check 04</name><family>Synthetic</family><cvss_base></cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">No action is required.</solution><refs></refs></nvt>
+      <threat>Log</threat>
+      <severity>0.0</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Informational Check 04.</description>
+    </result>
+    <result id="c28-0005">
+      <host>192.0.2.91<hostname>files91.example.com</hostname></host>
+      <port>8004/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992805"><type>nvt</type><name>Example Informational Check 05</name><family>Synthetic</family><cvss_base></cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">No action is required.</solution><refs></refs></nvt>
+      <threat>Log</threat>
+      <severity>0.0</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Informational Check 05.</description>
+    </result>
+    <result id="c28-0006">
+      <host>192.0.2.92<hostname>files92.example.com</hostname></host>
+      <port>8005/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992806"><type>nvt</type><name>Example Informational Check 06</name><family>Synthetic</family><cvss_base></cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">No action is required.</solution><refs></refs></nvt>
+      <threat>Log</threat>
+      <severity>0.0</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Informational Check 06.</description>
+    </result>
+    <result id="c28-0007">
+      <host>192.0.2.91<hostname>files91.example.com</hostname></host>
+      <port>general/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992807"><type>nvt</type><name>Example Informational Check 07</name><family>Synthetic</family><cvss_base></cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">No action is required.</solution><refs></refs></nvt>
+      <threat>Log</threat>
+      <severity>0.0</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Informational Check 07.</description>
+    </result>
+    <result id="c28-0008">
+      <host>192.0.2.92<hostname>files92.example.com</hostname></host>
+      <port>8007/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992808"><type>nvt</type><name>Example Informational Check 08</name><family>Synthetic</family><cvss_base></cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">No action is required.</solution><refs></refs></nvt>
+      <threat>Log</threat>
+      <severity>0.0</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Informational Check 08.</description>
+    </result>
+    <result id="c28-0009">
+      <host>192.0.2.91<hostname>files91.example.com</hostname></host>
+      <port>8008/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992809"><type>nvt</type><name>Example Informational Check 09</name><family>Synthetic</family><cvss_base></cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">No action is required.</solution><refs></refs></nvt>
+      <threat>Log</threat>
+      <severity>0.0</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Informational Check 09.</description>
+    </result>
+    <result id="c28-0010">
+      <host>192.0.2.92<hostname>files92.example.com</hostname></host>
+      <port>general/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992810"><type>nvt</type><name>Example Informational Check 10</name><family>Synthetic</family><cvss_base></cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">No action is required.</solution><refs></refs></nvt>
+      <threat>Log</threat>
+      <severity>0.0</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Informational Check 10.</description>
+    </result>
+    <result id="c28-0011">
+      <host>192.0.2.91<hostname>files91.example.com</hostname></host>
+      <port>8010/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992811"><type>nvt</type><name>Example Informational Check 11</name><family>Synthetic</family><cvss_base></cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">No action is required.</solution><refs></refs></nvt>
+      <threat>Log</threat>
+      <severity>0.0</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Informational Check 11.</description>
+    </result>
+    <result id="c28-0012">
+      <host>192.0.2.92<hostname>files92.example.com</hostname></host>
+      <port>8011/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992812"><type>nvt</type><name>Example Informational Check 12</name><family>Synthetic</family><cvss_base></cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">No action is required.</solution><refs></refs></nvt>
+      <threat>Log</threat>
+      <severity>0.0</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Informational Check 12.</description>
+    </result>
+    <result id="c28-0013">
+      <host>192.0.2.91<hostname>files91.example.com</hostname></host>
+      <port>general/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992813"><type>nvt</type><name>Example Informational Check 13</name><family>Synthetic</family><cvss_base></cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">No action is required.</solution><refs></refs></nvt>
+      <threat>Log</threat>
+      <severity>0.0</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Informational Check 13.</description>
+    </result>
+    <result id="c28-0014">
+      <host>192.0.2.92<hostname>files92.example.com</hostname></host>
+      <port>8013/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992814"><type>nvt</type><name>Example Informational Check 14</name><family>Synthetic</family><cvss_base></cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">No action is required.</solution><refs></refs></nvt>
+      <threat>Log</threat>
+      <severity>0.0</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Informational Check 14.</description>
+    </result>
+    <result id="c28-0015">
+      <host>192.0.2.91<hostname>files91.example.com</hostname></host>
+      <port>8014/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992815"><type>nvt</type><name>Example Informational Check 15</name><family>Synthetic</family><cvss_base></cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">No action is required.</solution><refs></refs></nvt>
+      <threat>Log</threat>
+      <severity>0.0</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Informational Check 15.</description>
+    </result>
+    <result id="c28-0016">
+      <host>192.0.2.92<hostname>files92.example.com</hostname></host>
+      <port>general/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992816"><type>nvt</type><name>Example Informational Check 16</name><family>Synthetic</family><cvss_base></cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">No action is required.</solution><refs></refs></nvt>
+      <threat>Log</threat>
+      <severity>0.0</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Informational Check 16.</description>
+    </result>
+    <result id="c28-0017">
+      <host>192.0.2.91<hostname>files91.example.com</hostname></host>
+      <port>8016/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992817"><type>nvt</type><name>Example Informational Check 17</name><family>Synthetic</family><cvss_base></cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">No action is required.</solution><refs></refs></nvt>
+      <threat>Log</threat>
+      <severity>0.0</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Informational Check 17.</description>
+    </result>
+    <result id="c28-0018">
+      <host>192.0.2.92<hostname>files92.example.com</hostname></host>
+      <port>8017/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992818"><type>nvt</type><name>Example Informational Check 18</name><family>Synthetic</family><cvss_base></cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">No action is required.</solution><refs></refs></nvt>
+      <threat>Log</threat>
+      <severity>0.0</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Informational Check 18.</description>
+    </result>
+    <result id="c28-0019">
+      <host>192.0.2.91<hostname>files91.example.com</hostname></host>
+      <port>general/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992819"><type>nvt</type><name>Example Informational Check 19</name><family>Synthetic</family><cvss_base></cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">No action is required.</solution><refs></refs></nvt>
+      <threat>Log</threat>
+      <severity>0.0</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Informational Check 19.</description>
+    </result>
+    <result id="c28-0020">
+      <host>192.0.2.92<hostname>files92.example.com</hostname></host>
+      <port>8019/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992820"><type>nvt</type><name>Example Informational Check 20</name><family>Synthetic</family><cvss_base></cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">No action is required.</solution><refs></refs></nvt>
+      <threat>Log</threat>
+      <severity>0.0</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Informational Check 20.</description>
+    </result>
+    <result id="c28-0021">
+      <host>192.0.2.91<hostname>files91.example.com</hostname></host>
+      <port>8020/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992821"><type>nvt</type><name>Example Informational Check 21</name><family>Synthetic</family><cvss_base></cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">No action is required.</solution><refs></refs></nvt>
+      <threat>Log</threat>
+      <severity>0.0</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Informational Check 21.</description>
+    </result>
+    <result id="c28-0022">
+      <host>192.0.2.92<hostname>files92.example.com</hostname></host>
+      <port>general/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992822"><type>nvt</type><name>Example Informational Check 22</name><family>Synthetic</family><cvss_base></cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">No action is required.</solution><refs></refs></nvt>
+      <threat>Log</threat>
+      <severity>0.0</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Informational Check 22.</description>
+    </result>
+    <result id="c28-0023">
+      <host>192.0.2.91<hostname>files91.example.com</hostname></host>
+      <port>9000/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992831"><type>nvt</type><name>Example Disowned Weak Cipher</name><family>Synthetic</family><cvss_base></cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">Disable the weak ciphers.</solution><refs></refs></nvt>
+      <threat>False Positive</threat>
+      <severity>-1.0</severity>
+      <qod><value>80</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Disowned Weak Cipher.</description>
+    </result>
+    <result id="c28-0024">
+      <host>192.0.2.92<hostname>files92.example.com</hostname></host>
+      <port>general/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992832"><type>nvt</type><name>Example Low Quality Inventory Probe</name><family>Synthetic</family><cvss_base></cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">No action is required.</solution><refs></refs></nvt>
+      <threat>Log</threat>
+      <severity>0.0</severity>
+      <qod><value>30</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Low Quality Inventory Probe.</description>
+    </result>
+    <result id="c28-0025">
+      <host>192.0.2.92<hostname>files92.example.com</hostname></host>
+      <port>9001/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.992833"><type>nvt</type><name>Example Disowned Low Quality Banner</name><family>Synthetic</family><cvss_base></cvss_base><tags>summary=Synthetic summary for the test advisory.|insight=Synthetic technical details.|impact=Synthetic impact statement.|affected=Synthetic affected software.|vuldetect=Synthetic detection method.|solution_type=Mitigation</tags><solution type="Mitigation">Upgrade the service.</solution><refs></refs></nvt>
+      <threat>False Positive</threat>
+      <severity>-1.0</severity>
+      <qod><value>30</value><type>remote_banner</type></qod>
+      <description>Synthetic detection output for Example Disowned Low Quality Banner.</description>
+    </result>
+  </results>
+</report>
