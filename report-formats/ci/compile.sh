@@ -54,6 +54,15 @@
 #      roda o check-veracity.py sobre o .tex do diagnostico, contra o XML, e o
 #      check-navigation.py (sumario e arvore de marcadores, no PDF entregue).
 # Artefatos em <dir-de-artefatos>/<lang>/<variant>/<fixture>/.
+#
+# PREVIAS para REVISAO HUMANA (nao sao portao): com PREVIEWS_DIR definido, o PNG
+# (pdftoppm, PREVIEW_DPI, padrao 100) das primeiras PREVIEW_PAGES paginas (padrao
+# 12) do generate.pdf -- o PDF que o usuario recebe -- da fixture PREVIEW_FIXTURE
+# (padrao v27-cliente-falso-positivo: falso positivo, Log, indicador e grupo
+# consolidado, a que mais difere entre as tres edicoes) vai para
+# $PREVIEWS_DIR/<lang>/<variant>/<lang>-<variant>-<fixture>-<pagina>.png. O workflow
+# as publica como artefato (previas-<lang>-<variant> e, juntando os nove, previas);
+# o repo nao guarda PDF nem PNG de amostra: ficavam velhos e ninguem os lia.
 set -euo pipefail
 
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
@@ -62,6 +71,12 @@ lang=${1:?uso: compile.sh <lang> <variant> <dir-de-artefatos>}
 variant=${2:?uso: compile.sh <lang> <variant> <dir-de-artefatos>}
 art="${3:?uso: compile.sh <lang> <variant> <dir-de-artefatos>}/$lang/$variant"
 mkdir -p "$art"
+
+preview_fx=${PREVIEW_FIXTURE:-v27-cliente-falso-positivo}
+preview_pages=${PREVIEW_PAGES:-12}
+preview_dpi=${PREVIEW_DPI:-100}
+previews=
+if [ -n "${PREVIEWS_DIR:-}" ]; then previews="$PREVIEWS_DIR/$lang/$variant"; fi
 
 gvmd_pull
 
@@ -123,19 +138,43 @@ for fx in $fixtures; do
     pdftoppm -r 60 -f 1 -l 3 -png "$d/generate.pdf" "$d/pagina" || log "[$lang/$variant/$fx] pdftoppm falhou"
   fi
 
+  # As previas para revisao humana (so' a fixture representativa).
+  if [ -n "$previews" ] && [ "$fx" = "$preview_fx" ]; then
+    mkdir -p "$previews"
+    if [ "$(head -c 4 "$d/generate.pdf" | tr -d '\0')" = "%PDF" ]; then
+      pdftoppm -r "$preview_dpi" -f 1 -l "$preview_pages" -png "$d/generate.pdf" "$previews/$lang-$variant-$fx" \
+        || log "[$lang/$variant/$fx] previas: pdftoppm falhou"
+    else
+      log "[$lang/$variant/$fx] previas: o generate nao entregou PDF"
+    fi
+  fi
+
   if ! "$CI_DIR/gates.sh" "$lang" "$variant" "$fx" "$d" "$work/diag/$fx" "$e2e_rc" "$work/fixtures/$fx.xml"; then
     overall=1
   fi
 done
 
+n_prev=0
+if [ -n "$previews" ]; then
+  n_prev=$({ find "$previews" -name '*.png' 2>/dev/null || true; } | wc -l | tr -d ' ')
+  log "previas: $n_prev PNG de $preview_fx em $previews"
+  if [ "$n_prev" -eq 0 ]; then
+    echo "::warning::Sem previas em $lang/$variant: a fixture $preview_fx nao gerou PNG (fixture renomeada? o generate falhou?)"
+  fi
+fi
+
 if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
   {
-    echo "### Suricatoos Premium PDF no gvmd:stable — $lang / $variant"
+    echo "### Suricatoos Premium PDF no gvmd fixado por digest — $lang / $variant"
     echo
     echo "| idioma | edição | fixture | veredito | páginas | erros TeX | Font shape undefined | Type 3 | links / alvos (+corte) | Overfull \\hbox (base) | veracidade | navegação |"
     echo "|---|---|---|---|---|---|---|---|---|---|---|---|"
     cat "$art"/*/summary.row 2>/dev/null || true
     echo
+    if [ -n "$previews" ]; then
+      echo "Previas para revisão humana: $n_prev PNG (as $preview_pages primeiras páginas de \`$preview_fx\`), artefato \`previas-$lang-$variant\` e, com as nove, \`previas\`."
+      echo
+    fi
     sed 's/^/    /' "$art/ambiente.txt"
   } >> "$GITHUB_STEP_SUMMARY"
 fi

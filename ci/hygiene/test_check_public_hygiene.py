@@ -180,16 +180,57 @@ def _feed_sync_job():
     return m.group(1)
 
 
+def _code_lines(text):
+    """As linhas do trecho de workflow que NAO sao so' comentario: uma copia comentada de uma
+    guarda (`# test -z ...') nao e' guarda, e o teste nao pode se contentar com ela."""
+    return [l for l in text.splitlines() if l.strip() and not l.lstrip().startswith("#")]
+
+
+# A guarda: a linha COMECA em `test -z "$(git ls-files ... pdf-suricatoos-...)"' (comentario depois
+# dela, tudo bem). Um `test -z' que aparece so' no fim de outra linha ou num comentario nao conta.
+_FEED_GUARD = re.compile(r"""^\s*test -z "\$\(git ls-files\b[^"]*pdf-suricatoos-[^"]*\)"(\s+#.*)?\s*$""")
+
+
+def _feed_guards(job):
+    return [l for l in _code_lines(job) if _FEED_GUARD.match(l)]
+
+
 def test_docstring_names_the_workflow_that_keeps_the_feed_in_sync():
     refs = set(re.findall(r"\.github/workflows/[\w.-]+\.yml", h.__doc__))
     assert ".github/workflows/report-formats-ci.yml" in refs
     assert "feed-sync" in h.__doc__
     for ref in refs:                                  # nome citado => arquivo existe
         assert (h.ROOT / ref).is_file(), ref
-    # ... e o job citado existe e faz o que a docstring diz: regenera o XML e reprova a divergencia
+    # ... e o job citado existe e faz o que a docstring diz: os XMLs de feed sao GERADOS (o job
+    # roda o build) e NAO versionados -- o job reprova um `pdf-suricatoos-*.xml' que volte ao git
+    # (git add -f), que e' o que tira o XML da varredura deste checador. So' linha de CODIGO conta:
+    # o build e a guarda comentados nao fazem nada.
     job = _feed_sync_job()
-    assert "build-feed-xml.py" in job
-    assert "git diff --exit-code" in job and "pdf-suricatoos-" in job
+    assert "build-feed-xml.py" in "\n".join(_code_lines(job)), "o job feed-sync nao roda mais o build (ou so' o cita num comentario)"
+    assert _feed_guards(job), ("o job feed-sync nao reprova mais um pdf-suricatoos-*.xml versionado: sem uma linha "
+                               "`test -z \"$(git ls-files ... pdf-suricatoos-...)\"' fora de comentario")
+
+
+_GUARD_LINE = """          test -z "$(git ls-files -- 'report-formats/pdf-suricatoos-*.xml' report-formats/x.xml)\""""
+
+
+@pytest.mark.parametrize("linhas,esperado", [
+    ([_GUARD_LINE], 1),                                              # a guarda de verdade
+    ([_GUARD_LINE + "  # tem de dar vazio"], 1),                     # comentario DEPOIS da guarda: continua guarda
+    (["          # " + _GUARD_LINE.strip()], 0),                      # a guarda comentada
+    (["#" + _GUARD_LINE], 0),                                        # idem, comentario na coluna 0
+    (["          true  # " + _GUARD_LINE.strip()], 0),               # a guarda no rabo de comentario de outra linha
+    (["          echo \"" + _GUARD_LINE.strip() + "\""], 0),         # entre aspas de outro comando
+    (["          test -n \"$(git ls-files -- 'report-formats/pdf-suricatoos-*.xml')\""], 0),   # nao e' `test -z'
+    (["          test -z \"$(git status --porcelain -- 'report-formats/pdf-suricatoos-*.xml')\""], 0),   # nao e' git ls-files
+])
+def test_the_feed_guard_must_be_a_real_code_line(linhas, esperado):
+    assert len(_feed_guards("\n".join(linhas) + "\n")) == esperado
+
+
+def test_a_commented_out_build_does_not_count_as_running_the_build():
+    job = "    steps:\n      - run: |\n          # python3 report-formats/build-feed-xml.py\n          true\n"
+    assert "build-feed-xml.py" not in "\n".join(_code_lines(job))
 
 
 # --- allowlist ------------------------------------------------------------------

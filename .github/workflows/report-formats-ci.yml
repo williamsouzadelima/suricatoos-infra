@@ -1,16 +1,26 @@
 name: report-formats-ci
 
 # Compila o "Suricatoos Premium PDF" na imagem de PRODUCAO do gvmd em todo PR
-# que toca report-formats/. O report-formats-publish so' roda no push da main e
-# so' confere os feed XMLs; nunca rodou xsltproc/pdflatex, entao um PR que
-# quebrava o LaTeX so' aparecia em producao.
+# que toca report-formats/ e em todo push na main. O report-formats-publish roda
+# DEPOIS deste workflow (workflow_run): so' publica a imagem do commit da main em
+# que este CI terminou com sucesso. Antes ele disparava no proprio push, em
+# paralelo, e so' conferia os feed XMLs -- nunca rodou xsltproc/pdflatex, entao um
+# commit que quebrava o LaTeX era publicado mesmo assim.
 #
 # Jobs:
-#   feed-sync  os 9 feed XMLs versionados (3 edicoes x 3 idiomas) e o
-#              manifest.json batem com o bundle (build-feed-xml.py), nenhum
-#              objeto gerado fica fora do repositorio, e o manifesto descreve
-#              exatamente os objetos (ci/check-manifest.py: UUID, nome, idioma
-#              e edicao do generate embutido);
+#   feed-sync  os 9 feed XMLs (3 edicoes x 3 idiomas) sao GERADOS aqui pelo
+#              build-feed-xml.py e NAO sao versionados (.gitignore): cada
+#              mudanca de relatorio regerava ~21 MB no historico do repo
+#              publico. O manifest.json continua no repo (o conector da frota o
+#              le) e o build tem de reescreve-lo igual; nada gerado fica fora do
+#              que o .gitignore declara, nenhum objeto gerado esta' versionado, e
+#              o manifesto descreve exatamente os objetos (ci/check-manifest.py:
+#              UUID, nome, idioma e edicao do generate embutido, a VERSION em
+#              cada objeto e os bytes do bundle que cada objeto leva). A VERSION
+#              e' derivada do CONTEUDO, nunca editada a mao; tests/test_feed.py
+#              prova que o mesmo conteudo da a mesma VERSION (outro diretorio,
+#              outro processo), que um byte a mais da outra, e que gerar duas
+#              vezes escreve os mesmos bytes;
 #   compile    por idioma x edicao (technical, client, executive -- os nomes
 #              do contrato da frota, ADR-0011): `sh ./generate` ponta a ponta
 #              + compilacao de
@@ -23,7 +33,13 @@ name: report-formats-ci
 #              report-formats/ci/gates.sh; o controle negativo (o generate tem
 #              de falhar alto) e os artefatos (PDFs, .log, .tex, .aux, .out,
 #              PNG das 3 primeiras paginas -- com o resumo executivo numa
-#              folha so', a 3a e' a de sumario);
+#              folha so', a 3a e' a de sumario). Alem deles, as PREVIAS para
+#              revisao humana: PNG das 12 primeiras paginas do PDF de uma
+#              fixture representativa (v27, a que mais difere entre as edicoes),
+#              artefato previas-<idioma>-<edicao>. O repo nao guarda PDF nem PNG
+#              de amostra (ficavam velhos): a amostra e' o artefato;
+#   previas    NAO bloqueia: junta as previas dos nove jobs do compile num
+#              artefato so' (`previas`), para baixar de uma vez;
 #   measure    NAO bloqueia: tempo e pico de memoria do generate (edicao
 #              tecnica x edicao do cliente, um idioma) num export sintetico
 #              grande (ci/big-report.py, dezenas de milhares de resultados,
@@ -34,6 +50,10 @@ on:
     paths:
       - 'report-formats/**'
       - '.github/workflows/report-formats-ci.yml'
+      # So' no PR: o tests/test_publish_wiring.py (job feed-sync) trava a fiacao do publish, e
+      # tem de rodar quando o workflow dele muda. No push na main esse arquivo NAO dispara o CI
+      # (mudar so' ele nao republica a imagem: dispare o publish a mao).
+      - '.github/workflows/report-formats-publish.yml'
   push:
     branches: [main]
     paths:
@@ -43,16 +63,27 @@ on:
 permissions:
   contents: read
 
+# PR: um run por PR e o novo cancela o velho (cada run custa ~45 job-min). Push na
+# main: um grupo por COMMIT e sem cancelar -- o CI de um commit nao cancela o de outro,
+# e o re-run de um CI antigo (que reentra com o ref e o sha do run original) nao
+# derruba o CI em andamento do commit mais novo. Agrupar a main por ref, como antes,
+# fazia exatamente isso. Quem decide qual imagem vira `stable' e' o publish
+# (ci/stable-gate.sh), nao a ordem em que os CIs terminam.
 concurrency:
-  group: report-formats-ci-${{ github.ref }}
-  cancel-in-progress: true
+  group: report-formats-ci-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
-env:
-  GVMD_IMAGE: registry.community.greenbone.net/community/gvmd:stable
+# A imagem do gvmd (compile, controle negativo e measure) e' FIXADA por digest em
+# report-formats/ci/lib.sh (GVMD_IMAGE), e so' la': a tag `stable' muda sozinha
+# (12/10/2026: dois digests em dois runs do mesmo dia). Trocar de imagem e' um PR
+# proprio; o comentario de lib.sh diz como resolver o digest novo. O digest usado
+# aparece no log de cada job ("digest: ...") e no resumo do measure. A deriva em
+# relacao a `stable' (a que a producao puxa) e' vigiada toda semana, sem bloquear
+# nada, por report-formats-gvmd-stable.yml.
 
 jobs:
   feed-sync:
-    name: feed XML em sincronia com o bundle
+    name: feed gerado do bundle e manifesto
     # Imagem fixa, como a do compile abaixo: trocar de Ubuntu e' mudanca deliberada, nao efeito do ubuntu-latest.
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -65,23 +96,29 @@ jobs:
         with:
           python-version: '3.x'
 
-      - name: Regenerar os feed XMLs e o manifesto a partir do bundle e comparar
+      - name: Gerar os feed XMLs a partir do bundle (nao sao versionados)
         run: |
           set -eux
           python3 report-formats/build-feed-xml.py
-          # Falha se o XML ou o manifesto versionado divergir do bundle:
-          # regenere e commite.
-          git diff --exit-code report-formats/pdf-suricatoos-*.xml report-formats/manifest.json \
-            report-formats/suricatoos-premium-pdf/report_format.xml
-          # O git diff nao ve arquivo NOVO: um objeto que o build escreve e o
-          # commit esqueceu passaria. Nada sob report-formats/ pode ficar fora.
+          # Os nove objetos e o descritor de referencia sao saida do build e
+          # estao no .gitignore. O manifest.json e' o unico que fica no repo (o
+          # conector da frota o le): o build tem de reescreve-lo igual.
+          git diff --exit-code report-formats/manifest.json
+          # O git diff nao ve arquivo NOVO: um objeto que o build escreve e que
+          # nem o .gitignore declara passaria. Nada sob report-formats/ pode
+          # ficar fora (arquivo ignorado nao aparece aqui, de proposito).
           test -z "$(git status --porcelain --untracked-files=all -- report-formats)"
+          # E nenhum objeto gerado pode voltar a ser versionado (git add -f).
+          test -z "$(git ls-files -- 'report-formats/pdf-suricatoos-*.xml' report-formats/suricatoos-premium-pdf/report_format.xml)"
 
-      - name: Manifesto = objetos de feed (UUID, nome, idioma e edicao)
+      - name: Manifesto = objetos de feed (UUID, nome, idioma, edicao, VERSION e bytes do bundle)
         run: python3 report-formats/ci/check-manifest.py
 
+      - name: Testes do feed (VERSION por conteudo, geracao idempotente, o que o git versiona)
+        run: python3 -m unittest discover -s report-formats/tests -p 'test_*.py' -v
+
   compile:
-    name: compila no gvmd:stable (${{ matrix.lang }}, ${{ matrix.variant }})
+    name: compila no gvmd fixado (${{ matrix.lang }}, ${{ matrix.variant }})
     # pdf-texto le o `pdftotext -layout` do poppler 24.02 desta imagem (outro poppler/xpdf quebra a regex do sumario e o portao reprova); ubuntu-latest esta migrando, entao trocar e' deliberado.
     runs-on: ubuntu-24.04
     timeout-minutes: 40
@@ -107,6 +144,10 @@ jobs:
           pdftotext -v 2>&1 | head -n 1
 
       - name: Compilar (sample + tortura) e aplicar os portoes
+        env:
+          # Previas para revisao humana (PNG das primeiras paginas da fixture
+          # representativa, v27 por padrao): ver o cabecalho de ci/compile.sh.
+          PREVIEWS_DIR: ${{ runner.temp }}/previas
         run: report-formats/ci/compile.sh "$REPORT_LANG" "$REPORT_VARIANT" "$RUNNER_TEMP/artefatos"
 
       - name: Controle negativo (o generate tem de falhar alto)
@@ -119,6 +160,58 @@ jobs:
         with:
           name: report-formats-${{ matrix.lang }}-${{ matrix.variant }}
           path: ${{ runner.temp }}/artefatos/
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Publicar as previas (PNG das primeiras paginas, para revisao humana)
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: previas-${{ matrix.lang }}-${{ matrix.variant }}
+          path: ${{ runner.temp }}/previas/
+          if-no-files-found: warn
+          retention-days: 14
+
+  previas:
+    name: previas visuais das nove edicoes (um artefato; nao bloqueia)
+    # Conveniencia, NAO portao: junta os previas-<idioma>-<edicao> dos nove jobs do
+    # compile num artefato so' (`previas`: uma pasta por idioma e edicao), para a
+    # revisao humana baixar uma vez. Os nove individuais continuam la'. Roda
+    # mesmo se algum compile reprovou (as previas de quem reprovou ajudam), e um
+    # defeito aqui nao reprova o workflow -- que e' o que o publish espera.
+    needs: compile
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    continue-on-error: true
+    steps:
+      - name: Baixar as previas dos nove jobs do compile
+        uses: actions/download-artifact@v4
+        with:
+          pattern: previas-*
+          path: previas
+          merge-multiple: true
+
+      - name: Indice das previas
+        run: |
+          set -eu
+          {
+            echo "### Previas visuais (PNG, para revisão humana)"
+            echo
+            echo "$(find previas -name '*.png' | wc -l) PNG: baixe o artefato \`previas\` (uma pasta por idioma e edição)."
+            echo
+            echo "| idioma / edição | páginas |"
+            echo "|---|---|"
+            find previas -mindepth 2 -maxdepth 2 -type d | sort | while read -r d; do
+              echo "| ${d#previas/} | $(find "$d" -name '*.png' | wc -l) |"
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publicar o artefato previas
+        uses: actions/upload-artifact@v4
+        with:
+          name: previas
+          path: previas/
           if-no-files-found: warn
           retention-days: 14
 

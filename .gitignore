@@ -17,3 +17,9 @@ compose/nginx/extra/*.conf
 compose/.env
 # Redes de administração (faixas internas ficam fora do repo).
 compose/nginx/admin-nets/*.conf
+# report-formats: objetos GERADOS por report-formats/build-feed-xml.py (no CI e no
+# publish), nunca versionados -- cada mudanca de relatorio regerava ~21 MB no historico
+# do repo publico. O descritor de referencia do bundle tambem e' gerado (leva a VERSION).
+# manifest.json NAO entra aqui: e' o mapeamento que o conector da frota le do repo.
+/report-formats/pdf-suricatoos-*.xml
+/report-formats/suricatoos-premium-pdf/report_format.xml

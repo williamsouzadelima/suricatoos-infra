@@ -122,7 +122,7 @@ esac
 #
 # PROVISORIA: 0 em tudo, que e' o que o tools/build-torture-fixture.py declara
 # como portao da tortura. A primeira execucao deste CI mede o valor real no
-# gvmd:stable; se for outro, ele e' fixado AQUI com a data e o run que o mediu.
+# gvmd fixado (ci/lib.sh); se for outro, ele e' fixado AQUI com a data e o run que o mediu.
 # Depois disso e' catraca: baixou, abaixe junto; subiu, e' regressao de layout
 # a corrigir no XSLT/.sty -- nao na linha de base, salvo decisao registrada.
 # As tres edicoes nascem com a mesma regua (o `*' do meio): uma base propria
@@ -442,7 +442,7 @@ fi
 
 # --- veracidade: o .tex diz a verdade sobre o XML -------------------------------
 # Roda no runner (python3 da imagem do Ubuntu, so' biblioteca padrao) sobre o
-# MESMO .tex que o xsltproc do gvmd:stable gerou no diagnostico.
+# MESMO .tex que o xsltproc do gvmd fixado (ci/lib.sh) gerou no diagnostico.
 if [ -z "$xml" ]; then
   gate falha "veracidade" "sem o XML da fixture (7o argumento do gates.sh)"
 elif [ ! -s "$tex" ]; then

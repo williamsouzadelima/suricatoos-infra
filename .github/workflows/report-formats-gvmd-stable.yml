@@ -1,0 +1,55 @@
+name: report-formats-gvmd-stable
+
+# Vigia a DERIVA entre o gvmd FIXADO por digest no CI do relatorio
+# (report-formats/ci/lib.sh) e a `stable` que a producao puxa
+# (compose/compose.yaml: registry.community.greenbone.net/community/gvmd:stable).
+#
+# O CI fixa o gvmd para os portoes nao mudarem sob um PR; o custo e' que, quando a
+# `stable` anda (andou duas vezes em 12/10/2026), ele deixa de testar o gvmd da
+# producao, e nada avisava. Toda segunda-feira este workflow resolve a `stable` de hoje:
+#   - mesmo digest do pin: sem deriva (nao compila: o CI de cada PR ja' e' esse teste);
+#   - digest diferente: AVISA no resumo e em anotacao ::warning:: (com a versao do gvmd)
+#     e compila UMA combinacao (en/technical, todas as fixtures e portoes) na `stable` de
+#     hoje, dizendo se passou ou reprovou: reprovar quer dizer que o relatorio pode
+#     quebrar quando a producao puxar a imagem nova.
+# NAO BLOQUEIA nada (agendado, informativo, `continue-on-error`; o script sai 0 sempre).
+# Para atualizar o pin: o comentario de report-formats/ci/lib.sh (um PR proprio).
+#
+# Agendamento so' roda na branch padrao e o GitHub o desliga depois de 60 dias sem
+# atividade no repositorio; o disparo manual (Actions > Run workflow) tambem so' aparece
+# depois do merge na main.
+on:
+  schedule:
+    - cron: '23 6 * * 1'     # segundas, 06:23 UTC (fora do pico do inicio da hora)
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deriva:
+    name: gvmd:stable x gvmd fixado (nao bloqueia)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # So' a compilacao (quando ha' deriva) usa o poppler; instalar sempre custa ~20 s.
+      - name: poppler-utils no runner (pdffonts, pdfinfo, pdftoppm, pdftotext)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends poppler-utils
+
+      - name: Comparar a stable de hoje com o gvmd fixado (e compilar nela se divergir)
+        run: report-formats/ci/gvmd-drift.sh "$RUNNER_TEMP/deriva"
+
+      - name: Publicar o veredito e os logs da compilacao na stable
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: deriva-gvmd-stable
+          path: ${{ runner.temp }}/deriva/
+          if-no-files-found: ignore
+          retention-days: 30
