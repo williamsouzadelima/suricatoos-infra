@@ -465,7 +465,8 @@ FEED_PRE_BUILD = {"descritor-de-referencia-velho"}
 # (REPORT_FORMATS_DIR). Cada mutante quebra uma propriedade da VERSION por
 # conteudo, e pelo menos um teste tem de reprovar.
 # ---------------------------------------------------------------------------
-DIGEST_LOOP = "    for fname, text in feed_objects(VERSION_TOKEN):\n        data = text.encode(\"utf-8\")\n"
+SORTED_LOOP = "    for fname, text in sorted(feed_objects(VERSION_TOKEN), key=lambda o: o[0]):\n"
+DIGEST_LOOP = SORTED_LOOP + "        data = text.encode(\"utf-8\")\n"
 VERSAO_MUTANTES = [
     ("controle", "nenhuma troca", []),
     ("versao-fixa", "a VERSION e' uma constante: nenhum byte a mais a muda",
@@ -477,12 +478,13 @@ VERSAO_MUTANTES = [
        "    return VERSION_PREFIX + hashlib.sha256((content_digest() + repr(time.time())).encode()).hexdigest()"
        "[:VERSION_DIGITS]\n")]),
     ("versao-depende-do-diretorio", "o caminho da pasta do build entra na VERSION",
-     [("    h = hashlib.sha256()\n    for fname, text in feed_objects(VERSION_TOKEN):\n",
-       "    h = hashlib.sha256(HERE.encode())\n    for fname, text in feed_objects(VERSION_TOKEN):\n")]),
+     [("    h = hashlib.sha256()\n" + SORTED_LOOP,
+       "    h = hashlib.sha256(HERE.encode())\n" + SORTED_LOOP)]),
     ("versao-depende-da-data-do-arquivo", "a data de modificacao do latex.xsl entra na VERSION",
-     [("    h = hashlib.sha256()\n    for fname, text in feed_objects(VERSION_TOKEN):\n",
-       "    h = hashlib.sha256(repr(os.path.getmtime(os.path.join(BUNDLE, 'latex.xsl'))).encode())\n"
-       "    for fname, text in feed_objects(VERSION_TOKEN):\n")]),
+     [("    h = hashlib.sha256()\n" + SORTED_LOOP,
+       "    h = hashlib.sha256(repr(os.path.getmtime(os.path.join(BUNDLE, 'latex.xsl'))).encode())\n" + SORTED_LOOP)]),
+    ("versao-depende-da-ordem-de-FORMATS", "os objetos entram no hash na ordem de FORMATS: reordenar a lista muda a VERSION",
+     [(SORTED_LOOP, "    for fname, text in feed_objects(VERSION_TOKEN):\n")]),
     ("versao-so-do-latex-xsl", "a VERSION so' olha o latex.xsl (os .sty, o catalogo e o texto do build nao a mudam)",
      [(DIGEST_LOOP,
        "    for fname, text in [('latex.xsl', open(os.path.join(BUNDLE, 'latex.xsl'), 'rb').read().decode('latin-1'))]:\n"
@@ -651,13 +653,15 @@ def modo_tex(work, only):
 
 def copia_do_feed(work, name, rel, subs, pre_build=False):
     """Uma COPIA de report-formats/ so' com o que o build precisa (o builder, o
-    check-manifest e o bundle, sem o descritor gerado: como numa `git archive'),
-    com `subs' aplicadas ao arquivo `rel'. `pre_build' roda antes o builder
-    INTACTO, para existir no disco o que o build mutado nao reescreve."""
+    check-manifest, o Dockerfile -- o test_feed.py executa a guarda do RUN dele --
+    e o bundle, sem o descritor gerado: como numa `git archive'), com `subs'
+    aplicadas ao arquivo `rel'. `pre_build' roda antes o builder INTACTO, para
+    existir no disco o que o build mutado nao reescreve."""
     d = os.path.join(work, "feed-" + name)
     shutil.rmtree(d, ignore_errors=True)
     os.makedirs(os.path.join(d, "ci"))
     shutil.copy(os.path.join(RF, "build-feed-xml.py"), d)
+    shutil.copy(os.path.join(RF, "Dockerfile"), d)
     shutil.copy(os.path.join(CI, "check-manifest.py"), os.path.join(d, "ci"))
     shutil.copytree(BUNDLE, os.path.join(d, "suricatoos-premium-pdf"),
                     ignore=shutil.ignore_patterns("__pycache__", "report_format.xml"))

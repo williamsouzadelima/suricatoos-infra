@@ -64,7 +64,9 @@ MANIFEST = os.path.join(HERE, "manifest.json")
 #     (no build date, no git history, no path, no mtime);
 #   - one byte more or less in any shipped member or text gives another VERSION;
 #   - a file of the bundle directory that never ships (FONTS.md, tools/...) does
-#     not count: the VERSION names what is delivered, not what sits in the folder.
+#     not count: the VERSION names what is delivered, not what sits in the folder;
+#   - the order of FORMATS does not count either: the objects are hashed in
+#     file-name order (the manifest keeps the FORMATS order: it is its contract).
 # The VERSION is informational text -- the summary and description of each object
 # --: gvmd re-imports a feed report format when the file's mtime is newer than the
 # report format's modification_time (gvmd 26.40.2 and 26.41.0,
@@ -366,10 +368,13 @@ def feed_objects(version: str) -> list:
 def content_digest() -> str:
     """sha256 of everything the nine objects carry but the VERSION itself: the
     objects rendered with VERSION_TOKEN where it goes, each framed by its file
-    name and length. Pure function of the bundle members that ship and of the
-    texts in this file -- nothing from the machine, the clock or git."""
+    name and length, in file-name order -- so reordering FORMATS alone, which
+    changes nothing the objects carry, does not change the VERSION (and would not
+    republish and re-import all nine). Pure function of the bundle members that
+    ship and of the texts in this file -- nothing from the machine, the clock or
+    git."""
     h = hashlib.sha256()
-    for fname, text in feed_objects(VERSION_TOKEN):
+    for fname, text in sorted(feed_objects(VERSION_TOKEN), key=lambda o: o[0]):
         data = text.encode("utf-8")
         h.update(("%s %d\n" % (fname, len(data))).encode("ascii"))
         h.update(data)

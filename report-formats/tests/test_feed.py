@@ -164,6 +164,23 @@ class VersaoPorConteudo(unittest.TestCase):
             vistas.add(out.strip())
         self.assertEqual(vistas, {self.version})
 
+    def test_reordenar_FORMATS_sozinho_nao_muda_a_versao(self):
+        # Reordenar as entradas nao muda objeto nenhum; mudar a VERSION por isso republicaria e
+        # reimportaria os nove sem motivo. Os objetos entram no hash em ordem de nome de arquivo.
+        b = load_builder(self.base_dir)
+        original = list(b.FORMATS)
+        for nome, ordem in (("invertida", original[::-1]), ("girada", original[3:] + original[:3]),
+                            ("por nome", sorted(original, key=lambda f: f[3]))):
+            with self.subTest(ordem=nome):
+                self.assertNotEqual(ordem, original)
+                b.FORMATS = ordem
+                self.assertEqual(b.derive_version(), self.version)
+        # O manifesto, ao contrario, SEGUE a ordem de FORMATS: e' o contrato dele (edicao x idioma).
+        self.assertNotEqual(b.manifest_bytes(), self.builder.manifest_bytes())
+        # E tirar uma entrada e' mudar o que se entrega: outra VERSION.
+        b.FORMATS = original[:-1]
+        self.assertNotEqual(b.derive_version(), self.version)
+
     def test_print_version_nao_escreve_nada(self):
         d = copy_tree(os.path.join(self.tmp, "so-versao"))
         antes = sorted(os.listdir(d))
