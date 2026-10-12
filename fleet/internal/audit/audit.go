@@ -53,6 +53,9 @@
 // goes on from its last line and the break is exposed in Status (Recovery.Breaks, FirstBreak) and in one log line;
 // the hub, which has seen the earlier tails, is the witness. The files are read without following a symbolic link
 // (fsutil.OpenRegularNoFollow): a link in place of one of them, like a file that cannot be read, makes Open fail.
+// What was read is then confirmed on disk — one fsync of the current file (fsutil.SyncFile, the very file read) and
+// one of the directory —, because after a crash of the process the page cache can still hold a line whose fsync never
+// returned; a stream whose files cannot be confirmed is poisoned, and appends nothing after what may not be there.
 //
 // # Tail
 //

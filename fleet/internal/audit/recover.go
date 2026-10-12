@@ -10,6 +10,7 @@ import (
 	"hash"
 	"io"
 	"io/fs"
+	"os"
 	"slices"
 	"time"
 	"unicode/utf8"
@@ -289,6 +290,14 @@ func (s *stream) recover(boot time.Time) (*chainScan, error) {
 	if err := s.recoverFile(sc, 0, boot); err != nil {
 		return nil, err
 	}
+	// what was read is trusted only once durable: after a crash of the process the page cache can still hold a line
+	// whose fsync never returned. The current file is confirmed (and the directory, for the renames of a rotation);
+	// if it cannot be, the stream appends nothing after what may not be there
+	if s.poisoned == nil && (s.ident != nil || len(idx) > 0) {
+		if err := s.confirmLocked(); err != nil {
+			s.poisonLocked(fmt.Errorf("confirmar no disco, no boot, o que se leu de %s: %w", s.spec.file, err))
+		}
+	}
 	tail, cut, badSeq := strictTail(sc.tail)
 	s.seq, s.head, s.tail = sc.seq, sc.head, tail
 	s.recovery.Breaks, s.recovery.FirstBreak, s.recovery.TailCut = sc.breaks, sc.first, cut
@@ -302,6 +311,21 @@ func (s *stream) recover(boot time.Time) (*chainScan, error) {
 			"fluxo", string(s.spec.name), "seq", badSeq, "linhas_cortadas", cut)
 	}
 	return sc, nil
+}
+
+// confirmLocked makes durable what the boot read: one fsync of the current file — the one read (os.SameFile) — and one
+// of the directory.
+func (s *stream) confirmLocked() error {
+	if s.ident != nil {
+		fi, err := s.ops.syncFile(s.path(0))
+		if err != nil {
+			return err
+		}
+		if !os.SameFile(s.ident, fi) {
+			return errors.New("o arquivo atual foi trocado durante o boot")
+		}
+	}
+	return s.ops.syncDir(s.dir)
 }
 
 // recoverFile scans the file i (0 = the current one) into sc.
