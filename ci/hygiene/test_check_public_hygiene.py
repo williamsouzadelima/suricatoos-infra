@@ -186,10 +186,14 @@ def test_docstring_names_the_workflow_that_keeps_the_feed_in_sync():
     assert "feed-sync" in h.__doc__
     for ref in refs:                                  # nome citado => arquivo existe
         assert (h.ROOT / ref).is_file(), ref
-    # ... e o job citado existe e faz o que a docstring diz: regenera o XML e reprova a divergencia
+    # ... e o job citado existe e faz o que a docstring diz: os XMLs de feed sao GERADOS (o job
+    # roda o build) e NAO versionados -- o job reprova um `pdf-suricatoos-*.xml' que volte ao git
+    # (git add -f), que e' o que tira o XML da varredura deste checador.
     job = _feed_sync_job()
     assert "build-feed-xml.py" in job
-    assert "git diff --exit-code" in job and "pdf-suricatoos-" in job
+    guard = [l for l in job.splitlines() if "git ls-files" in l and "pdf-suricatoos-" in l]
+    assert guard, "o job feed-sync nao reprova mais um pdf-suricatoos-*.xml versionado (git ls-files)"
+    assert all("test -z" in l for l in guard), "o git ls-files do job nao esta' num `test -z': nao reprova nada"
 
 
 # --- allowlist ------------------------------------------------------------------
