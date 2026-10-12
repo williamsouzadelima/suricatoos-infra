@@ -62,6 +62,14 @@ var breakers = []breaker{
 	}},
 	{"tenant_unknown", contract.ReasonTenantUnknown, func(s *scenario) { s.cmd.Tenant = "desconhecido" }},
 	{"unsupported", contract.ReasonUnsupported, func(s *scenario) { s.cmd.Type = "foo.bar" }},
+	// the policy is read only for what needs it (allow, budgets): after the tenant and the catalog
+	{"policy_unreadable", contract.ReasonUnavailable, func(s *scenario) {
+		s.setup = append(s.setup, func(n *node) {
+			if err := os.WriteFile(filepath.Join(n.dir, "policy.json"), []byte("{"), 0o600); err != nil {
+				n.t.Fatal(err)
+			}
+		})
+	}},
 	{"type_not_allowed", contract.ReasonTypeNotAllowed, func(s *scenario) { s.allow = []contract.CommandType{contract.TypeTaskStop} }},
 	{"rate_limited", contract.ReasonRateLimited, func(s *scenario) { s.total = 0 }},
 	{"bad_payload", contract.ReasonBadPayload, func(s *scenario) { s.payload = `{"task_id":"não é uuid"}` }},

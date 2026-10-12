@@ -9,6 +9,7 @@ import (
 	"github.com/williamsouzadelima/suricatoos-infra/fleet/internal/admission"
 	"github.com/williamsouzadelima/suricatoos-infra/fleet/internal/audit"
 	"github.com/williamsouzadelima/suricatoos-infra/fleet/internal/budget"
+	"github.com/williamsouzadelima/suricatoos-infra/fleet/internal/policy"
 	"github.com/williamsouzadelima/suricatoos-infra/fleet/internal/replay"
 	"github.com/williamsouzadelima/suricatoos-infra/fleet/internal/tenant"
 )
@@ -57,24 +58,33 @@ func (c *check) run(recorded []string) Outcome {
 		return c.refuse(contract.ReasonReplay, detailFloor)
 	}
 
-	// lines 6–7
+	// lines 6–7. The policy is read only when the verdict needs it — the tenant (6) and the catalog and node kind
+	// (7) do not —, so an unreadable policy.json never hides an earlier refusal; admission.Check decides all of them.
 	st, err := v.tenants.Resolve(c.cmd.Tenant, c.cmd.Type)
 	if err != nil {
 		return c.unavailable(detailTenants, err)
 	}
-	snap, err := v.d.policy()
-	if err != nil {
-		return c.unavailable(detailPolicy, err)
+	var snap policy.Snapshot
+	entry, inCatalog := contract.LookupType(c.cmd.Type)
+	needPolicy := st.OK && inCatalog && entry.Supports(v.kind)
+	if needPolicy {
+		if snap, err = v.d.policy(); err != nil {
+			return c.unavailable(detailPolicy, err)
+		}
 	}
 	err = admission.Check(admission.Request{
 		Type: c.cmd.Type, NodeKind: v.kind, LinksTasks: admission.LinksTasks(c.cmd.Type, c.cmd.Payload),
 		Tenant: st, Policy: snap.Policy, Budgets: v.d.ledger, At: c.t,
 	})
-	if err != nil {
-		var re *contract.RejectError
-		if errors.As(err, &re) {
-			return c.refuse(re.Reason, re.Detail)
-		}
+	var re *contract.RejectError
+	refused := errors.As(err, &re)
+	switch {
+	case !needPolicy && !(refused && (re.Reason == contract.ReasonTenantUnknown || re.Reason == contract.ReasonUnsupported)):
+		// without the policy only those two verdicts can come out: anything else would be a verdict on an empty policy
+		return c.unavailable(detailPolicy, errors.New("verifier: veredito das linhas 6–7 sem a política"))
+	case refused:
+		return c.refuse(re.Reason, re.Detail)
+	case err != nil:
 		return c.unavailable(detailBudgets, err)
 	}
 
