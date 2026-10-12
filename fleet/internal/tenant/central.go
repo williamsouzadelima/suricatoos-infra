@@ -107,3 +107,7 @@ func (c *central) password(name string) (string, error) {
 	}
 	return secrets[name], nil
 }
+
+func (c *central) SecretFileWarnings() []string {
+	return secretFileWarnings("SENSOR_TENANT_SECRETS", c.secretsFile, fsutil.LooseMode)
+}

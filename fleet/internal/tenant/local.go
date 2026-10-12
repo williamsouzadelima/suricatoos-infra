@@ -49,3 +49,7 @@ func (l *local) password() (string, error) {
 	}
 	return strings.TrimRight(string(data), "\r\n"), nil
 }
+
+func (l *local) SecretFileWarnings() []string {
+	return secretFileWarnings("FLEET_TENANT_GMP_PASSWORD_FILE", l.passwordFile, fsutil.LooseMode)
+}

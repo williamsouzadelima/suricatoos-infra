@@ -4,6 +4,7 @@ package fsutil
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"syscall"
@@ -53,5 +54,36 @@ func TestSyncDirDeVerdadeNoLinux(t *testing.T) {
 	err := WriteAtomic(filepath.Join(dir, "estado.json"), []byte("x"))
 	if !errors.Is(err, ErrNotDurable) || !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("esperava ErrNotDurable com a causa da abertura, deu %v", err)
+	}
+}
+
+// Modos de verdade, num sistema que os respeita (o link é seguido: vale o modo do destino).
+func TestLooseModeComModosReaisNoLinux(t *testing.T) {
+	dir := t.TempDir()
+	mk := func(name string, mode os.FileMode) string {
+		p := filepath.Join(dir, name)
+		if err := os.WriteFile(p, []byte("x"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chmod(p, mode); err != nil { // o chmod não sofre a umask
+			t.Fatal(err)
+		}
+		return p
+	}
+	for _, c := range []struct {
+		mode  os.FileMode
+		loose bool
+	}{{0o600, false}, {0o400, false}, {0o640, true}, {0o644, true}, {0o604, true}, {0o660, true}, {0o666, true}} {
+		perm, loose, err := LooseMode(mk(fmt.Sprintf("f-%04o", c.mode), c.mode))
+		if err != nil || loose != c.loose || perm != c.mode {
+			t.Errorf("modo %04o: perm=%04o loose=%v err=%v, esperava loose=%v", c.mode, perm, loose, err, c.loose)
+		}
+	}
+	link := filepath.Join(dir, "link")
+	if err := os.Symlink(mk("alvo", 0o644), link); err != nil {
+		t.Fatal(err)
+	}
+	if perm, loose, err := LooseMode(link); err != nil || !loose || perm != 0o644 {
+		t.Errorf("link para arquivo 0644: perm=%04o loose=%v err=%v", perm, loose, err)
 	}
 }

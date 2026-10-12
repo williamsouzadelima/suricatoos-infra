@@ -172,3 +172,26 @@ func syncDir(dir string) error {
 func dirSyncUnsupported(err error) bool {
 	return errors.Is(err, syscall.EINVAL) || errors.Is(err, errors.ErrUnsupported)
 }
+
+// LooseMode reports whether the file at path can be reached by its group or by others, that is, whether it has any
+// permission bit outside the owner's: a secrets file should be 0600. perm is the permission bits, for the warning
+// the caller writes. Symbolic links are followed (a config mount is often one), so it is the mode of the file
+// behind them. A missing file is the error from os.Stat (it satisfies fs.ErrNotExist). On Windows, where the mode
+// bits are not the access control, loose is always false.
+//
+// It only reports: refusing a file by its mode would break read-only mounts that carry another owner's mode, so
+// what to do about it (a warning at startup) is the caller's.
+func LooseMode(path string) (perm fs.FileMode, loose bool, err error) {
+	fi, err := os.Stat(path)
+	if err != nil {
+		return 0, false, err
+	}
+	perm = fi.Mode().Perm()
+	if runtime.GOOS == "windows" {
+		return perm, false, nil
+	}
+	return perm, looseBits(perm), nil
+}
+
+// looseBits reports whether perm has a bit of the group or of others (0o077).
+func looseBits(perm fs.FileMode) bool { return perm.Perm()&0o077 != 0 }

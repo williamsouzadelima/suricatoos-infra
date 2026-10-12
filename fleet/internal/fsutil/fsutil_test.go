@@ -350,6 +350,48 @@ func TestRemoveOrphanTempsSemNadaParaLimparNaoEErro(t *testing.T) {
 	}
 }
 
+// Um arquivo de segredos tem de ser 0600: qualquer bit de grupo ou de outros o deixa "frouxo".
+func TestLooseBits(t *testing.T) {
+	cases := []struct {
+		perm  fs.FileMode
+		loose bool
+	}{
+		{0o600, false}, {0o400, false}, {0o700, false}, {0o500, false}, {0o000, false},
+		{0o644, true}, {0o640, true}, {0o604, true}, {0o660, true}, {0o666, true}, {0o601 | 0o010, true}, {0o602, true},
+		{0o755, true}, {0o777, true},
+	}
+	for _, c := range cases {
+		if got := looseBits(c.perm); got != c.loose {
+			t.Errorf("looseBits(%04o) = %v, esperava %v", c.perm, got, c.loose)
+		}
+	}
+	// só os bits de permissão contam: o tipo do arquivo (link, diretório...) não
+	if looseBits(fs.ModeSymlink | 0o600) {
+		t.Error("o bit de tipo não é bit de permissão")
+	}
+}
+
+func TestLooseModeArquivoAusenteEErro(t *testing.T) {
+	_, loose, err := LooseMode(filepath.Join(t.TempDir(), "nao-existe"))
+	if !errors.Is(err, fs.ErrNotExist) || loose {
+		t.Fatalf("arquivo ausente: loose=%v err=%v", loose, err)
+	}
+}
+
+// No Windows o modo não é controle de acesso (todo arquivo aparece como 0666): avisar sempre seria só ruído.
+func TestLooseModeNoWindowsNuncaAvisa(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("só no Windows")
+	}
+	p := filepath.Join(t.TempDir(), "segredo")
+	if err := os.WriteFile(p, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, loose, err := LooseMode(p); err != nil || loose {
+		t.Fatalf("loose=%v err=%v", loose, err)
+	}
+}
+
 func TestWriteAtomicDiretorioAusenteEErro(t *testing.T) {
 	if err := WriteAtomic(filepath.Join(t.TempDir(), "sem", "pai", "f"), []byte("x")); err == nil {
 		t.Fatal("diretório ausente deveria dar erro")

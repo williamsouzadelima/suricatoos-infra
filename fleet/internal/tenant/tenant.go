@@ -32,6 +32,7 @@ package tenant
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"regexp"
 
 	"github.com/williamsouzadelima/suricatoos-infra/fleet/contract"
@@ -90,6 +91,11 @@ type Source interface {
 	// Credentials returns the gvmd user and password of tenant name, read now. ErrNoCredentials when it has
 	// none; any other error is a read failure.
 	Credentials(name string) (Credentials, error)
+	// SecretFileWarnings lists what is worth a warning in the node's log at startup about the files that hold
+	// the secrets of this source: today, one for a secrets file that its group or others can access (it should
+	// be 0600). It only warns: a read-only mount that carries another owner's mode must keep working. The text
+	// has the name of the setting, the path and the mode — never anything from inside the file.
+	SecretFileWarnings() []string
 }
 
 // Config is the environment of the node that this package reads (ADR "Configuração do nó"). Open uses the
@@ -183,4 +189,18 @@ func credentials(e entry, secret func() (string, error)) (Credentials, error) {
 		return Credentials{}, ErrNoCredentials
 	}
 	return Credentials{User: e.gvmUser, Password: newSecret(pw)}, nil
+}
+
+// secretFileWarnings is the warning, if any, about the mode of the secrets file at path (named what in the
+// message). mode is fsutil.LooseMode; it is a parameter so that the rule can be tested without real file modes.
+// A file that is absent or whose mode cannot be read gets no warning here: reading it reports that when it is used.
+func secretFileWarnings(what, path string, mode func(string) (fs.FileMode, bool, error)) []string {
+	if path == "" {
+		return nil
+	}
+	perm, loose, err := mode(path)
+	if err != nil || !loose {
+		return nil
+	}
+	return []string{fmt.Sprintf("%s: %s com modo %04o, acessível por grupo ou outros; um arquivo de segredos deve ser 0600", what, path, perm)}
 }
