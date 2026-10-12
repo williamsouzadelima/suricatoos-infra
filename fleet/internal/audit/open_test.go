@@ -307,6 +307,9 @@ func TestBootComCadeiaQuebradaNaoConsertaESegueDaUltimaLinha(t *testing.T) {
 		{"linha acima de 8 KiB", func(t *testing.T, path string, lines []string) {
 			rewriteLine(t, path, 1, strings.Repeat("x", MaxLineBytes+1))
 		}, 2, 2, "8 KiB"},
+		{"linha vazia", func(t *testing.T, path string, lines []string) {
+			rewriteLine(t, path, 1, "") // não é "acima do teto": é uma linha que não é de auditoria
+		}, 2, 2, "não é uma linha"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

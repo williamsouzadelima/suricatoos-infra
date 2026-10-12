@@ -44,7 +44,8 @@ type Break struct {
 
 // segment is one '\n'-terminated line of a file, or the partial bytes after the last '\n'.
 type segment struct {
-	text     []byte   // the line without its '\n'; nil when it is longer than MaxLineBytes
+	text     []byte   // the line without its '\n'; nil when it is overlong
+	overlong bool     // longer than MaxLineBytes: hashed, never held
 	sum      [32]byte // sha256 of the line without its '\n'
 	n        int64    // length of the line without its '\n'
 	complete bool     // it ended with '\n'
@@ -96,8 +97,10 @@ func (lr *lineReader) next() (segment, error) {
 			return segment{}, err
 		}
 		copy(seg.sum[:], lr.h.Sum(nil))
+		seg.overlong = overlong
 		if !overlong {
-			seg.text = append([]byte(nil), lr.buf...)
+			seg.text = make([]byte, len(lr.buf)) // never nil, not even for an empty line
+			copy(seg.text, lr.buf)
 		}
 		return seg, nil
 	}
@@ -184,7 +187,7 @@ func (sc *chainScan) add(seg segment, file string, line int) {
 	p, ok := parseChain(seg.text)
 	reason := ""
 	switch {
-	case seg.text == nil:
+	case seg.overlong:
 		reason = "linha acima do teto de 8 KiB"
 	case !ok:
 		reason = "não é uma linha de auditoria"
