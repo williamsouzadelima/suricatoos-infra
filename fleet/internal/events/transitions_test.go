@@ -392,8 +392,8 @@ func TestCorrupcaoDerrubaABaseSemEventos(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// estraga o registro da primeira base (o que tem a tarefa 1 como Running)
-	data = bytes.Replace(data, []byte(`"value":"Running"`), []byte(`"value":"Runnin_"`), 1)
+	// estraga o registro da segunda coleta (o que pôs a tarefa 2): a base da primeira já estava lida
+	data = bytes.Replace(data, []byte(`"value":"New"`), []byte(`"value":"Nex"`), 1)
 	if err := os.WriteFile(path, data, 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -640,12 +640,16 @@ func TestObjetoRepetidoNoRetratoEIgnorado(t *testing.T) {
 	w := newWorld(t)
 	w.agents = []contract.AgentItem{agent("win-01", "acme", true)}
 	b.observe(w.obs())
-	w.agents = []contract.AgentItem{agent("win-01", "acme", false), agent("win-01", "acme", true)}
+	// repetidos: o agente que está na base e uma tarefa nova; a última cópia de cada um faria evento
+	w.agents = []contract.AgentItem{agent("win-01", "acme", true), agent("win-01", "acme", false)}
+	w.tasks = []contract.TaskItem{task(uuidTask1, "acme", "New"), task(uuidTask1, "acme", "Running")}
 	b.observe(w.obs())
 	b.expect()
 	w.agents = []contract.AgentItem{agent("win-01", "acme", false)}
+	w.tasks = []contract.TaskItem{task(uuidTask1, "acme", "Running")}
 	b.observe(w.obs())
-	b.expect(`agent.offline acme {"agent_id":"win-01","last_seen":"2026-10-11T11:58:00Z"}`)
+	b.expect(`task.status_changed acme {"task_id":"`+uuidTask1+`","from":"","to":"Running","progress":-1}`,
+		`agent.offline acme {"agent_id":"win-01","last_seen":"2026-10-11T11:58:00Z"}`)
 	// feed repetido: idem (o nvt visto pela primeira vez sai como atualizado, sem versão anterior)
 	w.feeds = []contract.FeedStatus{feed(contract.FeedNVT, "1", 1)}
 	b.observe(w.obs())

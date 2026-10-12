@@ -439,6 +439,13 @@ func TestTetoDescartaOsMaisAntigosEConta(t *testing.T) {
 	if _, got := d.next(); !slices.Equal(got, idsOf(3, 5)) {
 		t.Fatalf("reinício depois do commit acima do teto: %v", got)
 	}
+	// e a seq segue depois dos descartados: o próximo não toma a seq de ninguém
+	d.capacity = 3
+	d.add(ev(6))
+	d.restart()
+	if _, got := d.next(); !slices.Equal(got, idsOf(4, 6)) {
+		t.Fatalf("depois de mais um: %v", got)
+	}
 }
 
 // Um arquivo com mais eventos que o teto (gravado com um teto maior) volta no boot só com os mais novos, e os de
@@ -762,20 +769,27 @@ func TestRegistroCorrompidoFicaDeFora(t *testing.T) {
 	}
 }
 
-// Uma linha com checksum certo mas que quebra as regras — evento fora do schema, seq que não avança, done abaixo da
-// cabeça, cabeçalho fora do lugar, tipo desconhecido — é corrupção: fica de fora inteira, e os outros registros valem.
+// Uma linha com checksum certo mas que quebra uma regra só — evento fora do schema, seq que não avança, done abaixo
+// da cabeça, delta que não casa com a base, cabeçalho fora do lugar, tipo desconhecido — é corrupção: fica de fora (a
+// linha de base cai), e os outros registros valem. O controle é a mesma linha sem o defeito, que entra.
 func TestRegistroComRegrasQuebradasFicaDeFora(t *testing.T) {
 	_, valid, err := build(uuidN(50), ev(50))
 	if err != nil {
 		t.Fatal(err)
 	}
 	invalid := []byte(strings.Replace(string(valid), `"to":"Done"`, `"to":"Done1"`, 1))
+	missing := &delta{Kinds: map[contract.StateKind]*kindDelta{contract.KindTasks: {
+		Del: []entry{{Tenant: "acme", ID: uuidN(99)}}}}}
+	untracked := &delta{Kinds: map[contract.StateKind]*kindDelta{contract.KindTargets: {}}}
 	for name, rec := range map[string]record{
-		"evento fora do schema": {K: kindTx, Events: []stored{{Seq: 9, Event: invalid}}},
-		"seq que não avança":    {K: kindTx, Events: []stored{{Seq: 3, Event: valid}}},
-		"done abaixo da cabeça": {K: kindTx, Done: 1},
-		"cabeçalho no meio":     {K: kindHead, Version: fileVersion},
-		"tipo desconhecido":     {K: "ack"},
+		"controle":                  {K: kindTx, Events: []stored{{Seq: 9, Event: valid}}, Done: 2},
+		"evento fora do schema":     {K: kindTx, Events: []stored{{Seq: 9, Event: invalid}}, Done: 2},
+		"seq que não avança":        {K: kindTx, Events: []stored{{Seq: 3, Event: valid}}, Done: 2},
+		"done abaixo da cabeça":     {K: kindTx, Done: 1},
+		"delta que não casa":        {K: kindTx, Delta: missing, Done: 2},
+		"delta de kind sem eventos": {K: kindTx, Delta: untracked, Done: 2},
+		"cabeçalho no meio":         {K: kindHead, Version: fileVersion},
+		"tipo desconhecido":         {K: "ack", Done: 2},
 	} {
 		b := newBox(t)
 		b.add(evs(1, 3)...)
@@ -794,7 +808,17 @@ func TestRegistroComRegrasQuebradasFicaDeFora(t *testing.T) {
 		}
 		f.Close()
 		b.restartRaw()
-		if r := b.Recovery(); r.Corrupt != 1 || r.Events != 1 {
+		r := b.Recovery()
+		if name == "controle" {
+			if r.Corrupt != 0 || r.Events != 2 {
+				t.Fatalf("%s: %+v", name, r)
+			}
+			if _, got := b.next(); !slices.Equal(got, []string{uuidN(3), uuidN(50)}) {
+				t.Fatalf("%s: eventos %v", name, got)
+			}
+			continue
+		}
+		if r.Corrupt != 1 || !r.BaselineLost || r.Events != 1 {
 			t.Fatalf("%s: %+v", name, r)
 		}
 		if _, got := b.next(); !slices.Equal(got, idsOf(3, 3)) {
