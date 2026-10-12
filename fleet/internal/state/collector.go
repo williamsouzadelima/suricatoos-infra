@@ -13,8 +13,9 @@ import (
 )
 
 // DefaultInterval and MinInterval are FLEET_STATE_INTERVAL's default and floor (ADR-0011 "Configuração do nó");
-// MaxInterval is its ceiling (a controller decision: the ADR sets none), so that a typo such as "60m" for "60s" does not
-// leave the state — and the replay_floor it carries — stale in silence: outside the range the connector does not start.
+// MaxInterval is its ceiling (a controller decision: the ADR sets none), so that a typo such as "60m" for "60s" does
+// not leave the state — and the replay_floor it carries — stale in silence: outside the range the connector does not
+// start.
 const (
 	DefaultInterval = 60 * time.Second
 	MinInterval     = 30 * time.Second
@@ -33,7 +34,8 @@ func ParseInterval(s string) (time.Duration, error) {
 	}
 	d, err := time.ParseDuration(s)
 	if err != nil || !validInterval(d) {
-		return 0, fmt.Errorf("%w: %.32q (de %s a %s, em segundos inteiros)", ErrInvalidInterval, s, MinInterval, MaxInterval)
+		return 0, fmt.Errorf("%w: %.32q (de %s a %s, em segundos inteiros)", ErrInvalidInterval, s, MinInterval,
+			MaxInterval)
 	}
 	return d, nil
 }
