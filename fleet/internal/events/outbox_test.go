@@ -26,6 +26,7 @@ type faults struct {
 	writeErr         error // a gravação escreve metade da linha e falha
 	syncErr          error
 	truncateErr      error
+	truncateCuts     bool  // o corte acontece, mas devolve erro (o fsync dele falhou)
 	streamErr        error // a reescrita falha antes do rename
 	streamNotDurable bool  // a reescrita vai ao disco, mas o diretório não se confirma
 	syncDirErr       error
@@ -57,9 +58,12 @@ func (f *faults) ops() fileOps {
 		openRead: base.openRead,
 		truncate: func(p string, n int64) error {
 			f.mu.Lock()
-			err := f.truncateErr
+			err, cuts := f.truncateErr, f.truncateCuts
 			f.mu.Unlock()
 			if err != nil {
+				if cuts {
+					_ = base.truncate(p, n)
+				}
 				return err
 			}
 			return base.truncate(p, n)
@@ -374,6 +378,21 @@ func TestLoteRespeitaOTetoDeBytes(t *testing.T) {
 	checkBatch(t, bt)
 }
 
+// Um lote que dá exatamente o teto de bytes cabe; com um byte a menos de teto, o último evento fica para o próximo.
+func TestLoteNaBordaExataDoTetoDeBytes(t *testing.T) {
+	b := newBox(t)
+	b.add(evs(1, 5)...)
+	whole, _ := b.next()
+	b.batchLimit = len(whole.Body)
+	if bt, _ := b.next(); len(bt.IDs) != 5 {
+		t.Fatalf("no teto exato: %d eventos", len(bt.IDs))
+	}
+	b.batchLimit = len(whole.Body) - 1
+	if bt, _ := b.next(); len(bt.IDs) != 4 {
+		t.Fatalf("um byte abaixo do teto: %d eventos", len(bt.IDs))
+	}
+}
+
 // Cheia, a outbox descarta os mais antigos — inclusive os de um lote a caminho — e conta em Dropped; a ordem dos que
 // ficam não muda, e um reinício começa a contagem de novo ("desde o início").
 func TestTetoDescartaOsMaisAntigosEConta(t *testing.T) {
@@ -492,26 +511,26 @@ func TestGravacaoQueFalhaNaoEnfileira(t *testing.T) {
 	}
 }
 
-// Se até o corte de volta falha, nada mais é anexado ao arquivo: a próxima gravação o reescreve da memória antes.
+// Se até o corte de volta falha — não cortou, ou cortou sem confirmar —, nada mais é anexado ao arquivo: a próxima
+// gravação o reescreve da memória antes (o tamanho certo não prova que o corte é durável).
 func TestCorteQueFalhaReescreveAntes(t *testing.T) {
-	b := newBox(t)
-	b.add(ev(1))
-	b.faults.set(func(f *faults) { f.writeErr, f.truncateErr = errDisco, errDisco })
-	if err := b.Outbox.add(ev(2)); err == nil {
-		t.Fatal("a gravação falhou e o evento foi dado como enfileirado")
-	}
-	b.faults.set(func(f *faults) { f.writeErr, f.truncateErr = nil, nil })
-	before := b.faults.rewrites()
-	b.add(ev(3))
-	if b.faults.rewrites() != before+1 {
-		t.Fatal("a gravação seguinte não reescreveu o arquivo antes")
-	}
-	b.restart()
-	if r := b.Recovery(); r.Corrupt != 0 || r.DiscardedBytes != 0 {
-		t.Fatalf("%+v", r)
-	}
-	if _, got := b.next(); !slices.Equal(got, []string{uuidN(1), uuidN(3)}) {
-		t.Fatalf("depois do reinício %v", got)
+	for _, cuts := range []bool{false, true} {
+		b := newBox(t)
+		b.add(ev(1))
+		b.faults.set(func(f *faults) { f.writeErr, f.truncateErr, f.truncateCuts = errDisco, errDisco, cuts })
+		if err := b.Outbox.add(ev(2)); err == nil {
+			t.Fatal("a gravação falhou e o evento foi dado como enfileirado")
+		}
+		b.faults.set(func(f *faults) { f.writeErr, f.truncateErr = nil, nil })
+		before := b.faults.rewrites()
+		b.add(ev(3))
+		if b.faults.rewrites() != before+1 {
+			t.Fatalf("corte que cortou %v: a gravação seguinte não reescreveu o arquivo antes", cuts)
+		}
+		b.restart()
+		if _, got := b.next(); !slices.Equal(got, []string{uuidN(1), uuidN(3)}) {
+			t.Fatalf("depois do reinício %v", got)
+		}
 	}
 }
 
@@ -705,6 +724,47 @@ func TestRegistroCorrompidoFicaDeFora(t *testing.T) {
 	}
 	if _, got := b.next(); !slices.Equal(got, []string{uuidN(1), uuidN(3)}) {
 		t.Fatalf("eventos %v", got)
+	}
+}
+
+// Uma linha com checksum certo mas que quebra as regras — evento fora do schema, seq que não avança, done abaixo da
+// cabeça, cabeçalho fora do lugar, tipo desconhecido — é corrupção: fica de fora inteira, e os outros registros valem.
+func TestRegistroComRegrasQuebradasFicaDeFora(t *testing.T) {
+	_, valid, err := build(uuidN(50), ev(50))
+	if err != nil {
+		t.Fatal(err)
+	}
+	invalid := []byte(strings.Replace(string(valid), `"to":"Done"`, `"to":"Done1"`, 1))
+	for name, rec := range map[string]record{
+		"evento fora do schema": {K: kindTx, Events: []stored{{Seq: 9, Event: invalid}}},
+		"seq que não avança":    {K: kindTx, Events: []stored{{Seq: 3, Event: valid}}},
+		"done abaixo da cabeça": {K: kindTx, Done: 1},
+		"cabeçalho no meio":     {K: kindHead, Version: fileVersion},
+		"tipo desconhecido":     {K: "ack"},
+	} {
+		b := newBox(t)
+		b.add(evs(1, 3)...)
+		bt, _ := b.next()
+		b.delivered(Batch{last: 2, IDs: bt.IDs[:2]}) // a cabeça em 2: fica o evento 3
+		line, err := encodeLine(rec)
+		if err != nil {
+			t.Fatal(err)
+		}
+		f, err := os.OpenFile(filepath.Join(b.dir, FileName), os.O_APPEND|os.O_WRONLY, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := f.Write(line); err != nil {
+			t.Fatal(err)
+		}
+		f.Close()
+		b.restartRaw()
+		if r := b.Recovery(); r.Corrupt != 1 || r.Events != 1 {
+			t.Fatalf("%s: %+v", name, r)
+		}
+		if _, got := b.next(); !slices.Equal(got, idsOf(3, 3)) {
+			t.Fatalf("%s: eventos %v", name, got)
+		}
 	}
 }
 

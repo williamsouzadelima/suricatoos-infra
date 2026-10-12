@@ -1,7 +1,10 @@
 package events
 
 import (
+	"bytes"
 	"fmt"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -221,10 +224,15 @@ func TestTaskStatusChanged(t *testing.T) {
 	if b.fileSize() != size {
 		t.Fatal("mudança sem transição gravou")
 	}
-	// tarefa que some não gera evento
+	// tarefa que some não gera evento; se volta (o mesmo id), é nova: sai com from ""
+	gone := w.tasks[0]
 	w.tasks = w.tasks[1:]
 	b.observe(w.obs())
 	b.expect()
+	w.tasks = append(w.tasks, gone)
+	b.observe(w.obs())
+	b.expect(`task.status_changed acme {"task_id":"` + uuidTask1 + `","from":"","to":"Done","report_id":"` +
+		uuidReport1 + `","progress":99}`)
 }
 
 // report.completed sai quando o report chega a Done (com início e fim), com o resumo de contagens; não se repete. Um
@@ -351,6 +359,54 @@ func TestFeedUpdatedEStale(t *testing.T) {
 	w.feeds = append(w.feeds, feed(contract.FeedSCAP, "202610020000", 1))
 	b.observe(w.obs())
 	b.expect(`feed.updated - {"feed":"scap","version":"202610020000","previous_version":"202610010000"}`)
+}
+
+// O node montado sem o gvmd não serve de base para os feeds: a base deles nasce do primeiro node com o gvmd, sem
+// evento — os feeds não "aparecem" quando o gvmd volta.
+func TestNodeSemGVMDNaoViraBaseDosFeeds(t *testing.T) {
+	b := newBox(t)
+	w := newWorld(t)
+	w.feeds = []contract.FeedStatus{feed(contract.FeedNVT, "1", 1), feed(contract.FeedSCAP, "1", 100)}
+	w.partial = true
+	b.observe(w.obs())
+	w.partial = false
+	b.observe(w.obs())
+	b.expect()
+	w.feeds[0] = feed(contract.FeedNVT, "2", 1)
+	b.observe(w.obs())
+	b.expect(`feed.updated - {"feed":"nvt","version":"2","previous_version":"1"}`)
+}
+
+// Um registro corrompido derruba a linha de base: depois do reinício, a primeira coleta só refaz a base, sem evento —
+// nunca compara com uma base que já não é a que gerou os registros seguintes.
+func TestCorrupcaoDerrubaABaseSemEventos(t *testing.T) {
+	b := newBox(t)
+	w := newWorld(t)
+	w.tasks = []contract.TaskItem{task(uuidTask1, "acme", "Running")}
+	b.observe(w.obs())
+	w.tasks = append(w.tasks, task(uuidTask2, "acme", "New"))
+	b.observe(w.obs())
+	b.expect(`task.status_changed acme {"task_id":"` + uuidTask2 + `","from":"","to":"New","progress":-1}`)
+	path := filepath.Join(b.dir, FileName)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// estraga o registro da primeira base (o que tem a tarefa 1 como Running)
+	data = bytes.Replace(data, []byte(`"value":"Running"`), []byte(`"value":"Runnin_"`), 1)
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	b.restartRaw()
+	if r := b.Recovery(); r.Corrupt == 0 || !r.BaselineLost {
+		t.Fatalf("%+v", r)
+	}
+	w.tasks[0].Status = "Done"
+	b.observe(w.obs())
+	b.expect()
+	w.tasks[0].Status = "Stopped"
+	b.observe(w.obs())
+	b.expect(`task.status_changed acme {"task_id":"` + uuidTask1 + `","from":"Done","to":"Stopped","progress":-1}`)
 }
 
 // O limiar é o FLEET_FEED_STALE_HOURS do nó.
