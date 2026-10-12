@@ -23,7 +23,12 @@ name: report-formats-ci
 #              report-formats/ci/gates.sh; o controle negativo (o generate tem
 #              de falhar alto) e os artefatos (PDFs, .log, .tex, .aux, .out,
 #              PNG das 3 primeiras paginas -- com o resumo executivo numa
-#              folha so', a 3a e' a de sumario).
+#              folha so', a 3a e' a de sumario);
+#   measure    NAO bloqueia: tempo e pico de memoria do generate (edicao
+#              tecnica x edicao do cliente, um idioma) num export sintetico
+#              grande (ci/big-report.py, dezenas de milhares de resultados,
+#              dado inventado), na imagem do gvmd, escritos no resumo do job.
+#              Sem limite ainda.
 on:
   pull_request:
     paths:
@@ -116,3 +121,23 @@ jobs:
           path: ${{ runner.temp }}/artefatos/
           if-no-files-found: warn
           retention-days: 14
+
+  measure:
+    name: medicao de um export grande (nao bloqueia)
+    # Medicao, NAO portao: o script sai 0 sempre e o job e' continue-on-error.
+    # Quanto custa a copia do relatorio da edicao do cliente num export com
+    # dezenas de milhares de resultados (revisao da R5). Um idioma so'.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: poppler-utils no runner (pdfinfo)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends poppler-utils
+
+      - name: Medir tecnico x cliente num export sintetico grande (en)
+        run: report-formats/ci/measure-big.sh en "$RUNNER_TEMP/medida"
