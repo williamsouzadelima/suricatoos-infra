@@ -10538,16 +10538,17 @@ index 10e592f..761694c 100644
 \ No newline at end of file
 diff --git a/public/suricatoos-theme.css b/public/suricatoos-theme.css
 new file mode 100644
-index 0000000..37be1ae
+index 0000000..75d0ca9
 --- /dev/null
 +++ b/public/suricatoos-theme.css
-@@ -0,0 +1,306 @@
-+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
-+
+@@ -0,0 +1,307 @@
 +/* ============================================================
 +   SURICATOOS — Tema Premium v2 (claro + escuro) — GSA / Mantine v7
 +   Carregado por ULTIMO. Foco: profundidade, cards, tabelas, nav,
 +   tipografia corporativa (Inter body + Space Grotesk headings).
++   As fontes (Inter, Space Grotesk, JetBrains Mono) vêm do próprio bundle
++   (@fontsource, importadas em src/index.tsx; licença OFL-1.1 em
++   /licenses/fonts-OFL-1.1.txt): NÃO importar fontes de CDN de terceiros aqui.
 +   Assinatura "De Vigília" no login (suricato-sentinela).
 +   ============================================================ */
 +
@@ -16134,15 +16135,28 @@ index 54db558..1ce36f3 100644
  });
  
 diff --git a/src/index.tsx b/src/index.tsx
-index f13de1d..3276ac4 100644
+index f13de1d..02e7e3a 100644
 --- a/src/index.tsx
 +++ b/src/index.tsx
-@@ -5,11 +5,16 @@
+@@ -5,11 +5,29 @@
  
  import {createRoot} from 'react-dom/client';
  import {StyleSheetManager} from 'styled-components';
 +import {onLocaleReady} from 'gmp/locale/lang';
  import App from 'web/App';
++// Suricatoos: the fonts of the theme (public/suricatoos-theme.css) come from
++// this bundle (@fontsource, OFL-1.1; the notices are in
++// public/licenses/fonts-OFL-1.1.txt): nothing is requested from a third-party
++// CDN. Only the weights the theme uses.
++import '@fontsource/inter/400.css';
++import '@fontsource/inter/500.css';
++import '@fontsource/inter/600.css';
++import '@fontsource/inter/700.css';
++import '@fontsource/jetbrains-mono/400.css';
++import '@fontsource/jetbrains-mono/500.css';
++import '@fontsource/space-grotesk/500.css';
++import '@fontsource/space-grotesk/600.css';
++import '@fontsource/space-grotesk/700.css';
  
  const root = createRoot(document.getElementById('app') as HTMLElement);
 -root.render(
@@ -16401,3 +16415,565 @@ index 0000000..1052f1e
 +  const now = date();
 +  return (parsed.isAfter(now) ? now : parsed).fromNow();
 +};
+diff --git a/package-lock.json b/package-lock.json
+index 69e7f6f..94627e6 100644
+--- a/package-lock.json
++++ b/package-lock.json
+@@ -11,6 +11,9 @@
+       "dependencies": {
+         "@dnd-kit/helpers": "^0.3.2",
+         "@dnd-kit/react": "^0.4.0",
++        "@fontsource/inter": "5.3.0",
++        "@fontsource/jetbrains-mono": "5.3.0",
++        "@fontsource/space-grotesk": "5.3.0",
+         "@greenbone/ui-lib": "^2.8.0",
+         "@mantine/core": "^8.3.16",
+         "@mantine/dates": "^8.3.16",
+@@ -2364,6 +2367,33 @@
+       "integrity": "sha512-aGTxbpbg8/b5JfU1HXSrbH3wXZuLPJcNEcZQFMxLs3oSzgtVu6nFPkbbGGUvBcUjKV2YyB9Wxxabo+HEH9tcRQ==",
+       "license": "MIT"
+     },
++    "node_modules/@fontsource/inter": {
++      "version": "5.3.0",
++      "resolved": "https://registry.npmjs.org/@fontsource/inter/-/inter-5.3.0.tgz",
++      "integrity": "sha512-RofMylZmjlJEfELXeNHFWBRcSs75rGU/6bV2S2jfnvv/3rPXPGe0LgUJTklcHZ9lM4OZmAVFhcJPnACfb91A3g==",
++      "license": "OFL-1.1",
++      "funding": {
++        "url": "https://github.com/sponsors/ayuhito"
++      }
++    },
++    "node_modules/@fontsource/jetbrains-mono": {
++      "version": "5.3.0",
++      "resolved": "https://registry.npmjs.org/@fontsource/jetbrains-mono/-/jetbrains-mono-5.3.0.tgz",
++      "integrity": "sha512-fqDfB5I9f1p1TV486aUgB9t8zP84P0O1FtQR5Ol9vjwPy+S+EIGlVYm1cvj2W5shcZMTg2nZFdVMoH5wFu8a1A==",
++      "license": "OFL-1.1",
++      "funding": {
++        "url": "https://github.com/sponsors/ayuhito"
++      }
++    },
++    "node_modules/@fontsource/space-grotesk": {
++      "version": "5.3.0",
++      "resolved": "https://registry.npmjs.org/@fontsource/space-grotesk/-/space-grotesk-5.3.0.tgz",
++      "integrity": "sha512-ksnGizDPXIDuvqcTYTSrmZ+evx9sDlS8rp7+42BQ7wU+spt3twEoXfbJz672C+5CLg6VeUQwRy5RXshWb67LcQ==",
++      "license": "OFL-1.1",
++      "funding": {
++        "url": "https://github.com/sponsors/ayuhito"
++      }
++    },
+     "node_modules/@greenbone/ui-lib": {
+       "version": "2.8.0",
+       "resolved": "https://registry.npmjs.org/@greenbone/ui-lib/-/ui-lib-2.8.0.tgz",
+diff --git a/package.json b/package.json
+index 18f9765..690bf51 100644
+--- a/package.json
++++ b/package.json
+@@ -39,6 +39,9 @@
+   "dependencies": {
+     "@dnd-kit/helpers": "^0.3.2",
+     "@dnd-kit/react": "^0.4.0",
++    "@fontsource/inter": "5.3.0",
++    "@fontsource/jetbrains-mono": "5.3.0",
++    "@fontsource/space-grotesk": "5.3.0",
+     "@greenbone/ui-lib": "^2.8.0",
+     "@mantine/core": "^8.3.16",
+     "@mantine/dates": "^8.3.16",
+diff --git a/public/licenses/fonts-OFL-1.1.txt b/public/licenses/fonts-OFL-1.1.txt
+new file mode 100644
+index 0000000..79d2216
+--- /dev/null
++++ b/public/licenses/fonts-OFL-1.1.txt
+@@ -0,0 +1,301 @@
++Fonts served by this interface
++==============================
++
++The font files (.woff2 and .woff) under /assets/ come from the @fontsource
++packages below (versions pinned in package.json) and are distributed under the
++SIL Open Font License, Version 1.1 (OFL-1.1). The copyright notice and the
++license text of each font follow, as shipped in its package.
++
++----------------------------------------------------------------------
++Inter - @fontsource/inter 5.3.0
++----------------------------------------------------------------------
++
++Copyright 2016 The Inter Project Authors (https://github.com/rsms/inter) Inter-Italic[opsz,wght].ttf: Copyright 2016 The Inter Project Authors (https://github.com/rsms/inter)
++
++This Font Software is licensed under the SIL Open Font License, Version 1.1.
++This license is copied below, and is also available with a FAQ at:
++http://scripts.sil.org/OFL
++
++
++-----------------------------------------------------------
++SIL OPEN FONT LICENSE Version 1.1 - 26 February 2007
++-----------------------------------------------------------
++
++PREAMBLE
++The goals of the Open Font License (OFL) are to stimulate worldwide
++development of collaborative font projects, to support the font creation
++efforts of academic and linguistic communities, and to provide a free and
++open framework in which fonts may be shared and improved in partnership
++with others.
++
++The OFL allows the licensed fonts to be used, studied, modified and
++redistributed freely as long as they are not sold by themselves. The
++fonts, including any derivative works, can be bundled, embedded,
++redistributed and/or sold with any software provided that any reserved
++names are not used by derivative works. The fonts and derivatives,
++however, cannot be released under any other type of license. The
++requirement for fonts to remain under this license does not apply
++to any document created using the fonts or their derivatives.
++
++DEFINITIONS
++"Font Software" refers to the set of files released by the Copyright
++Holder(s) under this license and clearly marked as such. This may
++include source files, build scripts and documentation.
++
++"Reserved Font Name" refers to any names specified as such after the
++copyright statement(s).
++
++"Original Version" refers to the collection of Font Software components as
++distributed by the Copyright Holder(s).
++
++"Modified Version" refers to any derivative made by adding to, deleting,
++or substituting -- in part or in whole -- any of the components of the
++Original Version, by changing formats or by porting the Font Software to a
++new environment.
++
++"Author" refers to any designer, engineer, programmer, technical
++writer or other person who contributed to the Font Software.
++
++PERMISSION & CONDITIONS
++Permission is hereby granted, free of charge, to any person obtaining
++a copy of the Font Software, to use, study, copy, merge, embed, modify,
++redistribute, and sell modified and unmodified copies of the Font
++Software, subject to the following conditions:
++
++1) Neither the Font Software nor any of its individual components,
++in Original or Modified Versions, may be sold by itself.
++
++2) Original or Modified Versions of the Font Software may be bundled,
++redistributed and/or sold with any software, provided that each copy
++contains the above copyright notice and this license. These can be
++included either as stand-alone text files, human-readable headers or
++in the appropriate machine-readable metadata fields within text or
++binary files as long as those fields can be easily viewed by the user.
++
++3) No Modified Version of the Font Software may use the Reserved Font
++Name(s) unless explicit written permission is granted by the corresponding
++Copyright Holder. This restriction only applies to the primary font name as
++presented to the users.
++
++4) The name(s) of the Copyright Holder(s) or the Author(s) of the Font
++Software shall not be used to promote, endorse or advertise any
++Modified Version, except to acknowledge the contribution(s) of the
++Copyright Holder(s) and the Author(s) or with their explicit written
++permission.
++
++5) The Font Software, modified or unmodified, in part or in whole,
++must be distributed entirely under this license, and must not be
++distributed under any other license. The requirement for fonts to
++remain under this license does not apply to any document created
++using the Font Software.
++
++TERMINATION
++This license becomes null and void if any of the above conditions are
++not met.
++
++DISCLAIMER
++THE FONT SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
++EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO ANY WARRANTIES OF
++MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT
++OF COPYRIGHT, PATENT, TRADEMARK, OR OTHER RIGHT. IN NO EVENT SHALL THE
++COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
++INCLUDING ANY GENERAL, SPECIAL, INDIRECT, INCIDENTAL, OR CONSEQUENTIAL
++DAMAGES, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
++FROM, OUT OF THE USE OR INABILITY TO USE THE FONT SOFTWARE OR FROM
++OTHER DEALINGS IN THE FONT SOFTWARE.
++
++----------------------------------------------------------------------
++Space Grotesk - @fontsource/space-grotesk 5.3.0
++----------------------------------------------------------------------
++
++Copyright 2020 The Space Grotesk Project Authors (https://github.com/floriankarsten/space-grotesk)
++
++This Font Software is licensed under the SIL Open Font License, Version 1.1.
++This license is copied below, and is also available with a FAQ at:
++http://scripts.sil.org/OFL
++
++
++-----------------------------------------------------------
++SIL OPEN FONT LICENSE Version 1.1 - 26 February 2007
++-----------------------------------------------------------
++
++PREAMBLE
++The goals of the Open Font License (OFL) are to stimulate worldwide
++development of collaborative font projects, to support the font creation
++efforts of academic and linguistic communities, and to provide a free and
++open framework in which fonts may be shared and improved in partnership
++with others.
++
++The OFL allows the licensed fonts to be used, studied, modified and
++redistributed freely as long as they are not sold by themselves. The
++fonts, including any derivative works, can be bundled, embedded,
++redistributed and/or sold with any software provided that any reserved
++names are not used by derivative works. The fonts and derivatives,
++however, cannot be released under any other type of license. The
++requirement for fonts to remain under this license does not apply
++to any document created using the fonts or their derivatives.
++
++DEFINITIONS
++"Font Software" refers to the set of files released by the Copyright
++Holder(s) under this license and clearly marked as such. This may
++include source files, build scripts and documentation.
++
++"Reserved Font Name" refers to any names specified as such after the
++copyright statement(s).
++
++"Original Version" refers to the collection of Font Software components as
++distributed by the Copyright Holder(s).
++
++"Modified Version" refers to any derivative made by adding to, deleting,
++or substituting -- in part or in whole -- any of the components of the
++Original Version, by changing formats or by porting the Font Software to a
++new environment.
++
++"Author" refers to any designer, engineer, programmer, technical
++writer or other person who contributed to the Font Software.
++
++PERMISSION & CONDITIONS
++Permission is hereby granted, free of charge, to any person obtaining
++a copy of the Font Software, to use, study, copy, merge, embed, modify,
++redistribute, and sell modified and unmodified copies of the Font
++Software, subject to the following conditions:
++
++1) Neither the Font Software nor any of its individual components,
++in Original or Modified Versions, may be sold by itself.
++
++2) Original or Modified Versions of the Font Software may be bundled,
++redistributed and/or sold with any software, provided that each copy
++contains the above copyright notice and this license. These can be
++included either as stand-alone text files, human-readable headers or
++in the appropriate machine-readable metadata fields within text or
++binary files as long as those fields can be easily viewed by the user.
++
++3) No Modified Version of the Font Software may use the Reserved Font
++Name(s) unless explicit written permission is granted by the corresponding
++Copyright Holder. This restriction only applies to the primary font name as
++presented to the users.
++
++4) The name(s) of the Copyright Holder(s) or the Author(s) of the Font
++Software shall not be used to promote, endorse or advertise any
++Modified Version, except to acknowledge the contribution(s) of the
++Copyright Holder(s) and the Author(s) or with their explicit written
++permission.
++
++5) The Font Software, modified or unmodified, in part or in whole,
++must be distributed entirely under this license, and must not be
++distributed under any other license. The requirement for fonts to
++remain under this license does not apply to any document created
++using the Font Software.
++
++TERMINATION
++This license becomes null and void if any of the above conditions are
++not met.
++
++DISCLAIMER
++THE FONT SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
++EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO ANY WARRANTIES OF
++MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT
++OF COPYRIGHT, PATENT, TRADEMARK, OR OTHER RIGHT. IN NO EVENT SHALL THE
++COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
++INCLUDING ANY GENERAL, SPECIAL, INDIRECT, INCIDENTAL, OR CONSEQUENTIAL
++DAMAGES, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
++FROM, OUT OF THE USE OR INABILITY TO USE THE FONT SOFTWARE OR FROM
++OTHER DEALINGS IN THE FONT SOFTWARE.
++
++----------------------------------------------------------------------
++JetBrains Mono - @fontsource/jetbrains-mono 5.3.0
++----------------------------------------------------------------------
++
++Copyright 2020 The JetBrains Mono Project Authors (https://github.com/JetBrains/JetBrainsMono) JetBrainsMono-Italic[wght].ttf: Copyright 2020 The JetBrains Mono Project Authors (https://github.com/JetBrains/JetBrainsMono)
++
++This Font Software is licensed under the SIL Open Font License, Version 1.1.
++This license is copied below, and is also available with a FAQ at:
++http://scripts.sil.org/OFL
++
++
++-----------------------------------------------------------
++SIL OPEN FONT LICENSE Version 1.1 - 26 February 2007
++-----------------------------------------------------------
++
++PREAMBLE
++The goals of the Open Font License (OFL) are to stimulate worldwide
++development of collaborative font projects, to support the font creation
++efforts of academic and linguistic communities, and to provide a free and
++open framework in which fonts may be shared and improved in partnership
++with others.
++
++The OFL allows the licensed fonts to be used, studied, modified and
++redistributed freely as long as they are not sold by themselves. The
++fonts, including any derivative works, can be bundled, embedded,
++redistributed and/or sold with any software provided that any reserved
++names are not used by derivative works. The fonts and derivatives,
++however, cannot be released under any other type of license. The
++requirement for fonts to remain under this license does not apply
++to any document created using the fonts or their derivatives.
++
++DEFINITIONS
++"Font Software" refers to the set of files released by the Copyright
++Holder(s) under this license and clearly marked as such. This may
++include source files, build scripts and documentation.
++
++"Reserved Font Name" refers to any names specified as such after the
++copyright statement(s).
++
++"Original Version" refers to the collection of Font Software components as
++distributed by the Copyright Holder(s).
++
++"Modified Version" refers to any derivative made by adding to, deleting,
++or substituting -- in part or in whole -- any of the components of the
++Original Version, by changing formats or by porting the Font Software to a
++new environment.
++
++"Author" refers to any designer, engineer, programmer, technical
++writer or other person who contributed to the Font Software.
++
++PERMISSION & CONDITIONS
++Permission is hereby granted, free of charge, to any person obtaining
++a copy of the Font Software, to use, study, copy, merge, embed, modify,
++redistribute, and sell modified and unmodified copies of the Font
++Software, subject to the following conditions:
++
++1) Neither the Font Software nor any of its individual components,
++in Original or Modified Versions, may be sold by itself.
++
++2) Original or Modified Versions of the Font Software may be bundled,
++redistributed and/or sold with any software, provided that each copy
++contains the above copyright notice and this license. These can be
++included either as stand-alone text files, human-readable headers or
++in the appropriate machine-readable metadata fields within text or
++binary files as long as those fields can be easily viewed by the user.
++
++3) No Modified Version of the Font Software may use the Reserved Font
++Name(s) unless explicit written permission is granted by the corresponding
++Copyright Holder. This restriction only applies to the primary font name as
++presented to the users.
++
++4) The name(s) of the Copyright Holder(s) or the Author(s) of the Font
++Software shall not be used to promote, endorse or advertise any
++Modified Version, except to acknowledge the contribution(s) of the
++Copyright Holder(s) and the Author(s) or with their explicit written
++permission.
++
++5) The Font Software, modified or unmodified, in part or in whole,
++must be distributed entirely under this license, and must not be
++distributed under any other license. The requirement for fonts to
++remain under this license does not apply to any document created
++using the Font Software.
++
++TERMINATION
++This license becomes null and void if any of the above conditions are
++not met.
++
++DISCLAIMER
++THE FONT SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
++EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO ANY WARRANTIES OF
++MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT
++OF COPYRIGHT, PATENT, TRADEMARK, OR OTHER RIGHT. IN NO EVENT SHALL THE
++COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
++INCLUDING ANY GENERAL, SPECIAL, INDIRECT, INCIDENTAL, OR CONSEQUENTIAL
++DAMAGES, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
++FROM, OUT OF THE USE OR INABILITY TO USE THE FONT SOFTWARE OR FROM
++OTHER DEALINGS IN THE FONT SOFTWARE.
+diff --git a/src/web/utils/__tests__/suricatoosFonts.test.ts b/src/web/utils/__tests__/suricatoosFonts.test.ts
+new file mode 100644
+index 0000000..a0af34e
+--- /dev/null
++++ b/src/web/utils/__tests__/suricatoosFonts.test.ts
+@@ -0,0 +1,173 @@
++/* SPDX-FileCopyrightText: 2026 Suricatoos
++ *
++ * SPDX-License-Identifier: AGPL-3.0-or-later
++ */
++
++// The fonts of the theme come from the bundle, not from a third-party CDN: the
++// UI must not call anyone when it opens (the IP of the operator is personal
++// data), must keep its type on a node without internet, and the CSP of the
++// nginx (font-src 'self') refuses anything that is not a file of this origin.
++
++/// <reference types="node" />
++
++import {describe, expect, test} from '@gsa/testing';
++import fs from 'node:fs';
++import path from 'node:path';
++import postcss from 'postcss';
++
++// The tests run from the root of the project (vitest is started there).
++const root = process.cwd();
++
++const read = (file: string) =>
++  fs.readFileSync(path.join(root, file), 'utf8').replace(/\r\n/g, '\n');
++
++const fontFiles = (pkg: string) =>
++  fs.readdirSync(path.join(root, 'node_modules/@fontsource', pkg, 'files'));
++
++// The weights the theme uses (the ones the old Google URL asked for).
++const FONTS = [
++  {pkg: 'inter', family: 'Inter', weights: [400, 500, 600, 700]},
++  {pkg: 'space-grotesk', family: 'Space Grotesk', weights: [500, 600, 700]},
++  {pkg: 'jetbrains-mono', family: 'JetBrains Mono', weights: [400, 500]},
++];
++
++const unquote = (value: string) => value.replace(/^['"]|['"]$/g, '');
++
++describe('theme CSS', () => {
++  const theme = read('public/suricatoos-theme.css');
++
++  test('does not reference a font service of a third party', () => {
++    expect(theme).not.toMatch(/fonts\.(googleapis|gstatic)\.com/i);
++    // nor any other address: no @import and no url() leaves this origin
++    expect(theme).not.toMatch(/@import/i);
++    expect(theme).not.toMatch(/url\(\s*['"]?(https?:)?\/\//i);
++  });
++
++  // What the CSS falls back to while a font does not load: not shipped, on purpose.
++  const FALLBACKS = [
++    'system-ui',
++    '-apple-system',
++    'Segoe UI',
++    'sans-serif',
++    'monospace',
++    'ui-monospace',
++    'Menlo',
++  ];
++
++  test('the theme asks for the fonts the bundle ships, and only for them', () => {
++    const asked = new Set<string>();
++    postcss
++      .parse(theme)
++      .walkDecls(/^font-family$|^--mantine-font-family/, decl => {
++        for (const part of decl.value.replace(/!important/i, '').split(',')) {
++          asked.add(unquote(part.trim()));
++        }
++      });
++    const shipped = FONTS.map(({family}) => family);
++    // a font the theme names that is neither shipped nor a fallback would fall
++    // back to the system font without anyone noticing
++    for (const family of asked) {
++      expect([...shipped, ...FALLBACKS], family).toContain(family);
++    }
++    // and a font that is shipped but never used only weighs on the bundle
++    for (const family of shipped) {
++      expect([...asked], family).toContain(family);
++    }
++  });
++});
++
++describe('fontsource packages', () => {
++  const pkg = JSON.parse(read('package.json')) as {
++    dependencies: Record<string, string>;
++  };
++  const lock = JSON.parse(read('package-lock.json')) as {
++    packages: Record<
++      string,
++      {version: string; resolved: string; integrity: string; license: string}
++    >;
++  };
++
++  test.each(FONTS)(
++    '$pkg is pinned to one exact version, locked and OFL',
++    ({pkg: name}) => {
++      const version = pkg.dependencies[`@fontsource/${name}`];
++      expect(version).toMatch(/^\d+\.\d+\.\d+$/);
++
++      const locked = lock.packages[`node_modules/@fontsource/${name}`];
++      expect(locked.version).toBe(version);
++      expect(locked.license).toBe('OFL-1.1');
++      expect(locked.resolved).toBe(
++        `https://registry.npmjs.org/@fontsource/${name}/-/${name}-${version}.tgz`,
++      );
++      expect(locked.integrity).toMatch(/^sha512-[A-Za-z0-9+/]+={0,2}$/);
++
++      const installed = JSON.parse(
++        read(`node_modules/@fontsource/${name}/package.json`),
++      ) as {version: string; license: string};
++      expect(installed.version).toBe(version);
++      expect(installed.license).toBe('OFL-1.1');
++    },
++  );
++
++  test('the OFL notice shipped with the UI carries each license as the package has it', () => {
++    const notice = read('public/licenses/fonts-OFL-1.1.txt');
++    for (const {pkg: name, family} of FONTS) {
++      const version = pkg.dependencies[`@fontsource/${name}`];
++      expect(notice).toContain(`${family} - @fontsource/${name} ${version}`);
++      expect(notice).toContain(
++        read(`node_modules/@fontsource/${name}/LICENSE`).trimEnd(),
++      );
++    }
++  });
++});
++
++describe('what the entry point imports', () => {
++  const entry = read('src/index.tsx');
++  const imported = [
++    ...entry.matchAll(/^import '(@fontsource\/[^']+)';$/gm),
++  ].map(m => m[1]);
++
++  test('is only the weights the theme uses', () => {
++    const expected = FONTS.flatMap(({pkg, weights}) =>
++      weights.map(weight => `@fontsource/${pkg}/${weight}.css`),
++    );
++    expect([...imported].sort()).toEqual([...expected].sort());
++  });
++
++  describe.each(FONTS)('$family', ({pkg, family, weights}) => {
++    test.each(weights)(
++      '%i: files of this origin, with font-display swap',
++      weight => {
++        const css = postcss.parse(
++          read(`node_modules/@fontsource/${pkg}/${weight}.css`),
++        );
++        const faces: postcss.AtRule[] = [];
++        css.walkAtRules('font-face', rule => {
++          faces.push(rule);
++        });
++        expect(faces.length).toBeGreaterThan(0);
++
++        for (const face of faces) {
++          const decl = (prop: string) =>
++            (face.nodes ?? []).find(
++              (n): n is postcss.Declaration =>
++                n.type === 'decl' && n.prop === prop,
++            )?.value ?? '';
++          expect(unquote(decl('font-family'))).toBe(family);
++          expect(decl('font-weight')).toBe(String(weight));
++          expect(decl('font-display')).toBe('swap');
++
++          const urls = [...decl('src').matchAll(/url\(([^)]+)\)/g)].map(m =>
++            unquote(m[1]),
++          );
++          expect(urls.length).toBeGreaterThan(0);
++          for (const url of urls) {
++            // a relative file of the package, which the build bundles
++            expect(url).toMatch(/^\.\/files\/[a-z0-9-]+\.woff2?$/);
++            expect(fontFiles(pkg), url).toContain(path.basename(url));
++          }
++        }
++      },
++    );
++  });
++});
+diff --git a/vite.config.ts b/vite.config.ts
+index 6d1eaef..04a7022 100644
+--- a/vite.config.ts
++++ b/vite.config.ts
+@@ -64,6 +64,9 @@ export default defineConfig({
+   },
+   build: {
+     outDir: 'build',
++    // Suricatoos: the fonts stay files. The small ones (< 4 KiB) would become
++    // data: URIs, which the font-src 'self' of the CSP of the nginx refuses.
++    assetsInlineLimit: file => (/\.woff2?$/.test(file) ? false : undefined),
+     rolldownOptions: {
+       output: {
+         minify: {
