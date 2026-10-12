@@ -1,11 +1,13 @@
 name: control-plane-ci
 
+# O fixture de tenants em fleet/internal/tenant/testdata é lido também por tenants/fleet_parity_test.go:
+# mudar o fixture (ou o formato do registro) tem de rodar este CI.
 on:
   push:
     branches: [main, "feat/**"]
-    paths: ["control-plane/**", ".github/workflows/control-plane-ci.yml"]
+    paths: ["control-plane/**", "fleet/internal/tenant/testdata/**", ".github/workflows/control-plane-ci.yml"]
   pull_request:
-    paths: ["control-plane/**", ".github/workflows/control-plane-ci.yml"]
+    paths: ["control-plane/**", "fleet/internal/tenant/testdata/**", ".github/workflows/control-plane-ci.yml"]
 
 permissions:
   contents: read
