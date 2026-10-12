@@ -17,6 +17,7 @@
 package scopegate
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"net/netip"
@@ -73,6 +74,27 @@ func New(allowSpec, selfDenySpec string, opts ...Option) (*Scope, error) {
 		opt(s)
 	}
 	return s, nil
+}
+
+// WithSelfDeny returns a NEW Scope whose self-deny also holds ips: the fleet
+// connector adds the hub's addresses (resolved from FLEET_HUB_URL at start-up and
+// on every connection, plus each connection's remote IP) and swaps its pointer
+// atomically. s itself is never modified. An IPv4-mapped address counts as its
+// IPv4 and a zone is dropped, as targets are compared without them; an invalid
+// (zero) address is an error, since a deny that silently didn't happen would fail
+// open.
+func (s *Scope) WithSelfDeny(ips ...netip.Addr) (*Scope, error) {
+	deny := make([]netip.Addr, len(s.deny), len(s.deny)+len(ips))
+	copy(deny, s.deny)
+	for _, ip := range ips {
+		if !ip.IsValid() {
+			return nil, errors.New("self-deny: endereço inválido")
+		}
+		deny = append(deny, ip.Unmap().WithZone(""))
+	}
+	n := *s
+	n.deny = deny
+	return &n, nil
 }
 
 // Empty reports whether the allow-set is empty (deny-all).
