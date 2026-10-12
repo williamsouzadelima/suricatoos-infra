@@ -27,9 +27,13 @@ var (
 // and refuses a file bigger than limit bytes: a runaway file must not grow the connector's memory. Nothing at
 // the path (or a missing parent directory) returns an error that satisfies errors.Is(err, fs.ErrNotExist), so
 // "absent" can be told apart from "present but unusable": a dangling link is ErrDanglingLink, and anything that
-// is not a regular file is ErrNotRegular and is never opened (opening a FIFO would block).
+// is not a regular file is ErrNotRegular.
+//
+// The path is opened first and the opened descriptor is what is checked (readRegular), so there is no window
+// between a check and the open for the path to turn into something else; where the OS supports it the open does
+// not block, so a FIFO swapped in at that very moment cannot hang the caller either.
 func ReadBounded(path string, limit int64) ([]byte, error) {
-	fi, err := os.Stat(path)
+	f, err := openRead(path)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			if _, lerr := os.Lstat(path); lerr == nil {
@@ -38,21 +42,26 @@ func ReadBounded(path string, limit int64) ([]byte, error) {
 		}
 		return nil, err
 	}
-	if !fi.Mode().IsRegular() {
-		return nil, fmt.Errorf("%w: %s", ErrNotRegular, path)
-	}
-	f, err := os.Open(path)
+	defer f.Close()
+	return readRegular(f, path, limit)
+}
+
+// readRegular reads the open file f if, and only if, the descriptor is a regular file and fits in limit bytes.
+func readRegular(f *os.File, name string, limit int64) ([]byte, error) {
+	fi, err := f.Stat()
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
-	// one byte past the cap tells a file that grew after the Stat from one that fits exactly
+	if !fi.Mode().IsRegular() {
+		return nil, fmt.Errorf("%w: %s", ErrNotRegular, name)
+	}
+	// one byte past the cap tells a file that grew while it was read from one that fits exactly
 	b, err := io.ReadAll(io.LimitReader(f, limit+1))
 	if err != nil {
 		return nil, err
 	}
 	if int64(len(b)) > limit {
-		return nil, fmt.Errorf("%w (%d bytes): %s", ErrTooLarge, limit, path)
+		return nil, fmt.Errorf("%w (%d bytes): %s", ErrTooLarge, limit, name)
 	}
 	return b, nil
 }

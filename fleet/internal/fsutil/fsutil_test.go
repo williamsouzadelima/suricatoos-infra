@@ -48,6 +48,43 @@ func TestReadBoundedRecusaQuemNaoEArquivoRegular(t *testing.T) {
 	}
 }
 
+// A regularidade é conferida no descritor que se abriu, não no caminho: entre um Stat e um Open o caminho pode
+// virar outra coisa (uma FIFO trava o Open para sempre). readRegular é o passo que decide, com o descritor na mão.
+func TestReadRegularConfereODescritorAberto(t *testing.T) {
+	dir := t.TempDir()
+
+	// um diretório aberto é um descritor que não é arquivo regular em qualquer sistema
+	d, err := os.Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.Close()
+	if _, err := readRegular(d, "dir", 64); !errors.Is(err, ErrNotRegular) {
+		t.Fatalf("descritor de diretório: esperava ErrNotRegular, deu %v", err)
+	}
+
+	// um arquivo regular passa, com o teto
+	p := filepath.Join(dir, "f")
+	if err := os.WriteFile(p, []byte("abc"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	f, err := os.Open(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	got, err := readRegular(f, p, 3)
+	if err != nil || string(got) != "abc" {
+		t.Fatalf("arquivo regular no teto: %q, %v", got, err)
+	}
+	if _, err := f.Seek(0, 0); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := readRegular(f, p, 2); !errors.Is(err, ErrTooLarge) {
+		t.Fatalf("um byte acima do teto: esperava ErrTooLarge, deu %v", err)
+	}
+}
+
 func TestReadBoundedSegueSymlink(t *testing.T) {
 	dir := t.TempDir()
 	real := filepath.Join(dir, "real")
