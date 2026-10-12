@@ -12391,10 +12391,10 @@ index b995df4..be67f0d 100644
              <TableRow>
 diff --git a/src/web/pages/extras/FeedUpdateSection.tsx b/src/web/pages/extras/FeedUpdateSection.tsx
 new file mode 100644
-index 0000000..7448748
+index 0000000..2bb8d5a
 --- /dev/null
 +++ b/src/web/pages/extras/FeedUpdateSection.tsx
-@@ -0,0 +1,327 @@
+@@ -0,0 +1,332 @@
 +/* SPDX-FileCopyrightText: 2026 Suricatoos
 + *
 + * SPDX-License-Identifier: AGPL-3.0-or-later
@@ -12411,6 +12411,7 @@ index 0000000..7448748
 +  usePolling,
 +} from 'web/utils/suricatoosApi';
 +import {formatApiDate} from 'web/utils/suricatoosDate';
++import LiveRegion from 'web/utils/suricatoosLive';
 +
 +const API = '/feed-sync';
 +
@@ -12712,9 +12713,13 @@ index 0000000..7448748
 +          >
 +            {_('Save schedule')}
 +          </Button>
-+          <Text c="green" role="status" size="sm">
-+            {saved ? _('Saved') : ''}
-+          </Text>
++          <LiveRegion role="status">
++            {saved && (
++              <Text c="green" size="sm">
++                {_('Saved')}
++              </Text>
++            )}
++          </LiveRegion>
 +        </Group>
 +      </div>
 +    </div>
@@ -12977,10 +12982,10 @@ index dd0b390..9316ed8 100644
    Layers: {
 diff --git a/src/web/pages/ai-providers/AiProvidersPage.tsx b/src/web/pages/ai-providers/AiProvidersPage.tsx
 new file mode 100644
-index 0000000..d04e962
+index 0000000..679e946
 --- /dev/null
 +++ b/src/web/pages/ai-providers/AiProvidersPage.tsx
-@@ -0,0 +1,1161 @@
+@@ -0,0 +1,1201 @@
 +/* SPDX-FileCopyrightText: 2026 Suricatoos
 + *
 + * SPDX-License-Identifier: AGPL-3.0-or-later
@@ -13077,6 +13082,8 @@ index 0000000..d04e962
 +
 +interface NoticeTextProps {
 +  notice: Notice | null;
++  // lets the page move the keyboard focus to the message of a success
++  statusRef?: React.Ref<HTMLDivElement>;
 +}
 +
 +interface AckCheckboxProps {
@@ -13107,6 +13114,7 @@ index 0000000..d04e962
 +  token: string;
 +  deleting: ReadonlySet<string>;
 +  notice: Notice | null;
++  noticeRef: React.Ref<HTMLDivElement>;
 +  onSaved: (p: Provider) => void;
 +  onDelete: (p: Provider) => void;
 +}
@@ -13116,6 +13124,7 @@ index 0000000..d04e962
 +  token: string;
 +  deleting: ReadonlySet<string>;
 +  notice: Notice | null;
++  noticeRef: React.Ref<HTMLDivElement>;
 +  onNotice: (n: Notice | null) => void;
 +  onSaved: (p: Provider) => void;
 +  onDelete: (p: Provider) => void;
@@ -13261,13 +13270,30 @@ index 0000000..d04e962
 +  return options;
 +};
 +
++// True when the keyboard focus is still where an action left it, so moving it
++// takes nothing from the operator: on no element (the one that had it left the
++// page, or was disabled) or inside `where` (the question that was answered). If
++// it is anywhere else, the operator went on while the request ran: it stays.
++const focusIsFree = (where?: Element | null): boolean => {
++  const active = document.activeElement;
++  return (
++    active === null ||
++    active === document.body ||
++    (where?.contains(active) ?? false)
++  );
++};
++
 +// The result of a save or a delete shows up away from the button that was
 +// pressed: an error is read at once, a success in turn. The two live regions
 +// are on the page from the start and the text goes into the one that fits, so
 +// no node swaps its role between one attempt and the next.
-+const NoticeText = ({notice}: NoticeTextProps) => (
++const NoticeText = ({notice, statusRef}: NoticeTextProps) => (
 +  <>
-+    <LiveRegion role="status">
++    <LiveRegion
++      ref={statusRef}
++      role="status"
++      tabIndex={statusRef ? -1 : undefined}
++    >
 +      {notice !== null && !notice.error && (
 +        <Text c="green" size="sm">
 +          {notice.text}
@@ -13330,6 +13356,7 @@ index 0000000..d04e962
 +  const questionId = useId();
 +  const deleteButton = useRef<HTMLButtonElement>(null);
 +  const cancelButton = useRef<HTMLButtonElement>(null);
++  const question = useRef<HTMLDivElement>(null);
 +  const wasAsking = useRef<boolean>(false);
 +  const wasBusy = useRef<boolean>(false);
 +
@@ -13348,10 +13375,11 @@ index 0000000..d04e962
 +
 +  // While the delete runs the buttons are disabled, which takes the focus away.
 +  // If it fails the question stays open and the focus goes back to "Cancel" as
-+  // soon as the button is enabled again. (If it works, the provider and this
++  // soon as the button is enabled again, unless the operator went on to
++  // something else in the meantime. (If it works, the provider and this
 +  // component leave the page, and the page moves the focus.)
 +  useEffect(() => {
-+    if (wasBusy.current && !busy) {
++    if (wasBusy.current && !busy && focusIsFree(question.current)) {
 +      cancelButton.current?.focus();
 +    }
 +    wasBusy.current = busy;
@@ -13373,6 +13401,7 @@ index 0000000..d04e962
 +  }
 +  return (
 +    <Group
++      ref={question}
 +      aria-labelledby={questionId}
 +      gap="xs"
 +      justify="flex-end"
@@ -13679,6 +13708,7 @@ index 0000000..d04e962
 +  token,
 +  deleting,
 +  notice,
++  noticeRef,
 +  onSaved,
 +  onDelete,
 +}: FreeModelsProps) => {
@@ -13756,7 +13786,7 @@ index 0000000..d04e962
 +        </Paper>
 +      )}
 +
-+      <NoticeText notice={notice} />
++      <NoticeText notice={notice} statusRef={noticeRef} />
 +    </Stack>
 +  );
 +};
@@ -13767,6 +13797,7 @@ index 0000000..d04e962
 +  token,
 +  deleting,
 +  notice,
++  noticeRef,
 +  onNotice,
 +  onSaved,
 +  onDelete,
@@ -13855,7 +13886,7 @@ index 0000000..d04e962
 +
 +  return (
 +    <Stack gap="md">
-+      <NoticeText notice={notice} />
++      <NoticeText notice={notice} statusRef={noticeRef} />
 +
 +      {providers.length === 0 ? (
 +        <Text c="dimmed">{_('No providers configured.')}</Text>
@@ -13975,8 +14006,12 @@ index 0000000..d04e962
 +  );
 +  const [notice, setNotice] = useState<Notice | null>(null);
 +  const mounted = useMounted();
-+  // the title stays on the page when a provider is deleted: it takes the focus
-+  const title = useRef<HTMLHeadingElement>(null);
++  // When a delete works, the button that was pressed leaves the page with the
++  // provider and the keyboard focus would fall to the top of the document. It
++  // goes to the notice that says so ("Provider deleted."), once that is on the
++  // page, unless the operator went on to something else while the request ran.
++  const noticeRegion = useRef<HTMLDivElement>(null);
++  const focusNotice = useRef<boolean>(false);
 +
 +  const load = useCallback(
 +    async (signal: AbortSignal) => {
@@ -14028,6 +14063,15 @@ index 0000000..d04e962
 +    return () => controller.abort();
 +  }, [load]);
 +
++  useEffect(() => {
++    if (focusNotice.current) {
++      focusNotice.current = false;
++      if (focusIsFree()) {
++        noticeRegion.current?.focus();
++      }
++    }
++  }, [notice]);
++
 +  // The POST answers with the saved provider: the list is updated in place
 +  // instead of reloaded, since every call counts against the nginx rate limit.
 +  const onSaved = useCallback((saved: Provider) => {
@@ -14055,10 +14099,8 @@ index 0000000..d04e962
 +          return;
 +        }
 +        setProviders(list => list.filter(x => x.id !== p.id));
++        focusNotice.current = true;
 +        setNotice({text: _('Provider deleted.'), error: false});
-+        // the button that was pressed leaves the page with the provider: the
-+        // focus goes to the title, not to the top of the document
-+        title.current?.focus();
 +      } catch (e) {
 +        if (mounted.current) {
 +          setNotice({text: mensagemDeErro(_, e), error: true});
@@ -14076,45 +14118,48 @@ index 0000000..d04e962
 +    [token, _, mounted],
 +  );
 +
++  // While it loads there is no body: the loader is in the live region below,
++  // which stays on the page.
 +  let body: React.ReactNode = null;
-+  if (loading) {
-+    // the loader is in the live region below, which stays on the page
-+    body = null;
-+  } else if (loadError !== '') {
-+    body = (
-+      <Alert color="red" variant="light">
-+        {loadError}
-+      </Alert>
-+    );
-+  } else if (policy?.free_models_only === true) {
-+    body = (
-+      <FreeModels
-+        deleting={deleting}
-+        notice={notice}
-+        presets={policy.presets}
-+        providers={providers}
-+        token={token}
-+        onDelete={p => void onDelete(p)}
-+        onSaved={onSaved}
-+      />
-+    );
-+  } else {
-+    body = (
-+      <GenericProviders
-+        deleting={deleting}
-+        notice={notice}
-+        providers={providers}
-+        token={token}
-+        onDelete={p => void onDelete(p)}
-+        onNotice={setNotice}
-+        onSaved={onSaved}
-+      />
-+    );
++  if (!loading) {
++    if (loadError !== '') {
++      body = (
++        <Alert color="red" variant="light">
++          {loadError}
++        </Alert>
++      );
++    } else if (policy?.free_models_only === true) {
++      body = (
++        <FreeModels
++          deleting={deleting}
++          notice={notice}
++          noticeRef={noticeRegion}
++          presets={policy.presets}
++          providers={providers}
++          token={token}
++          onDelete={p => void onDelete(p)}
++          onSaved={onSaved}
++        />
++      );
++    } else {
++      body = (
++        <GenericProviders
++          deleting={deleting}
++          notice={notice}
++          noticeRef={noticeRegion}
++          providers={providers}
++          token={token}
++          onDelete={p => void onDelete(p)}
++          onNotice={setNotice}
++          onSaved={onSaved}
++        />
++      );
++    }
 +  }
 +
 +  return (
 +    <Stack gap="md" p="md">
-+      <Text ref={title} component="h2" fw={700} size="lg" tabIndex={-1}>
++      <Text component="h2" fw={700} size="lg">
 +        {_('AI Providers')}
 +      </Text>
 +      {policy !== null && (
@@ -17014,10 +17059,10 @@ index 0000000..79d2216
 +OTHER DEALINGS IN THE FONT SOFTWARE.
 diff --git a/src/web/utils/__tests__/suricatoosA11y.test.tsx b/src/web/utils/__tests__/suricatoosA11y.test.tsx
 new file mode 100644
-index 0000000..f89e858
+index 0000000..c4e9f6f
 --- /dev/null
 +++ b/src/web/utils/__tests__/suricatoosA11y.test.tsx
-@@ -0,0 +1,1066 @@
+@@ -0,0 +1,1159 @@
 +/* SPDX-FileCopyrightText: 2026 Suricatoos
 + *
 + * SPDX-License-Identifier: AGPL-3.0-or-later
@@ -17117,6 +17162,17 @@ index 0000000..f89e858
 +    .queryAllByRole(role)
 +    .map(region => region.textContent ?? '')
 +    .filter(text => text !== '');
++
++// The live region that says `text` now (for the focus, which goes to a region).
++const regionSaying = (role: 'status' | 'alert', text: string) => {
++  const region = within(document.body)
++    .queryAllByRole(role)
++    .find(candidate => candidate.textContent === text);
++  if (region === undefined) {
++    throw new Error(`no ${role} region says "${text}"`);
++  }
++  return region;
++};
 +
 +beforeEach(() => {
 +  fetchMock.mockReset();
@@ -17445,12 +17501,16 @@ index 0000000..f89e858
 +    const {userEvent} = render(<FeedUpdateSection />);
 +    await screen.findByLabelText('Time');
 +
-+    // the region is on the page before the save, so the change is announced
++    // the region is on the page before the save, so the change is announced; it
++    // takes no room while empty (no gap slot in the row of the button)
 +    const status = screen.getByRole('status');
-+    expect(status).toHaveTextContent('');
++    expect(status).toBeEmptyDOMElement();
++    expect(status).toHaveStyle({position: 'absolute'});
 +    await tabTo(userEvent, screen.getByRole('button', {name: 'Save schedule'}));
 +    await userEvent.keyboard('{Enter}');
 +    await waitFor(() => expect(status).toHaveTextContent('Saved'));
++    expect(status).toHaveStyle({position: 'static'});
++    expect(screen.getByRole('status')).toBe(status);
 +  });
 +
 +  test('the error is an alert', async () => {
@@ -17731,10 +17791,28 @@ index 0000000..f89e858
 +    );
 +    await waitFor(() => expect(said('status')).toEqual(['Provider deleted.']));
 +    // the button that was pressed left the page with the provider: the focus is
-+    // on the title, which stays, and not on the top of the document
-+    expect(
-+      screen.getByRole('heading', {level: 2, name: 'AI Providers'}),
-+    ).toHaveFocus();
++    // on the notice that says so (it is read with the focus), and not on the
++    // top of the document
++    expect(regionSaying('status', 'Provider deleted.')).toHaveFocus();
++  });
++
++  test('the notice takes the focus after a delete in the free-models layout too', async () => {
++    serveProviders(FREE_ONLY, {
++      '/ai-providers/api/providers/legacy': () => json(204, null),
++    });
++    const {render} = rendererWith({gmp: createGmp()});
++    const {userEvent} = render(<AiProvidersPage />);
++    await screen.findByRole('group', {name: 'OpenRouter'});
++    await userEvent.click(screen.getByRole('button', {name: 'Delete: Legacy'}));
++    const asked = await screen.findByRole('group', {
++      name: /Delete the provider/,
++    });
++    await userEvent.click(
++      within(asked).getAllByRole('button', {name: 'Delete'})[0],
++    );
++
++    await waitFor(() => expect(said('status')).toEqual(['Provider deleted.']));
++    expect(regionSaying('status', 'Provider deleted.')).toHaveFocus();
 +  });
 +
 +  test('a failed delete is announced as an alert and the focus goes back to Cancel', async () => {
@@ -17761,6 +17839,66 @@ index 0000000..f89e858
 +    expect(
 +      screen.getByRole('group', {name: /Delete the provider/}),
 +    ).toBeInTheDocument();
++  });
++
++  describe('when the operator goes on to another field while the delete runs', () => {
++    // The DELETE is held until the test lets it go; the operator confirms it
++    // and then clicks into the "Name" field of the form.
++    const startAndMoveOn = async (): Promise<{
++      answer: (response: Response) => void;
++      name: HTMLElement;
++    }> => {
++      let answer: (response: Response) => void = () => {};
++      serveProviders(OPEN, {
++        '/ai-providers/api/providers/legacy': () =>
++          new Promise<Response>(resolve => {
++            answer = resolve;
++          }),
++      });
++      const {render} = rendererWith({gmp: createGmp()});
++      const {userEvent} = render(<AiProvidersPage />);
++      await screen.findByText('Add provider');
++      await userEvent.click(
++        screen.getByRole('button', {name: 'Delete: Legacy'}),
++      );
++      const asked = await screen.findByRole('group', {
++        name: /Delete the provider/,
++      });
++      await userEvent.click(
++        within(asked).getAllByRole('button', {name: 'Delete'})[0],
++      );
++      await waitFor(() =>
++        expect(calls('/ai-providers/api/providers/legacy')).toHaveLength(1),
++      );
++
++      const name = screen.getByRole('textbox', {name: 'Name'});
++      await userEvent.click(name);
++      expect(name).toHaveFocus();
++      return {answer: response => answer(response), name};
++    };
++
++    test('a delete that works does not take the focus from the field', async () => {
++      const {answer, name} = await startAndMoveOn();
++
++      answer(json(204, null));
++      await waitFor(() =>
++        expect(said('status')).toEqual(['Provider deleted.']),
++      );
++      expect(name).toHaveFocus();
++      expect(regionSaying('status', 'Provider deleted.')).not.toHaveFocus();
++    });
++
++    test('a delete that fails does not take the focus from the field', async () => {
++      const {answer, name} = await startAndMoveOn();
++
++      answer(json(500, {error: 'boom'}));
++      await waitFor(() => expect(said('alert')).toHaveLength(1));
++      const asked = screen.getByRole('group', {name: /Delete the provider/});
++      const cancel = within(asked).getByRole('button', {name: 'Cancel'});
++      await waitFor(() => expect(cancel).toBeEnabled());
++      expect(name).toHaveFocus();
++      expect(cancel).not.toHaveFocus();
++    });
 +  });
 +
 +  test('the load error is an alert', async () => {
@@ -18385,20 +18523,23 @@ index 0000000..9b2d721
 +};
 diff --git a/src/web/utils/suricatoosLive.tsx b/src/web/utils/suricatoosLive.tsx
 new file mode 100644
-index 0000000..75d310c
+index 0000000..83193ec
 --- /dev/null
 +++ b/src/web/utils/suricatoosLive.tsx
-@@ -0,0 +1,43 @@
+@@ -0,0 +1,53 @@
 +/* SPDX-FileCopyrightText: 2026 Suricatoos
 + *
 + * SPDX-License-Identifier: AGPL-3.0-or-later
 + */
 +
-+import {Children, type ReactNode, useEffect, useState} from 'react';
++import {Children, forwardRef, type ReactNode, useEffect, useState} from 'react';
 +
 +interface LiveRegionProps {
 +  children?: ReactNode;
 +  role: 'status' | 'alert';
++  // -1 lets the page move the keyboard focus to the region (with a ref), which
++  // reads the message with the focus. The region stays out of the Tab order.
++  tabIndex?: -1;
 +}
 +
 +/**
@@ -18414,21 +18555,28 @@ index 0000000..75d310c
 + * Empty, the region takes no room (position: absolute): the pages put it in
 + * flex layouts with a gap, which an empty child would otherwise widen.
 + */
-+const LiveRegion = ({children, role}: LiveRegionProps) => {
-+  const [mounted, setMounted] = useState(false);
++const LiveRegion = forwardRef<HTMLDivElement, LiveRegionProps>(
++  function LiveRegion({children, role, tabIndex}, ref) {
++    const [mounted, setMounted] = useState(false);
 +
-+  useEffect(() => {
-+    setMounted(true);
-+  }, []);
++    useEffect(() => {
++      setMounted(true);
++    }, []);
 +
-+  const content = mounted ? children : null;
-+  const empty = Children.toArray(content).every(child => child === '');
++    const content = mounted ? children : null;
++    const empty = Children.toArray(content).every(child => child === '');
 +
-+  return (
-+    <div role={role} style={{position: empty ? 'absolute' : 'static'}}>
-+      {content}
-+    </div>
-+  );
-+};
++    return (
++      <div
++        ref={ref}
++        role={role}
++        style={{position: empty ? 'absolute' : 'static'}}
++        tabIndex={tabIndex}
++      >
++        {content}
++      </div>
++    );
++  },
++);
 +
 +export default LiveRegion;
