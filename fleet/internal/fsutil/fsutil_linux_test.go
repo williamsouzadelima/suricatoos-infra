@@ -143,3 +143,24 @@ func TestLooseModeComModosReaisNoLinux(t *testing.T) {
 		t.Errorf("link para arquivo 0644: perm=%04o loose=%v err=%v", perm, loose, err)
 	}
 }
+
+// SyncFile numa FIFO não trava (sem leitor o open falha na hora) e, com leitor, recusa o descritor: não é arquivo
+// regular, e nunca chega ao fsync.
+func TestSyncFileNumaFIFO(t *testing.T) {
+	dir := t.TempDir()
+	fifo := filepath.Join(dir, "fifo")
+	if err := syscall.Mkfifo(fifo, 0o600); err != nil {
+		t.Skipf("mkfifo indisponível neste host: %v", err)
+	}
+	if _, err := SyncFile(fifo); err == nil {
+		t.Fatal("FIFO sem leitor: SyncFile devia falhar")
+	}
+	r, err := os.OpenFile(fifo, os.O_RDONLY|syscall.O_NONBLOCK, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	if _, err := SyncFile(fifo); !errors.Is(err, ErrNotRegular) {
+		t.Fatalf("FIFO com leitor: esperava ErrNotRegular, deu %v", err)
+	}
+}

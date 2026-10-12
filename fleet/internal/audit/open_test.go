@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -142,6 +143,34 @@ func TestResultDeEnrollTokenCreateSaiSemDetail(t *testing.T) {
 		if !strings.Contains(line, "level=WARN") || !strings.Contains(line, "enroll_token.create") || strings.Contains(line, "nao-e-segredo") {
 			t.Fatalf("log: %s", line)
 		}
+	}
+}
+
+// O WARN do detail descartado no result de enroll_token.create só sai depois que a linha foi gravada: um acréscimo
+// que falha não loga nada (a linha não conta), e a nova tentativa que dá certo loga uma vez só.
+func TestWarnDoDetailDescartadoSoDepoisDoAcrescimo(t *testing.T) {
+	dir := t.TempDir()
+	fl := &faults{}
+	l, sink := openAt(t, dir, testConfig(fl.ops()))
+	ref := Ref{CommandID: "3b9c1d2e-4f5a-4b6c-8d7e-9f0a1b2c3d4e", Type: contract.TypeEnrollTokenCreate, Tenant: "acme"}
+	o := Outcome{Status: contract.StatusSucceeded, ObjectIDs: []string{"tok01"}, Detail: "texto livre fictício"}
+	fl.failSync = errors.New("EIO simulado")
+	if err := l.Result(testBoot, ref, o); err == nil {
+		t.Fatal("o acréscimo com fsync falhando devia dar erro")
+	}
+	if logs := sink.lines(); len(logs) != 0 {
+		t.Fatalf("um acréscimo que falhou não pode logar o descarte: %v", logs)
+	}
+	fl.failSync = nil
+	if err := l.Result(testBoot, ref, o); err != nil {
+		t.Fatal(err)
+	}
+	logs := sink.lines()
+	if len(logs) != 1 || !strings.Contains(logs[0], "level=WARN") || !strings.Contains(logs[0], "enroll_token.create") {
+		t.Fatalf("esperava um WARN só, depois do acréscimo que deu certo: %v", logs)
+	}
+	if lines := execLines(t, dir); len(lines) != 1 || strings.Contains(lines[0], `"detail"`) {
+		t.Fatalf("linhas %v", lines)
 	}
 }
 
@@ -512,4 +541,51 @@ func TestMetodosSoRecebemTiposFechados(t *testing.T) {
 			}
 		}
 	}
+}
+
+// O boot confirma no disco o arquivo atual de cada fluxo — um fsync dele e um do diretório, que também cobre as
+// renomeações de uma rotação — antes de seguir a cadeia dele: depois de uma queda do processo, o page cache ainda
+// pode ter uma linha cujo fsync nunca voltou. Fluxo sem arquivo nenhum não tem o que confirmar.
+func TestBootConfirmaNoDiscoOArquivoAtual(t *testing.T) {
+	dir := t.TempDir()
+	l, _ := openAt(t, dir, defaultConfig())
+	policyChanged(t, l, 1) // só o exec tem arquivo
+	fl := &faults{}
+	l2, _ := openAt(t, dir, testConfig(fl.ops()))
+	if fl.syncFiles != 1 || !slices.Contains(fl.calls, "syncdir") {
+		t.Fatalf("syncs do arquivo %d, chamadas %v", fl.syncFiles, fl.calls)
+	}
+	if st := l2.Status(); st.Exec.Poisoned != nil || st.Reject.Poisoned != nil {
+		t.Fatalf("status %+v", st)
+	}
+	policyChanged(t, l2, 2)
+}
+
+// Se o arquivo atual não se confirma no disco, o fluxo se envenena: nenhuma linha nova vai atrás do que pode não
+// estar lá — e, sem linha, o pipeline não dá ack. O próximo Open, com o disco bom, segue normalmente.
+func TestBootQueNaoConfirmaOArquivoAtualEnvenena(t *testing.T) {
+	dir := t.TempDir()
+	l, _ := openAt(t, dir, defaultConfig())
+	policyChanged(t, l, 1)
+	for name, fl := range map[string]*faults{
+		"fsync do arquivo":  {failSyncFile: errors.New("EIO simulado")},
+		"sync do diretório": {failSyncDir: errors.New("EIO simulado")},
+	} {
+		l2, sink := openAt(t, dir, testConfig(fl.ops()))
+		st := l2.Status()
+		if st.Exec.Poisoned == nil || st.Reject.Poisoned != nil {
+			t.Fatalf("%s: o exec devia ficar envenenado e o reject (sem arquivo) não: %+v", name, st)
+		}
+		if err := l2.PolicyChanged(testBoot, "depois"); !errors.Is(err, ErrPoisoned) {
+			t.Fatalf("%s: acréscimo num fluxo não confirmado: %v", name, err)
+		}
+		if logs := sink.lines(); len(logs) == 0 || !strings.Contains(strings.Join(logs, "\n"), "level=ERROR") {
+			t.Fatalf("%s: esperava o ERROR do envenenamento: %v", name, logs)
+		}
+	}
+	l3, _ := openAt(t, dir, defaultConfig())
+	if l3.Status().Exec.Poisoned != nil {
+		t.Fatal("com o disco bom, o próximo Open segue")
+	}
+	policyChanged(t, l3, 2)
 }

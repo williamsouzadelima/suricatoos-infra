@@ -64,6 +64,7 @@ type fileOps struct {
 	openAppend func(path string) (appendFile, error)
 	truncate   func(path string, size int64) error
 	syncDir    func(dir string) error
+	syncFile   func(path string) (fs.FileInfo, error)
 	rename     func(oldpath, newpath string) error
 	remove     func(path string) error
 	readDir    func(dir string) ([]fs.DirEntry, error)
@@ -81,6 +82,7 @@ func defaultOps() fileOps {
 		},
 		truncate: fsutil.TruncateDurable,
 		syncDir:  fsutil.SyncDir,
+		syncFile: fsutil.SyncFile,
 		rename:   os.Rename,
 		remove:   os.Remove,
 		readDir:  os.ReadDir,

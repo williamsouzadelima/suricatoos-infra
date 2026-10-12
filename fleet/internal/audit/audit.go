@@ -53,13 +53,17 @@
 // goes on from its last line and the break is exposed in Status (Recovery.Breaks, FirstBreak) and in one log line;
 // the hub, which has seen the earlier tails, is the witness. The files are read without following a symbolic link
 // (fsutil.OpenRegularNoFollow): a link in place of one of them, like a file that cannot be read, makes Open fail.
+// What was read is then confirmed on disk — one fsync of the current file (fsutil.SyncFile, the very file read) and
+// one of the directory —, because after a crash of the process the page cache can still hold a line whose fsync never
+// returned; a stream whose files cannot be confirmed is poisoned, and appends nothing after what may not be there.
 //
 // # Tail
 //
 // Tail returns, for the audit_tail state, the last TailLines lines of each stream verbatim with first_seq,
 // last_seq and head_sha256. It comes from memory — the lines this Log confirmed plus those Open read — never from
 // re-reading a file after a write that was not confirmed. Only audit lines of the stream get there: a line Open
-// found that is not one (another file's content, say) makes the tail restart after it.
+// found that is not one (another file's content, say) makes the tail restart after it — and when the line is cut
+// only because it does not decode strictly as an audit_entry, the cut is counted in Recovery.TailCut and logged.
 //
 // # No secret
 //
@@ -217,16 +221,15 @@ func (l *Log) Executed(t time.Time, r Ref) error {
 
 // Result records, in the exec stream, how an accepted command ended, before the result is reported. For
 // enroll_token.create — whose output is the only secret of the contract — the Detail is dropped, whatever the
-// status, and a WARN (which does not repeat it) says so: free text there could carry the token.
+// status, and a WARN (which does not repeat it) says so: free text there could carry the token. The WARN comes only
+// once the line is written, so an append that fails (and the caller's retry) does not log the drop twice.
 func (l *Log) Result(t time.Time, r Ref, o Outcome) error {
-	return l.exec.build(t, func(at string) (*entry, error) {
-		e, err := newResult(at, r, o)
-		if err == nil && r.Type == contract.TypeEnrollTokenCreate && o.Detail != "" {
-			l.exec.log.Warn("auditoria: detail descartado no result de enroll_token.create (a saída desse comando é o único segredo do contrato)",
-				"command_id", r.CommandID)
-		}
-		return e, err
-	})
+	err := l.exec.build(t, func(at string) (*entry, error) { return newResult(at, r, o) })
+	if err == nil && r.Type == contract.TypeEnrollTokenCreate && o.Detail != "" {
+		l.exec.log.Warn("auditoria: detail descartado no result de enroll_token.create (a saída desse comando é o único segredo do contrato)",
+			"command_id", r.CommandID)
+	}
+	return err
 }
 
 // Rejected records, in the reject stream, a final rejection (verification lines 3–9) before its ack.

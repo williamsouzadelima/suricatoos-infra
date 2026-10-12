@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -285,10 +286,11 @@ func (f *faultyFile) Close() error {
 
 // faults makes the next appends fail as configured, and records every call to the file.
 type faults struct {
-	failWrite, failSync, failTruncate, failSyncDir, failRename error
-	renameCalls                                                int
-	failRenameAt                                               int // 0 = every rename fails while failRename is set
-	calls                                                      []string
+	failWrite, failSync, failTruncate, failSyncDir, failRename, failSyncFile error
+	syncFiles                                                                int
+	renameCalls                                                              int
+	failRenameAt                                                             int // 0 = every rename fails while failRename is set
+	calls                                                                    []string
 }
 
 func (fl *faults) ops() fileOps {
@@ -315,6 +317,14 @@ func (fl *faults) ops() fileOps {
 			return fl.failSyncDir
 		}
 		return real.syncDir(dir)
+	}
+	o.syncFile = func(path string) (fs.FileInfo, error) {
+		fl.syncFiles++
+		fl.calls = append(fl.calls, "syncfile")
+		if fl.failSyncFile != nil {
+			return nil, fl.failSyncFile
+		}
+		return real.syncFile(path)
 	}
 	o.rename = func(oldpath, newpath string) error {
 		fl.renameCalls++
